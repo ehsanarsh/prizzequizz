@@ -33,7 +33,7 @@ services:
       API_BASE_PATH: /v1
       DATABASE_URL: postgres://postgres:postgres@postgres:5432/prizzequizz
       REDIS_URL: redis://redis:6379
-      REPOSITORY_DRIVER: memory
+      REPOSITORY_DRIVER: postgres
       REALTIME_ADAPTER: redis
       LEADERBOARD_ADAPTER: redis
       PUSH_PROVIDER: log
