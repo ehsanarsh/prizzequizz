@@ -13,6 +13,7 @@ export type ServerRealtimeType =
   | 'server:match_snapshot'
   | 'server:answer_result'
   | 'server:match_finished'
+  | 'server:opponent_left'
   | 'server:chat'
   | 'server:presence'
   | 'server:leaderboard_update'

@@ -58,6 +58,11 @@ export interface Match {
   currentQuestionId?: UUID;
   winnerUserId?: UUID;
   rewardPreview?: Reward;
+  /** Real duel answers keyed by `${userId}:${round}` — used for per-player,
+   *  round-based scoring in synchronous 2-player duels (no bot/random scoring). */
+  duelAnswers?: Record<string, { selectedIndex: number; correct: boolean }>;
+  /** Set to true once the finish/reward side-effects have run, so they run once. */
+  duelSettled?: boolean;
   createdAt: string;
   updatedAt: string;
 }

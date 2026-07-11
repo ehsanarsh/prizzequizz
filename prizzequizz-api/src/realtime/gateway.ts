@@ -28,7 +28,16 @@ export function attachRealtimeGateway(server: Server): WebSocketServer {
     socket.on('pong', () => realtimeRooms.touch(meta.id));
     socket.on('message', (raw) => void handleMessage(socket, meta.id, userId, raw));
     socket.on('close', () => {
+      const matchId = meta.matchId;
       realtimeRooms.remove(meta.id);
+      // Human-only: if a player drops out of an active match, tell the other
+      // player so they can win by forfeit instead of waiting forever.
+      if (matchId) {
+        void realtimeRooms.presence(matchId).then((users) => {
+          realtimeRooms.broadcast(matchId, { type: 'server:presence', matchId, payload: { users } });
+          realtimeRooms.broadcast(matchId, { type: 'server:opponent_left', matchId, payload: { userId } });
+        }).catch(() => undefined);
+      }
       logger.info('realtime_disconnected', { clientId: meta.id, userId });
     });
     socket.on('error', (error) => logger.warn('realtime_socket_error', { clientId: meta.id, userId, message: error.message }));
@@ -101,17 +110,20 @@ async function handleMessage(socket: WebSocket, clientId: string, userId: string
       const matchId = String(payload?.matchId ?? '');
       const questionId = String(payload?.questionId ?? '');
       const selectedIndex = Number(payload?.selectedIndex ?? -1);
+      const round = payload?.round === undefined ? undefined : Number(payload.round);
       const validation = await validateAnswer(questionId, selectedIndex);
       const { match, duplicate } = await submitAnswer({
         matchId,
         userId,
         questionId,
         selectedIndex,
+        round,
         correct: validation.correct,
         answerTimeMs: Number(payload?.answerTimeMs ?? 0),
-        idempotencyKey: String(payload?.idempotencyKey ?? `${matchId}:${userId}:${questionId}:${selectedIndex}`)
+        idempotencyKey: String(payload?.idempotencyKey ?? `${matchId}:${userId}:${round ?? questionId}:${selectedIndex}`)
       });
-      realtimeRooms.broadcast(matchId, { type: 'server:answer_result', matchId, payload: { correct: validation.correct, selectedIndex, correctIndex: validation.correctIndex, duplicate } });
+      // Include userId + round so the OTHER player knows whose answer this is and which round.
+      realtimeRooms.broadcast(matchId, { type: 'server:answer_result', matchId, payload: { userId, round: round ?? match.round, questionId, correct: validation.correct, selectedIndex, correctIndex: validation.correctIndex, duplicate } });
       realtimeRooms.broadcast(matchId, { type: 'server:match_snapshot', matchId, payload: snapshot(match) });
       if (match.phase === 'result') realtimeRooms.broadcast(matchId, { type: 'server:match_finished', matchId, payload: snapshot(match) });
       return;

@@ -60,9 +60,29 @@ export interface SubmitAnswerInput {
   correct: boolean;
   answerTimeMs: number;
   idempotencyKey: string;
+  /** Zero-based round this answer belongs to. If omitted it is derived from
+   *  how many rounds this player has already answered. */
+  round?: number;
 }
 
-export async function submitAnswer(input: SubmitAnswerInput): Promise<{ match: Match; duplicate: boolean }> {
+const DUEL_BASE_ROUNDS = 5;      // fixed-length portion of a duel
+const DUEL_MAX_ROUNDS = 15;      // hard cap so a tie can never loop forever
+
+// Serialize answer processing per match so two players submitting at nearly the
+// same instant can't lose-update each other's scores (read-modify-write race).
+const matchLocks = new Map<string, Promise<unknown>>();
+function withMatchLock<T>(matchId: string, fn: () => Promise<T>): Promise<T> {
+  const prev = matchLocks.get(matchId) ?? Promise.resolve();
+  const next = prev.then(fn, fn);
+  matchLocks.set(matchId, next.then(() => undefined, () => undefined));
+  return next;
+}
+
+export function submitAnswer(input: SubmitAnswerInput): Promise<{ match: Match; duplicate: boolean }> {
+  return withMatchLock(input.matchId, () => submitAnswerLocked(input));
+}
+
+async function submitAnswerLocked(input: SubmitAnswerInput): Promise<{ match: Match; duplicate: boolean }> {
   const existing = await repositories.answers.findByIdempotencyKey(input.idempotencyKey);
   if (existing) {
     await integrity.recordReplay({ matchId: input.matchId, userId: input.userId, questionId: input.questionId, idempotencyKey: input.idempotencyKey });
@@ -70,26 +90,47 @@ export async function submitAnswer(input: SubmitAnswerInput): Promise<{ match: M
   }
 
   const match = await getMatch(input.matchId);
-  if (match.phase !== 'question' && match.phase !== 'revealing') throw new Error('MATCH_NOT_ACCEPTING_ANSWERS');
+  if (match.phase === 'result' || match.phase === 'finished') throw new Error('MATCH_NOT_ACCEPTING_ANSWERS');
 
   const integritySignals = await integrity.inspectAnswer({ match, userId: input.userId, questionId: input.questionId, selectedIndex: input.selectedIndex, correct: input.correct, answerTimeMs: input.answerTimeMs, idempotencyKey: input.idempotencyKey });
 
+  if (!match.duelAnswers) match.duelAnswers = {};
   const player = match.players.find((p) => p.userId === input.userId) ?? match.players[0]!;
-  if (input.correct) { player.score += 1; player.correctAnswers += 1; } else player.wrongAnswers += 1;
 
-  const opponent = match.players.find((p) => p.userId !== input.userId);
-  if (opponent && Math.random() < 0.58) { opponent.score += 1; opponent.correctAnswers += 1; }
+  // Resolve this answer's round: prefer the client-supplied round, else the
+  // count of rounds this player has already answered (their next round).
+  const answeredByPlayer = (uid: string): number => Object.keys(match.duelAnswers!).filter((k) => k.startsWith(`${uid}:`)).length;
+  const round = Number.isInteger(input.round) ? Number(input.round) : answeredByPlayer(input.userId);
+  const key = `${input.userId}:${round}`;
 
-  const answerId = id();
-  await repositories.answers.save({ id: answerId, matchId: input.matchId, userId: input.userId, questionId: input.questionId, selectedIndex: input.selectedIndex, correct: input.correct, answerTimeMs: input.answerTimeMs, idempotencyKey: input.idempotencyKey, createdAt: new Date().toISOString() });
+  // Score each player ONLY from their own answer, exactly once per (player, round).
+  // No random/bot scoring for the opponent — their score comes from their own submits.
+  if (!match.duelAnswers[key]) {
+    match.duelAnswers[key] = { selectedIndex: input.selectedIndex, correct: input.correct };
+    if (input.correct) { player.score += 1; player.correctAnswers += 1; } else player.wrongAnswers += 1;
+  }
 
-  match.round += 1;
-  match.phase = match.round >= 5 ? 'result' : 'question';
+  await repositories.answers.save({ id: id(), matchId: input.matchId, userId: input.userId, questionId: input.questionId, selectedIndex: input.selectedIndex, correct: input.correct, answerTimeMs: input.answerTimeMs, idempotencyKey: input.idempotencyKey, createdAt: new Date().toISOString() });
+
+  // Completion is decided only when every player has answered the SAME number of
+  // rounds (lockstep) and that number has reached the base length: the leader wins.
+  // A tie keeps the match in 'question' phase → sudden-death continues on the next
+  // shared round. A hard cap guarantees termination.
+  const counts = match.players.map((p) => answeredByPlayer(p.userId));
+  const minCount = counts.length ? Math.min(...counts) : 0;
+  const allEqual = counts.every((c) => c === minCount);
+  match.round = minCount;
+
+  const sorted = [...match.players].sort((a, b) => b.score - a.score);
+  const decisiveLeader = sorted.length >= 2 && sorted[0]!.score !== sorted[1]!.score;
+  const finished = allEqual && minCount >= DUEL_BASE_ROUNDS && (decisiveLeader || minCount >= DUEL_MAX_ROUNDS);
+
+  match.phase = finished ? 'result' : 'question';
   match.updatedAt = new Date().toISOString();
 
-  if (match.phase === 'result') {
-    const sorted = [...match.players].sort((a, b) => b.score - a.score);
-    match.winnerUserId = sorted[0]?.userId;
+  if (finished && !match.duelSettled) {
+    match.duelSettled = true;
+    match.winnerUserId = decisiveLeader ? sorted[0]!.userId : undefined; // undefined => draw (only at hard cap)
     const user = await repositories.users.findById(input.userId);
     if (user && match.winnerUserId === input.userId) await applyReward(user, calculateDuelReward(match, user), match.id);
     await integrity.inspectMatchFinished(match);
@@ -100,7 +141,7 @@ export async function submitAnswer(input: SubmitAnswerInput): Promise<{ match: M
 
   await repositories.matches.save(match);
   await activeMatchState.set(match, 60 * 60);
-  await appendMatchEvent(match.id, 'ANSWER_SUBMITTED', { userId: input.userId, questionId: input.questionId, correct: input.correct, duplicate: false, integritySignals: integritySignals.length });
+  await appendMatchEvent(match.id, 'ANSWER_SUBMITTED', { userId: input.userId, questionId: input.questionId, round, correct: input.correct, duplicate: false, integritySignals: integritySignals.length });
   return { match, duplicate: false };
 }
 

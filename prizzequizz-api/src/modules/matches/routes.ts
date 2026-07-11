@@ -48,9 +48,10 @@ export function registerMatchRoutes(router: Router, base: string): void {
       userId: ctx.userId ?? 'u1',
       questionId: body.questionId,
       selectedIndex: Number(body.selectedIndex),
+      round: body.round === undefined ? undefined : Number(body.round),
       correct: validation.correct,
       answerTimeMs: Number(body.answerTimeMs ?? 0),
-      idempotencyKey: String(body.idempotencyKey ?? `${ctx.params.id}:${ctx.userId ?? 'u1'}:${body.questionId}:${body.selectedIndex}`)
+      idempotencyKey: String(body.idempotencyKey ?? `${ctx.params.id}:${ctx.userId ?? 'u1'}:${body.round ?? body.questionId}:${body.selectedIndex}`)
     });
     json(ctx.res, 200, { correct: validation.correct, selectedIndex: body.selectedIndex, correctIndex: validation.correctIndex, score: match.players.find((p) => p.userId === (ctx.userId ?? 'u1'))?.score ?? 0, phase: match.phase, duplicate, events: [] });
   });
