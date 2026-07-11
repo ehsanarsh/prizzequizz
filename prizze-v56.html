@@ -6788,7 +6788,10 @@ cancelMatchmaking=function(){
    The UI/CSS is untouched; only the DATA source and flow control change. */
 const PZ_PREFETCH=15;              /* main 5 + up to 10 sudden-death rounds */
 function pzNewRt(matchId){
-  return { ws:(typeof pzRt!=='undefined'&&pzRt&&pzRt.ws)?pzRt.ws:null, hb:null,
+  /* NOTE: must NOT reference pzRt here — this runs while `let pzRt` is still
+     initializing, and `typeof pzRt` on a let in the temporal dead zone throws
+     ("Cannot access 'pzRt' before initialization"), which broke startMatchmaking. */
+  return { ws:null, hb:null,
            active:false, finished:false, serverFinished:false, oppLeft:false,
            matchId:matchId, myId:(_usr&&_usr.id)?_usr.id:null, oppId:null,
            myByRound:{}, oppByRound:{}, waiters:{}, snapshot:null, presence:1 };
@@ -6872,6 +6875,8 @@ async function _pzMatchFound(mid){
   /* Fresh real-time state for this match, then open the room socket early so
      both players are present well before the first question. */
   window._pzQs=null;
+  try{ if(pzRt.hb) clearInterval(pzRt.hb); }catch(_){}
+  try{ if(pzRt.ws){ pzRt.ws.onclose=null; pzRt.ws.close(); } }catch(_){}
   pzRt=pzNewRt(mid);
   pzRt.active=true;
   pzWsConnect();
