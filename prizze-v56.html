@@ -2756,13 +2756,13 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
     <section class="screen pad" id="register">
       <div class="topbar" style="padding:0 0 12px;background:none"><button class="iconbtn" onclick="go('otp')">→</button><h1>تکمیل اطلاعات</h1></div>
       <p style="color:var(--muted);font-size:13px;margin-bottom:20px">این اطلاعات توی پروفایل و رنکینگ نمایش داده می‌شه</p>
-      <div class="field"><label>نام و نام خانوادگی</label><input class="input" placeholder="شهاب ساعدی"></div>
-      <div class="field"><label>نام کاربری (یکتا)</label><input class="input" placeholder="shahab_9421" dir="ltr"></div>
-      <div class="field"><label>کد معرف (اختیاری)</label><input class="input" placeholder="کد دوستت رو وارد کن و جایزه بگیر" dir="ltr"></div>
+      <div class="field"><label>نام و نام خانوادگی</label><input class="input" id="regFullName" placeholder="شهاب ساعدی"></div>
+      <div class="field"><label>نام کاربری (یکتا)</label><input class="input" id="regUsername" placeholder="shahab_9421" dir="ltr"></div>
+      <div class="field"><label>کد معرف (اختیاری)</label><input class="input" id="regReferral" placeholder="کد دوستت رو وارد کن و جایزه بگیر" dir="ltr"></div>
       <div class="card" style="display:flex;gap:12px;align-items:center;background:linear-gradient(180deg,#FFDD5C,#F1B211);color:var(--gold-ink);margin-bottom:20px">
         <span style="font-size:26px">🎁</span><div style="font-size:13px;font-weight:700;line-height:1.6">با هر دوستی که دعوت کنی، هر دو <b>پاداش نقدی</b> می‌گیرید!</div></div>
       <div class="grow"></div>
-      <button class="btn btn-primary" onclick="go('character')">ساخت کاراکتر</button>
+      <button class="btn btn-primary" onclick="submitRegister()">ثبت و ساخت کاراکتر</button>
     </section>
 
     <!-- ============ CHARACTER (AAA) ============ -->
@@ -2862,7 +2862,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
           <div class="hero-top">
             <div class="hero-av" onclick="go('profile')"><svg class="mascot" width="46" height="46" viewBox="0 0 120 120" id="mascotHome"></svg></div>
             <div class="hero-info">
-              <b>Shahab_9865</b>
+              <b id="hdrName">Shahab_9865</b>
               <div class="hero-meta">
                 <span class="hero-tag lg" onclick="openLeagues()">🥉 لیگ برنزی</span>
                 <span class="hero-tag rank" onclick="go('rankings')">رتبه هفته: ۷</span>
@@ -2976,7 +2976,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
       <div class="grow center" style="width:100%">
         <div class="chip" style="margin-bottom:10px">🏆 مرحله <b id="duelStage">۱</b> از ۱۰</div>
         <div style="display:flex;align-items:center;gap:16px;margin:14px 0">
-          <div style="text-align:center"><div style="width:88px;height:88px;border-radius:26px;background:var(--green-soft);border:2px solid var(--green);display:grid;place-items:center"><svg class="mascot" width="66" height="66" viewBox="0 0 120 120" id="mascotDuelMe"></svg></div><b style="font-size:14px;display:block;margin-top:8px">Shahab_9865</b></div>
+          <div style="text-align:center"><div style="width:88px;height:88px;border-radius:26px;background:var(--green-soft);border:2px solid var(--green);display:grid;place-items:center"><svg class="mascot" width="66" height="66" viewBox="0 0 120 120" id="mascotDuelMe"></svg></div><b style="font-size:14px;display:block;margin-top:8px" id="duelMeName">Shahab_9865</b></div>
           <div style="font-size:34px;font-weight:900;color:var(--gold);text-shadow:0 0 16px rgba(255,210,63,.5)">VS</div>
           <div style="text-align:center"><div style="width:88px;height:88px;border-radius:26px;background:var(--red-soft);border:2px solid var(--red);display:grid;place-items:center;font-size:44px" id="duelOppAv" onclick="showCurrentOpponentProfile()">🦊</div><b style="font-size:14px;display:block;margin-top:8px" id="duelOppName">Sara_1452</b></div>
         </div>
@@ -3724,7 +3724,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
     <div class="menu-sheet-head"><button class="iconbtn" onclick="closeMenu()">→</button><h2>منوی بیشتر</h2><button class="iconbtn" onclick="closeMenu()">✕</button></div>
     <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px" onclick="menuGo('profile')">
       <div class="prof-av" style="width:52px;height:52px;border-radius:16px;border-width:2px"><svg class="mascot" width="38" height="38" viewBox="0 0 120 120" id="mascotMenu"></svg></div>
-      <div style="flex:1"><b style="font-size:15px">Shahab_9865</b><div style="color:var(--muted);font-size:12px">سطح ۳ · مشاهده پروفایل</div></div><span style="color:var(--muted)">‹</span></div>
+      <div style="flex:1"><b style="font-size:15px" id="profName">Shahab_9865</b><div style="color:var(--muted);font-size:12px">سطح ۳ · مشاهده پروفایل</div></div><span style="color:var(--muted)">‹</span></div>
     <div class="row" onclick="menuGo('wallet')"><div class="r-ico">💳</div><div class="r-txt"><b>کیف پول</b></div><span class="r-arrow">‹</span></div>
     <div class="row" onclick="closeMenu();plansBack='home';go('plans')"><div class="r-ico">👑</div><div class="r-txt"><b>پلن اشتراک</b></div><span class="r-arrow">‹</span></div>
     <div class="row" onclick="menuGo('stats')"><div class="r-ico">📈</div><div class="r-txt"><b>آمار و ارقام</b></div><span class="r-arrow">‹</span></div>
@@ -4707,7 +4707,7 @@ function renderDuelResultPanel(won){
   const score=fa(oppScore)+' - '+fa(myScore),wrong=myResults.filter(x=>x==='no').length;
   const coins=won?(lastPracticeCoinsEarned||Math.max(0,duelStage*45+80)):0,xp=duelStage*80;
   if(userPlan==='free'){
-    box.innerHTML='<div class="duel-summary-aaa"><div class="duel-summary-card"><div class="duel-summary-top"><div class="duel-side me"><div class="av">🦁</div><b>Shahab_9865</b><span>بازیکن</span></div><div class="duel-final"><div class="state '+(won?'':'lose')+'">'+(won?'پیروزی':'پایان دوئل')+'</div><div class="score">'+score+'</div></div><div class="duel-side"><div class="av" onclick="showCurrentOpponentProfile()">'+(oppAv||'🦊')+'</div><b>'+(oppName||'حریف')+'</b><span>حریف</span></div></div><div class="duel-summary-kpis"><div class="duel-kpi"><b>'+fa(myScore)+'</b><span>پاسخ درست</span></div><div class="duel-kpi"><b>'+fa(wrong)+'</b><span>پاسخ اشتباه</span></div><div class="duel-kpi"><b>'+fa(xp)+'</b><span>XP</span></div><div class="duel-kpi"><b>'+fa(duelStage)+'</b><span>مرحله</span></div><div class="duel-kpi"><b>~'+fa(duelStage*52)+'ث</b><span>مدت مسابقه</span></div><div class="duel-kpi"><b>'+fa(coins)+'</b><span>سکه برده</span></div></div><div class="duel-reward-strip"><span class="bigcoin">🪙</span><b>+'+fa(coins)+' سکه</b><small>اگر پلن پولی بود، جایزه نقدی واقعی می‌گرفتی.</small></div><div class="duel-social-actions"><button onclick="showFriendRequestSnackbar(oppName||\'حریف\')"><span class="ico">➕</span>دوستی</button><button onclick="showCurrentOpponentProfile()"><span class="ico">👤</span>پروفایل</button><button onclick="reportOpponent()"><span class="ico">🚩</span>گزارش</button><button onclick="blockOpponent()"><span class="ico">🚫</span>بلاک</button></div><div class="duel-bottom-actions"><button class="btn btn-primary" onclick="collectPracticeCoinsExit()">خروج بعد از دریافت سکه</button><button class="btn btn-blue" onclick="continueDoublePracticeCoins()">ادامه و دوبرابر کردن سکه</button></div></div></div>';
+    box.innerHTML='<div class="duel-summary-aaa"><div class="duel-summary-card"><div class="duel-summary-top"><div class="duel-side me"><div class="av">🦁</div><b>'+(window.myName||'Shahab_9865')+'</b><span>بازیکن</span></div><div class="duel-final"><div class="state '+(won?'':'lose')+'">'+(won?'پیروزی':'پایان دوئل')+'</div><div class="score">'+score+'</div></div><div class="duel-side"><div class="av" onclick="showCurrentOpponentProfile()">'+(oppAv||'🦊')+'</div><b>'+(oppName||'حریف')+'</b><span>حریف</span></div></div><div class="duel-summary-kpis"><div class="duel-kpi"><b>'+fa(myScore)+'</b><span>پاسخ درست</span></div><div class="duel-kpi"><b>'+fa(wrong)+'</b><span>پاسخ اشتباه</span></div><div class="duel-kpi"><b>'+fa(xp)+'</b><span>XP</span></div><div class="duel-kpi"><b>'+fa(duelStage)+'</b><span>مرحله</span></div><div class="duel-kpi"><b>~'+fa(duelStage*52)+'ث</b><span>مدت مسابقه</span></div><div class="duel-kpi"><b>'+fa(coins)+'</b><span>سکه برده</span></div></div><div class="duel-reward-strip"><span class="bigcoin">🪙</span><b>+'+fa(coins)+' سکه</b><small>اگر پلن پولی بود، جایزه نقدی واقعی می‌گرفتی.</small></div><div class="duel-social-actions"><button onclick="showFriendRequestSnackbar(oppName||\'حریف\')"><span class="ico">➕</span>دوستی</button><button onclick="showCurrentOpponentProfile()"><span class="ico">👤</span>پروفایل</button><button onclick="reportOpponent()"><span class="ico">🚩</span>گزارش</button><button onclick="blockOpponent()"><span class="ico">🚫</span>بلاک</button></div><div class="duel-bottom-actions"><button class="btn btn-primary" onclick="collectPracticeCoinsExit()">خروج بعد از دریافت سکه</button><button class="btn btn-blue" onclick="continueDoublePracticeCoins()">ادامه و دوبرابر کردن سکه</button></div></div></div>';
   }else{
     box.innerHTML='<div class="duel-result-card"><div class="opp-av" onclick="showCurrentOpponentProfile()">'+(oppAv||'🦊')+'</div><div class="dr-info"><b>'+(won?'نتیجه دوئل: پیروزی':'نتیجه دوئل: پایان مسابقه')+'</b><span>حریف: '+(oppName||'حریف')+' · مرحله '+fa(duelStage)+' · پاسخ‌های تو: '+fa(myScore)+'</span></div><div class="dr-score">'+score+'</div></div><div class="duel-result-actions"><button class="btn btn-ghost" onclick="showCurrentOpponentProfile()">پروفایل حریف</button><button class="btn btn-ghost" onclick="showFriendRequestSnackbar(oppName||\'حریف\')">درخواست دوستی</button></div>';
   }
@@ -6653,7 +6653,7 @@ let _tok = localStorage.getItem('pz_tok') || null;
 let _usr = JSON.parse(localStorage.getItem('pz_usr') || 'null');
 let _rid = null, _mid = null, _mmt = null, _mmi = null;
 
-if(_tok && _usr) setTimeout(()=>{ wallet = _usr.balances?.wallet||0; updateWalletUI(); },300);
+if(_tok && _usr) setTimeout(()=>{ wallet = _usr.balances?.wallet||0; updateWalletUI(); try{applyMyName();}catch(e){} },300);
 
 async function pzApi(m,p,b,a=true){
   const h={'Content-Type':'application/json'};
@@ -6688,9 +6688,47 @@ async function realVerifyOtp(){
     localStorage.setItem('pz_tok',_tok);
     localStorage.setItem('pz_usr',JSON.stringify(_usr));
     wallet=_usr.balances?.wallet||0; updateWalletUI();
-    toast('خوش اومدی!'); go('character');
+    applyMyName();
+    /* New account (no chosen name yet) → registration; otherwise straight in. */
+    if(_pzNeedsRegister()){ toast('خوش اومدی! اطلاعاتت رو کامل کن'); go('register'); }
+    else { toast('خوش اومدی '+pzDisplayName()+'!'); go('character'); }
   } else {
     toast('کد اشتباه'); boxes.forEach(b=>b.value=''); boxes[0]?.focus();
+  }
+}
+
+/* ---- Player profile / display name ---- */
+function _pzNeedsRegister(){
+  if(!_usr) return false;
+  const dn=(_usr.displayName||'').trim();
+  const un=(_usr.username||'');
+  return (!dn || dn==='بازیکن جدید') || /^user_\d+$/.test(un);
+}
+function pzDisplayName(){
+  if(!_usr) return 'بازیکن';
+  const dn=(_usr.displayName||'').trim();
+  if(dn && dn!=='بازیکن جدید') return dn;
+  return _usr.username || 'بازیکن';
+}
+function applyMyName(){
+  const n=pzDisplayName(); window.myName=n;
+  ['hdrName','duelMeName','profName'].forEach(id=>{const el=document.getElementById(id); if(el) el.textContent=n;});
+}
+async function submitRegister(){
+  const full=(document.getElementById('regFullName')?.value||'').trim();
+  const uname=(document.getElementById('regUsername')?.value||'').trim();
+  const ref=(document.getElementById('regReferral')?.value||'').trim();
+  if(full.length<2){toast('نام و نام خانوادگی را وارد کن');return;}
+  if(!/^[A-Za-z0-9_]{3,20}$/.test(uname)){toast('نام کاربری: ۳ تا ۲۰ حرف انگلیسی، عدد یا _');return;}
+  const btn=document.querySelector('#register .btn-primary'); const _t=btn?btn.textContent:'';
+  if(btn){btn.disabled=true;btn.textContent='در حال ذخیره...';}
+  const r=await pzApi('PATCH','/users/me',{displayName:full,username:uname,referralCode:ref});
+  if(btn){btn.disabled=false;btn.textContent=_t;}
+  if(r.ok){
+    _usr=r.data; try{localStorage.setItem('pz_usr',JSON.stringify(_usr));}catch(e){}
+    applyMyName(); toast('اطلاعاتت ثبت شد ✅'); go('character');
+  } else {
+    toast(r.error?.message || 'این نام کاربری قبلاً گرفته شده — یکی دیگه بزن');
   }
 }
 
