@@ -6694,6 +6694,17 @@ async function realVerifyOtp(){
   }
 }
 
+/* Refund the entry fee (paid in startGame BEFORE matchmaking) when no opponent
+   is found or the search is cancelled — so a search that finds nobody never
+   costs the player anything. Consumed (no refund) once a match actually starts. */
+let _pzEntryRefunded=true,_pzEntryStake=0,_pzEntryPlan='free',_pzEntryCoins=0;
+function _pzRefundEntry(){
+  if(_pzEntryRefunded)return; _pzEntryRefunded=true;
+  if(_pzEntryPlan==='premium'){ wallet+=_pzEntryStake; try{addTxn('↩️','بازگشت ورودی — حریف پیدا نشد',_pzEntryStake,true,'ok','refund');}catch(e){} }
+  else { try{addHearts(1);}catch(e){} practiceCoins+=_pzEntryCoins; try{savePracticeCoins();}catch(e){} }
+  try{updateWalletUI();}catch(e){}
+}
+
 /* MATCHMAKING - جایگزین کامل بدون صدا زدن original */
 const _origSMM = startMatchmaking;
 startMatchmaking = async function(){
@@ -6702,6 +6713,9 @@ startMatchmaking = async function(){
   /* Clear any questions/match from a previous game so we never reuse stale data */
   window._pzQs=null; _mid=null;
   if(typeof pzRt!=='undefined'&&pzRt){ pzRt.active=false; pzRt.finished=false; pzRt.oppLeft=false; if(pzRt.hb){clearInterval(pzRt.hb);pzRt.hb=null;} }
+
+  /* Snapshot the entry fee just paid, so we can refund it if nobody is found */
+  _pzEntryRefunded=false; _pzEntryStake=curStake; _pzEntryPlan=userPlan; _pzEntryCoins=practiceCoinStake;
 
   /* UI animations - بدون setTimeout که ربات میاره */
   leagueDuelActive=false; leagueWtaActive=false;
@@ -6731,7 +6745,7 @@ startMatchmaking = async function(){
 
   /* API enqueue */
   const r=await pzApi('POST','/matchmaking/enqueue',{modeId:'duel',economyType:'free',skill:800});
-  if(!r.ok){clearInterval(mmTimer);clearInterval(mmPingT);toast('خطای سرور');go('home');return;}
+  if(!r.ok){clearInterval(mmTimer);clearInterval(mmPingT);_pzRefundEntry();toast('خطای سرور');go('home');return;}
   
   /* Immediately matched? */
   if(r.data.status==='matched'&&r.data.matchId){
@@ -6747,7 +6761,8 @@ startMatchmaking = async function(){
     if(secs>=60){
       clearInterval(_mmi); clearInterval(mmTimer); clearInterval(mmPingT);
       if(_mmt) pzApi('DELETE','/matchmaking/'+_mmt);
-      toast('حریفی برای شما یافت نشد',3000); setTimeout(()=>go('home'),600);
+      _pzRefundEntry();
+      toast('حریفی برای شما یافت نشد — ورودی برگشت',3000); setTimeout(()=>go('home'),600);
       return;
     }
     const tr=await pzApi('GET','/matchmaking/'+_mmt);
@@ -6760,6 +6775,7 @@ startMatchmaking = async function(){
 cancelMatchmaking=function(){
   clearInterval(_mmi); clearInterval(mmTimer); clearInterval(mmPingT);
   if(_mmt) pzApi('DELETE','/matchmaking/'+_mmt);
+  _pzRefundEntry();
   go('home');
 };
 
@@ -6845,6 +6861,7 @@ function pzForfeitWin(){ if(pzRt.finished)return; pzRt.finished=true; clearInter
 
 async function _pzMatchFound(mid){
   clearInterval(_mmi); clearInterval(mmTimer); clearInterval(mmPingT);
+  _pzEntryRefunded=true;   /* opponent found → entry fee is consumed, no refund */
   _mid=mid;
   document.getElementById('mmStatus').textContent='✅ حریف پیدا شد!';
   const _radar=document.getElementById('radar');
