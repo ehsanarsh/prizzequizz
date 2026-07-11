@@ -1,0 +1,102 @@
+{
+  "initial": {
+    "state": "idle",
+    "outfit": {
+      "head": "none",
+      "body": "none",
+      "shoes": "none"
+    }
+  },
+  "states": {
+    "idle": {
+      "label": "Idle",
+      "title": "آماده",
+      "src": "assets/states/idle.png"
+    },
+    "happy": {
+      "label": "Happy",
+      "title": "خوشحال",
+      "src": "assets/states/happy.png"
+    },
+    "sad": {
+      "label": "Sad",
+      "title": "ناراحت",
+      "src": "assets/states/sad.png"
+    },
+    "win": {
+      "label": "Win",
+      "title": "برنده",
+      "src": "assets/states/win.png"
+    },
+    "lose": {
+      "label": "Lose",
+      "title": "بازنده",
+      "src": "assets/states/lose.png"
+    }
+  },
+  "outfits": {
+    "head": {
+      "label": "سر",
+      "items": {
+        "none": {
+          "title": "بدون آیتم",
+          "src": "assets/outfits/head/none.png"
+        },
+        "cap_blue": {
+          "title": "کلاه آبی",
+          "src": "assets/outfits/head/cap_blue.png"
+        },
+        "crown_gold": {
+          "title": "تاج طلایی",
+          "src": "assets/outfits/head/crown_gold.png"
+        },
+        "halo": {
+          "title": "هاله نور",
+          "src": "assets/outfits/head/halo.png"
+        }
+      }
+    },
+    "body": {
+      "label": "بدن / لباس",
+      "items": {
+        "none": {
+          "title": "لباس اصلی",
+          "src": "assets/outfits/body/none.png"
+        },
+        "hoodie_sky": {
+          "title": "هودی آسمانی",
+          "src": "assets/outfits/body/hoodie_sky.png"
+        },
+        "jacket_purple": {
+          "title": "ژاکت بنفش",
+          "src": "assets/outfits/body/jacket_purple.png"
+        },
+        "badge_star": {
+          "title": "نشان ستاره",
+          "src": "assets/outfits/body/badge_star.png"
+        }
+      }
+    },
+    "shoes": {
+      "label": "کفش",
+      "items": {
+        "none": {
+          "title": "کفش اصلی",
+          "src": "assets/outfits/shoes/none.png"
+        },
+        "sneakers_blue": {
+          "title": "اسنیکر آبی",
+          "src": "assets/outfits/shoes/sneakers_blue.png"
+        },
+        "boots_black": {
+          "title": "بوت مشکی",
+          "src": "assets/outfits/shoes/boots_black.png"
+        },
+        "gold_steps": {
+          "title": "کفش طلایی",
+          "src": "assets/outfits/shoes/gold_steps.png"
+        }
+      }
+    }
+  }
+}

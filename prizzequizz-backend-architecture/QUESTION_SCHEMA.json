@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://prizzequizz.example/schemas/question.schema.json",
+  "title": "PrizzeQuizzQuestion",
+  "type": "object",
+  "required": [
+    "id",
+    "text",
+    "options",
+    "correctIndex",
+    "difficulty",
+    "category",
+    "status",
+    "version",
+    "locale"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "text": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 500
+    },
+    "options": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 160
+      }
+    },
+    "correctIndex": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 3
+    },
+    "difficulty": {
+      "type": "string",
+      "enum": ["easy", "medium", "hard"]
+    },
+    "category": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "maxLength": 40
+      },
+      "default": []
+    },
+    "status": {
+      "type": "string",
+      "enum": ["draft", "pending", "approved", "rejected", "archived"]
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "locale": {
+      "type": "string",
+      "examples": ["fa-IR", "en-US"]
+    },
+    "media": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "imageUrl": {
+          "type": "string",
+          "format": "uri"
+        },
+        "audioUrl": {
+          "type": "string",
+          "format": "uri"
+        },
+        "alt": {
+          "type": "string",
+          "maxLength": 160
+        }
+      }
+    },
+    "explanation": {
+      "type": "string",
+      "maxLength": 700
+    },
+    "createdBy": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "reviewedBy": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "updatedAt": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "additionalProperties": false
+}

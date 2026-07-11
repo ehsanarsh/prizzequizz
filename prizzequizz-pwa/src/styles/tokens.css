@@ -1,0 +1,21 @@
+:root {
+  --ink: #0d0d10;
+  --ink-2: #17171c;
+  --ink-3: #24242b;
+  --paper: #f7f4ec;
+  --muted: #b9b4a6;
+  --bolt: #ffd21f;
+  --bolt-2: #f5b90d;
+  --sky: #73d9ff;
+  --ok: #33d97c;
+  --bad: #ff5a48;
+  --stroke: 2.5px solid #000;
+  --hard: 0 5px 0 #000;
+  --hard-sm: 0 3px 0 #000;
+  font-family: Vazirmatn, system-ui, sans-serif;
+}
+
+[data-theme='free'] {
+  --bolt: var(--sky);
+  --bolt-2: #1597d2;
+}

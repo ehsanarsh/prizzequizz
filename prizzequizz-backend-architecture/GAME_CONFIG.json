@@ -1,0 +1,175 @@
+{
+  "version": "2026.07.06-prod-001",
+  "economy": {
+    "free": {
+      "enabled": true,
+      "entryCurrency": "coins",
+      "heartCostPerMatch": 1,
+      "heartRechargeMinutes": 60,
+      "maxAutoRechargeHearts": 5,
+      "defaultCoins": 350,
+      "showCash": false
+    },
+    "paid": {
+      "enabled": true,
+      "entryCurrency": "cash",
+      "walletCurrency": "IRR",
+      "withdrawFeePercent": 5,
+      "showCash": true
+    }
+  },
+  "globalRules": {
+    "answerIdempotencyWindowSeconds": 30,
+    "reconnectGraceSeconds": 45,
+    "questionRepeatWindowDays": 14,
+    "maxActiveMatchesPerUser": 1
+  },
+  "modes": {
+    "duel": {
+      "enabled": true,
+      "displayName": "Duel",
+      "playerCount": 2,
+      "questionCount": 5,
+      "timerSeconds": 10,
+      "tieBreaker": "sudden_death",
+      "entry": {
+        "free": {
+          "hearts": 1,
+          "coins": 25
+        },
+        "paid": {
+          "cash": 30000
+        }
+      },
+      "reward": {
+        "free": {
+          "type": "coins",
+          "base": 80,
+          "perStage": 45,
+          "perCorrect": 0,
+          "continueMultiplier": 2
+        },
+        "paid": {
+          "type": "cash",
+          "winnerTakes": "entry_pool",
+          "continueMultiplier": 2
+        }
+      },
+      "progression": {
+        "afterWin": ["collect_exit", "continue_double"],
+        "afterLoss": ["view_summary", "home", "rematch_request"]
+      },
+      "ui": {
+        "resultPanel": "duel_result_panel",
+        "rewardAnimation": "coin_or_cash_fly_to_header"
+      }
+    },
+    "last_survivor": {
+      "enabled": true,
+      "displayName": "Last Survivor",
+      "minPlayers": 3,
+      "maxPlayers": 15,
+      "maxQuestions": 12,
+      "timerSeconds": 15,
+      "elimination": true,
+      "entry": {
+        "free": {
+          "hearts": 1,
+          "coins": 25
+        },
+        "paid": {
+          "cash": 60000
+        }
+      },
+      "reward": {
+        "free": {
+          "type": "coins",
+          "base": 50,
+          "perQuestion": 30,
+          "survivorBonus": 120
+        },
+        "paid": {
+          "type": "cash",
+          "pool": "eliminated_entries_split_among_survivors"
+        }
+      },
+      "continueExitRules": {
+        "enabled": true,
+        "autoContinueSeconds": 10,
+        "collectAllowedAfterCorrect": true
+      },
+      "ui": {
+        "postQuestionPanel": "checkpoint_panel",
+        "resultPanel": "standard_result_panel",
+        "rewardAnimation": "coin_or_cash_fly_to_header"
+      }
+    },
+    "all_or_nothing": {
+      "enabled": true,
+      "displayName": "All or Nothing",
+      "minPlayers": 3,
+      "maxPlayers": 15,
+      "timerSeconds": 15,
+      "chatSeconds": 60,
+      "voteSeconds": 10,
+      "decision": "majority",
+      "entry": {
+        "free": {
+          "hearts": 1,
+          "coins": 25
+        },
+        "paid": {
+          "cash": 60000
+        }
+      },
+      "reward": {
+        "free": {
+          "type": "coins",
+          "base": 50,
+          "perQuestion": 30,
+          "teamBonus": 100
+        },
+        "paid": {
+          "type": "cash",
+          "pool": "group_entry_pool"
+        }
+      },
+      "continueExitRules": {
+        "enabled": true,
+        "voteRequired": true,
+        "tieDecision": "continue"
+      },
+      "ui": {
+        "postQuestionPanel": "checkpoint_panel",
+        "votePanel": "group_vote_panel",
+        "resultPanel": "standard_result_panel"
+      }
+    },
+    "practice": {
+      "enabled": true,
+      "displayName": "Practice Wrapper",
+      "appliesTo": ["duel", "last_survivor", "all_or_nothing"],
+      "entry": {
+        "hearts": 1,
+        "coinsSelectable": [10, 25, 50]
+      },
+      "reward": {
+        "type": "coins",
+        "xpEnabled": true,
+        "cashVisible": false
+      },
+      "ui": {
+        "theme": "free_sky_accent",
+        "hideWallet": true,
+        "showHearts": true,
+        "showCoins": true
+      }
+    }
+  },
+  "animationTriggers": {
+    "ANSWER_CORRECT": "correct_answer_pop",
+    "ANSWER_WRONG": "wrong_answer_shake",
+    "REWARD_GRANTED": "reward_fly_to_header",
+    "MATCH_FINISHED": "result_panel_enter"
+  }
+}
