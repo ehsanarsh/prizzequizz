@@ -23,8 +23,11 @@ export function registerUserRoutes(router: Router, base: string): void {
     }
     json(ctx.res, 200, toDto(user));
   });
-  router.add('GET', `${base}/users/:id/profile`, (ctx) => {
-    json(ctx.res, 200, { id: ctx.params.id, username: 'Opponent', displayName: 'حریف', avatar: '🦊', level: 5, league: 'Bronze', winRate: 62, totalPrize: 1250000 });
+  // Public profile of ANOTHER user: expose only the public handle + stats.
+  // Never the real name / phone (privacy).
+  router.add('GET', `${base}/users/:id/profile`, async (ctx) => {
+    const u = await repositories.users.findById(ctx.params.id!);
+    json(ctx.res, 200, { id: ctx.params.id, username: u?.username ?? 'player', avatar: '🦊', level: u?.level ?? 1, league: 'Bronze', winRate: 62, totalPrize: 0 });
   });
 }
 

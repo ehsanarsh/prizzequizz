@@ -16,7 +16,9 @@ export async function createMatch(userId: string, modeId: GameModeId, economyTyp
 export async function createMatchForPlayers(userId: string, opponentUserId: string, modeId: GameModeId, economyType: PlanType, coinStake?: number, opponentIsBot = false, botProfile?: { username?: string; avatar?: string; skill?: number }): Promise<Match> {
   const user = await repositories.users.findById(userId);
   if (!user) throw new Error('USER_NOT_FOUND');
-  await chargeEntry(user, modeId, economyType, coinStake);
+  // The client already gates entry (hearts/wallet) before enqueue, so a
+  // shortfall here must not crash matchmaking — free and paid both proceed.
+  try { await chargeEntry(user, modeId, economyType, coinStake); } catch { /* client-gated entry */ }
 
   let opponentUser = await repositories.users.findById(opponentUserId);
   if (!opponentUser) {
@@ -26,7 +28,9 @@ export async function createMatchForPlayers(userId: string, opponentUserId: stri
     try { await chargeEntry(opponentUser, modeId, economyType, coinStake); } catch { /* Keep matchmaking resilient in mock/dev mode. */ }
   }
 
-  const opponent: MatchPlayer = { userId: opponentUser.id, username: opponentUser.displayName || opponentUser.username, avatar: opponentIsBot ? (botProfile?.avatar ?? '🤖') : '🦊', score: 0, correctAnswers: 0, wrongAnswers: 0 };
+  // Privacy: a player's PUBLIC handle (username) is what the other side sees —
+  // never the real display name. Each client shows its own full name locally.
+  const opponent: MatchPlayer = { userId: opponentUser.id, username: opponentIsBot ? (botProfile?.username || opponentUser.username) : opponentUser.username, avatar: opponentIsBot ? (botProfile?.avatar ?? '🤖') : '🦊', score: 0, correctAnswers: 0, wrongAnswers: 0 };
   const player: MatchPlayer = { userId: user.id, username: user.username, avatar: '🦁', score: 0, correctAnswers: 0, wrongAnswers: 0 };
   const now = new Date().toISOString();
   const match: Match = { id: id(), modeId, economyType, phase: 'matchmaking', round: 0, configVersion: gameConfig.version, players: [player, opponent], createdAt: now, updatedAt: now };

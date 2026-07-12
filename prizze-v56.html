@@ -6812,7 +6812,9 @@ startMatchmaking = async function(){
   },1000);
 
   /* API enqueue */
-  const r=await pzApi('POST','/matchmaking/enqueue',{modeId:'duel',economyType:'free',skill:800});
+  /* Separate ecosystems: paid players only queue/match with paid, free with free */
+  const _eco=(userPlan==='premium')?'paid':'free';
+  const r=await pzApi('POST','/matchmaking/enqueue',{modeId:'duel',economyType:_eco,skill:800});
   if(!r.ok){clearInterval(mmTimer);clearInterval(mmPingT);_pzRefundEntry();toast('خطای سرور');go('home');return;}
   
   /* Immediately matched? */
