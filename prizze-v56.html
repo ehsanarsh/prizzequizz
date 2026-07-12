@@ -3261,9 +3261,9 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
       </div>
       <div class="pad" style="padding-top:0">
         <div class="section-title" style="text-align:center;margin-top:0">انتخاب کاراکتر</div>
-        <div class="field"><label>نام و نام خانوادگی</label><input class="input" value="شهاب ساعدی"></div>
-        <div class="field"><label>نام کاربری</label><input class="input" value="shahab_9421" dir="ltr"></div>
-        <button class="btn btn-primary" onclick="toast('تغییرات ذخیره شد ✅')">ذخیره تغییرات</button>
+        <div class="field"><label>نام و نام خانوادگی</label><input class="input" id="profEditName" placeholder="نام و نام خانوادگی"></div>
+        <div class="field"><label>نام کاربری</label><input class="input" id="profEditUsername" dir="ltr" placeholder="username"></div>
+        <button class="btn btn-primary" onclick="submitProfileEdit()">ذخیره تغییرات</button>
         <div class="card" style="display:flex;align-items:center;gap:10px;margin-top:14px;padding:13px 16px">
           <span style="font-size:22px">🎫</span><b style="flex:1;font-size:14px">بلیت‌های لیگ</b>
           <span id="profTickets" style="font-weight:900;font-size:14px">🥇 ۰ · 🥈 ۰ · 🥉 ۱</span></div>
@@ -4964,7 +4964,9 @@ function usePower(type){
     sfx('found');vib([20,10,20]);
   }else if(type==='stats'){
     if(powerups.pstats<=0||statsShown)return;powerups.pstats--;statsShown=true;
-    showHistoricalStats();
+    /* Inline (no modal): paint the answer-distribution % directly onto the
+       current question's options so the player can still pick immediately. */
+    revealOthersPct(curBox,curSel);
   }
   renderPowerups();
 }
@@ -6195,12 +6197,16 @@ function animateXPGain(amount,origin){
   const chip=target.closest('.xpchip');if(chip){chip.classList.add('gain-bounce');setTimeout(()=>chip.classList.remove('gain-bounce'),620);}const bar=document.getElementById('hdrXp');if(bar)bar.style.width=Math.min(100,68+amount/30)+'%';
   setTimeout(()=>el.remove(),900);
 }
-function initAAAUX(){renderWeeklyProgress();renderDailyHero();renderBadges();showOnboardingIfNeeded();try{if(localStorage.getItem('pq_onboarding_done')==='1')showStarterToken();}catch(e){}}
+function initAAAUX(){renderWeeklyProgress();renderDailyHero();renderBadges();try{if(localStorage.getItem('pq_onboarding_done')==='1')showStarterToken();}catch(e){}}
 setTimeout(initAAAUX,900);
 
 const _origGo=go;
 go=function(id){_origGo(id);
-  if(id==='profile')setTimeout(animateProfile,120);
+  /* Onboarding tutorial: only once, and only after the user actually reaches
+     Home (not over login/splash, not on the start-game screen). The guard
+     inside showOnboardingIfNeeded (pq_onboarding_done) keeps it to one time. */
+  if(id==='home')setTimeout(()=>{try{if(_tok&&_usr)showOnboardingIfNeeded();}catch(e){}},500);
+  if(id==='profile'){setTimeout(animateProfile,120);try{populateProfileEdit();}catch(e){}}
   if(id==='mode-entry')setTimeout(updateModeEntryPlan,20);
   if(id==='character')setTimeout(ccInit,80);
   if(id==='missions'){markBadgeViewed('missions');showTutorialOnce('missions','🎯','ماموریت‌ها','ماموریت‌ها را کامل کن و جایزه آماده را دریافت کن.');setTimeout(renderMissions,80);}
@@ -6211,7 +6217,8 @@ go=function(id){_origGo(id);
   if(id==='wallet'){recordMissionEvent('walletVisit',1);setTimeout(()=>{try{renderWallet();}catch(e){}},80);}
   if(id==='support')recordMissionEvent('supportVisit',1);
   if(id==='feedback')setTimeout(()=>{renderFeedbackList();buildRatingStars();},80);
-  if(id==='mode-entry')showTutorialOnce('mode_entry','🎮','شروع بازی','در حالت تمرینی با قلب و سکه، در حالت پولی با کیف پول وارد بازی می‌شی.');
+  /* (removed) the game guide no longer pops up on the start-game screen — the
+     one-time onboarding now runs after the first Home entry instead. */
   if(id==='home'){setTimeout(()=>{applyPlanTheme();animateXP();renderWeeklyProgress();renderDailyHero();renderBadges();setTimeout(updateMissionHome,120);},80);
     if(!spinAutoShown&&spinAvailable){spinAutoShown=true;setTimeout(()=>{if(document.getElementById('home').classList.contains('active'))openSpin();},800);}
   }
@@ -6731,6 +6738,29 @@ async function submitRegister(){
     toast(r.error?.message || 'این نام کاربری قبلاً گرفته شده — یکی دیگه بزن');
   }
 }
+/* Profile-edit screen: fill from the SINGLE shared source (_usr) — no hardcoded name. */
+function populateProfileEdit(){
+  const nEl=document.getElementById('profEditName'); if(nEl) nEl.value=(_usr&&_usr.displayName&&_usr.displayName!=='بازیکن جدید')?_usr.displayName:'';
+  const uEl=document.getElementById('profEditUsername'); if(uEl) uEl.value=(_usr&&_usr.username&&!/^user_\d+$/.test(_usr.username))?_usr.username:'';
+}
+async function submitProfileEdit(){
+  const full=(document.getElementById('profEditName')?.value||'').trim();
+  const uname=(document.getElementById('profEditUsername')?.value||'').trim();
+  if(full && full.length<2){toast('نام را کامل وارد کن');return;}
+  if(uname && !/^[A-Za-z0-9_]{3,20}$/.test(uname)){toast('نام کاربری: ۳ تا ۲۰ حرف انگلیسی، عدد یا _');return;}
+  const body={}; if(full)body.displayName=full; if(uname)body.username=uname;
+  if(!body.displayName&&!body.username){toast('چیزی برای تغییر نیست');return;}
+  const r=await pzApi('PATCH','/users/me',body);
+  if(r.ok){ _usr=r.data; try{localStorage.setItem('pz_usr',JSON.stringify(_usr));}catch(e){} applyMyName(); toast('تغییرات ذخیره شد ✅'); }
+  else { toast(r.error?.message||'ذخیره نشد — شاید نام کاربری تکراری است'); }
+}
+/* Keep the primary button visible above the mobile keyboard on the auth screens
+   (login / OTP / register): scroll it into view when a field gains focus. */
+document.addEventListener('focusin',function(e){
+  const t=e.target; if(!t||t.tagName!=='INPUT') return;
+  const scr=t.closest?t.closest('.screen'):null; if(!scr||['login','otp','register'].indexOf(scr.id)<0) return;
+  setTimeout(function(){ try{ (scr.querySelector('.btn-primary')||t).scrollIntoView({block:'center',behavior:'smooth'}); }catch(_){} },320);
+});
 
 /* Refund the entry fee (paid in startGame BEFORE matchmaking) when no opponent
    is found or the search is cancelled — so a search that finds nobody never
