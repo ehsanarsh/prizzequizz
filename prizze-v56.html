@@ -590,6 +590,8 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
 .radar::before{content:"";position:absolute;inset:-2px;border-radius:50%;background:conic-gradient(from 0deg,rgba(255,210,31,.5),transparent 55%);animation:sweep 2.2s linear infinite}
 @keyframes sweep{to{transform:rotate(360deg)}}
 @keyframes tkFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
+.pz-pop{display:inline-block;animation:pzPop .6s cubic-bezier(.2,1.4,.4,1)}
+@keyframes pzPop{0%{transform:scale(2);opacity:.2}60%{transform:scale(.82)}100%{transform:scale(1);opacity:1}}
 .radar .ring{position:absolute;border-radius:50%;border:1.5px dashed rgba(255,210,31,.3)}
 .radar .ring.r1{inset:26%}.radar .ring.r2{inset:12%}
 .radar .center-av{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:68px;height:68px;border-radius:20px;background:var(--paper);border:var(--stroke);display:grid;place-items:center;z-index:3;box-shadow:var(--hard-sm),0 0 22px var(--bolt-glow)}
@@ -4440,6 +4442,9 @@ function runDuelRound(){
 function duelContinue(){
   if(duelStage>=10){endGame(true,prize,false,'هر ۱۰ مرحله رو بردی! قهرمان مطلق 👑');return;}
   duelStage++;duelStakeVal*=2;prize=duelStakeVal*2;
+  /* Ascension: compete at the NEW value tier (winnings), no new ticket needed.
+     e.g. green winner now at 25,000 meets fresh blue entrants (also 25,000). */
+  window.matchValue=duelStakeVal; duelTicket=null;
   duelChain=true;
   setTimeout(startMatchmaking,700);
 }
@@ -5741,8 +5746,9 @@ function ticketEnterDuel(){
   mTickets[selectedTicket]--; saveMTickets(); renderHeaderTickets();
   duelTicket=selectedTicket;
   /* Stake = ticket value → the existing win/withdraw flow pays the combined
-     prize (both entries) into the wallet with the transaction + animation. */
-  curStake=t.value;
+     prize (both entries) into the wallet with the transaction + animation.
+     matchValue is the VALUE tier used for matchmaking (see enqueue). */
+  curStake=t.value; window.matchValue=t.value;
   return true;
 }
 /* Credit the combined prize to the wallet when a paid ticket duel is won. */
@@ -6907,9 +6913,10 @@ startMatchmaking = async function(){
   },1000);
 
   /* API enqueue */
-  /* Separate ecosystems + stage-1 ticket separation: a paid player only matches
-     others who entered with the SAME ticket type (green/blue/red). */
-  const _eco=(userPlan==='premium')?('paid_'+(duelTicket||selectedTicket)):'free';
+  /* VALUE-BASED ladder: a paid player only matches others at the SAME prize
+     value tier — so a green winner (now 25,000) meets fresh blue entrants
+     (25,000), etc. Fresh green=12500, blue=25000, red=50000; each win doubles. */
+  const _eco=(userPlan==='premium')?('v'+(window.matchValue||curStake||0)):'free';
   const r=await pzApi('POST','/matchmaking/enqueue',{modeId:'duel',economyType:_eco,skill:800});
   if(!r.ok){clearInterval(mmTimer);clearInterval(mmPingT);_pzRefundEntry();toast('خطای سرور');go('home');return;}
   
@@ -7203,23 +7210,35 @@ readyGate=function(cb,label){
   return _origReadyGate(cb,label);
 };
 
-/* ---- Auto-advance (no manual button); "آماده‌ای؟" gate then next Q together ---- */
+/* ---- Result modal after each question: your result + opponent result +
+   animated score, 5s countdown, then auto-advance to the next question. ---- */
+function pzResultGate(myRight,oppRight,cb,label){
+  const badge=(ok,txt)=>'<span style="font-size:12px;font-weight:900;padding:5px 11px;border-radius:100px;background:'+(ok?'var(--ok-soft)':'var(--red-soft)')+';color:'+(ok?'var(--ok)':'var(--red)')+'">'+txt+' '+(ok?'✅':'❌')+'</span>';
+  const sub='<div style="text-align:center">'+
+    '<div style="display:flex;justify-content:center;gap:8px;margin:0 0 12px">'+badge(myRight,'تو')+badge(oppRight,((pzRt&&pzRt.oppName)||'حریف'))+'</div>'+
+    '<div style="font-size:36px;font-weight:900;direction:ltr;letter-spacing:2px">'+
+      '<span id="pzScMe" class="'+(myRight?'pz-pop':'')+'" style="color:var(--ok)">'+fa(myScore)+'</span>'+
+      '<span style="opacity:.45;margin:0 6px">-</span>'+
+      '<span id="pzScOpp" class="'+(oppRight?'pz-pop':'')+'" style="color:var(--red)">'+fa(oppScore)+'</span>'+
+    '</div>'+
+    (label?'<div style="font-size:12px;color:var(--muted);margin-top:9px;font-weight:800">'+label+'</div>':'')+
+    '</div>';
+  showAaaModal({ icon: myRight?'🎉':'💪', title: myRight?'آفرین! جوابت درست بود':'اشکالی نداره — ادامه بده', sub:sub, seconds:5, hideActions:true, dismissible:false, onDone:cb });
+}
 function pzAutoAdvance(myRight,oppRight){
-  const sc=document.getElementById('duelScore');
-  if(sc){ sc.style.color=oppRight?'var(--ok)':'var(--red)'; setTimeout(()=>sc.style.color='',900); }
-  const next=(label)=>readyGate(()=>loadDuelQWithFocus(), label||'سوال بعدی...');
+  const next=(label)=>pzResultGate(myRight,oppRight,()=>loadDuelQWithFocus(),label);
   if(!suddenDeath){
     if(dQ>=5){
       if(myScore>oppScore) return duelRoundWin();
       if(myScore<oppScore) return duelRoundLose();
-      suddenDeath=true; if(sc){ sc.textContent='⚡'; }
-      return next('مساوی شد! مرگ ناگهانی ⚡');
+      suddenDeath=true;
+      return next('مساوی شد! ⚡ مرگ ناگهانی');
     }
     return next();
   }else{
     if(myRight&&!oppRight) return duelRoundWin();
     if(!myRight&&oppRight) return duelRoundLose();
-    return next('ادامه مرگ ناگهانی ⚡');
+    return next('⚡ ادامهٔ مرگ ناگهانی');
   }
 }
 
