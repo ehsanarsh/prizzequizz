@@ -3668,7 +3668,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
       <div class="spin-chipline"><span class="spin-chip">💰 جایزه نقدی</span><span class="spin-chip">🎫 بلیت لیگ</span><span class="spin-chip">⚡ XP</span></div>
     </div>
     <div class="wheel-wrap"><div class="wheel-pointer"></div><div class="wheel" id="wheel"></div><div class="wheel-hub">🎁</div></div>
-    <div class="spin-result" id="spinResult"><span class="sr-ico" id="spinResultIcon">🎁</span><b id="spinResultTitle">جایزه</b><p id="spinResultSub">به حساب تو اضافه شد</p></div>
+    <div class="spin-result" id="spinResult"><span class="sr-ico" id="spinResultIcon">🎁</span><b id="spinResultTitle">جایزه</b><p id="spinResultSub">به حسابت اضافه شد</p></div>
     <button class="btn btn-primary" id="spinBtn" onclick="spinWheel()">بچرخون!</button>
     <div class="spin-note" id="spinNote">بعد از چرخش، جایزه با موشن به هدر منتقل می‌شود.</div>
     <button class="btn btn-ghost spin-bottom-close" onclick="forceCloseSpin()">بستن گردونه</button>
@@ -4721,7 +4721,7 @@ function renderDuelResultPanel(won){
   const score=fa(oppScore)+' - '+fa(myScore),wrong=myResults.filter(x=>x==='no').length;
   const coins=won?(lastPracticeCoinsEarned||Math.max(0,duelStage*45+80)):0,xp=duelStage*80;
   if(userPlan==='free'){
-    box.innerHTML='<div class="duel-summary-aaa"><div class="duel-summary-card"><div class="duel-summary-top"><div class="duel-side me"><div class="av">🦁</div><b>'+(window.myName||'Shahab_9865')+'</b><span>بازیکن</span></div><div class="duel-final"><div class="state '+(won?'':'lose')+'">'+(won?'پیروزی':'پایان دوئل')+'</div><div class="score">'+score+'</div></div><div class="duel-side"><div class="av" onclick="showCurrentOpponentProfile()">'+(oppAv||'🦊')+'</div><b>'+(oppName||'حریف')+'</b><span>حریف</span></div></div><div class="duel-summary-kpis"><div class="duel-kpi"><b>'+fa(myScore)+'</b><span>پاسخ درست</span></div><div class="duel-kpi"><b>'+fa(wrong)+'</b><span>پاسخ اشتباه</span></div><div class="duel-kpi"><b>'+fa(xp)+'</b><span>XP</span></div><div class="duel-kpi"><b>'+fa(duelStage)+'</b><span>مرحله</span></div><div class="duel-kpi"><b>~'+fa(duelStage*52)+'ث</b><span>مدت مسابقه</span></div><div class="duel-kpi"><b>'+fa(coins)+'</b><span>سکه برده</span></div></div><div class="duel-reward-strip"><span class="bigcoin">🪙</span><b>+'+fa(coins)+' سکه</b><small>اگر پلن پولی بود، جایزه نقدی واقعی می‌گرفتی.</small></div><div class="duel-social-actions"><button onclick="showFriendRequestSnackbar(oppName||\'حریف\')"><span class="ico">➕</span>دوستی</button><button onclick="showCurrentOpponentProfile()"><span class="ico">👤</span>پروفایل</button><button onclick="reportOpponent()"><span class="ico">🚩</span>گزارش</button><button onclick="blockOpponent()"><span class="ico">🚫</span>بلاک</button></div><div class="duel-bottom-actions"><button class="btn btn-primary" onclick="collectPracticeCoinsExit()">خروج بعد از دریافت سکه</button><button class="btn btn-blue" onclick="continueDoublePracticeCoins()">ادامه و دوبرابر کردن سکه</button></div></div></div>';
+    box.innerHTML='<div class="duel-summary-aaa"><div class="duel-summary-card"><div class="duel-summary-top"><div class="duel-side me"><div class="av">🦁</div><b>'+(window.myUserId||window.myName||'من')+'</b><span>بازیکن</span></div><div class="duel-final"><div class="state '+(won?'':'lose')+'">'+(won?'پیروزی':'پایان دوئل')+'</div><div class="score">'+score+'</div></div><div class="duel-side"><div class="av" onclick="showCurrentOpponentProfile()">'+(oppAv||'🦊')+'</div><b>'+(oppName||'حریف')+'</b><span>حریف</span></div></div><div class="duel-summary-kpis"><div class="duel-kpi"><b>'+fa(myScore)+'</b><span>پاسخ درست</span></div><div class="duel-kpi"><b>'+fa(wrong)+'</b><span>پاسخ اشتباه</span></div><div class="duel-kpi"><b>'+fa(xp)+'</b><span>XP</span></div><div class="duel-kpi"><b>'+fa(duelStage)+'</b><span>مرحله</span></div><div class="duel-kpi"><b>~'+fa(duelStage*52)+'ث</b><span>مدت مسابقه</span></div><div class="duel-kpi"><b>'+fa(coins)+'</b><span>سکه برده</span></div></div><div class="duel-reward-strip"><span class="bigcoin">🪙</span><b>+'+fa(coins)+' سکه</b><small>اگر پلن پولی بود، جایزه نقدی واقعی می‌گرفتی.</small></div><div class="duel-social-actions"><button onclick="showFriendRequestSnackbar(oppName||\'حریف\')"><span class="ico">➕</span>دوستی</button><button onclick="showCurrentOpponentProfile()"><span class="ico">👤</span>پروفایل</button><button onclick="reportOpponent()"><span class="ico">🚩</span>گزارش</button><button onclick="blockOpponent()"><span class="ico">🚫</span>بلاک</button></div><div class="duel-bottom-actions"><button class="btn btn-primary" onclick="collectPracticeCoinsExit()">خروج بعد از دریافت سکه</button><button class="btn btn-blue" onclick="continueDoublePracticeCoins()">ادامه و دوبرابر کردن سکه</button></div></div></div>';
   }else{
     box.innerHTML='<div class="duel-result-card"><div class="opp-av" onclick="showCurrentOpponentProfile()">'+(oppAv||'🦊')+'</div><div class="dr-info"><b>'+(won?'نتیجه دوئل: پیروزی':'نتیجه دوئل: پایان مسابقه')+'</b><span>حریف: '+(oppName||'حریف')+' · مرحله '+fa(duelStage)+' · پاسخ‌های تو: '+fa(myScore)+'</span></div><div class="dr-score">'+score+'</div></div><div class="duel-result-actions"><button class="btn btn-ghost" onclick="showCurrentOpponentProfile()">پروفایل حریف</button><button class="btn btn-ghost" onclick="showFriendRequestSnackbar(oppName||\'حریف\')">درخواست دوستی</button></div>';
   }
@@ -5891,14 +5891,16 @@ function awardSpinPrize(prize){
   const res=document.getElementById('spinResult');
   document.getElementById('spinResultIcon').textContent=prize.ico;
   document.getElementById('spinResultTitle').textContent=prize.title;
-  document.getElementById('spinResultSub').textContent='جایزه به حساب تو منتقل شد';
+  document.getElementById('spinResultSub').textContent='جایزه به حسابت اضافه شد';
   if(res)res.classList.add('show');document.getElementById('spinSheet').classList.add('done');
   spinConfetti();flySpinRewardToHeader(prize);
   if(prize.type==='cash')earn(prize.amount,'جایزه گردونه شانس','🎡');
-  else if(prize.type==='ticket'){tickets.bronze+=prize.amount;updateWalletUI();addTxn('🎫','بلیت گردونه شانس',0,true,'ok','reward');toast('🎫 بلیت برنزی به هدر اضافه شد');}
+  else if(prize.type==='ticket'){tickets.bronze+=prize.amount;updateWalletUI();addTxn('🎫','بلیت گردونه شانس',0,true,'ok','reward');toast('🎫 بلیت برنزی اضافه شد');}
   else if(prize.type==='power'){powerups[prize.key]=(powerups[prize.key]||0)+prize.amount;toast(prize.ico+' '+prize.title+' به کمک‌ها اضافه شد');sfx('correct');}
   else {toast('⚡ '+prize.title+' دریافت شد');sfx('correct');}
-  showAaaModal({icon:prize.ico,title:'تبریک! '+prize.title,sub:'جایزه گردونه شانس با موفقیت به حسابت اضافه شد.',primaryText:'عالیه، بستن گردونه',secondaryText:'دیدن نتیجه',onPrimary:()=>{closeAaaModal(false);forceCloseSpin();},onSecondary:()=>closeAaaModal(false),onDismiss:()=>forceCloseSpin()});
+  /* No confirmation modal: the prize is already credited and flew to its
+     counter — briefly show the inline result, then auto-close and return. */
+  setTimeout(()=>{ try{forceCloseSpin();}catch(e){} },1100);
 }
 function spinWheel(){
   if(spinning||!spinAvailable)return;spinning=true;renderLuckyWheel();
@@ -6825,7 +6827,10 @@ function pzDisplayName(){
 }
 function applyMyName(){
   const n=pzDisplayName(); window.myName=n;
-  ['hdrName','duelMeName','duelMeName2','profName'].forEach(id=>{const el=document.getElementById(id); if(el) el.textContent=n;});
+  const uid=(_usr&&_usr.username&&!/^user_\d+$/.test(_usr.username))?_usr.username:n; window.myUserId=uid;
+  /* Header/profile show the name; in-game labels show the User ID (never "تو"). */
+  ['hdrName','profName'].forEach(id=>{const el=document.getElementById(id); if(el) el.textContent=n;});
+  ['duelMeName','duelMeName2'].forEach(id=>{const el=document.getElementById(id); if(el) el.textContent=uid;});
 }
 async function submitRegister(){
   const full=(document.getElementById('regFullName')?.value||'').trim();
@@ -6998,19 +7003,26 @@ function pzWsSubmit(round,sel){
   fetch(_A+'/matches/'+pzRt.matchId+'/answer',{method:'POST',headers:{'Authorization':'Bearer '+_tok,'Content-Type':'application/json'},body:JSON.stringify(payload)}).catch(()=>{});
 }
 function pzResolveWaiter(round,res){ const w=pzRt.waiters[round]; if(w) w(res); }
+/* Opponent reconnected within the grace window → cancel the pending forfeit. */
+function pzOppBack(){ if(pzRt.oppGraceTimer){ clearTimeout(pzRt.oppGraceTimer); pzRt.oppGraceTimer=null; const top=document.getElementById('dTopic'); if(top&&pzRt._prevTopic&&/اتصال حریف قطع/.test(top.textContent)){ top.textContent=pzRt._prevTopic; } } }
 function pzHandleWs(m){
   if(!m||!m.type) return; const p=m.payload||{};
   if(m.type==='server:connected'){ if(!pzRt.myId&&p.userId)pzRt.myId=p.userId; return; }
   if(m.type==='server:answer_result'){
     const uid=p.userId, rnd=Number(p.round);
-    if(uid&&uid!==pzRt.myId){ if(!pzRt.oppId)pzRt.oppId=uid; pzRt.oppByRound[rnd]={correct:!!p.correct,sel:p.selectedIndex}; pzResolveWaiter(rnd,pzRt.oppByRound[rnd]); }
+    if(uid&&uid!==pzRt.myId){ pzOppBack(); if(!pzRt.oppId)pzRt.oppId=uid; pzRt.oppByRound[rnd]={correct:!!p.correct,sel:p.selectedIndex}; pzResolveWaiter(rnd,pzRt.oppByRound[rnd]); }
     return;
   }
   if(m.type==='server:match_snapshot'){ if(Array.isArray(p.players))pzRt.snapshot=p.players; return; }
-  if(m.type==='server:presence'){ const u=p.users||[]; pzRt.presence=u.length; const other=u.find(x=>(x.userId||x.id)!==pzRt.myId); if(other&&!pzRt.oppId)pzRt.oppId=other.userId||other.id; return; }
+  if(m.type==='server:presence'){ const u=p.users||[]; pzRt.presence=u.length; const other=u.find(x=>(x.userId||x.id)!==pzRt.myId); if(other&&!pzRt.oppId)pzRt.oppId=other.userId||other.id; if(u.length>=2)pzOppBack(); return; }
   if(m.type==='server:opponent_left'){
-    pzRt.oppLeft=true; for(const k in pzRt.waiters) pzResolveWaiter(k,null);
-    if(pzRt.active&&!pzRt.finished) setTimeout(()=>{ if(pzRt.active&&!pzRt.finished) pzForfeitWin(); },800);
+    /* Weak internet: a brief disconnect must NOT end the match. Give the
+       opponent a grace window to reconnect; only forfeit if they stay gone. */
+    if(pzRt.active&&!pzRt.finished&&!pzRt.oppGraceTimer){
+      const top=document.getElementById('dTopic'); const duelOn=document.getElementById('duel')&&document.getElementById('duel').classList.contains('active');
+      if(top&&duelOn){ pzRt._prevTopic=top.textContent; top.textContent='⏳ اتصال حریف قطع شد؛ منتظر بازگشت...'; }
+      pzRt.oppGraceTimer=setTimeout(()=>{ pzRt.oppGraceTimer=null; if(pzRt.active&&!pzRt.finished){ pzRt.oppLeft=true; for(const k in pzRt.waiters) pzResolveWaiter(k,null); pzForfeitWin(); } },15000);
+    }
     return;
   }
   if(m.type==='server:match_finished'){ pzRt.serverFinished=true; return; }
@@ -7029,7 +7041,7 @@ function pzOnPeer(msg){
 }
 function pzHash(s){ let h=2166136261; s=String(s); for(let i=0;i<s.length;i++){ h^=s.charCodeAt(i); h=Math.imul(h,16777619); } return h>>>0; }
 function pzApplyDuelNames(){
-  const me=window.myName||(typeof pzDisplayName==='function'?pzDisplayName():'تو');
+  const me=(_usr&&_usr.username&&!/^user_\d+$/.test(_usr.username))?_usr.username:(window.myUserId||window.myName||'من');
   const op=(pzRt&&pzRt.oppName)||oppName||'حریف';
   const oa=(pzRt&&pzRt.oppAv)||oppAv||'🦊';
   ['duelMeName','duelMeName2'].forEach(id=>{const el=document.getElementById(id); if(el)el.textContent=me;});
@@ -7183,7 +7195,7 @@ function pzTossWaitAndDecide(){
 function pzShowWaitTopic(){
   const top=document.getElementById('dTopic');
   if(top) top.textContent='⏳ '+((pzRt&&pzRt.oppName)||'حریف')+' در حال انتخاب موضوع است، منتظر بمان...';
-  pzRt.topicWaiter=(topic)=>{ pzRt.topicWaiter=null; clearTimeout(pzRt.topicSafety); duelTopic=topic; if(top)top.textContent='موضوع: '+topic; setTimeout(()=>runDuelRound(),400); };
+  pzRt.topicWaiter=(topic)=>{ pzRt.topicWaiter=null; clearTimeout(pzRt.topicSafety); duelTopic=topic; if(top)top.textContent='موضوع: '+topic; setTimeout(()=>runDuelRound(),150); };
   if(pzRt.oppTopic) return pzRt.topicWaiter(pzRt.oppTopic);
   pzRt.topicSafety=setTimeout(()=>{ if(pzRt.topicWaiter){ pzRt.topicWaiter(TOPICS[pzHash(String(pzRt.matchId)+'t')%TOPICS.length][1]); } },14000);
 }
@@ -7193,7 +7205,7 @@ pickTopic=function(topic,mine){
   if(pzRt.active&&pzRt.matchId){
     clearInterval(tpTimer); duelTopic=topic; sfx('found');
     if(pzRt.tossWinner) pzWsSay({k:'topic',topic:topic});
-    setTimeout(()=>runDuelRound(),500); return;
+    setTimeout(()=>runDuelRound(),150); return;
   }
   return _origPickTopic(topic,mine);
 };
@@ -7213,13 +7225,17 @@ readyGate=function(cb,label){
 /* ---- Result modal after each question: your result + opponent result +
    animated score, 5s countdown, then auto-advance to the next question. ---- */
 function pzResultGate(myRight,oppRight,cb,label){
-  const badge=(ok,txt)=>'<span style="font-size:12px;font-weight:900;padding:5px 11px;border-radius:100px;background:'+(ok?'var(--ok-soft)':'var(--red-soft)')+';color:'+(ok?'var(--ok)':'var(--red)')+'">'+txt+' '+(ok?'✅':'❌')+'</span>';
+  const meId=(window.myUserId||window.myName||'من'), opId=((pzRt&&pzRt.oppName)||'حریف');
+  const badge=(ok,txt)=>'<span style="font-size:12px;font-weight:900;padding:5px 11px;border-radius:100px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background:'+(ok?'var(--ok-soft)':'var(--red-soft)')+';color:'+(ok?'var(--ok)':'var(--red)')+'">'+txt+' '+(ok?'✅':'❌')+'</span>';
+  /* Standard colors: leader = green, trailing = red (equal = neutral). */
+  const meCol=myScore>oppScore?'var(--ok)':(myScore<oppScore?'var(--red)':'inherit');
+  const opCol=oppScore>myScore?'var(--ok)':(oppScore<myScore?'var(--red)':'inherit');
   const sub='<div style="text-align:center">'+
-    '<div style="display:flex;justify-content:center;gap:8px;margin:0 0 12px">'+badge(myRight,'تو')+badge(oppRight,((pzRt&&pzRt.oppName)||'حریف'))+'</div>'+
+    '<div style="display:flex;justify-content:center;gap:8px;margin:0 0 12px">'+badge(myRight,meId)+badge(oppRight,opId)+'</div>'+
     '<div style="font-size:36px;font-weight:900;direction:ltr;letter-spacing:2px">'+
-      '<span id="pzScMe" class="'+(myRight?'pz-pop':'')+'" style="color:var(--ok)">'+fa(myScore)+'</span>'+
+      '<span id="pzScMe" class="'+(myRight?'pz-pop':'')+'" style="color:'+meCol+'">'+fa(myScore)+'</span>'+
       '<span style="opacity:.45;margin:0 6px">-</span>'+
-      '<span id="pzScOpp" class="'+(oppRight?'pz-pop':'')+'" style="color:var(--red)">'+fa(oppScore)+'</span>'+
+      '<span id="pzScOpp" class="'+(oppRight?'pz-pop':'')+'" style="color:'+opCol+'">'+fa(oppScore)+'</span>'+
     '</div>'+
     (label?'<div style="font-size:12px;color:var(--muted);margin-top:9px;font-weight:800">'+label+'</div>':'')+
     '</div>';
