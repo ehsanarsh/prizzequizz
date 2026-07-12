@@ -841,6 +841,7 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
 .spec-badge{position:absolute;top:-14px;left:50%;transform:translateX(-50%);background:var(--ink);border:2px solid var(--info);color:var(--info);border-radius:100px;padding:4px 14px;font-size:11px;font-weight:900;z-index:4;box-shadow:0 3px 0 #000}
 
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+@media (prefers-reduced-motion:reduce){.radar::before,.phone.theme-free .radar::before{animation-duration:2.2s!important}}
 /* ============================================================
    V5 — TV STUDIO UX
    ============================================================ */
@@ -7085,6 +7086,18 @@ pickTopic=function(topic,mine){
     setTimeout(()=>runDuelRound(),500); return;
   }
   return _origPickTopic(topic,mine);
+};
+
+/* Real-duel ready gate: a 5s countdown with NO "شروع سریع" button that
+   auto-advances — so both players move to the next question together. Overrides
+   readyGate only while in a real match; arena/WTA keep the original gate. */
+function pzReadyGate(cb,label){
+  showAaaModal({icon:'🎯',title:'آماده‌ای؟',sub:label||'سوال بعدی خودکار شروع می‌شود',seconds:5,hideActions:true,dismissible:false,onDone:cb});
+}
+const _origReadyGate=readyGate;
+readyGate=function(cb,label){
+  if(typeof pzRt!=='undefined'&&pzRt&&pzRt.active&&pzRt.matchId) return pzReadyGate(cb,label);
+  return _origReadyGate(cb,label);
 };
 
 /* ---- Auto-advance (no manual button); "آماده‌ای؟" gate then next Q together ---- */
