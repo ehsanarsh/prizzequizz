@@ -3899,7 +3899,7 @@ let toastT;
 function toast(msg){try{console.debug('[toast disabled]',msg);}catch(e){}}
 
 /* ============ MENU ============ */
-function openMenu(){document.getElementById('menuBg').classList.add('show');document.getElementById('menuSheet').classList.add('show');setTimeout(()=>{const s=document.getElementById('menuSheet');if(s)s.scrollTop=0;},30);}
+function openMenu(){const a=document.querySelector('.screen.active');if(a&&['login','otp','register','splash','intro'].indexOf(a.id)>=0)return;document.getElementById('menuBg').classList.add('show');document.getElementById('menuSheet').classList.add('show');setTimeout(()=>{const s=document.getElementById('menuSheet');if(s)s.scrollTop=0;},30);}
 function closeMenu(){document.getElementById('menuBg').classList.remove('show');document.getElementById('menuSheet').classList.remove('show');}
 let openedFromMenu=false;
 function menuGo(id){openedFromMenu=true;closeMenu();go(id);}
@@ -6754,14 +6754,6 @@ async function submitProfileEdit(){
   if(r.ok){ _usr=r.data; try{localStorage.setItem('pz_usr',JSON.stringify(_usr));}catch(e){} applyMyName(); toast('تغییرات ذخیره شد ✅'); }
   else { toast(r.error?.message||'ذخیره نشد — شاید نام کاربری تکراری است'); }
 }
-/* Keep the primary button visible above the mobile keyboard on the auth screens
-   (login / OTP / register): scroll it into view when a field gains focus. */
-document.addEventListener('focusin',function(e){
-  const t=e.target; if(!t||t.tagName!=='INPUT') return;
-  const scr=t.closest?t.closest('.screen'):null; if(!scr||['login','otp','register'].indexOf(scr.id)<0) return;
-  setTimeout(function(){ try{ (scr.querySelector('.btn-primary')||t).scrollIntoView({block:'center',behavior:'smooth'}); }catch(_){} },320);
-});
-
 /* Refund the entry fee (paid in startGame BEFORE matchmaking) when no opponent
    is found or the search is cancelled — so a search that finds nobody never
    costs the player anything. Consumed (no refund) once a match actually starts. */
