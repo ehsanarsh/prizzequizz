@@ -589,6 +589,7 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
   background:radial-gradient(circle,rgba(255,210,31,.1),rgba(13,13,16,.55) 76%);overflow:hidden;box-shadow:var(--hard)}
 .radar::before{content:"";position:absolute;inset:-2px;border-radius:50%;background:conic-gradient(from 0deg,rgba(255,210,31,.5),transparent 55%);animation:sweep 2.2s linear infinite}
 @keyframes sweep{to{transform:rotate(360deg)}}
+@keyframes tkFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
 .radar .ring{position:absolute;border-radius:50%;border:1.5px dashed rgba(255,210,31,.3)}
 .radar .ring.r1{inset:26%}.radar .ring.r2{inset:12%}
 .radar .center-av{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:68px;height:68px;border-radius:20px;background:var(--paper);border:var(--stroke);display:grid;place-items:center;z-index:3;box-shadow:var(--hard-sm),0 0 22px var(--bolt-glow)}
@@ -2844,7 +2845,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
           <span class="heartpill" onclick="showHeartInfo()">❤️ <span id="hdrHearts">۳</span><small id="heartRechargeTxt">۱س</small></span>
           <span class="practice-coinpill" onclick="showPracticeCoinInfo()">🪙 <span id="hdrPracticeCoins">۳۵۰</span></span>
           <div class="xpchip xp-blue hp"><span class="lvl" id="hdrLvl">۳</span><div class="xptrack"><i id="hdrXp"></i></div><span class="xpn" id="hdrXpN">XP</span></div>
-          <span class="coinpill hp" onclick="openLeagues()" style="color:var(--bolt)">🎫 <span id="hdrTickets">۱</span></span>
+          <span class="coinpill hp" onclick="goShopTickets()" style="color:var(--bolt)" title="بلیط مسابقات">🎫 <span id="hdrTickets">۰</span></span>
         </div>
         <button class="iconbtn hdr-sm" onclick="openSpin()" id="spinHdrBtn">🎡</button>
       </div>
@@ -2949,6 +2950,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
         <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:7px"><span style="color:var(--muted)">موجودی شما</span><b class="mono" style="color:var(--ok)"><span id="meBalance">۹۰۰٬۰۰۰</span> تومان</b></div>
         <div style="font-size:11px;color:var(--muted2);text-align:center">پس از پرداخت مبلغ ورودی، وارد روم می‌شوی</div>
       </div>
+      <div class="card" id="ticketSelectCard" style="display:none;margin-bottom:12px"></div>
       <div class="card practice-cost-card" style="gap:10px;align-items:center;margin-bottom:12px;padding:12px 14px">
         <span class="heart-big">❤️</span><div style="font-size:12px;font-weight:800;flex:1;line-height:1.6">حالت تمرینی: ورود به هر بازی با <b style="color:#ff7aa8">۱ قلب</b> انجام می‌شود، بدون پول و بدون مبلغ ورودی.</div><span class="heart-recharge" id="meHeartInfo">شارژ هر ۱ ساعت</span></div>
       <div class="card practice-coin-card" style="margin-bottom:12px;padding:13px 14px"><div class="section-title" style="margin-top:0">ورودی تمرینی با سکه</div><div style="font-size:12px;color:var(--muted);font-weight:800;line-height:1.6">برای مسابقات تمرینی، به‌جای پول از سکه تمرینی استفاده می‌کنی.</div><div class="coin-stake-grid" id="coinStakeGrid"><button class="tab" onclick="selCoinStake(this,10)">۱۰ 🪙</button><button class="tab active" onclick="selCoinStake(this,25)">۲۵ 🪙</button><button class="tab" onclick="selCoinStake(this,50)">۵۰ 🪙</button></div></div>
@@ -3132,6 +3134,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
     <section class="screen" id="shop">
       <div class="topbar"><h1>فروشگاه 🛍️</h1><div class="balance"><span class="coinpill gold">🪙 ۵۸</span></div></div>
       <div class="tabs" id="shopTabs">
+        <button class="tab" id="shopTabTickets" onclick="shopTab(this,'tickets')">🎫 بلیط مسابقات</button>
         <button class="tab active" onclick="shopTab(this,'util')">آیتم‌های کاربردی</button>
         <button class="tab" onclick="shopTab(this,'cosmetic')">آیتم‌های تزئینی</button>
         <button class="tab" onclick="shopTab(this,'gift')">هدیه به دوست</button>
@@ -4115,11 +4118,16 @@ let qIndex=0,arenaOthers=0,prize=0,answered=false,timer,timeLeft=15;
 function startGame(){recordMissionEvent('play',1);
   const modeName=MODES[curMode]?MODES[curMode].name:'مسابقه';
   if(userPlan==='premium'){
-    const tokenModes=['survivor','arena','consensus'];
-    if(starterToken>0&&tokenModes.includes(curMode)){
-      starterToken=0;try{localStorage.setItem('pq_starter_token','0');}catch(e){}
-      showSmartSnackbar({icon:'🎟️',title:'توکن پریمیوم مصرف شد',message:'ورود این بازی رایگان شد.',cta:'باشه'});
-    }else if(!pay(curStake,'ورودی '+modeName,'⚔️'))return;
+    if(curMode==='survivor'){
+      /* Paid duel entry is now TICKET-based (no direct payment). */
+      if(!ticketEnterDuel())return;
+    }else{
+      const tokenModes=['arena','consensus'];
+      if(starterToken>0&&tokenModes.includes(curMode)){
+        starterToken=0;try{localStorage.setItem('pq_starter_token','0');}catch(e){}
+        showSmartSnackbar({icon:'🎟️',title:'توکن پریمیوم مصرف شد',message:'ورود این بازی رایگان شد.',cta:'باشه'});
+      }else if(!pay(curStake,'ورودی '+modeName,'⚔️'))return;
+    }
   }
   else { if(!spendHeart())return; if(!spendPracticeCoins(practiceCoinStake)){addHearts(1);return;} }
   if(curMode==='survivor')return startMatchmaking();
@@ -5539,11 +5547,11 @@ function updateWalletUI(){
   const hw=document.getElementById('hdrWallet');if(hw)hw.textContent=fa(wallet);
   const wb=document.getElementById('walletBal');if(wb)wb.textContent=fa(wallet);
   const m=document.getElementById('meBalance');if(m)m.textContent=fa(wallet);
-  const ht=document.getElementById('hdrTickets');if(ht)ht.textContent=fa(tickets.gold+tickets.silver+tickets.bronze);
+  try{renderHeaderTickets();}catch(e){}   /* header shows the 3 MATCH tickets (colored) */
   const hh=document.getElementById('hdrHearts');if(hh){syncHearts();hh.textContent=fa(hearts);}const hr=document.getElementById('heartRechargeTxt');if(hr)hr.textContent=nextHeartText();
   const pc=document.getElementById('hdrPracticeCoins');if(pc)pc.textContent=fa(practiceCoins);
   const mh=document.getElementById('meHeartInfo');if(mh)mh.textContent=hearts>=HEART_MAX_RECHARGE?'قلب‌ها کامل است':'شارژ بعدی: '+nextHeartText();
-  const pt=document.getElementById('profTickets');if(pt)pt.textContent='🥇 '+fa(tickets.gold)+' · 🥈 '+fa(tickets.silver)+' · 🥉 '+fa(tickets.bronze);
+  const pt=document.getElementById('profTickets');if(pt)pt.innerHTML='<span style="color:#FFD24A">🥇 '+fa(tickets.gold)+'</span> · <span style="color:#cfd6dd">🥈 '+fa(tickets.silver)+'</span> · <span style="color:#e6a86b">🥉 '+fa(tickets.bronze)+'</span>';
   renderWalletStats();
 }
 function walletSum(pos,type){return TXNS.filter(t=>(pos==null||t.pos===pos)&&(!type||t.type===type)).reduce((s,t)=>s+t.amt,0);}
@@ -5652,6 +5660,7 @@ const SHOP={
   ],
 };
 function renderShop(tab){
+  if(tab==='tickets'){ renderTicketShop(); return; }
   const c=document.getElementById('shopContent');c.innerHTML='<div class="shop-grid"></div>';
   const g=c.querySelector('.shop-grid');
   SHOP[tab].forEach(it=>{
@@ -5681,6 +5690,96 @@ function applySkin(k){
   if(k==='skin-rainbow'){let h=0;setInterval(()=>{h=(h+4)%360;document.querySelectorAll('.mascot image').forEach(el=>el.style.filter='hue-rotate('+h+'deg)');},120);}
 }
 renderShop('util');
+
+/* ============================================================
+   MATCH TICKET SYSTEM — paid entry via tickets (not direct pay).
+   Green/Blue/Red tickets; prize on win = both entries combined.
+   ============================================================ */
+const TICKET_DEFS=[
+  {key:'green',name:'بلیط سبز',icon:'🟢',color:'#2ecc71',grad:'linear-gradient(160deg,#2fca77,#158049)',value:12500},
+  {key:'blue', name:'بلیط آبی',icon:'🔵',color:'#3aa0ff',grad:'linear-gradient(160deg,#3a9bf0,#1560a8)',value:25000},
+  {key:'red',  name:'بلیط قرمز',icon:'🔴',color:'#ff5a48',grad:'linear-gradient(160deg,#f0574a,#a5241a)',value:50000}
+];
+function tDef(k){return TICKET_DEFS.find(t=>t.key===k)||TICKET_DEFS[0];}
+let mTickets={green:0,blue:0,red:0}; let selectedTicket='green'; let duelTicket=null;
+try{const s=localStorage.getItem('pz_mtickets'); if(s)mTickets=Object.assign(mTickets,JSON.parse(s));}catch(e){}
+function saveMTickets(){try{localStorage.setItem('pz_mtickets',JSON.stringify(mTickets));}catch(e){}}
+function renderHeaderTickets(){
+  const el=document.getElementById('hdrTickets'); if(!el)return;
+  el.innerHTML=TICKET_DEFS.map(t=>'<b style="color:'+t.color+'">'+fa(mTickets[t.key]||0)+'</b>').join('<i style="opacity:.35;font-style:normal">·</i>');
+}
+function goShopTickets(){ go('shop'); setTimeout(()=>{ const tab=document.getElementById('shopTabTickets'); if(tab)shopTab(tab,'tickets'); },50); }
+function renderTicketShop(){
+  const c=document.getElementById('shopContent');
+  c.innerHTML='<div class="pad" style="padding:2px 2px 10px;color:var(--muted);font-size:12px;font-weight:800;line-height:1.7">با خرید بلیط وارد مسابقهٔ پولی می‌شوی. برندهٔ هر دوئل، مجموع ورودی هر دو بلیط را می‌برد.</div>'+
+    '<div class="shop-grid" id="ticketGrid"></div>';
+  const g=document.getElementById('ticketGrid');
+  TICKET_DEFS.forEach(t=>{
+    const d=document.createElement('div'); d.className='item'; d.style.cssText='background:'+t.grad+';color:#fff;border:2px solid #000;text-align:center';
+    d.innerHTML='<div class="it-ico" style="font-size:34px;filter:drop-shadow(0 3px 0 rgba(0,0,0,.35));animation:tkFloat 2.4s ease-in-out infinite">🎫</div>'+
+      '<b style="font-size:15px">'+t.name+'</b>'+
+      '<p style="color:rgba(255,255,255,.9);font-size:12px;line-height:1.6">ورودی مسابقه<br>جایزهٔ برد: <b>'+fa(t.value*2)+' تومان</b></p>'+
+      '<div class="price" style="background:rgba(0,0,0,.28);color:#fff">'+fa(t.value)+' ت · تعداد تو: '+fa(mTickets[t.key]||0)+'</div>';
+    d.onclick=()=>buyTicket(t,d);
+    g.appendChild(d);
+  });
+}
+function buyTicket(t,el){
+  if(!pay(t.value,'خرید '+t.name,'🎫'))return;
+  mTickets[t.key]=(mTickets[t.key]||0)+1; saveMTickets(); renderHeaderTickets();
+  sfx('correct');vib([30]); if(el)el.classList.add('pop');
+  toast(t.name+' خریداری شد ✅');
+  renderTicketShop();
+}
+/* Entry gate: paid duel needs a ticket; otherwise message + go to shop. */
+function ticketEnterDuel(){
+  const t=tDef(selectedTicket);
+  if((mTickets[selectedTicket]||0)<=0){
+    showAaaModal({icon:'🎫',title:'بلیط نداری',sub:'برای ورود به مسابقهٔ پولی به '+t.name+' نیاز داری.',primaryText:'خرید بلیط',secondaryText:'بی‌خیال',onPrimary:()=>{closeAaaModal(true);goShopTickets();}});
+    return false;
+  }
+  mTickets[selectedTicket]--; saveMTickets(); renderHeaderTickets();
+  duelTicket=selectedTicket;
+  /* Stake = ticket value → the existing win/withdraw flow pays the combined
+     prize (both entries) into the wallet with the transaction + animation. */
+  curStake=t.value;
+  return true;
+}
+/* Credit the combined prize to the wallet when a paid ticket duel is won. */
+function ticketAwardPrize(){
+  if(!duelTicket) return;
+  const t=tDef(duelTicket); const amount=t.value*2; duelTicket=null;
+  try{ earn(amount,'برد دوئل ('+t.name+')','🏆'); }catch(e){ wallet+=amount; try{updateWalletUI();}catch(_){} }
+  toast('🏆 بردی! '+fa(amount)+' تومان به کیف پولت اضافه شد');
+}
+/* Ticket-tier selector on the paid-duel entry screen. */
+function renderTicketSelect(){
+  const card=document.getElementById('ticketSelectCard'), stake=document.getElementById('modeStakeCard');
+  const isDuelPaid=(curMode==='survivor'&&userPlan==='premium');
+  if(card) card.style.display=isDuelPaid?'block':'none';
+  if(stake&&isDuelPaid) stake.style.display='none';
+  if(!isDuelPaid||!card) return;
+  card.innerHTML='<div class="section-title" style="margin-top:0">انتخاب بلیط ورود</div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px" id="tkSelGrid"></div>'+
+    '<div style="font-size:11px;color:var(--muted2);text-align:center;margin-top:9px">در مرحلهٔ اول فقط با همین نوع بلیط رقابت می‌کنی · برندهٔ دوئل مجموع ورودی هر دو بلیط را می‌برد</div>';
+  const g=document.getElementById('tkSelGrid');
+  TICKET_DEFS.forEach(t=>{
+    const b=document.createElement('button'); b.className='tab'+(selectedTicket===t.key?' active':'');
+    b.style.cssText='border:2px solid '+t.color+(selectedTicket===t.key?';background:'+t.grad+';color:#fff':'');
+    b.innerHTML=t.icon+' '+t.name.replace('بلیط ','')+'<br><small style="font-size:10px;opacity:.85">'+fa(t.value)+' ت · '+fa(mTickets[t.key]||0)+' تا</small>';
+    b.onclick=()=>{ selectedTicket=t.key; renderTicketSelect(); };
+    g.appendChild(b);
+  });
+  const btn=document.getElementById('meStartBtn');
+  if(btn) btn.textContent=(mTickets[selectedTicket]||0)>0?('ورود با '+tDef(selectedTicket).name+' 🎫'):('خرید '+tDef(selectedTicket).name+' 🎫');
+}
+/* Weekly-league tickets (gold/silver/bronze) are NOT purchasable — awarded by
+   weekly ranking. Show their counts wherever leagues are displayed. */
+function renderLeagueTickets(){
+  const el=document.getElementById('profTickets');
+  if(el&&typeof tickets==='object') el.innerHTML='<span style="color:#FFD24A">🥇 '+fa(tickets.gold||0)+'</span> · <span style="color:#cfd6dd">🥈 '+fa(tickets.silver||0)+'</span> · <span style="color:#e6a86b">🥉 '+fa(tickets.bronze||0)+'</span>';
+}
+setTimeout(()=>{ try{renderHeaderTickets();}catch(e){} },300);
 
 /* ============ ANTI-CHEAT / FOCUS ============ */
 let acStrikes=0;
@@ -6208,7 +6307,7 @@ go=function(id){_origGo(id);
      inside showOnboardingIfNeeded (pq_onboarding_done) keeps it to one time. */
   if(id==='home')setTimeout(()=>{try{if(_tok&&_usr)showOnboardingIfNeeded();}catch(e){}},500);
   if(id==='profile'){setTimeout(animateProfile,120);try{populateProfileEdit();}catch(e){}}
-  if(id==='mode-entry')setTimeout(updateModeEntryPlan,20);
+  if(id==='mode-entry')setTimeout(()=>{updateModeEntryPlan();try{renderTicketSelect();}catch(e){}},20);
   if(id==='character')setTimeout(ccInit,80);
   if(id==='missions'){markBadgeViewed('missions');showTutorialOnce('missions','🎯','ماموریت‌ها','ماموریت‌ها را کامل کن و جایزه آماده را دریافت کن.');setTimeout(renderMissions,80);}
   if(id==='stats')setTimeout(renderStats,80);
@@ -6758,10 +6857,11 @@ async function submitProfileEdit(){
 /* Refund the entry fee (paid in startGame BEFORE matchmaking) when no opponent
    is found or the search is cancelled — so a search that finds nobody never
    costs the player anything. Consumed (no refund) once a match actually starts. */
-let _pzEntryRefunded=true,_pzEntryStake=0,_pzEntryPlan='free',_pzEntryCoins=0;
+let _pzEntryRefunded=true,_pzEntryStake=0,_pzEntryPlan='free',_pzEntryCoins=0,_pzEntryTicket=null;
 function _pzRefundEntry(){
   if(_pzEntryRefunded)return; _pzEntryRefunded=true;
-  if(_pzEntryPlan==='premium'){ wallet+=_pzEntryStake; try{addTxn('↩️','بازگشت ورودی — حریف پیدا نشد',_pzEntryStake,true,'ok','refund');}catch(e){} }
+  if(_pzEntryTicket){ try{ mTickets[_pzEntryTicket]=(mTickets[_pzEntryTicket]||0)+1; saveMTickets(); renderHeaderTickets(); }catch(e){} }
+  else if(_pzEntryPlan==='premium'){ wallet+=_pzEntryStake; try{addTxn('↩️','بازگشت ورودی — حریف پیدا نشد',_pzEntryStake,true,'ok','refund');}catch(e){} }
   else { try{addHearts(1);}catch(e){} practiceCoins+=_pzEntryCoins; try{savePracticeCoins();}catch(e){} }
   try{updateWalletUI();}catch(e){}
 }
@@ -6775,8 +6875,10 @@ startMatchmaking = async function(){
   window._pzQs=null; _mid=null;
   if(typeof pzRt!=='undefined'&&pzRt){ pzRt.active=false; pzRt.finished=false; pzRt.oppLeft=false; if(pzRt.hb){clearInterval(pzRt.hb);pzRt.hb=null;} }
 
-  /* Snapshot the entry fee just paid, so we can refund it if nobody is found */
+  /* Snapshot the entry just paid, so we can refund it if nobody is found.
+     Paid duel entry is a TICKET → refund the ticket, not wallet cash. */
   _pzEntryRefunded=false; _pzEntryStake=curStake; _pzEntryPlan=userPlan; _pzEntryCoins=practiceCoinStake;
+  _pzEntryTicket=(userPlan==='premium'&&duelTicket)?duelTicket:null;
 
   /* UI animations - بدون setTimeout که ربات میاره */
   leagueDuelActive=false; leagueWtaActive=false;
@@ -6805,8 +6907,9 @@ startMatchmaking = async function(){
   },1000);
 
   /* API enqueue */
-  /* Separate ecosystems: paid players only queue/match with paid, free with free */
-  const _eco=(userPlan==='premium')?'paid':'free';
+  /* Separate ecosystems + stage-1 ticket separation: a paid player only matches
+     others who entered with the SAME ticket type (green/blue/red). */
+  const _eco=(userPlan==='premium')?('paid_'+(duelTicket||selectedTicket)):'free';
   const r=await pzApi('POST','/matchmaking/enqueue',{modeId:'duel',economyType:_eco,skill:800});
   if(!r.ok){clearInterval(mmTimer);clearInterval(mmPingT);_pzRefundEntry();toast('خطای سرور');go('home');return;}
   
