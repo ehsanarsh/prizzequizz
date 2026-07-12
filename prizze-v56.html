@@ -7070,6 +7070,9 @@ function pzForfeitWin(){ if(pzRt.finished)return; pzRt.finished=true; clearInter
 
 async function _pzMatchFound(mid){
   clearInterval(_mmi); clearInterval(mmTimer); clearInterval(mmPingT);
+  /* Guard: process each match ONCE. Re-entry (double poll / reconnect) would
+     rebuild pzRt and churn the WebSocket ("closed before established"). */
+  if(pzRt&&pzRt.active&&pzRt.matchId===mid) return;
   _pzEntryRefunded=true;   /* opponent found → entry fee is consumed, no refund */
   _mid=mid;
   document.getElementById('mmStatus').textContent='✅ حریف پیدا شد!';
