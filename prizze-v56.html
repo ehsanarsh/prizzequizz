@@ -3030,7 +3030,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
         <div class="timer-ring" id="dRing"><svg width="54" height="54"><circle cx="27" cy="27" r="23" fill="none" stroke="rgba(255,255,255,.14)" stroke-width="5"/><circle id="dTimerArc" cx="27" cy="27" r="23" fill="none" stroke="#FFD23F" stroke-width="5" stroke-linecap="round" stroke-dasharray="145"/></svg><div class="timer-num" id="dTimerNum">۱۰</div></div>
       </div>
       <div class="duel-score-row" style="display:flex;align-items:center;justify-content:space-between;padding:4px 18px 10px;gap:10px;position:relative;z-index:2">
-        <div class="duel-player-box duel-me-box" style="display:flex;align-items:center;gap:8px"><div class="duel-mini-av" style="width:38px;height:38px;border-radius:12px;background:var(--green-soft);border:1.5px solid var(--green);display:grid;place-items:center"><svg class="mascot" width="28" height="28" viewBox="0 0 120 120" id="mascotDuelMe2"></svg></div><div class="duel-player-meta"><b style="font-size:12px">تو</b><span class="duel-side-score duel-me-score">۰</span><div class="pen-slots" id="myDots"></div></div></div>
+        <div class="duel-player-box duel-me-box" style="display:flex;align-items:center;gap:8px"><div class="duel-mini-av" style="width:38px;height:38px;border-radius:12px;background:var(--green-soft);border:1.5px solid var(--green);display:grid;place-items:center"><svg class="mascot" width="28" height="28" viewBox="0 0 120 120" id="mascotDuelMe2"></svg></div><div class="duel-player-meta"><b style="font-size:12px" id="duelMeName2">تو</b><span class="duel-side-score duel-me-score">۰</span><div class="pen-slots" id="myDots"></div></div></div>
         <div style="font-size:20px;font-weight:900" id="duelScore">۰ - ۰</div>
         <div class="duel-player-box duel-opp-box" style="display:flex;align-items:center;gap:8px;flex-direction:row-reverse"><div class="duel-mini-av" style="width:38px;height:38px;border-radius:12px;background:var(--red-soft);border:1.5px solid var(--red);display:grid;place-items:center;font-size:20px" id="duelOppAv2" onclick="showCurrentOpponentProfile()">🦊</div><div class="duel-player-meta" style="text-align:left"><b style="font-size:12px" id="duelOppName2">Sara</b><span class="duel-side-score duel-opp-score">۰</span><div class="pen-slots" id="oppDots"></div></div></div>
       </div>
@@ -6712,7 +6712,7 @@ function pzDisplayName(){
 }
 function applyMyName(){
   const n=pzDisplayName(); window.myName=n;
-  ['hdrName','duelMeName','profName'].forEach(id=>{const el=document.getElementById(id); if(el) el.textContent=n;});
+  ['hdrName','duelMeName','duelMeName2','profName'].forEach(id=>{const el=document.getElementById(id); if(el) el.textContent=n;});
 }
 async function submitRegister(){
   const full=(document.getElementById('regFullName')?.value||'').trim();
@@ -6879,6 +6879,27 @@ function pzHandleWs(m){
     return;
   }
   if(m.type==='server:match_finished'){ pzRt.serverFinished=true; return; }
+  if(m.type==='server:chat'){
+    const t=String(p.text||''); const uid=p.userId;
+    if(uid&&uid!==pzRt.myId&&t.indexOf('PZ1:')===0){ try{ pzOnPeer(JSON.parse(t.slice(4))); }catch(_){} }
+    return;
+  }
+}
+/* Custom client-to-client sync ride on the room chat channel (no backend change). */
+function pzWsSay(obj){ try{ if(pzRt.ws&&pzRt.ws.readyState===1) pzRt.ws.send(JSON.stringify({type:'client:send_chat',payload:{matchId:pzRt.matchId,text:'PZ1:'+JSON.stringify(obj)}})); }catch(_){} }
+function pzOnPeer(msg){
+  if(!msg||!msg.k) return;
+  if(msg.k==='toss'){ pzRt.tossOpp={correct:!!msg.correct,t:Number(msg.t)||99999}; if(pzRt.tossWaiter) pzRt.tossWaiter(); return; }
+  if(msg.k==='topic'){ pzRt.oppTopic=String(msg.topic||''); if(pzRt.topicWaiter) pzRt.topicWaiter(pzRt.oppTopic); return; }
+}
+function pzHash(s){ let h=2166136261; s=String(s); for(let i=0;i<s.length;i++){ h^=s.charCodeAt(i); h=Math.imul(h,16777619); } return h>>>0; }
+function pzApplyDuelNames(){
+  const me=window.myName||(typeof pzDisplayName==='function'?pzDisplayName():'تو');
+  const op=(pzRt&&pzRt.oppName)||oppName||'حریف';
+  const oa=(pzRt&&pzRt.oppAv)||oppAv||'🦊';
+  ['duelMeName','duelMeName2'].forEach(id=>{const el=document.getElementById(id); if(el)el.textContent=me;});
+  ['duelOppName','duelOppName2','vsOppName'].forEach(id=>{const el=document.getElementById(id); if(el)el.textContent=op;});
+  ['duelOppAv','duelOppAv2','vsOppAv'].forEach(id=>{const el=document.getElementById(id); if(el)el.textContent=oa;});
 }
 function pzCleanupRt(){
   pzRt.active=false; pzHeartbeat(false);
@@ -6924,13 +6945,15 @@ async function _pzMatchFound(mid){
   if(!r.ok) r=await pzApi('GET','/matches/'+mid);
   if(!r.ok){toast('خطا در ورود');go('home');return;}
 
-  /* Set opponent */
+  /* Set opponent from the REAL backend player package (fixes wrong/fake names) */
   const opp=(r.data.players||[]).find(p=>p.userId!==_usr?.id)||r.data.players?.[1]||{};
   if(opp&&opp.userId) pzRt.oppId=opp.userId;
-  const oppAv=document.getElementById('vsOppAv');
-  const oppNm=document.getElementById('vsOppName');
-  if(oppAv) oppAv.textContent=opp.avatar||'👤';
-  if(oppNm) oppNm.textContent=opp.username||'حریف';
+  pzRt.realOpp=true;
+  pzRt.oppName=(opp&&opp.username)?opp.username:'حریف';
+  pzRt.oppAv=(opp&&opp.avatar)?opp.avatar:'🦊';
+  oppName=pzRt.oppName; oppAv=pzRt.oppAv;   /* globals used by the duel UI */
+  window.myName=pzDisplayName();
+  try{ pzApplyDuelNames(); }catch(e){}
 
   /* Fetch questions in PARALLEL. Both players hit the SAME matchId + same round
      numbers, so the server returns identical questions in identical order. */
@@ -6964,6 +6987,7 @@ function _pzQsValid(list){
 const _origRDR=runDuelRound;
 runDuelRound=function(){
   _origRDR();
+  try{ if(pzRt.active&&pzRt.realOpp) pzApplyDuelNames(); }catch(e){}
   if(_pzQsValid(window._pzQs)){
     duelRoundQs=window._pzQs.map(q=>({t:q.t,q:q.q,a:q.a,c:q.c,_id:q._id}));
     dQ=0;
@@ -6972,55 +6996,123 @@ runDuelRound=function(){
   }
 };
 
-/* Round-decision logic — identical to the original duel rules, but driven by
-   the opponent's REAL result/score instead of Math.random(). dQ is already
-   incremented by the caller before this runs. */
-function pzDecideAfterRound(myRight,oppRight){
+/* ---- Real opponent name on the duel/VS screens (no more random "نگار") ---- */
+const _origPickOpp=pickOpponent;
+pickOpponent=function(){
+  if(pzRt.active&&pzRt.realOpp){ oppName=pzRt.oppName||oppName; oppAv=pzRt.oppAv||oppAv; window.myName=(typeof pzDisplayName==='function'?pzDisplayName():window.myName); pzApplyDuelNames(); return; }
+  return _origPickOpp();
+};
+
+/* ---- Synced TOSS (topic-selection) : same question, speed decides winner ---- */
+const _origRunToss=_runTossQuestion;
+_runTossQuestion=function(){
+  if(!(pzRt.active&&pzRt.matchId)) return _origRunToss();
+  pzRt.tossMe=null; pzRt.tossOpp=null; pzRt.tossWaiter=null; pzRt.tossWinner=false; pzRt.oppTopic=null; pzRt.topicWaiter=null;
+  pzApplyDuelNames();
+  const qd=TOSS_QS[pzHash(pzRt.matchId)%TOSS_QS.length];   /* identical for both players */
+  dCorrect=qd.c; dAnswered=false;
+  document.getElementById('dTopic').textContent='⚡ سوال سرعتی — هر کی زودتر و درست، موضوع رو انتخاب می‌کنه';
+  document.getElementById('dText').textContent=qd.q;
+  buildAnswers('dAnswers',qd,(i)=>tossAnswer(i,qd.c),true);
+  renderPowerups();
+  pzRt.tossStart=Date.now();
+  startDTimer();
+};
+const _origTossAns=tossAnswer;
+tossAnswer=function(sel,correct){
+  if(!(pzRt.active&&pzRt.matchId)) return _origTossAns(sel,correct);
+  if(dAnswered) return; dAnswered=true; clearInterval(dTimer);
+  const myRight=(sel===correct);
+  const t=Date.now()-(pzRt.tossStart||Date.now());
+  pzRt.tossMe={correct:myRight,t:(myRight?t:1000000+t)};   /* wrong ranks worst */
+  pzWsSay({k:'toss',correct:myRight,t:pzRt.tossMe.t});
+  revealAnswers('dAnswers',sel,correct,()=>{ pzTossWaitAndDecide(); });
+};
+function pzTossWaitAndDecide(){
+  const top=document.getElementById('dTopic'); if(top) top.textContent='⏳ منتظر پاسخ حریف...';
+  let done=false;
+  const decide=()=>{
+    if(done)return; done=true; pzRt.tossWaiter=null; clearTimeout(to); tossPhase=false;
+    const me=Object.assign({id:String(pzRt.myId||'me')}, pzRt.tossMe||{correct:false,t:1000000});
+    const op=Object.assign({id:String(pzRt.oppId||'opp')}, pzRt.tossOpp||{correct:false,t:1000001});
+    const pick=(x,y)=>{ if(x.correct!==y.correct)return x.correct?x:y; if(x.t!==y.t)return x.t<y.t?x:y; return x.id<y.id?x:y; };
+    const iWon=(pick(me,op).id===String(pzRt.myId||'me'));
+    pzRt.tossWinner=iWon;
+    if(iWon){ if(top) top.textContent='⚡ سریع‌تر و درست بودی! موضوع رو انتخاب کن'; openTopicPick(true); }
+    else { pzShowWaitTopic(); }
+  };
+  pzRt.tossWaiter=decide;
+  if(pzRt.tossOpp) return decide();
+  var to=setTimeout(decide,8000);   /* opponent has a 10s toss clock; 8s after my answer is safe */
+}
+function pzShowWaitTopic(){
+  const top=document.getElementById('dTopic');
+  if(top) top.textContent='⏳ '+((pzRt&&pzRt.oppName)||'حریف')+' در حال انتخاب موضوع است، منتظر بمان...';
+  pzRt.topicWaiter=(topic)=>{ pzRt.topicWaiter=null; clearTimeout(pzRt.topicSafety); duelTopic=topic; if(top)top.textContent='موضوع: '+topic; setTimeout(()=>runDuelRound(),400); };
+  if(pzRt.oppTopic) return pzRt.topicWaiter(pzRt.oppTopic);
+  pzRt.topicSafety=setTimeout(()=>{ if(pzRt.topicWaiter){ pzRt.topicWaiter(TOPICS[pzHash(String(pzRt.matchId)+'t')%TOPICS.length][1]); } },14000);
+}
+/* Winner broadcasts the chosen topic (manual pick or the auto timeout pick). */
+const _origPickTopic=pickTopic;
+pickTopic=function(topic,mine){
+  if(pzRt.active&&pzRt.matchId){
+    clearInterval(tpTimer); duelTopic=topic; sfx('found');
+    if(pzRt.tossWinner) pzWsSay({k:'topic',topic:topic});
+    setTimeout(()=>runDuelRound(),500); return;
+  }
+  return _origPickTopic(topic,mine);
+};
+
+/* ---- Auto-advance (no manual button); "آماده‌ای؟" gate then next Q together ---- */
+function pzAutoAdvance(myRight,oppRight){
   const sc=document.getElementById('duelScore');
   if(sc){ sc.style.color=oppRight?'var(--ok)':'var(--red)'; setTimeout(()=>sc.style.color='',900); }
-  const contNext=()=> myRight?showDuelCorrectModal(loadDuelQWithFocus):setTimeout(loadDuelQWithFocus,650);
+  const next=(label)=>readyGate(()=>loadDuelQWithFocus(), label||'سوال بعدی...');
   if(!suddenDeath){
     if(dQ>=5){
       if(myScore>oppScore) return duelRoundWin();
       if(myScore<oppScore) return duelRoundLose();
-      suddenDeath=true;
-      if(sc){ sc.textContent='⚡'; sc.style.color='var(--red)'; }
-      return myRight?showDuelCorrectModal(loadDuelQWithFocus):setTimeout(loadDuelQWithFocus,1000);
+      suddenDeath=true; if(sc){ sc.textContent='⚡'; }
+      return next('مساوی شد! مرگ ناگهانی ⚡');
     }
-    return contNext();
+    return next();
   }else{
     if(myRight&&!oppRight) return duelRoundWin();
     if(!myRight&&oppRight) return duelRoundLose();
-    return myRight?showDuelCorrectModal(loadDuelQWithFocus):setTimeout(loadDuelQWithFocus,1000);
+    return next('ادامه مرگ ناگهانی ⚡');
   }
 }
 
-/* Synced answer handler for REAL matches. Non-real duels (weekly-league / WTA
-   final / offline fallback) keep the original behavior untouched. */
+/* Synced answer handler for REAL matches:
+   1) lock selection (buildAnswers already did) — NOT revealed yet,
+   2) submit + wait until the opponent also answers (or timeout),
+   3) 1.2s suspense, then reveal correct/wrong to both at once,
+   4) auto-advance through the "آماده‌ای؟" gate. */
 const _origAD=answerDuel;
 answerDuel=function(sel,correct){
   if(!pzRt.active||!pzRt.matchId||!_pzQsValid(window._pzQs)) return _origAD(sel,correct);
   if(dAnswered) return; dAnswered=true; clearInterval(dTimer);
-  const roundIdx=dQ;
-  const myRight=(sel===correct);
+  const roundIdx=dQ; const myRight=(sel===correct);
   pzRt.myByRound[roundIdx]={correct:myRight,sel:sel};
   pzWsSubmit(roundIdx,sel);                 /* real submit → server scores + broadcasts */
-  revealAnswers('dAnswers',sel,correct,()=>{
-    myScore=pzCount(pzRt.myByRound);
-    if(myRight){ recordMissionEvent('correct',1); recordMissionEvent('duelCorrect',1); }
-    if(leagueDuelActive&&myRight) showLeagueDuelReward();
-    updateDuelScore();
-    pzWaitOpp(roundIdx,(oppRes)=>{
-      if(pzRt.finished) return;             /* already ended (e.g. forfeit) */
-      const oppRight=!!(oppRes&&oppRes.correct);
-      oppScore=pzCount(pzRt.oppByRound);
-      myResults.push(myRight?'ok':'no');
-      oppResults.push(oppRes?(oppRight?'ok':'no'):'no');
-      updateDuelScore();
-      dQ++;
-      if(pzRt.oppLeft) return pzForfeitWin();
-      pzDecideAfterRound(myRight,oppRight);
-    });
+  pzWaitOpp(roundIdx,(oppRes)=>{            /* shows "در انتظار پاسخ حریف" until both answered */
+    if(pzRt.finished) return;
+    setTimeout(()=>{                        /* 1.2s suspense, then reveal together */
+      if(pzRt.finished) return;
+      revealAnswers('dAnswers',sel,correct,()=>{
+        myScore=pzCount(pzRt.myByRound);
+        const oppRight=!!(oppRes&&oppRes.correct);
+        oppScore=pzCount(pzRt.oppByRound);
+        if(myRight){ recordMissionEvent('correct',1); recordMissionEvent('duelCorrect',1); }
+        if(leagueDuelActive&&myRight) showLeagueDuelReward();
+        myResults.push(myRight?'ok':'no');
+        oppResults.push(oppRes?(oppRight?'ok':'no'):'no');
+        updateDuelScore();
+        dQ++;
+        if(pzRt.oppLeft) return pzForfeitWin();
+        pzAutoAdvance(myRight,oppRight);
+      });
+    },1200);
   });
 };
 
