@@ -599,6 +599,10 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
 @keyframes sweep{to{transform:rotate(360deg)}}
 @keyframes tkFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
 .pz-pop{display:inline-block;animation:pzPop .6s cubic-bezier(.2,1.4,.4,1)}
+/* 50/50: the two wrong options break/fade away but their SLOT stays empty
+   (opacity:0 keeps the layout box, so answers don't jump). */
+.ans.pz-removed{animation:pzBreak .5s cubic-bezier(.4,0,.6,1) forwards!important;pointer-events:none!important}
+@keyframes pzBreak{0%{opacity:1}45%{opacity:.25;transform:scale(.965) translateY(2px) rotate(-1deg);filter:blur(1px)}100%{opacity:0;transform:scale(.92);filter:blur(2px)}}
 @keyframes pzPop{0%{transform:scale(2);opacity:.2}60%{transform:scale(.82)}100%{transform:scale(1);opacity:1}}
 .radar .ring{position:absolute;border-radius:50%;border:1.5px dashed rgba(255,210,31,.3)}
 .radar .ring.r1{inset:26%}.radar .ring.r2{inset:12%}
@@ -4982,7 +4986,7 @@ function usePower(type){
   if(type==='5050'){
     if(powerups.p5050<=0)return;
     const all=[...document.querySelectorAll('#'+curBox+' .ans')];let removed=0;
-    all.forEach((b,i)=>{if(i!==curCorrect&&removed<2&&!b.disabled){b.classList.add('dim');b.disabled=true;b.classList.remove('selected');if(curSel===i)curSel=-1;removed++;}});
+    all.forEach((b,i)=>{if(i!==curCorrect&&removed<2&&!b.disabled){b.classList.add('dim','pz-removed');b.disabled=true;b.classList.remove('selected');if(curSel===i)curSel=-1;removed++;}});
     if(removed){powerups.p5050--;sfx('select');vib([15,10]);}
   }else if(type==='second'){
     /* Second Chance: arm it now; if the FIRST answer is wrong, the answer
@@ -6820,7 +6824,7 @@ async function realVerifyOtp(){
     applyMyName();
     /* New account (no chosen name yet) → registration; otherwise straight in. */
     if(_pzNeedsRegister()){ toast('خوش اومدی! اطلاعاتت رو کامل کن'); go('register'); }
-    else { toast('خوش اومدی '+pzDisplayName()+'!'); go('character'); }
+    else { toast('خوش اومدی '+pzDisplayName()+'!'); go('plans'); }
   } else {
     toast('کد اشتباه'); boxes.forEach(b=>b.value=''); boxes[0]?.focus();
   }
@@ -6858,7 +6862,7 @@ async function submitRegister(){
   if(btn){btn.disabled=false;btn.textContent=_t;}
   if(r.ok){
     _usr=r.data; try{localStorage.setItem('pz_usr',JSON.stringify(_usr));}catch(e){}
-    applyMyName(); toast('اطلاعاتت ثبت شد ✅'); go('character');
+    applyMyName(); toast('اطلاعاتت ثبت شد ✅'); go('plans');
   } else {
     toast(r.error?.message || 'این نام کاربری قبلاً گرفته شده — یکی دیگه بزن');
   }
@@ -7400,17 +7404,17 @@ function pzResultGate(myRight,oppRight,cb,label){
   const opCol=oppScore>myScore?'var(--ok)':(oppScore<myScore?'var(--red)':'inherit');
   /* Previous scores, so the number rolls UP from old→new instead of snapping. */
   const prevMy=myScore-(myRight?1:0), prevOpp=oppScore-(oppRight?1:0);
-  /* Both the badges row AND the score are direction:ltr with ME first (left),
-     so each player's badge sits exactly above their own number — no swap. */
-  const sub='<div style="text-align:center">'+
-    '<div style="display:flex;justify-content:center;gap:8px;margin:0 0 12px;direction:ltr">'+badge(myRight,meId)+badge(oppRight,opId)+'</div>'+
-    '<div style="font-size:36px;font-weight:900;direction:ltr;letter-spacing:2px">'+
-      '<span id="pzScMe" style="color:'+meCol+';display:inline-block">'+fa(prevMy)+'</span>'+
-      '<span style="opacity:.45;margin:0 6px">-</span>'+
-      '<span id="pzScOpp" style="color:'+opCol+';display:inline-block">'+fa(prevOpp)+'</span>'+
+  /* Two columns — each player's NAME sits directly above their OWN number, and
+     the order matches the in-game row (opponent left, you right) so nothing looks
+     swapped. */
+  const col=(id,name,ok,col2,val)=>'<div style="text-align:center;min-width:96px">'+badge(ok,name)+
+      '<div id="'+id+'" style="font-size:40px;font-weight:900;margin-top:8px;color:'+col2+'">'+fa(val)+'</div></div>';
+  const sub='<div style="display:flex;justify-content:center;align-items:center;gap:16px;direction:ltr">'+
+      col('pzScOpp',opId,oppRight,opCol,prevOpp)+
+      '<div style="font-size:26px;font-weight:900;opacity:.4">-</div>'+
+      col('pzScMe',meId,myRight,meCol,prevMy)+
     '</div>'+
-    (label?'<div style="font-size:12px;color:var(--muted);margin-top:9px;font-weight:800">'+label+'</div>':'')+
-    '</div>';
+    (label?'<div style="text-align:center;font-size:12px;color:var(--muted);margin-top:12px;font-weight:800">'+label+'</div>':'');
   showAaaModal({ icon: myRight?'🎉':'💪', title: myRight?'آفرین! جوابت درست بود':'اشکالی نداره — ادامه بده', sub:sub, seconds:5, hideActions:true, dismissible:false, onDone:cb });
   /* Roll the changed number up with a pop, ~0.5s after the modal appears. */
   setTimeout(()=>{
@@ -7554,10 +7558,22 @@ answerDuel=function(sel,correct){
   if(!dAnswered && pzSecondArmed && !pzSecondUsedRound && sel!==correct){
     pzSecondUsedRound=true; pzSecondArmed=false;
     powerups.psecond=Math.max(0,(powerups.psecond||0)-1); try{renderPowerups();}catch(_){}
-    const scr=document.querySelector('.screen.active');
-    const btn=scr?[...scr.querySelectorAll('.ans')][sel]:null;
-    if(btn){ btn.classList.add('dim'); btn.disabled=true; btn.classList.remove('selected'); }
-    if(curSel===sel)curSel=-1;
+    /* buildAnswers already LOCKED the box + disabled every button on the first
+       click, so we must UN-lock it: re-enable the remaining options (keep the
+       wrong pick + any 50/50-removed gone) and resume the clock so it can't hang. */
+    const box=document.getElementById(curBox);
+    const btns=box?[...box.querySelectorAll('.ans')]:[];
+    qLocked=false; curSel=-1;
+    btns.forEach((b,i)=>{
+      b.classList.remove('selected','locked-in','judging');
+      if(i===sel){ b.classList.add('dim','pz-removed'); b.disabled=true; }
+      else if(b.classList.contains('dim')||b.classList.contains('pz-removed')){ b.disabled=true; }
+      else { b.disabled=false; }
+    });
+    const sid=(document.querySelector('.screen.active')||{}).id;
+    if(sid==='duel'){ clearInterval(dTimer); dTimeLeft=Math.max(dTimeLeft||0,6); if(typeof runDuelTimer==='function')runDuelTimer(); }
+    else if(sid==='q-screen'){ clearInterval(timer); timeLeft=Math.max(timeLeft||0,6); if(typeof runArenaTimer==='function')runArenaTimer(); }
+    else if(sid==='wta'){ clearInterval(wtaTimer); wtaTimeLeft=Math.max(wtaTimeLeft||0,6); if(typeof runWtaTimer==='function')runWtaTimer(); }
     toast('❌ اشتباه بود — یک انتخاب دیگر داری',1800); sfx('select'); vib([15,10,15]);
     return;   /* don't lock/submit — wait for the next pick */
   }
@@ -7603,7 +7619,12 @@ function startIntroFlow(){
     if(bar) bar.style.width=pct+'%';
     if(pct>40&&mi===0){mi=1;if(txt)txt.textContent=msgs[1];}
     if(pct>80&&mi===1){mi=2;if(txt)txt.textContent=msgs[2];}
-    if(pct>=100){clearInterval(iv);setTimeout(()=>go('login'),300);}
+    if(pct>=100){clearInterval(iv);setTimeout(()=>{
+      /* Already registered → skip phone/OTP entirely and go straight to the
+         subscription-plan screen. Only brand-new users see login. */
+      if(_tok && _usr && !_pzNeedsRegister()){ try{applyMyName();}catch(e){} go('plans'); }
+      else go('login');
+    },300);}
   },55);
 }
 document.addEventListener('DOMContentLoaded',()=>{
