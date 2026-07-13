@@ -6892,8 +6892,10 @@ function _pzRefundEntry(){
 const _origSMM = startMatchmaking;
 startMatchmaking = async function(){
   if(!_tok){toast('ابتدا وارد شوید');go('login');return;}
-  /* A fresh search abandons any pending rematch handshake. */
+  /* A fresh search abandons any pending rematch handshake, and clears any stuck
+     flag/modal from a previous game so entry can NEVER be permanently blocked. */
   try{ _pzRematchMid=null; clearInterval(_pzRematchPoll); clearInterval(_pzRematchWatch); _pzRematchModalOpen=false; }catch(_){}
+  try{ exitPromptOpen=false; if(typeof closeAaaModal==='function') closeAaaModal(false); const ro=document.getElementById('readyOverlay'); if(ro)ro.classList.remove('show'); }catch(_){}
 
   /* Clear any questions/match from a previous game so we never reuse stale data */
   window._pzQs=null; _mid=null;
@@ -7515,6 +7517,32 @@ function pzEnterRematch(newMid){
 }
 /* ======= END ======= */
 
+
+/* Exit (✕) during a REAL duel = forfeit: close the room so the server tells the
+   opponent (server:opponent_left → they win), record our loss locally, and make
+   sure no stuck flag can block re-entry afterwards. */
+const _origQuitGame=quitGame;
+quitGame=function(){
+  if(!(typeof pzRt!=='undefined'&&pzRt&&pzRt.active)) return _origQuitGame.apply(this,arguments);
+  if(exitPromptOpen) return;
+  exitPromptOpen=true; pauseCurrentGameTimers();
+  try{ readyT.forEach(clearTimeout); readyT=[]; }catch(_){}
+  const ro=document.getElementById('readyOverlay'); if(ro)ro.classList.remove('show');
+  showAaaModal({
+    icon:'🚪', title:'از بازی خارج می‌شی؟',
+    sub:'اگر بیرون بری، بازندهٔ این دوئل می‌شی و حریف برنده اعلام می‌شود.',
+    primaryText:'خروج و باخت', secondaryText:'انصراف', primaryClass:'btn-red', secondaryClass:'btn-ghost',
+    onPrimary:()=>{
+      exitPromptOpen=false; closeAaaModal(false);
+      clearInterval(timer);clearInterval(dTimer);clearInterval(cpTimer);clearInterval(vsTimer);clearInterval(tpTimer);
+      try{ pzRt.finished=true; pzCleanupRt(); if(pzRt.ws){ pzRt.ws.onclose=null; try{pzRt.ws.close();}catch(_){} } }catch(_){}
+      leagueDuelActive=false; leagueWtaActive=false;
+      endGame(false,0,false,'از بازی خارج شدی؛ حریف برنده شد');
+    },
+    onSecondary:()=>{ exitPromptOpen=false; closeAaaModal(false); resumeCurrentGameTimers(); },
+    onDismiss:()=>{ exitPromptOpen=false; resumeCurrentGameTimers(); }
+  });
+};
 
 /* Intro + Splash Loading Bar */
 function startIntroFlow(){
