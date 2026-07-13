@@ -7211,48 +7211,150 @@ _runTossQuestion=function(){
   startDTimer();
 };
 const _origTossAns=tossAnswer;
+/* Re-broadcast my toss result several times so a single dropped WS message can
+   never leave the two clients with different views of who was faster (that was
+   the cause of BOTH players being sent to topic-selection). */
+function pzTossBroadcast(){
+  if(!pzRt.tossMe) return; let sends=0; clearInterval(pzRt.tossReT);
+  const send=()=>{ pzWsSay({k:'toss',correct:pzRt.tossMe.correct,t:pzRt.tossMe.t}); if(++sends>=6) clearInterval(pzRt.tossReT); };
+  send(); pzRt.tossReT=setInterval(send,500);
+}
 tossAnswer=function(sel,correct){
   if(!(pzRt.active&&pzRt.matchId)) return _origTossAns(sel,correct);
   if(dAnswered) return; dAnswered=true; clearInterval(dTimer);
   const myRight=(sel===correct);
   const t=Date.now()-(pzRt.tossStart||Date.now());
   pzRt.tossMe={correct:myRight,t:(myRight?t:1000000+t)};   /* wrong ranks worst */
-  pzWsSay({k:'toss',correct:myRight,t:pzRt.tossMe.t});
+  pzTossBroadcast();
   revealAnswers('dAnswers',sel,correct,()=>{ pzTossWaitAndDecide(); });
 };
 function pzTossWaitAndDecide(){
   const top=document.getElementById('dTopic'); if(top) top.textContent='⏳ منتظر پاسخ حریف...';
   let done=false;
   const decide=()=>{
-    if(done)return; done=true; pzRt.tossWaiter=null; clearTimeout(to); tossPhase=false;
-    const me=Object.assign({id:String(pzRt.myId||'me')}, pzRt.tossMe||{correct:false,t:1000000});
-    const op=Object.assign({id:String(pzRt.oppId||'opp')}, pzRt.tossOpp||{correct:false,t:1000001});
-    const pick=(x,y)=>{ if(x.correct!==y.correct)return x.correct?x:y; if(x.t!==y.t)return x.t<y.t?x:y; return x.id<y.id?x:y; };
-    const iWon=(pick(me,op).id===String(pzRt.myId||'me'));
+    if(done)return; done=true; pzRt.tossWaiter=null; clearTimeout(to); clearInterval(pzRt.tossReT); tossPhase=false;
+    let iWon;
+    if(pzRt.tossMe && pzRt.tossOpp){
+      /* Both speed results are known → fastest CORRECT answer wins; the id only
+         breaks an exact tie. This is symmetric, so both clients agree. */
+      const me={id:String(pzRt.myId||'me'),correct:!!pzRt.tossMe.correct,t:pzRt.tossMe.t};
+      const op={id:String(pzRt.oppId||'opp'),correct:!!pzRt.tossOpp.correct,t:pzRt.tossOpp.t};
+      const pick=(x,y)=>{ if(x.correct!==y.correct)return x.correct?x:y; if(x.t!==y.t)return x.t<y.t?x:y; return x.id<y.id?x:y; };
+      iWon=(pick(me,op).id===me.id);
+    } else {
+      /* Opponent's result never arrived. Fall back to a rule BOTH clients compute
+         identically from the two ids (smaller id picks) — so we can NEVER both
+         become the picker. */
+      iWon = String(pzRt.myId||'me') < String(pzRt.oppId||'opp');
+    }
     pzRt.tossWinner=iWon;
     if(iWon){ if(top) top.textContent='⚡ سریع‌تر و درست بودی! موضوع رو انتخاب کن'; openTopicPick(true); }
     else { pzShowWaitTopic(); }
   };
   pzRt.tossWaiter=decide;
   if(pzRt.tossOpp) return decide();
-  var to=setTimeout(decide,8000);   /* opponent has a 10s toss clock; 8s after my answer is safe */
+  /* Safety cap timed from the TOSS start (not my answer) so it always fires
+     AFTER the opponent's 10s toss clock + a moment to exchange results — by then
+     both sides have each other's data and decide by speed identically. */
+  const elapsed=Date.now()-(pzRt.tossStart||Date.now());
+  var to=setTimeout(decide,Math.max(2500,13000-elapsed));
 }
 function pzShowWaitTopic(){
   const top=document.getElementById('dTopic');
   if(top) top.textContent='⏳ '+((pzRt&&pzRt.oppName)||'حریف')+' در حال انتخاب موضوع است، منتظر بمان...';
-  pzRt.topicWaiter=(topic)=>{ pzRt.topicWaiter=null; clearTimeout(pzRt.topicSafety); duelTopic=topic; if(top)top.textContent='موضوع: '+topic; setTimeout(()=>runDuelRound(),150); };
-  if(pzRt.oppTopic) return pzRt.topicWaiter(pzRt.oppTopic);
-  pzRt.topicSafety=setTimeout(()=>{ if(pzRt.topicWaiter){ pzRt.topicWaiter(TOPICS[pzHash(String(pzRt.matchId)+'t')%TOPICS.length][1]); } },14000);
+  const enter=async (topic)=>{
+    pzRt.topicWaiter=null; clearTimeout(pzRt.topicSafety); duelTopic=topic;
+    if(top)top.textContent='📥 موضوع «'+pzTopicLabel(topic)+'» — در حال آماده‌سازی سوالات...';
+    await pzLoadTopicQuestions(topic);
+    setTimeout(()=>runDuelRound(),150);
+  };
+  pzRt.topicWaiter=enter;
+  if(pzRt.oppTopic) return enter(pzRt.oppTopic);
+  /* Last-resort only: with the winner re-broadcasting the topic this should
+     never fire. Fall back to the mixed "popular" pool (a valid game either way). */
+  pzRt.topicSafety=setTimeout(()=>{ if(pzRt.topicWaiter){ enter('__popular__'); } },16000);
 }
-/* Winner broadcasts the chosen topic (manual pick or the auto timeout pick). */
+/* Winner re-broadcasts the chosen topic several times so the loser reliably
+   receives it (a lost topic message would otherwise desync the question sets). */
+function pzTopicBroadcast(topic){
+  let sends=0; clearInterval(pzRt.topicReT);
+  const send=()=>{ pzWsSay({k:'topic',topic:topic}); if(++sends>=8) clearInterval(pzRt.topicReT); };
+  send(); pzRt.topicReT=setInterval(send,500);
+}
 const _origPickTopic=pickTopic;
 pickTopic=function(topic,mine){
   if(pzRt.active&&pzRt.matchId){
     clearInterval(tpTimer); duelTopic=topic; sfx('found');
-    if(pzRt.tossWinner) pzWsSay({k:'topic',topic:topic});
-    setTimeout(()=>runDuelRound(),150); return;
+    if(pzRt.tossWinner) pzTopicBroadcast(topic);
+    const top=document.getElementById('dTopic'); if(top)top.textContent='✅ موضوع «'+pzTopicLabel(topic)+'» — در حال آماده‌سازی سوالات...';
+    (async()=>{ await pzLoadTopicQuestions(topic); setTimeout(()=>runDuelRound(),150); })();
+    return;
   }
   return _origPickTopic(topic,mine);
+};
+function pzTopicLabel(t){ return (t==='__popular__')?'محبوب':(t||'عمومی'); }
+/* Fetch the 15 per-match questions FILTERED BY the chosen topic. Same matchId +
+   same topic on both clients → byte-identical set in identical order, with no
+   repeat until the topic's pool is exhausted. */
+async function pzLoadTopicQuestions(topic){
+  const mid=pzRt.matchId; if(!mid) return;
+  const qp=(topic&&topic!=='__popular__')?('&topic='+encodeURIComponent(topic)):'';
+  /* Retry the whole batch a couple of times: a one-sided fetch failure would put
+     the two players on different question sets, so we try hard to get a full set
+     (identical on both clients because it's keyed on matchId+topic). */
+  for(let attempt=0;attempt<3;attempt++){
+    let raw=[];
+    try{ raw=await Promise.all([...Array(PZ_PREFETCH)].map((_,i)=>
+      fetch(_A+'/matches/'+mid+'/question?round='+i+qp,{headers:{'Authorization':'Bearer '+_tok}}).then(x=>x.json()).catch(()=>null))); }catch(e){}
+    const qs=[];
+    for(let i=0;i<raw.length;i++){ const qr=raw[i]; const q=(qr&&qr.data)?qr.data:qr;
+      if(q&&q.id&&Array.isArray(q.options)&&q.options.length>=4&&Number.isInteger(q.correctIndex)){ qs[i]={t:q.category||pzTopicLabel(topic),q:q.text||'',a:q.options.slice(0,4),c:q.correctIndex,_id:q.id}; }
+      else break;
+    }
+    if(qs.length>=5){ window._pzQs=qs; pzRt.topic=topic; console.log('[PZ] Loaded',qs.length,'questions for topic',pzTopicLabel(topic)); return; }
+    await new Promise(r=>setTimeout(r,400));
+  }
+  console.warn('[PZ] topic',topic,'could not load a full set; keeping prior (matchId-only) set');
+}
+/* Real-match topic-pick: show 10 RANDOM real categories (from the live question
+   bank) + a "popular" mixed option. Only the toss winner ever sees this. */
+function pzTopicEmoji(name){
+  const m={'فیلم و سریال':'🎬','سینما':'🎬','ورزش':'⚽','فوتبال':'⚽','تاریخ و فرهنگ':'📜','تاریخ':'📜','فرهنگ':'🏛️','موسیقی':'🎵','غذا و خوراکی':'🍔','غذا':'🍔','علم و دانش':'🔬','علوم':'🔬','دانش':'🔬','جغرافیا':'🌍','عمومی':'🧠','هنر':'🎨','ادبیات':'📚','فناوری':'💻','تکنولوژی':'💻','دین':'🕌','مذهب':'🕌','ریاضی':'➗','حیوانات':'🐾','طبیعت':'🌿','سیاست':'🏛️','اقتصاد':'💹'};
+  if(m[name]) return m[name];
+  for(const k in m){ if(name&&name.indexOf(k)>=0) return m[k]; }
+  const pool=['🧠','💡','🎯','🌟','📌','🔎','🎲','🧩','🏆','✨'];
+  return pool[pzHash(String(name||''))%pool.length];
+}
+async function pzRenderTopicChoices(){
+  const g=document.getElementById('topicGrid'); if(!g) return;
+  g.innerHTML='<div style="grid-column:1/-1;text-align:center;color:var(--muted);font-weight:800;padding:16px">در حال بارگذاری موضوع‌ها...</div>';
+  let cats=[];
+  try{ const r=await pzApi('GET','/questions/categories'); if(r.ok&&Array.isArray(r.data)) cats=r.data.filter(c=>c&&(c.count===undefined||c.count>=3)).map(c=>(c&&c.category)||c).filter(x=>typeof x==='string'&&x); }catch(e){}
+  if(cats.length<1) cats=TOPICS.map(t=>t[1]);
+  const chosen=shuffle(cats.slice()).slice(0,10);
+  pzRt._topicChoices=chosen.slice();
+  g.innerHTML='';
+  const mk=(emoji,label,val)=>{ const b=document.createElement('button'); b.className='topic-btn'; b.innerHTML='<span class="ti">'+emoji+'</span>'+label; b.onclick=()=>pickTopic(val,true); return b; };
+  g.appendChild(mk('🔥','محبوب','__popular__'));
+  chosen.forEach(name=>g.appendChild(mk(pzTopicEmoji(name),name,name)));
+}
+/* Only the toss winner opens the picker; the loser always waits. In a real
+   match this REPLACES the fixed 6-topic list with the dynamic one above. */
+const _origOpenTopicPick=openTopicPick;
+openTopicPick=function(mine){
+  if(!(pzRt.active&&pzRt.matchId)) return _origOpenTopicPick(mine);
+  if(!mine) return pzShowWaitTopic();
+  clearInterval(tpTimer);
+  go('topic-pick');
+  pzRenderTopicChoices();
+  let n=10; const cnt=document.getElementById('tpCount'); if(cnt){cnt.textContent=fa(n);cnt.style.color='';}
+  tpTimer=setInterval(()=>{
+    n--; if(cnt)cnt.textContent=fa(Math.max(0,n));
+    if(n<=0){ clearInterval(tpTimer); if(cnt)cnt.style.color='var(--red)';
+      const ch=pzRt._topicChoices||[]; const auto=ch.length?ch[Math.floor(Math.random()*ch.length)]:'__popular__';
+      pickTopic(auto,true);
+    }
+  },1000);
 };
 
 /* Real-duel ready gate: a 5s countdown with NO "شروع سریع" button that

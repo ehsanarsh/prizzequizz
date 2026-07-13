@@ -23,14 +23,25 @@ export function registerMatchRoutes(router: Router, base: string): void {
     json(ctx.res, 201, { matchId: match.id, status: match.phase, configVersion: match.configVersion });
   });
 
-  // Same question for the same (matchId, round) for BOTH players. Callable
+  // Same question for the same (matchId, round, topic) for BOTH players. Callable
   // repeatedly (idempotent) so polling clients always see identical content.
+  //  - `topic`  : restrict to that category (empty / "__popular__" = whole bank).
+  //  - Rounds map to DISTINCT questions until the pool is exhausted, so a player
+  //    never sees a repeat within a match unless questions genuinely run out;
+  //    and because the order is derived purely from (matchId, topic), BOTH
+  //    players get the identical set — a question shown to one is shown to both.
   router.add('GET', `${base}/matches/:id/question`, async (ctx) => {
     const round = Math.max(0, Math.floor(Number(ctx.query.get('round') ?? 0)) || 0);
-    const questions = await repositories.questions.listApproved();
-    if (!questions.length) return error(ctx.res, 404, 'NO_QUESTIONS', 'No approved questions available');
-    const ordered = [...questions].sort((a, b) => a.id.localeCompare(b.id));
-    const start = hashString(ctx.params.id!) % ordered.length;
+    const topic = (ctx.query.get('topic') ?? '').trim();
+    const all = await repositories.questions.listApproved();
+    if (!all.length) return error(ctx.res, 404, 'NO_QUESTIONS', 'No approved questions available');
+    let pool = all;
+    if (topic && topic !== '__popular__') {
+      const filtered = all.filter((q) => q.category === topic);
+      if (filtered.length) pool = filtered; // fall back to the whole bank if the topic is empty
+    }
+    const ordered = [...pool].sort((a, b) => a.id.localeCompare(b.id));
+    const start = hashString(`${ctx.params.id!}|${topic}`) % ordered.length;
     const q = ordered[(start + round) % ordered.length]!;
     json(ctx.res, 200, { id: q.id, text: q.text, options: q.options, correctIndex: q.correctIndex, category: q.category });
   });
