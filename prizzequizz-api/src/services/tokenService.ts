@@ -17,8 +17,12 @@ if (appConfig.nodeEnv === 'production' && (!accessSecret || !refreshSecret)) {
   throw new Error('JWT secrets must be configured in production');
 }
 
+// Access token lifetime. Kept long (default 7 days) so a play session never
+// expires mid-match and the WebSocket token stays valid; the client also
+// silently refreshes on launch via the 30-day refresh token.
+const ACCESS_TTL_SEC = Number(process.env.ACCESS_TOKEN_TTL_SEC ?? 7 * 24 * 60 * 60);
 export function signAccessToken(userId: string, role: 'user' | 'admin' = 'user'): string {
-  return sign({ sub: userId, typ: 'access', role, iat: now(), exp: now() + 15 * 60, jti: randomUUID() }, accessSecret);
+  return sign({ sub: userId, typ: 'access', role, iat: now(), exp: now() + ACCESS_TTL_SEC, jti: randomUUID() }, accessSecret);
 }
 
 export function signRefreshToken(userId: string, role: 'user' | 'admin' = 'user'): string {

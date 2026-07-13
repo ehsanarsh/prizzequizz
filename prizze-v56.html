@@ -6794,6 +6794,24 @@ async function pzApi(m,p,b,a=true){
   try{ return await fetch(_A+p,{method:m,headers:h,body:b?JSON.stringify(b):undefined}).then(r=>r.json()); }
   catch(e){ return {ok:false,error:{message:'خطای شبکه'}}; }
 }
+/* Silent re-auth: exchange the stored 30-day refresh token for a fresh access
+   token so the user never has to re-enter phone/OTP, and every device keeps its
+   REAL userId (an expired token makes the server fall back to a shared id, which
+   is why two devices then never matched). */
+async function pzRefreshToken(){
+  let rtok=null; try{ rtok=localStorage.getItem('pz_rtok'); }catch(e){}
+  if(!rtok) return false;
+  try{
+    const r=await pzApi('POST','/auth/refresh',{refreshToken:rtok},false);
+    if(r&&r.ok&&r.data&&r.data.accessToken){
+      _tok=r.data.accessToken; try{localStorage.setItem('pz_tok',_tok);}catch(e){}
+      if(r.data.refreshToken){ try{localStorage.setItem('pz_rtok',r.data.refreshToken);}catch(e){} }
+      if(r.data.user){ _usr=r.data.user; try{localStorage.setItem('pz_usr',JSON.stringify(_usr));}catch(e){} }
+      return true;
+    }
+  }catch(e){}
+  return false;
+}
 
 /* AUTH */
 async function realSendOtp(){
@@ -6820,6 +6838,7 @@ async function realVerifyOtp(){
     _tok=r.data.accessToken; _usr=r.data.user;
     localStorage.setItem('pz_tok',_tok);
     localStorage.setItem('pz_usr',JSON.stringify(_usr));
+    if(r.data.refreshToken){ try{localStorage.setItem('pz_rtok',r.data.refreshToken);}catch(e){} }  /* stay logged in for 30 days */
     wallet=_usr.balances?.wallet||0; updateWalletUI();
     applyMyName();
     /* New account (no chosen name yet) → registration; otherwise straight in. */
@@ -7619,10 +7638,19 @@ function startIntroFlow(){
     if(bar) bar.style.width=pct+'%';
     if(pct>40&&mi===0){mi=1;if(txt)txt.textContent=msgs[1];}
     if(pct>80&&mi===1){mi=2;if(txt)txt.textContent=msgs[2];}
-    if(pct>=100){clearInterval(iv);setTimeout(()=>{
-      /* Already registered → skip phone/OTP entirely and go straight to the
-         subscription-plan screen. Only brand-new users see login. */
-      if(_tok && _usr && !_pzNeedsRegister()){ try{applyMyName();}catch(e){} go('plans'); }
+    if(pct>=100){clearInterval(iv);setTimeout(async()=>{
+      /* Silently refresh the access token so a returning user keeps a VALID
+         session (real userId) without re-entering phone/OTP. A legacy session
+         with no saved refresh token has a likely-expired token (the cause of two
+         devices colliding on the same id) → send it to log in once to bootstrap. */
+      let authed=false;
+      if(_tok && _usr){
+        const ok=await pzRefreshToken();
+        let hasR=false; try{ hasR=!!localStorage.getItem('pz_rtok'); }catch(e){}
+        authed = ok || hasR;
+        if(!ok && !hasR){ try{ _tok=null; localStorage.removeItem('pz_tok'); }catch(e){} }
+      }
+      if(authed && _usr && !_pzNeedsRegister()){ try{applyMyName();}catch(e){} go('plans'); }
       else go('login');
     },300);}
   },55);
