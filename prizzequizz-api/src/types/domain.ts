@@ -72,6 +72,9 @@ export interface Match {
    *  who gets to pick the topic. */
   duelToss?: Record<string, { correct: boolean; timeMs: number }>;
   duelTossWinner?: string;
+  /** Per-player highest round reached — used as a start barrier so both players
+   *  enter the first question at the same time (no 5–10s head start). */
+  duelReady?: Record<string, number>;
   /** Rematch handshake between the same two players: one requests, the other
    *  accepts/rejects; on accept the server creates a fresh match and both sides
    *  read `newMatchId` here to enter it. */

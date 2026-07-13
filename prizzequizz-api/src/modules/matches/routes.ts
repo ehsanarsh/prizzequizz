@@ -60,6 +60,24 @@ export function registerMatchRoutes(router: Router, base: string): void {
     json(ctx.res, 200, match.rematch);
   });
 
+  // Start barrier: each player marks the round they've reached; both enter a
+  // round together only once BOTH have marked it (so no one gets a head start).
+  router.add('POST', `${base}/matches/:id/ready`, async (ctx) => {
+    const match = await getMatch(ctx.params.id!);
+    const uid = ctx.userId ?? 'u1';
+    const round = Math.max(0, Math.floor(Number((ctx.body as any)?.round ?? 0)) || 0);
+    if (!match.duelReady) match.duelReady = {};
+    match.duelReady[uid] = Math.max(match.duelReady[uid] ?? -1, round);
+    match.updatedAt = new Date().toISOString();
+    await repositories.matches.save(match);
+    json(ctx.res, 200, readyState(match, round));
+  });
+  router.add('GET', `${base}/matches/:id/ready`, async (ctx) => {
+    const match = await getMatch(ctx.params.id!);
+    const round = Math.max(0, Math.floor(Number(ctx.query.get('round') ?? 0)) || 0);
+    json(ctx.res, 200, readyState(match, round));
+  });
+
   // Speed-round (toss): each player submits their result; the SERVER decides the
   // winner (fastest correct answer, userId breaks an exact tie) so the two
   // clients can never both think they won and both open topic-selection.
@@ -167,4 +185,11 @@ function resolveToss(match: any): void {
 function tossState(match: any, uid: string) {
   const submitted = match.duelToss ? Object.keys(match.duelToss) : [];
   return { winner: match.duelTossWinner ?? null, iWon: match.duelTossWinner ? match.duelTossWinner === uid : null, submitted, waiting: !match.duelTossWinner };
+}
+
+function readyState(match: any, round: number) {
+  const ids = (match.players ?? []).map((p: any) => p.userId);
+  const ready = match.duelReady ?? {};
+  const allReady = ids.length > 0 && ids.every((id: string) => (ready[id] ?? -1) >= round);
+  return { round, allReady, ready: Object.keys(ready).length };
 }
