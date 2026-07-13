@@ -23,16 +23,34 @@ export function registerMatchRoutes(router: Router, base: string): void {
     json(ctx.res, 201, { matchId: match.id, status: match.phase, configVersion: match.configVersion });
   });
 
+  // The toss winner stores the chosen topic on the match; the server is the
+  // single source of truth (no client-to-client rebroadcast to the loser).
+  router.add('POST', `${base}/matches/:id/topic`, async (ctx) => {
+    const match = await getMatch(ctx.params.id!);
+    const topic = String((ctx.body as any)?.topic ?? '').trim() || '__popular__';
+    match.duelTopic = topic;
+    match.updatedAt = new Date().toISOString();
+    await repositories.matches.save(match);
+    json(ctx.res, 200, { topic });
+  });
+  // The loser polls this until the winner has chosen (topic !== null).
+  router.add('GET', `${base}/matches/:id/topic`, async (ctx) => {
+    const match = await getMatch(ctx.params.id!);
+    json(ctx.res, 200, { topic: match.duelTopic ?? null });
+  });
+
   // Same question for the same (matchId, round, topic) for BOTH players. Callable
   // repeatedly (idempotent) so polling clients always see identical content.
-  //  - `topic`  : restrict to that category (empty / "__popular__" = whole bank).
+  //  - topic: from ?topic=, else the match's stored duelTopic (winner's choice);
+  //    empty / "__popular__" = whole bank.
   //  - Rounds map to DISTINCT questions until the pool is exhausted, so a player
   //    never sees a repeat within a match unless questions genuinely run out;
   //    and because the order is derived purely from (matchId, topic), BOTH
   //    players get the identical set — a question shown to one is shown to both.
   router.add('GET', `${base}/matches/:id/question`, async (ctx) => {
     const round = Math.max(0, Math.floor(Number(ctx.query.get('round') ?? 0)) || 0);
-    const topic = (ctx.query.get('topic') ?? '').trim();
+    let topic = (ctx.query.get('topic') ?? '').trim();
+    if (!topic) { try { topic = (await getMatch(ctx.params.id!)).duelTopic ?? ''; } catch { /* no stored topic yet */ } }
     const all = await repositories.questions.listApproved();
     if (!all.length) return error(ctx.res, 404, 'NO_QUESTIONS', 'No approved questions available');
     let pool = all;

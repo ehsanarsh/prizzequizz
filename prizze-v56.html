@@ -7057,6 +7057,7 @@ function pzApplyDuelNames(){
 }
 function pzCleanupRt(){
   pzRt.active=false; pzHeartbeat(false);
+  try{ clearInterval(pzRt.topicPoll); clearTimeout(pzRt.topicSafety); clearInterval(pzRt.tossReT); }catch(_){}
   try{ if(pzRt.ws&&pzRt.ws.readyState===1&&pzRt.matchId) pzRt.ws.send(JSON.stringify({type:'client:leave_match',payload:{matchId:pzRt.matchId}})); }catch(_){}
   for(const k in pzRt.waiters) delete pzRt.waiters[k];
 }
@@ -7262,32 +7263,34 @@ function pzTossWaitAndDecide(){
 function pzShowWaitTopic(){
   const top=document.getElementById('dTopic');
   if(top) top.textContent='⏳ '+((pzRt&&pzRt.oppName)||'حریف')+' در حال انتخاب موضوع است، منتظر بمان...';
+  let done=false;
   const enter=async (topic)=>{
-    pzRt.topicWaiter=null; clearTimeout(pzRt.topicSafety); duelTopic=topic;
+    if(done)return; done=true; clearInterval(pzRt.topicPoll); clearTimeout(pzRt.topicSafety); duelTopic=topic;
     if(top)top.textContent='📥 موضوع «'+pzTopicLabel(topic)+'» — در حال آماده‌سازی سوالات...';
     await pzLoadTopicQuestions(topic);
     setTimeout(()=>runDuelRound(),150);
   };
-  pzRt.topicWaiter=enter;
-  if(pzRt.oppTopic) return enter(pzRt.oppTopic);
-  /* Last-resort only: with the winner re-broadcasting the topic this should
-     never fire. Fall back to the mixed "popular" pool (a valid game either way). */
-  pzRt.topicSafety=setTimeout(()=>{ if(pzRt.topicWaiter){ enter('__popular__'); } },16000);
-}
-/* Winner re-broadcasts the chosen topic several times so the loser reliably
-   receives it (a lost topic message would otherwise desync the question sets). */
-function pzTopicBroadcast(topic){
-  let sends=0; clearInterval(pzRt.topicReT);
-  const send=()=>{ pzWsSay({k:'topic',topic:topic}); if(++sends>=8) clearInterval(pzRt.topicReT); };
-  send(); pzRt.topicReT=setInterval(send,500);
+  /* Server is the single source of truth: poll the match until the winner has
+     stored their chosen topic. No client-to-client rebroadcast. */
+  clearInterval(pzRt.topicPoll);
+  pzRt.topicPoll=setInterval(async()=>{
+    if(done||!pzRt.active){ clearInterval(pzRt.topicPoll); return; }
+    try{ const r=await pzApi('GET','/matches/'+pzRt.matchId+'/topic'); if(r.ok&&r.data&&r.data.topic) enter(r.data.topic); }catch(e){}
+  },600);
+  /* Last-resort so the loser can never hang if the topic never lands. */
+  pzRt.topicSafety=setTimeout(()=>{ enter('__popular__'); },20000);
 }
 const _origPickTopic=pickTopic;
 pickTopic=function(topic,mine){
   if(pzRt.active&&pzRt.matchId){
     clearInterval(tpTimer); duelTopic=topic; sfx('found');
-    if(pzRt.tossWinner) pzTopicBroadcast(topic);
     const top=document.getElementById('dTopic'); if(top)top.textContent='✅ موضوع «'+pzTopicLabel(topic)+'» — در حال آماده‌سازی سوالات...';
-    (async()=>{ await pzLoadTopicQuestions(topic); setTimeout(()=>runDuelRound(),150); })();
+    (async()=>{
+      /* Winner stores the topic on the server; the loser reads it from there. */
+      if(pzRt.tossWinner){ try{ await pzApi('POST','/matches/'+pzRt.matchId+'/topic',{topic:topic}); }catch(e){} }
+      await pzLoadTopicQuestions(topic);
+      setTimeout(()=>runDuelRound(),150);
+    })();
     return;
   }
   return _origPickTopic(topic,mine);

@@ -63,6 +63,10 @@ export interface Match {
   duelAnswers?: Record<string, { selectedIndex: number; correct: boolean }>;
   /** Set to true once the finish/reward side-effects have run, so they run once. */
   duelSettled?: boolean;
+  /** Category chosen by the toss winner. The server is the single source of
+   *  truth: the winner POSTs it, the loser reads it, and both fetch questions
+   *  filtered by it — no client-to-client rebroadcast. */
+  duelTopic?: string;
   createdAt: string;
   updatedAt: string;
 }
