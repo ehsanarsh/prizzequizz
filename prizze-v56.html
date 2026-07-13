@@ -3123,15 +3123,14 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
       </div>
       <div style="width:100%;display:flex;flex-direction:column;gap:10px">
         <div id="duelActions" style="display:none;flex-direction:column;gap:10px">
-          <button class="btn btn-red money-only" onclick="rematch()">🔁 بازی مجدد با همین حریف — ورودی ۲ برابر (<span id="rematchStake">۴۰٬۰۰۰</span> ت)</button>
-          <button class="btn btn-primary practice-cost-card" onclick="practiceRematch()">🔁 بازی تمرینی دوباره — ۱ قلب + <span id="practiceRematchCoins">۲۵</span> سکه</button>
+          <button class="btn btn-red money-only" id="rematchBtn" onclick="rematch()">🔁 بازی مجدد با همین حریف</button>
+          <button class="btn btn-primary practice-cost-card" id="practiceRematchBtn" onclick="practiceRematch()">🔁 بازی مجدد تمرینی — ۱ قلب + <span id="practiceRematchCoins">۲۵</span> سکه</button>
           <div style="display:flex;gap:10px">
             <button class="btn btn-ghost btn-sm" style="flex:1" onclick="showFriendRequestSnackbar(oppName||'حریف')">➕ درخواست دوستی</button>
             <button class="btn btn-ghost btn-sm" style="flex:1" onclick="showCurrentOpponentProfile()">👤 پروفایل حریف</button>
           </div>
         </div>
-        <button class="btn btn-orange" onclick="startGame()">🔁 شروع مسابقه جدید</button>
-        <button class="btn btn-blue" onclick="go('rankings')">🏅 مشاهده رنکینگ</button>
+        <button class="btn btn-orange" onclick="startGame()">🆕 حریف جدید</button>
         <button class="btn btn-primary" onclick="go('home')">🏠 بازگشت به خانه</button>
       </div>
     </section>
@@ -4778,7 +4777,7 @@ function endGame(won,amount,isWithdraw,customSub){
   const da=document.getElementById('duelActions');
   da.style.display=isDuel?'flex':'none';
   renderDuelResultPanel(won);
-  if(isDuel)document.getElementById('rematchStake').textContent=(userPlan==='free'?'تمرینی · ۱ قلب + '+fa(practiceCoinStake)+' سکه':fa(duelStakeVal*2));
+  const _prc=document.getElementById('practiceRematchCoins'); if(_prc)_prc.textContent=fa(practiceCoinStake);
   document.getElementById('stat-q').textContent=fa(isDuel?myScore:qIndex);
   document.getElementById('stat-xp').textContent='+'+fa(isDuel?duelStage*80:qIndex*50);
   if(won){
@@ -6885,6 +6884,8 @@ function _pzRefundEntry(){
 const _origSMM = startMatchmaking;
 startMatchmaking = async function(){
   if(!_tok){toast('ابتدا وارد شوید');go('login');return;}
+  /* A fresh search abandons any pending rematch handshake. */
+  try{ _pzRematchMid=null; clearInterval(_pzRematchPoll); clearInterval(_pzRematchWatch); _pzRematchModalOpen=false; }catch(_){}
 
   /* Clear any questions/match from a previous game so we never reuse stale data */
   window._pzQs=null; _mid=null;
@@ -7057,7 +7058,7 @@ function pzApplyDuelNames(){
 }
 function pzCleanupRt(){
   pzRt.active=false; pzHeartbeat(false);
-  try{ clearInterval(pzRt.topicPoll); clearTimeout(pzRt.topicSafety); clearInterval(pzRt.tossReT); }catch(_){}
+  try{ clearInterval(pzRt.topicPoll); clearTimeout(pzRt.topicSafety); clearInterval(pzRt.tossPoll); clearTimeout(pzRt.tossSafety); }catch(_){}
   try{ if(pzRt.ws&&pzRt.ws.readyState===1&&pzRt.matchId) pzRt.ws.send(JSON.stringify({type:'client:leave_match',payload:{matchId:pzRt.matchId}})); }catch(_){}
   for(const k in pzRt.waiters) delete pzRt.waiters[k];
 }
@@ -7212,53 +7213,41 @@ _runTossQuestion=function(){
   startDTimer();
 };
 const _origTossAns=tossAnswer;
-/* Re-broadcast my toss result several times so a single dropped WS message can
-   never leave the two clients with different views of who was faster (that was
-   the cause of BOTH players being sent to topic-selection). */
-function pzTossBroadcast(){
-  if(!pzRt.tossMe) return; let sends=0; clearInterval(pzRt.tossReT);
-  const send=()=>{ pzWsSay({k:'toss',correct:pzRt.tossMe.correct,t:pzRt.tossMe.t}); if(++sends>=6) clearInterval(pzRt.tossReT); };
-  send(); pzRt.tossReT=setInterval(send,500);
-}
 tossAnswer=function(sel,correct){
   if(!(pzRt.active&&pzRt.matchId)) return _origTossAns(sel,correct);
   if(dAnswered) return; dAnswered=true; clearInterval(dTimer);
   const myRight=(sel===correct);
   const t=Date.now()-(pzRt.tossStart||Date.now());
-  pzRt.tossMe={correct:myRight,t:(myRight?t:1000000+t)};   /* wrong ranks worst */
-  pzTossBroadcast();
-  revealAnswers('dAnswers',sel,correct,()=>{ pzTossWaitAndDecide(); });
+  pzRt.tossMe={correct:myRight,t:t};
+  /* Submit to the SERVER, which decides the single winner. Retried inside
+     pzTossServerDecide's poll if this first POST is dropped. */
+  pzApi('POST','/matches/'+pzRt.matchId+'/toss',{correct:myRight,timeMs:t}).catch(()=>{});
+  revealAnswers('dAnswers',sel,correct,()=>{ pzTossServerDecide(); });
 };
-function pzTossWaitAndDecide(){
-  const top=document.getElementById('dTopic'); if(top) top.textContent='⏳ منتظر پاسخ حریف...';
+/* Ask the SERVER who won the toss (single source of truth) — the two clients
+   can never both become the picker. Poll until the winner is resolved. */
+function pzTossServerDecide(){
+  const top=document.getElementById('dTopic'); if(top) top.textContent='⏳ در حال تعیین برنده سرعت...';
   let done=false;
-  const decide=()=>{
-    if(done)return; done=true; pzRt.tossWaiter=null; clearTimeout(to); clearInterval(pzRt.tossReT); tossPhase=false;
-    let iWon;
-    if(pzRt.tossMe && pzRt.tossOpp){
-      /* Both speed results are known → fastest CORRECT answer wins; the id only
-         breaks an exact tie. This is symmetric, so both clients agree. */
-      const me={id:String(pzRt.myId||'me'),correct:!!pzRt.tossMe.correct,t:pzRt.tossMe.t};
-      const op={id:String(pzRt.oppId||'opp'),correct:!!pzRt.tossOpp.correct,t:pzRt.tossOpp.t};
-      const pick=(x,y)=>{ if(x.correct!==y.correct)return x.correct?x:y; if(x.t!==y.t)return x.t<y.t?x:y; return x.id<y.id?x:y; };
-      iWon=(pick(me,op).id===me.id);
-    } else {
-      /* Opponent's result never arrived. Fall back to a rule BOTH clients compute
-         identically from the two ids (smaller id picks) — so we can NEVER both
-         become the picker. */
-      iWon = String(pzRt.myId||'me') < String(pzRt.oppId||'opp');
-    }
+  const apply=(iWon)=>{
+    if(done)return; done=true; clearInterval(pzRt.tossPoll); clearTimeout(pzRt.tossSafety); tossPhase=false;
     pzRt.tossWinner=iWon;
     if(iWon){ if(top) top.textContent='⚡ سریع‌تر و درست بودی! موضوع رو انتخاب کن'; openTopicPick(true); }
     else { pzShowWaitTopic(); }
   };
-  pzRt.tossWaiter=decide;
-  if(pzRt.tossOpp) return decide();
-  /* Safety cap timed from the TOSS start (not my answer) so it always fires
-     AFTER the opponent's 10s toss clock + a moment to exchange results — by then
-     both sides have each other's data and decide by speed identically. */
-  const elapsed=Date.now()-(pzRt.tossStart||Date.now());
-  var to=setTimeout(decide,Math.max(2500,13000-elapsed));
+  clearInterval(pzRt.tossPoll);
+  pzRt.tossPoll=setInterval(async()=>{
+    if(done||!pzRt.active){ clearInterval(pzRt.tossPoll); return; }
+    try{
+      const r=await pzApi('GET','/matches/'+pzRt.matchId+'/toss');
+      if(r.ok&&r.data&&r.data.winner){ apply(r.data.iWon===true); return; }
+      /* Resubmit in case my first POST was lost, so the server can resolve. */
+      if(pzRt.tossMe) pzApi('POST','/matches/'+pzRt.matchId+'/toss',{correct:pzRt.tossMe.correct,timeMs:pzRt.tossMe.t}).catch(()=>{});
+    }catch(e){}
+  },600);
+  /* Absolute safety: if the server never resolves (opponent gone), decide
+     deterministically so we never hang — the smaller id becomes the picker. */
+  pzRt.tossSafety=setTimeout(()=>{ apply(String(pzRt.myId||'me') < String(pzRt.oppId||'opp')); },16000);
 }
 function pzShowWaitTopic(){
   const top=document.getElementById('dTopic');
@@ -7441,10 +7430,81 @@ answerDuel=function(sel,correct){
   });
 };
 
-/* End of a real duel → release the room + timers exactly once. */
+/* End of a real duel → release the room + timers exactly once, remember the
+   match so a rematch can be offered, and start watching for the opponent's
+   rematch request. */
 const _origDRW=duelRoundWin, _origDRL=duelRoundLose;
-duelRoundWin=function(){ if(pzRt.active){pzRt.finished=true;pzCleanupRt();} return _origDRW.apply(this,arguments); };
-duelRoundLose=function(){ if(pzRt.active){pzRt.finished=true;pzCleanupRt();} return _origDRL.apply(this,arguments); };
+function _pzOnRealDuelEnd(){ if(pzRt.active){ _pzRematchMid=pzRt.matchId; pzRt.finished=true; pzCleanupRt(); setTimeout(_pzWatchRematchAsOpponent,600); } }
+duelRoundWin=function(){ const real=pzRt.active; if(real)_pzOnRealDuelEnd(); return _origDRW.apply(this,arguments); };
+duelRoundLose=function(){ const real=pzRt.active; if(real)_pzOnRealDuelEnd(); return _origDRL.apply(this,arguments); };
+
+/* ---- Real rematch: request → opponent accept/reject → both enter a fresh
+   match (same opponent, same stake) via the same tested match-start path. ---- */
+let _pzRematchMid=null,_pzRematchPoll=null,_pzRematchWatch=null,_pzRematchModalOpen=false;
+const _origRematch=rematch;
+rematch=function(){
+  if(!_pzRematchMid) return _origRematch.apply(this,arguments);   /* non-real → keep original */
+  clearInterval(_pzRematchWatch);
+  const btn=document.getElementById('rematchBtn');
+  const oppLbl=((pzRt&&pzRt.oppName)||oppName||'حریف');
+  if(btn){ btn.disabled=true; btn.textContent='⏳ منتظر پاسخ '+oppLbl+'...'; }
+  pzApi('POST','/matches/'+_pzRematchMid+'/rematch/request',{}).then(r=>{
+    if(!r||!r.ok){ if(btn){btn.disabled=false;btn.textContent='🔁 بازی مجدد با همین حریف';} toast('خطا در ارسال درخواست'); _pzWatchRematchAsOpponent(); return; }
+    _pzPollRematchAsRequester();
+  });
+};
+function _pzResetRematchBtn(){ const btn=document.getElementById('rematchBtn'); if(btn){ btn.disabled=false; btn.textContent='🔁 بازی مجدد با همین حریف'; } }
+function _pzPollRematchAsRequester(){
+  clearInterval(_pzRematchPoll); const t0=Date.now();
+  _pzRematchPoll=setInterval(async()=>{
+    if(!_pzRematchMid||!document.getElementById('result').classList.contains('active')){ clearInterval(_pzRematchPoll); return; }
+    try{
+      const r=await pzApi('GET','/matches/'+_pzRematchMid+'/rematch');
+      if(r.ok&&r.data){
+        if(r.data.status==='accepted'&&r.data.newMatchId){ clearInterval(_pzRematchPoll); return pzEnterRematch(r.data.newMatchId); }
+        if(r.data.status==='rejected'){ clearInterval(_pzRematchPoll); _pzResetRematchBtn(); toast(((pzRt&&pzRt.oppName)||'حریف')+' درخواست بازی مجدد را رد کرد',2600); return; }
+      }
+    }catch(e){}
+    if(Date.now()-t0>45000){ clearInterval(_pzRematchPoll); _pzResetRematchBtn(); toast('پاسخی از حریف نیامد',2600); }
+  },1500);
+}
+function _pzWatchRematchAsOpponent(){
+  if(!_pzRematchMid) return;
+  clearInterval(_pzRematchWatch);
+  _pzRematchWatch=setInterval(async()=>{
+    if(!_pzRematchMid||!document.getElementById('result').classList.contains('active')){ clearInterval(_pzRematchWatch); return; }
+    if(_pzRematchModalOpen) return;
+    try{
+      const r=await pzApi('GET','/matches/'+_pzRematchMid+'/rematch');
+      if(r.ok&&r.data&&r.data.status==='pending'&&r.data.by&&r.data.by!==(pzRt&&pzRt.myId)){ clearInterval(_pzRematchWatch); _pzShowRematchPrompt(); }
+    }catch(e){}
+  },1500);
+}
+function _pzShowRematchPrompt(){
+  _pzRematchModalOpen=true;
+  showAaaModal({
+    icon:'🔁', title:'درخواست بازی مجدد', sub:((pzRt&&pzRt.oppName)||oppName||'حریف')+' می‌خواهد دوباره با تو بازی کند. قبول می‌کنی؟',
+    primaryText:'✅ قبول', secondaryText:'❌ رد', primaryClass:'btn-primary', secondaryClass:'btn-red', dismissible:false,
+    onPrimary:()=>{ _pzRematchModalOpen=false; closeAaaModal(true); _pzRespondRematch(true); },
+    onSecondary:()=>{ _pzRematchModalOpen=false; closeAaaModal(true); _pzRespondRematch(false); }
+  });
+}
+function _pzRespondRematch(accept){
+  if(!_pzRematchMid) return;
+  pzApi('POST','/matches/'+_pzRematchMid+'/rematch/respond',{accept:accept}).then(r=>{
+    if(accept){ if(r.ok&&r.data&&r.data.newMatchId) pzEnterRematch(r.data.newMatchId); else { toast('خطا در شروع بازی مجدد'); _pzWatchRematchAsOpponent(); } }
+    else { toast('درخواست رد شد'); _pzWatchRematchAsOpponent(); }
+  });
+}
+function pzEnterRematch(newMid){
+  clearInterval(_pzRematchPoll); clearInterval(_pzRematchWatch); _pzRematchModalOpen=false; _pzRematchMid=null;
+  leagueDuelActive=false; leagueWtaActive=false; gameType='duel';
+  _pzEntryRefunded=true;   /* friendly rematch, same stake → nothing charged/refunded */
+  go('matchmaking');
+  const ms=document.getElementById('mmStatus'); if(ms)ms.textContent='✅ بازی مجدد — در حال اتصال به حریف...';
+  const radar=document.getElementById('radar'); if(radar){ radar.classList.remove('found'); radar.classList.add('searching'); }
+  _pzMatchFound(newMid);
+}
 /* ======= END ======= */
 
 

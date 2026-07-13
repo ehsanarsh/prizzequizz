@@ -67,6 +67,15 @@ export interface Match {
    *  truth: the winner POSTs it, the loser reads it, and both fetch questions
    *  filtered by it — no client-to-client rebroadcast. */
   duelTopic?: string;
+  /** Speed-round (toss) submissions keyed by userId, and the resolved winner.
+   *  The server decides the winner so the two clients can never disagree about
+   *  who gets to pick the topic. */
+  duelToss?: Record<string, { correct: boolean; timeMs: number }>;
+  duelTossWinner?: string;
+  /** Rematch handshake between the same two players: one requests, the other
+   *  accepts/rejects; on accept the server creates a fresh match and both sides
+   *  read `newMatchId` here to enter it. */
+  rematch?: { by: string; status: 'pending' | 'accepted' | 'rejected'; newMatchId?: string; at: string };
   createdAt: string;
   updatedAt: string;
 }
