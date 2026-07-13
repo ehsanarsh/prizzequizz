@@ -2643,7 +2643,11 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
 /* Remove rotating / sweeping decorative light effects that caused flicker. */
 .dti-rays,.wfi-rays,#askSplash .askrays{display:none!important;animation:none!important;background:none!important}
 .aaa-card::before,.league-ticket-card::before,.duel-summary-card::before,.wheel-wrap::before,.hero::before,.league-cta::before,.plan2.prize::before,.cc-preview::before{animation:none!important;background:none!important;opacity:0!important}
-.radar::before{animation:none!important;background:radial-gradient(circle,rgba(115,217,255,.24),transparent 62%)!important;transform:none!important}.phone.theme-free .radar::before{animation:none!important;background:radial-gradient(circle,rgba(115,217,255,.34),transparent 64%)!important}.spinner{animation:none!important;border-color:rgba(255,210,31,.28)!important;border-top-color:var(--bolt)!important}.item::after,.mode-pill::after,.btn::after{animation:none!important}
+/* NOTE: the radar conic sweep is (re)defined by the v52 block below with its own
+   spinning animation. Do NOT force `animation:none`/`transform:none` here — an
+   !important transform overrides the running animation's rotate() (per the CSS
+   Animations spec) and freezes the sweep while the orbit dots keep moving. */
+.spinner{animation:none!important;border-color:rgba(255,210,31,.28)!important;border-top-color:var(--bolt)!important}.item::after,.mode-pill::after,.btn::after{animation:none!important}
 /* Weekly score bar must be a thin, unobtrusive score tracker, not an XP card. */
 .weekly-progress-line{margin:0 12px 8px!important;padding:4px 8px 8px!important;border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;contain:layout paint}.wpl-track{height:42px!important;margin:0 2px!important}.wpl-track::before{top:20px!important;height:4px!important;border-width:1.5px!important;left:4%!important;right:4%!important;background:#000!important}.wpl-track>i{top:20px!important;height:4px!important;left:4%!important;background:linear-gradient(90deg,#B87333,#C9CED4,#FFD21F)!important;box-shadow:0 0 8px rgba(255,210,31,.26)!important}.wpl-marker{top:5px!important}.wpl-marker span{font-size:13px!important}.wpl-marker b{font-size:9.5px!important;padding:1px 6px!important}.wpl-flag em{font-size:14px!important}.wpl-flag small{font-size:7.8px!important;line-height:1.1!important;color:var(--muted)!important}.wpl-next{font-size:9.5px!important;margin-top:0!important;line-height:1.25!important}.wpl-flag.reached{animation:flagReachLite .38s ease-out!important}@keyframes flagReachLite{50%{transform:translateX(-50%) scale(1.08);filter:drop-shadow(0 0 6px var(--bolt-glow))}100%{transform:translateX(-50%) scale(1)}}
 /* Lightweight replacements for large movement animations. */
@@ -6935,7 +6939,9 @@ startMatchmaking = async function(){
   let secs=0;
   _mmi=setInterval(async()=>{
     secs+=2;
-    if(!document.getElementById('matchmaking').classList.contains('active')){clearInterval(_mmi);return;}
+    /* Left the search screen (back/nav/close) → CANCEL the ticket so we never
+       leave a zombie in the queue that another player could match into. */
+    if(!document.getElementById('matchmaking').classList.contains('active')){clearInterval(_mmi); if(_mmt) pzApi('DELETE','/matchmaking/'+_mmt); return;}
     if(secs>=60){
       clearInterval(_mmi); clearInterval(mmTimer); clearInterval(mmPingT);
       if(_mmt) pzApi('DELETE','/matchmaking/'+_mmt);
@@ -6972,6 +6978,7 @@ function pzNewRt(matchId){
   return { ws:null, hb:null,
            active:false, finished:false, serverFinished:false, oppLeft:false,
            matchId:matchId, myId:(_usr&&_usr.id)?_usr.id:null, oppId:null,
+           oppPresent:false,
            myByRound:{}, oppByRound:{}, waiters:{}, snapshot:null, presence:1 };
 }
 let pzRt=pzNewRt(null);
@@ -7010,11 +7017,11 @@ function pzHandleWs(m){
   if(m.type==='server:connected'){ if(!pzRt.myId&&p.userId)pzRt.myId=p.userId; return; }
   if(m.type==='server:answer_result'){
     const uid=p.userId, rnd=Number(p.round);
-    if(uid&&uid!==pzRt.myId){ pzOppBack(); if(!pzRt.oppId)pzRt.oppId=uid; pzRt.oppByRound[rnd]={correct:!!p.correct,sel:p.selectedIndex}; pzResolveWaiter(rnd,pzRt.oppByRound[rnd]); }
+    if(uid&&uid!==pzRt.myId){ pzRt.oppPresent=true; pzOppBack(); if(!pzRt.oppId)pzRt.oppId=uid; pzRt.oppByRound[rnd]={correct:!!p.correct,sel:p.selectedIndex}; pzResolveWaiter(rnd,pzRt.oppByRound[rnd]); }
     return;
   }
   if(m.type==='server:match_snapshot'){ if(Array.isArray(p.players))pzRt.snapshot=p.players; return; }
-  if(m.type==='server:presence'){ const u=p.users||[]; pzRt.presence=u.length; const other=u.find(x=>(x.userId||x.id)!==pzRt.myId); if(other&&!pzRt.oppId)pzRt.oppId=other.userId||other.id; if(u.length>=2)pzOppBack(); return; }
+  if(m.type==='server:presence'){ const u=p.users||[]; pzRt.presence=u.length; const other=u.find(x=>(x.userId||x.id)!==pzRt.myId); if(other){ pzRt.oppPresent=true; if(!pzRt.oppId)pzRt.oppId=other.userId||other.id; } if(u.length>=2)pzOppBack(); return; }
   if(m.type==='server:opponent_left'){
     /* Weak internet: a brief disconnect must NOT end the match. Give the
        opponent a grace window to reconnect; only forfeit if they stay gone. */
@@ -7028,7 +7035,7 @@ function pzHandleWs(m){
   if(m.type==='server:match_finished'){ pzRt.serverFinished=true; return; }
   if(m.type==='server:chat'){
     const t=String(p.text||''); const uid=p.userId;
-    if(uid&&uid!==pzRt.myId&&t.indexOf('PZ1:')===0){ try{ pzOnPeer(JSON.parse(t.slice(4))); }catch(_){} }
+    if(uid&&uid!==pzRt.myId){ pzRt.oppPresent=true; pzOppBack(); if(t.indexOf('PZ1:')===0){ try{ pzOnPeer(JSON.parse(t.slice(4))); }catch(_){} } }
     return;
   }
 }
@@ -7067,6 +7074,26 @@ function pzWaitOpp(round,cb){
   const to=setTimeout(()=>finish(pzRt.oppByRound[round]!==undefined?pzRt.oppByRound[round]:null),15000);
 }
 function pzForfeitWin(){ if(pzRt.finished)return; pzRt.finished=true; clearInterval(dTimer); toast('حریف از بازی خارج شد؛ تو برنده شدی 🏆',3000); duelRoundWin(); }
+
+/* Confirm the matched opponent is REALLY in the room before starting the game.
+   The HTTP match package always lists two players, so it can't tell a real
+   opponent from one who was matched but never joined the socket (crashed / quit
+   / dead network) — that's the "ghost opponent". We only proceed once we've seen
+   a genuine live signal from them (presence>=2, or any answer/chat over the WS).
+   Re-join every 700ms in case our join raced theirs. Resolves false on timeout. */
+function pzWaitOpponentPresent(timeoutMs){
+  return new Promise((resolve)=>{
+    if(pzRt.oppPresent||pzRt.presence>=2) return resolve(true);
+    const t0=Date.now(); let done=false;
+    const iv=setInterval(()=>{
+      if(done) return;
+      if(!pzRt.active){ done=true; clearInterval(iv); return resolve(false); }
+      if(pzRt.oppPresent||pzRt.presence>=2){ done=true; clearInterval(iv); return resolve(true); }
+      if(Date.now()-t0>=timeoutMs){ done=true; clearInterval(iv); return resolve(false); }
+      pzWsJoin();   /* nudge: re-announce presence in case the first join raced */
+    },700);
+  });
+}
 
 async function _pzMatchFound(mid){
   clearInterval(_mmi); clearInterval(mmTimer); clearInterval(mmPingT);
@@ -7122,7 +7149,22 @@ async function _pzMatchFound(mid){
   if(qs.length>=5){ window._pzQs=qs; console.log('[PZ] Loaded',qs.length,'synced questions for match',mid); }
   else console.warn('[PZ] Only',qs.length,'valid questions; using local fallback');
 
-  setTimeout(()=>duelIntro(),1200);
+  /* GHOST-OPPONENT GUARD: don't start until the opponent is really in the room.
+     If they never join (matched but crashed/quit/dead network) treat it as a
+     no-show → refund the entry and go home, instead of playing against nobody. */
+  const _mmStat=document.getElementById('mmStatus'); if(_mmStat) _mmStat.textContent='🔗 در حال اتصال حریف...';
+  const present=await pzWaitOpponentPresent(15000);
+  if(!pzRt.active||pzRt.matchId!==mid) return;   /* superseded by a newer match */
+  if(!present){
+    pzRt.active=false; pzRt.finished=true; pzHeartbeat(false);
+    try{ if(pzRt.ws){ pzRt.ws.onclose=null; pzRt.ws.close(); } }catch(_){}
+    _pzEntryRefunded=false; _pzRefundEntry();
+    toast('حریف به بازی متصل نشد — ورودی برگشت داده شد',3200);
+    setTimeout(()=>go('home'),700);
+    return;
+  }
+  if(_mmStat) _mmStat.textContent='✅ حریف آماده است!';
+  setTimeout(()=>duelIntro(),600);
 }
 
 /* Inject synced questions into duelRoundQs when the duel starts.

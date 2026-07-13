@@ -49,6 +49,14 @@ export interface MatchmakingQueue {
 
 const DEFAULT_EXPIRE_MS = 60_000;
 const DEFAULT_BOT_MS = 30_000;
+// A queued ticket is only matchable while its owner is actively polling. The
+// client polls every 2s; if we haven't heard from a ticket in this window we
+// treat it as ABANDONED and never pair a live player with it (prevents the
+// "ghost opponent": you get matched, but the other side already left/crashed).
+const FRESH_MS = Number(process.env.MATCHMAKING_FRESH_MS ?? 9_000);
+function isFresh(ticket: MatchmakingTicket): boolean {
+  return Date.now() - new Date(ticket.updatedAt).getTime() <= FRESH_MS;
+}
 
 abstract class BaseMatchmakingQueue implements MatchmakingQueue {
   protected analytics = { enqueued: 0, matched: 0, botFallbacks: 0, cancelled: 0, expired: 0 };
@@ -87,7 +95,7 @@ export class MemoryMatchmakingQueue extends BaseMatchmakingQueue {
     const skill = input.skill ?? 1000;
     this.analytics.enqueued += 1;
     const compatible = [...this.tickets.values()].find((t) =>
-      t.status === 'queued' && t.userId !== input.userId && t.modeId === input.modeId && t.economyType === input.economyType && Math.abs(t.skill - skill) <= wideningWindow(t.createdAt)
+      t.status === 'queued' && isFresh(t) && t.userId !== input.userId && t.modeId === input.modeId && t.economyType === input.economyType && Math.abs(t.skill - skill) <= wideningWindow(t.createdAt)
     );
     const ticket: MatchmakingTicket = { id: id(), userId: input.userId, modeId: input.modeId, economyType: input.economyType, coinStake: input.coinStake, skill, status: 'queued', createdAt: now, updatedAt: now };
     if (compatible) return this.matchTickets(ticket, compatible, skill);
@@ -98,7 +106,11 @@ export class MemoryMatchmakingQueue extends BaseMatchmakingQueue {
 
   async get(ticketId: string): Promise<MatchmakingTicket | null> {
     await this.expireOldTickets();
-    return this.tickets.get(ticketId) ?? null;
+    const ticket = this.tickets.get(ticketId) ?? null;
+    // A poll is a liveness heartbeat: keep this ticket "fresh" so it stays
+    // matchable while its owner is still waiting.
+    if (ticket && ticket.status === 'queued') ticket.updatedAt = new Date().toISOString();
+    return ticket;
   }
 
   async cancel(ticketId: string, userId: string): Promise<MatchmakingTicket | null> {
@@ -165,8 +177,9 @@ export class RedisMatchmakingQueue extends BaseMatchmakingQueue {
     const queueKey = this.queueKey(input.modeId, input.economyType);
     const ids = await client.zRangeByScore(queueKey, skill - 1000, skill + 1000);
     for (const candidateId of ids) {
-      const candidate = await this.get(candidateId);
+      const candidate = await this.getRaw(candidateId);
       if (!candidate || candidate.status !== 'queued' || candidate.userId === input.userId) continue;
+      if (!isFresh(candidate)) { await client.zRem(queueKey, candidate.id); continue; }
       if (Math.abs(candidate.skill - skill) > wideningWindow(candidate.createdAt)) continue;
       await client.zRem(queueKey, candidate.id);
       const ticket: MatchmakingTicket = { id: id(), userId: input.userId, modeId: input.modeId, economyType: input.economyType, coinStake: input.coinStake, skill, status: 'queued', createdAt: now, updatedAt: now };
@@ -180,6 +193,14 @@ export class RedisMatchmakingQueue extends BaseMatchmakingQueue {
 
   async get(ticketId: string): Promise<MatchmakingTicket | null> {
     await this.expireOldTickets();
+    const ticket = await this.getRaw(ticketId);
+    // A poll is a liveness heartbeat — refresh so the ticket stays matchable
+    // while its owner is still waiting (see FRESH_MS / the ghost-opponent fix).
+    if (ticket && ticket.status === 'queued') { ticket.updatedAt = new Date().toISOString(); await this.saveTicket(ticket); }
+    return ticket;
+  }
+
+  private async getRaw(ticketId: string): Promise<MatchmakingTicket | null> {
     const raw = await (await this.getClient()).get(this.ticketKey(ticketId));
     return raw ? JSON.parse(raw) as MatchmakingTicket : null;
   }
