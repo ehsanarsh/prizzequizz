@@ -67,11 +67,13 @@ export interface Match {
    *  truth: the winner POSTs it, the loser reads it, and both fetch questions
    *  filtered by it — no client-to-client rebroadcast. */
   duelTopic?: string;
-  /** Speed-round (toss) submissions keyed by userId, and the resolved winner.
-   *  The server decides the winner so the two clients can never disagree about
-   *  who gets to pick the topic. */
-  duelToss?: Record<string, { correct: boolean; timeMs: number }>;
+  /** Speed-round (toss) submissions keyed by userId (with the toss round they
+   *  belong to), and the resolved winner. The server decides the winner. If BOTH
+   *  players answer the toss wrong, nobody wins: duelTossRound is bumped and a
+   *  fresh toss question is shown until at least one answers correctly. */
+  duelToss?: Record<string, { correct: boolean; timeMs: number; round: number }>;
   duelTossWinner?: string;
+  duelTossRound?: number;
   /** Per-player highest round reached — used as a start barrier so both players
    *  enter the first question at the same time (no 5–10s head start). */
   duelReady?: Record<string, number>;

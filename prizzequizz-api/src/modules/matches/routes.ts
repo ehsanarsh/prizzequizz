@@ -3,7 +3,17 @@ import { error, json } from '../../http/response.js';
 import { createMatch, createMatchForPlayers, getMatch, startMatch, submitAnswer } from '../../services/matchEngine.js';
 import { validateAnswer } from '../../services/questionEngine.js';
 import { repositories } from '../../repositories/index.js';
-import type { GameModeId, PlanType } from '../../types/domain.js';
+import { activeMatchState } from '../../services/matchStateStore.js';
+import type { GameModeId, Match, PlanType } from '../../types/domain.js';
+
+// Persist a mutated match to BOTH the repository AND the in-memory active-match
+// store. getMatch() reads the active store first, so writing only to the repo
+// (as several endpoints used to) left the active copy stale — which desynced the
+// chosen topic, the toss winner and the rematch handshake between the two clients.
+async function persist(match: Match): Promise<void> {
+  await repositories.matches.save(match);
+  await activeMatchState.set(match, 60 * 60);
+}
 
 // Deterministic string hash so both players in a match derive the SAME
 // question list from the same matchId — no shared state required.
@@ -33,7 +43,7 @@ export function registerMatchRoutes(router: Router, base: string): void {
     if (!match.rematch || match.rematch.status !== 'pending' || match.rematch.by !== by) {
       match.rematch = { by, status: 'pending', at: new Date().toISOString() };
       match.updatedAt = new Date().toISOString();
-      await repositories.matches.save(match);
+      await persist(match);
     }
     json(ctx.res, 200, match.rematch);
   });
@@ -56,7 +66,7 @@ export function registerMatchRoutes(router: Router, base: string): void {
       match.rematch.status = 'rejected';
     }
     match.updatedAt = new Date().toISOString();
-    await repositories.matches.save(match);
+    await persist(match);
     json(ctx.res, 200, match.rematch);
   });
 
@@ -69,7 +79,7 @@ export function registerMatchRoutes(router: Router, base: string): void {
     if (!match.duelReady) match.duelReady = {};
     match.duelReady[uid] = Math.max(match.duelReady[uid] ?? -1, round);
     match.updatedAt = new Date().toISOString();
-    await repositories.matches.save(match);
+    await persist(match);
     json(ctx.res, 200, readyState(match, round));
   });
   router.add('GET', `${base}/matches/:id/ready`, async (ctx) => {
@@ -85,18 +95,41 @@ export function registerMatchRoutes(router: Router, base: string): void {
     const match = await getMatch(ctx.params.id!);
     const uid = ctx.userId ?? 'u1';
     const body = (ctx.body ?? {}) as any;
+    const cur = match.duelTossRound ?? 0;
+    const round = Number.isInteger(body.round) ? Number(body.round) : cur;
     if (!match.duelToss) match.duelToss = {};
-    if (!match.duelToss[uid]) match.duelToss[uid] = { correct: !!body.correct, timeMs: Math.max(0, Number(body.timeMs ?? 999999)) };
+    // Only record a submission for the CURRENT round, once, and only while the
+    // winner is undecided (ignores late/stale submissions from a previous round).
+    if (round === cur && !match.duelTossWinner) {
+      const prev = match.duelToss[uid];
+      if (!prev || prev.round !== cur) match.duelToss[uid] = { correct: !!body.correct, timeMs: Math.max(0, Number(body.timeMs ?? 999999)), round: cur };
+    }
     resolveToss(match);
     match.updatedAt = new Date().toISOString();
-    await repositories.matches.save(match);
+    await persist(match);
     json(ctx.res, 200, tossState(match, uid));
   });
   // Both players poll this until `winner` is set (then winner picks, loser waits).
+  // `round` tells the client which toss question to show (it grows on a both-wrong retry).
   router.add('GET', `${base}/matches/:id/toss`, async (ctx) => {
     const match = await getMatch(ctx.params.id!);
-    resolveToss(match);
     json(ctx.res, 200, tossState(match, ctx.userId ?? 'u1'));
+  });
+
+  // Permanently finish a match (e.g. a forfeit when the opponent disconnected).
+  // Once finished the phase is locked so a reconnecting client cannot resume a
+  // match the other player has already won and left.
+  router.add('POST', `${base}/matches/:id/finish`, async (ctx) => {
+    const match = await getMatch(ctx.params.id!);
+    if (match.phase !== 'finished') {
+      const w = (ctx.body as any)?.winnerUserId;
+      if (w) match.winnerUserId = String(w);
+      match.phase = 'finished';
+      match.duelSettled = true;
+      match.updatedAt = new Date().toISOString();
+      await persist(match);
+    }
+    json(ctx.res, 200, toSnapshot(match));
   });
 
   // The toss winner stores the chosen topic on the match; the server is the
@@ -106,7 +139,7 @@ export function registerMatchRoutes(router: Router, base: string): void {
     const topic = String((ctx.body as any)?.topic ?? '').trim() || '__popular__';
     match.duelTopic = topic;
     match.updatedAt = new Date().toISOString();
-    await repositories.matches.save(match);
+    await persist(match);
     json(ctx.res, 200, { topic });
   });
   // The loser polls this until the winner has chosen (topic !== null).
@@ -166,25 +199,33 @@ function toSnapshot(match: any) {
   return { matchId: match.id, modeId: match.modeId, phase: match.phase, round: match.round, timerSeconds: 10, players: match.players, rewardPreview: match.rewardPreview };
 }
 
-// Decide the toss winner once BOTH players have submitted: a correct answer
-// beats a wrong one, then the faster time, then the smaller userId (a stable,
-// deterministic tiebreak). Idempotent — the winner is fixed once set.
+// Decide the toss winner for the CURRENT round once BOTH players have submitted:
+//  - at least one correct  → the fastest CORRECT answer wins (userId breaks an
+//    exact tie); a wrong answer can never win.
+//  - both wrong            → nobody wins; bump duelTossRound so a fresh toss
+//    question is shown, and repeat until someone is correct.
+// Idempotent — the winner is fixed once set.
 function resolveToss(match: any): void {
   if (match.duelTossWinner || !match.duelToss) return;
+  const cur = match.duelTossRound ?? 0;
   const ids = (match.players ?? []).map((p: any) => p.userId);
-  if (!ids.length || !ids.every((id: string) => match.duelToss[id])) return; // wait for both
-  const better = (a: string, b: string): string => {
-    const x = match.duelToss[a], y = match.duelToss[b];
-    if (x.correct !== y.correct) return x.correct ? a : b;
+  if (!ids.length) return;
+  const subFor = (id: string) => { const s = match.duelToss[id]; return s && s.round === cur ? s : null; };
+  if (!ids.every((id: string) => subFor(id))) return; // still waiting for both this round
+  const correctIds = ids.filter((id: string) => subFor(id)!.correct);
+  if (correctIds.length === 0) { match.duelTossRound = cur + 1; return; } // both wrong → retry
+  const faster = (a: string, b: string): string => {
+    const x = subFor(a)!, y = subFor(b)!;
     if (x.timeMs !== y.timeMs) return x.timeMs < y.timeMs ? a : b;
     return a < b ? a : b;
   };
-  match.duelTossWinner = ids.reduce((best: string, id: string) => (best ? better(best, id) : id), '');
+  match.duelTossWinner = correctIds.reduce((best: string, id: string) => (best ? faster(best, id) : id), '');
 }
 
 function tossState(match: any, uid: string) {
-  const submitted = match.duelToss ? Object.keys(match.duelToss) : [];
-  return { winner: match.duelTossWinner ?? null, iWon: match.duelTossWinner ? match.duelTossWinner === uid : null, submitted, waiting: !match.duelTossWinner };
+  const cur = match.duelTossRound ?? 0;
+  const submitted = match.duelToss ? Object.keys(match.duelToss).filter((k) => match.duelToss[k]?.round === cur) : [];
+  return { round: cur, winner: match.duelTossWinner ?? null, iWon: match.duelTossWinner ? match.duelTossWinner === uid : null, submitted, waiting: !match.duelTossWinner };
 }
 
 function readyState(match: any, round: number) {

@@ -3122,6 +3122,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
     <section class="screen pad center" id="result">
       <div class="grow center" style="width:100%">
         <svg class="mascot pop" width="120" height="120" viewBox="0 0 120 120" id="mascotResult" style="margin-bottom:6px"></svg>
+        <img id="resultChar" alt="" style="display:none;width:150px;height:auto;margin:0 auto 4px;filter:drop-shadow(0 10px 18px rgba(0,0,0,.45));animation:pzPop .5s cubic-bezier(.2,1.4,.4,1)">
         <h1 style="font-size:26px;font-weight:900" id="resultTitle">برنده شدی!</h1>
         <p style="color:var(--muted);margin-top:6px;font-size:14px" id="resultSub">تو آخرین بازمانده بودی</p>
         <div style="font-size:38px;font-weight:900;color:var(--green);margin:16px 0"><span id="resultAmt">+۱۸۰٬۰۰۰</span> <small style="font-size:16px;color:var(--muted)">تومان</small></div>
@@ -4215,10 +4216,11 @@ function showAaaModal(opts){
 }
 function showCountdownModal(opts,cb){
   opts=opts||{};
+  /* NO "شروع سریع" / skip button on ANY timed modal — the countdown can't be
+     skipped, so both players always move to the next step at the same moment. */
   showAaaModal({
     icon:opts.icon||'⚡',title:opts.title||'آماده‌ای؟',sub:opts.sub||'تمرکز کن؛ بازی شروع می‌شود.',
-    seconds:opts.seconds||3,primaryText:opts.primaryText||'شروع سریع',secondaryText:'',
-    onPrimary:()=>closeAaaModal(true),onDone:cb,dismissible:false
+    seconds:opts.seconds||3,hideActions:true,onDone:cb,dismissible:false
   });
 }
 function setupDismissibleOverlays(){
@@ -4384,10 +4386,37 @@ function duelIntro(){
     if(n<=0){clearInterval(vsTimer);duelToss();}
   },1000);
 }
+/* Speed-round (توس) questions — kept EASY and varied so retries (both-wrong)
+   rarely repeat. The server picks TOSS_QS[hash(matchId+':'+round)%len]. */
 const TOSS_QS=[
   {t:'عمومی',q:'یک هفته چند روز است؟',a:['۵ روز','۶ روز','۷ روز','۸ روز'],c:2},
   {t:'عمومی',q:'رنگ آسمان در روز صاف چیست؟',a:['سبز','آبی','قرمز','زرد'],c:1},
   {t:'عمومی',q:'حاصل ۲+۲ چند است؟',a:['۳','۴','۵','۶'],c:1},
+  {t:'عمومی',q:'یک سال چند ماه دارد؟',a:['۱۰','۱۱','۱۲','۱۳'],c:2},
+  {t:'عمومی',q:'حاصل ۵×۲ چند است؟',a:['۷','۱۰','۱۲','۱۵'],c:1},
+  {t:'عمومی',q:'پایتخت ایران کجاست؟',a:['اصفهان','مشهد','تهران','شیراز'],c:2},
+  {t:'عمومی',q:'رنگ خون چیست؟',a:['آبی','قرمز','سبز','زرد'],c:1},
+  {t:'عمومی',q:'یک روز چند ساعت است؟',a:['۱۲','۲۰','۲۴','۳۰'],c:2},
+  {t:'عمومی',q:'خورشید از کدام سمت طلوع می‌کند؟',a:['غرب','شمال','شرق','جنوب'],c:2},
+  {t:'عمومی',q:'حاصل ۱۰−۴ چند است؟',a:['۴','۵','۶','۷'],c:2},
+  {t:'عمومی',q:'کدام حیوان پرواز می‌کند؟',a:['ماهی','گنجشک','گربه','مار'],c:1},
+  {t:'عمومی',q:'آب در چند درجه یخ می‌زند؟',a:['۰','۱۰','۵۰','۱۰۰'],c:0},
+  {t:'عمومی',q:'حاصل ۳+۴ چند است؟',a:['۶','۷','۸','۹'],c:1},
+  {t:'عمومی',q:'کدام میوه زرد است؟',a:['موز','هندوانه','انگور سیاه','بادمجان'],c:0},
+  {t:'عمومی',q:'یک دست چند انگشت دارد؟',a:['۳','۴','۵','۶'],c:2},
+  {t:'عمومی',q:'بزرگ‌ترین اقیانوس کدام است؟',a:['اطلس','هند','آرام','منجمد'],c:2},
+  {t:'عمومی',q:'حاصل ۶÷۲ چند است؟',a:['۲','۳','۴','۶'],c:1},
+  {t:'عمومی',q:'گاو چه صدایی می‌دهد؟',a:['میو','ماما','هاپ','واق'],c:1},
+  {t:'عمومی',q:'کدام فصل از همه سردتر است؟',a:['بهار','تابستان','پاییز','زمستان'],c:3},
+  {t:'عمومی',q:'حاصل ۹−۳ چند است؟',a:['۵','۶','۷','۸'],c:1},
+  {t:'عمومی',q:'ماه در آسمان چه زمانی دیده می‌شود؟',a:['روز','شب','ظهر','هرگز'],c:1},
+  {t:'عمومی',q:'حاصل ۴×۳ چند است؟',a:['۷','۱۰','۱۲','۱۴'],c:2},
+  {t:'عمومی',q:'کدام‌یک نوشیدنی است؟',a:['نان','آب','سنگ','کاغذ'],c:1},
+  {t:'عمومی',q:'رنگ چمن تازه چیست؟',a:['قرمز','آبی','سبز','بنفش'],c:2},
+  {t:'عمومی',q:'حاصل ۲×۲×۲ چند است؟',a:['۴','۶','۸','۱۰'],c:2},
+  {t:'عمومی',q:'کدام‌یک وسیله نقلیه است؟',a:['ماشین','سیب','در','کتاب'],c:0},
+  {t:'عمومی',q:'یک دقیقه چند ثانیه است؟',a:['۳۰','۴۵','۶۰','۱۰۰'],c:2},
+  {t:'عمومی',q:'کدام‌یک عدد زوج است؟',a:['۳','۵','۷','۸'],c:3},
 ];
 function refreshDuelPot(){
   const el=document.getElementById('duelPot');
@@ -4424,7 +4453,8 @@ function tossAnswer(sel,correct){
     else{top.textContent='❌ اشتباه زدی — حق انتخاب با '+oppName;openTopicPick(false);}
   });
 }
-const TOPICS=[['🎬','فیلم و سریال'],['⚽','ورزش'],['📜','تاریخ و فرهنگ'],['🎵','موسیقی'],['🍔','غذا و خوراکی'],['🔬','علم و دانش']];
+/* The 12 canonical categories (the ONLY topics used anywhere in the game). */
+const TOPICS=[['🧠','اطلاعات عمومی'],['⚽','فوتبال'],['🎬','سینما و سریال'],['🔬','علم و دانش'],['🏛️','تاریخ ایران'],['🎵','موسیقی'],['🌍','ایران و جهان'],['🏅','ورزش'],['🧩','هوش و معما'],['💻','تکنولوژی'],['📜','تاریخ جهان'],['🕌','مذهبی']];
 function openTopicPick(mine){
   clearInterval(tpTimer);
   if(mine){
@@ -4787,6 +4817,14 @@ function animatePracticeCoinReward(amount,before,after){
 /* ================= END GAME ================= */
 function endGame(won,amount,isWithdraw,customSub){
   clearInterval(timer);clearInterval(dTimer);
+  /* Win/lose character image (happy on win, sad on loss). Falls back to the SVG
+     mascot if the image file hasn't been uploaded to the web root yet. */
+  (function(){ const rc=document.getElementById('resultChar'), ms=document.getElementById('mascotResult');
+    if(!rc) return;
+    rc.onerror=()=>{ rc.style.display='none'; if(ms)ms.style.display=''; };
+    rc.onload=()=>{ rc.style.display=''; if(ms)ms.style.display='none'; };
+    rc.src = won ? 'winchar.png' : 'losechar.png';
+  })();
   const badge=document.getElementById('resultBadge'),emoji=document.getElementById('resultEmoji');
   const title=document.getElementById('resultTitle'),sub=document.getElementById('resultSub'),amt=document.getElementById('resultAmt');
   const isDuel=gameType==='duel';
@@ -7083,7 +7121,18 @@ function pzHandleWs(m){
     if(uid&&uid!==pzRt.myId){ pzRt.oppPresent=true; pzOppBack(); if(!pzRt.oppId)pzRt.oppId=uid; pzRt.oppByRound[rnd]={correct:!!p.correct,sel:p.selectedIndex}; pzResolveWaiter(rnd,pzRt.oppByRound[rnd]); }
     return;
   }
-  if(m.type==='server:match_snapshot'){ if(Array.isArray(p.players))pzRt.snapshot=p.players; return; }
+  if(m.type==='server:match_snapshot'){
+    if(Array.isArray(p.players))pzRt.snapshot=p.players;
+    /* The match is already OVER on the server (we likely reconnected after the
+       opponent won by forfeit): do NOT resume — close out on the real result so
+       a finished match can never keep running on this device. */
+    if((p.phase==='finished'||p.phase==='result') && pzRt.active && !pzRt.finished){
+      for(const k in pzRt.waiters) pzResolveWaiter(k,null);
+      const iWon = p.winnerUserId && String(p.winnerUserId)===String(pzRt.myId);
+      if(iWon) pzForfeitWin(); else pzForfeitLoss();
+    }
+    return;
+  }
   if(m.type==='server:presence'){ const u=p.users||[]; pzRt.presence=u.length; const other=u.find(x=>(x.userId||x.id)!==pzRt.myId); if(other){ pzRt.oppPresent=true; if(!pzRt.oppId)pzRt.oppId=other.userId||other.id; } if(u.length>=2)pzOppBack(); return; }
   if(m.type==='server:opponent_left'){
     /* Weak internet: a brief disconnect must NOT end the match. Give the
@@ -7142,7 +7191,13 @@ function pzWaitOpp(round,cb){
   pzRt.waiters[round]=finish;
   const to=setTimeout(()=>finish(pzRt.oppByRound[round]!==undefined?pzRt.oppByRound[round]:null),15000);
 }
-function pzForfeitWin(){ if(pzRt.finished)return; pzRt.finished=true; clearInterval(dTimer); toast('حریف از بازی خارج شد؛ تو برنده شدی 🏆',3000); duelRoundWin(); }
+function pzForfeitWin(){ if(pzRt.finished)return; pzRt.finished=true; clearInterval(dTimer);
+  /* Tell the server the match is finished so the disconnected player can never
+     reconnect and keep playing a match we've already won. */
+  try{ if(pzRt.matchId&&pzRt.myId) pzApi('POST','/matches/'+pzRt.matchId+'/finish',{winnerUserId:pzRt.myId}); }catch(_){}
+  toast('حریف از بازی خارج شد؛ تو برنده شدی 🏆',3000); duelRoundWin(); }
+/* We reconnected to a match the opponent already won → record the loss, no resume. */
+function pzForfeitLoss(){ if(pzRt.finished)return; pzRt.finished=true; clearInterval(dTimer); toast('این مسابقه پایان یافته — حریف برنده شد',3000); duelRoundLose(); }
 
 /* Confirm the matched opponent is REALLY in the room before starting the game.
    The HTTP match package always lists two players, so it can't tell a real
@@ -7264,20 +7319,27 @@ pickOpponent=function(){
   return _origPickOpp();
 };
 
-/* ---- Synced TOSS (topic-selection) : same question, speed decides winner ---- */
+/* ---- Synced TOSS (topic-selection) : same question, SERVER decides winner ----
+   If BOTH answer wrong, the server bumps the toss round; both clients then show
+   a NEW toss question and repeat until at least one is correct. */
 const _origRunToss=_runTossQuestion;
-_runTossQuestion=function(){
-  if(!(pzRt.active&&pzRt.matchId)) return _origRunToss();
-  pzRt.tossMe=null; pzRt.tossOpp=null; pzRt.tossWaiter=null; pzRt.tossWinner=false; pzRt.oppTopic=null; pzRt.topicWaiter=null;
-  pzApplyDuelNames();
-  const qd=TOSS_QS[pzHash(pzRt.matchId)%TOSS_QS.length];   /* identical for both players */
-  dCorrect=qd.c; dAnswered=false;
-  document.getElementById('dTopic').textContent='⚡ سوال سرعتی — هر کی زودتر و درست، موضوع رو انتخاب می‌کنه';
+function pzShowTossQ(){
+  const rnd=pzRt.tossRound||0;
+  const qd=TOSS_QS[pzHash(pzRt.matchId+':'+rnd)%TOSS_QS.length];   /* identical for both players, per round */
+  dCorrect=qd.c; dAnswered=false; tossPhase=true;
+  const top=document.getElementById('dTopic');
+  if(top) top.textContent=(rnd>0?'🔁 هر دو اشتباه زدید — سوال سرعتیِ جدید':'⚡ سوال سرعتی — هر کی زودتر و درست، موضوع رو انتخاب می‌کنه');
   document.getElementById('dText').textContent=qd.q;
   buildAnswers('dAnswers',qd,(i)=>tossAnswer(i,qd.c),true);
   renderPowerups();
   pzRt.tossStart=Date.now();
   startDTimer();
+}
+_runTossQuestion=function(){
+  if(!(pzRt.active&&pzRt.matchId)) return _origRunToss();
+  pzRt.tossRound=0; pzRt.tossWinner=false; pzRt.tossMe=null;
+  pzApplyDuelNames();
+  pzShowTossQ();
 };
 const _origTossAns=tossAnswer;
 tossAnswer=function(sel,correct){
@@ -7285,14 +7347,13 @@ tossAnswer=function(sel,correct){
   if(dAnswered) return; dAnswered=true; clearInterval(dTimer);
   const myRight=(sel===correct);
   const t=Date.now()-(pzRt.tossStart||Date.now());
-  pzRt.tossMe={correct:myRight,t:t};
-  /* Submit to the SERVER, which decides the single winner. Retried inside
-     pzTossServerDecide's poll if this first POST is dropped. */
-  pzApi('POST','/matches/'+pzRt.matchId+'/toss',{correct:myRight,timeMs:t}).catch(()=>{});
+  const rnd=pzRt.tossRound||0;
+  pzRt.tossMe={correct:myRight,t:t,round:rnd};
+  pzApi('POST','/matches/'+pzRt.matchId+'/toss',{correct:myRight,timeMs:t,round:rnd}).catch(()=>{});
   revealAnswers('dAnswers',sel,correct,()=>{ pzTossServerDecide(); });
 };
-/* Ask the SERVER who won the toss (single source of truth) — the two clients
-   can never both become the picker. Poll until the winner is resolved. */
+/* Ask the SERVER who won (single source of truth). Handle a both-wrong retry
+   (round bumped → new question) and never both become the picker. */
 function pzTossServerDecide(){
   const top=document.getElementById('dTopic'); if(top) top.textContent='⏳ در حال تعیین برنده سرعت...';
   let done=false;
@@ -7302,19 +7363,26 @@ function pzTossServerDecide(){
     if(iWon){ if(top) top.textContent='⚡ سریع‌تر و درست بودی! موضوع رو انتخاب کن'; openTopicPick(true); }
     else { pzShowWaitTopic(); }
   };
+  const retry=(newRound)=>{
+    if(done)return; done=true; clearInterval(pzRt.tossPoll); clearTimeout(pzRt.tossSafety);
+    pzRt.tossRound=newRound; pzRt.tossMe=null;
+    pzShowTossQ();   /* new question; answering it calls pzTossServerDecide again */
+  };
   clearInterval(pzRt.tossPoll);
   pzRt.tossPoll=setInterval(async()=>{
     if(done||!pzRt.active){ clearInterval(pzRt.tossPoll); return; }
     try{
       const r=await pzApi('GET','/matches/'+pzRt.matchId+'/toss');
-      if(r.ok&&r.data&&r.data.winner){ apply(r.data.iWon===true); return; }
-      /* Resubmit in case my first POST was lost, so the server can resolve. */
-      if(pzRt.tossMe) pzApi('POST','/matches/'+pzRt.matchId+'/toss',{correct:pzRt.tossMe.correct,timeMs:pzRt.tossMe.t}).catch(()=>{});
+      if(r.ok&&r.data){
+        if(r.data.winner){ return apply(r.data.iWon===true); }
+        if(typeof r.data.round==='number' && r.data.round>(pzRt.tossRound||0)){ return retry(r.data.round); }
+      }
+      if(pzRt.tossMe) pzApi('POST','/matches/'+pzRt.matchId+'/toss',{correct:pzRt.tossMe.correct,timeMs:pzRt.tossMe.t,round:pzRt.tossMe.round}).catch(()=>{});
     }catch(e){}
   },600);
-  /* Absolute safety: if the server never resolves (opponent gone), decide
-     deterministically so we never hang — the smaller id becomes the picker. */
-  pzRt.tossSafety=setTimeout(()=>{ apply(String(pzRt.myId||'me') < String(pzRt.oppId||'opp')); },16000);
+  /* Safety: only if the server never resolves for a long time (opponent truly
+     gone) → win by forfeit instead of hanging. Retries resolve in seconds. */
+  pzRt.tossSafety=setTimeout(()=>{ if(!done){ done=true; clearInterval(pzRt.tossPoll); pzForfeitWin(); } },30000);
 }
 function pzShowWaitTopic(){
   const top=document.getElementById('dTopic');
@@ -7339,7 +7407,12 @@ function pzShowWaitTopic(){
 const _origPickTopic=pickTopic;
 pickTopic=function(topic,mine){
   if(pzRt.active&&pzRt.matchId){
+    /* LOCK on the first valid tap — any second/late tap (even on slow net or a
+       momentary hang) is ignored, so only the first choice is ever stored. */
+    if(pzRt._topicPicked) return;
+    pzRt._topicPicked=true;
     clearInterval(tpTimer); duelTopic=topic; sfx('found');
+    try{ document.querySelectorAll('#topicGrid .topic-btn').forEach(b=>{ b.disabled=true; b.style.pointerEvents='none'; if(b.textContent&&b.textContent.indexOf(topic)<0) b.style.opacity='.5'; }); }catch(_){}
     const top=document.getElementById('dTopic'); if(top)top.textContent='✅ موضوع «'+pzTopicLabel(topic)+'» — در حال آماده‌سازی سوالات...';
     (async()=>{
       /* Winner stores the topic on the server; the loser reads it from there. */
@@ -7400,18 +7473,18 @@ function pzTopicEmoji(name){
   const pool=['🧠','💡','🎯','🌟','📌','🔎','🎲','🧩','🏆','✨'];
   return pool[pzHash(String(name||''))%pool.length];
 }
-async function pzRenderTopicChoices(){
+/* Show EXACTLY the 12 canonical categories (no random subset, no "popular"). */
+function pzRenderTopicChoices(){
   const g=document.getElementById('topicGrid'); if(!g) return;
-  g.innerHTML='<div style="grid-column:1/-1;text-align:center;color:var(--muted);font-weight:800;padding:16px">در حال بارگذاری موضوع‌ها...</div>';
-  let cats=[];
-  try{ const r=await pzApi('GET','/questions/categories'); if(r.ok&&Array.isArray(r.data)) cats=r.data.filter(c=>c&&(c.count===undefined||c.count>=3)).map(c=>(c&&c.category)||c).filter(x=>typeof x==='string'&&x); }catch(e){}
-  if(cats.length<1) cats=TOPICS.map(t=>t[1]);
-  const chosen=shuffle(cats.slice()).slice(0,10);
-  pzRt._topicChoices=chosen.slice();
+  pzRt._topicPicked=false;
+  pzRt._topicChoices=TOPICS.map(t=>t[1]);
   g.innerHTML='';
-  const mk=(emoji,label,val)=>{ const b=document.createElement('button'); b.className='topic-btn'; b.innerHTML='<span class="ti">'+emoji+'</span>'+label; b.onclick=()=>pickTopic(val,true); return b; };
-  g.appendChild(mk('🔥','محبوب','__popular__'));
-  chosen.forEach(name=>g.appendChild(mk(pzTopicEmoji(name),name,name)));
+  TOPICS.forEach(t=>{
+    const b=document.createElement('button'); b.className='topic-btn';
+    b.innerHTML='<span class="ti">'+t[0]+'</span>'+t[1];
+    b.onclick=()=>pickTopic(t[1],true);
+    g.appendChild(b);
+  });
 }
 /* Only the toss winner opens the picker; the loser always waits. In a real
    match this REPLACES the fixed 6-topic list with the dynamic one above. */
