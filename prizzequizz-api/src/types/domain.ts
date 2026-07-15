@@ -23,6 +23,8 @@ export interface User {
   coins: number;
   hearts: number;
   tickets: { bronze: number; silver: number; gold: number };
+  /** Persistent lifeline (کمکی) inventory: 50:50 / Second-Chance / Audience-Poll. */
+  lifelines?: { p5050: number; psecond: number; pstats: number };
 }
 
 export interface Question {

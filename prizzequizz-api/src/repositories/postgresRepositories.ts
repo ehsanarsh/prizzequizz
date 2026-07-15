@@ -5,7 +5,7 @@ import type { AnswerSubmission, BetaAccess, BetaInvite, BetaInviteStatus, Charac
 const pool = () => getPgPool();
 
 function userFromRow(r: any): User {
-  return { id: r.id, phone: r.phone, username: r.username, displayName: r.display_name, plan: r.plan, role: r.role ?? 'user', status: r.status ?? 'active', banReason: r.ban_reason ?? undefined, bannedAt: r.banned_at?.toISOString?.() ?? r.banned_at ?? undefined, level: r.level, xp: Number(r.xp), weeklyScore: Number(r.weekly_score ?? 0), wallet: Number(r.wallet_balance), coins: Number(r.coins), hearts: Number(r.hearts), tickets: r.tickets ?? { bronze: 0, silver: 0, gold: 0 } };
+  return { id: r.id, phone: r.phone, username: r.username, displayName: r.display_name, plan: r.plan, role: r.role ?? 'user', status: r.status ?? 'active', banReason: r.ban_reason ?? undefined, bannedAt: r.banned_at?.toISOString?.() ?? r.banned_at ?? undefined, level: r.level, xp: Number(r.xp), weeklyScore: Number(r.weekly_score ?? 0), wallet: Number(r.wallet_balance), coins: Number(r.coins), hearts: Number(r.hearts), tickets: r.tickets ?? { bronze: 0, silver: 0, gold: 0 }, lifelines: r.lifelines ?? { p5050: 2, psecond: 1, pstats: 5 } };
 }
 
 function questionFromRow(r: any): Question {
@@ -45,6 +45,9 @@ export const postgresRepositories: RepositoryBundle = {
         values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,now())
         on conflict(id) do update set phone=$2, username=$3, display_name=$4, plan=$5, coins=$6, hearts=$7, wallet_balance=$8, xp=$9, level=$10, weekly_score=$11, role=$12, status=$13, ban_reason=$14, banned_at=$15, updated_at=now()`,
         [user.id,user.phone,user.username,user.displayName,user.plan,user.coins,user.hearts,user.wallet,user.xp,user.level,user.weeklyScore,user.role ?? 'user',user.status ?? 'active',user.banReason ?? null,user.bannedAt ?? null]);
+    },
+    async updateLifelines(userId: string, lifelines: { p5050: number; psecond: number; pstats: number }): Promise<void> {
+      await pool().query('update users set lifelines=$1, updated_at=now() where id=$2', [JSON.stringify(lifelines), userId]);
     }
   },
   questions: {

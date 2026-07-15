@@ -23,6 +23,16 @@ export function registerUserRoutes(router: Router, base: string): void {
     }
     json(ctx.res, 200, toDto(user));
   });
+  // Persist the player's lifeline inventory (decremented on use, server-side).
+  router.add('PATCH', `${base}/users/me/lifelines`, async (ctx) => {
+    const user = await repositories.users.findById(ctx.userId ?? 'u1');
+    if (!user) return error(ctx.res, 404, 'USER_NOT_FOUND', 'User not found');
+    const l = ((ctx.body ?? {}) as any).lifelines ?? {};
+    const clamp = (n: unknown) => Math.max(0, Math.min(999, Math.floor(Number(n)) || 0));
+    const lifelines = { p5050: clamp(l.p5050), psecond: clamp(l.psecond), pstats: clamp(l.pstats) };
+    await repositories.users.updateLifelines(user.id, lifelines);
+    json(ctx.res, 200, { lifelines });
+  });
   // Public profile of ANOTHER user: expose only the public handle + stats.
   // Never the real name / phone (privacy).
   router.add('GET', `${base}/users/:id/profile`, async (ctx) => {
@@ -32,5 +42,5 @@ export function registerUserRoutes(router: Router, base: string): void {
 }
 
 function toDto(user: any) {
-  return { id: user.id, username: user.username, displayName: user.displayName, plan: user.plan, level: user.level, xp: user.xp, weeklyScore: user.weeklyScore, balances: { wallet: user.wallet, coins: user.coins, hearts: user.hearts, tickets: user.tickets } };
+  return { id: user.id, username: user.username, displayName: user.displayName, plan: user.plan, level: user.level, xp: user.xp, weeklyScore: user.weeklyScore, lifelines: user.lifelines ?? { p5050: 2, psecond: 1, pstats: 5 }, balances: { wallet: user.wallet, coins: user.coins, hearts: user.hearts, tickets: user.tickets } };
 }

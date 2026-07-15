@@ -4280,7 +4280,7 @@ function askArena(){
 
 let arenaTotal=10,miAuto;
 function beginArena(total){
-  gameType=curMode;qIndex=0;arenaTotal=total;arenaOthers=total-1;prize=curStake;acStrikes=0;powerups={p5050:1,p1opt:1,pswap:1};
+  gameType=curMode;qIndex=0;arenaTotal=total;arenaOthers=total-1;prize=curStake;acStrikes=0;puUsed={};
   document.getElementById('q-mode').textContent=MODES[curMode].name;
   const pg=document.getElementById('qProgress');pg.innerHTML='';
   for(let i=0;i<12;i++)pg.appendChild(document.createElement('i'));
@@ -4377,7 +4377,7 @@ function duelIntro(){
   gameType='duel';
   if(duelChain){duelChain=false;}
   else{duelStage=1;duelStakeVal=curStake;}
-  prize=duelStakeVal*2;acStrikes=0;powerups={p5050:1,p1opt:1,pswap:1};
+  prize=duelStakeVal*2;acStrikes=0;puUsed={};
   pickOpponent();updateDuelVs();go('duel-vs');
   let n=5;document.getElementById('vsCount').textContent=fa(n);
   clearInterval(vsTimer);
@@ -4941,7 +4941,17 @@ function quitGame(){
 
 /* ============ SHARED ANSWERS + POWERUPS ============ */
 let curBox='answers',curCorrect=0,qLocked=false,curSel=-1,statsShown=false;
-let powerups={p5050:1,p1opt:1,pswap:1};
+/* Lifelines: exactly three — 50:50, حق دو انتخاب (Second Chance), درصد پاسخ دیگران
+   (Audience Poll). `powerups` is the persistent INVENTORY (survives reload; synced
+   to the server when available); `puUsed` tracks per-match usage so each lifeline
+   is usable only ONCE per match even if the inventory is >1. */
+function _pzDefaultLifelines(){ return {p5050:2,psecond:1,pstats:5}; }
+let powerups=(function(){ try{ const s=JSON.parse(localStorage.getItem('pz_lifelines')); if(s&&typeof s==='object') return {p5050:s.p5050??2,psecond:s.psecond??1,pstats:s.pstats??5}; }catch(e){} return _pzDefaultLifelines(); })();
+let puUsed={};
+function savePowerups(){ try{ localStorage.setItem('pz_lifelines',JSON.stringify(powerups)); }catch(e){} try{ if(typeof _tok!=='undefined'&&_tok) pzApi('PATCH','/users/me/lifelines',{lifelines:powerups}); }catch(e){} }
+/* Load the server-persisted inventory on login/refresh (falls back to whatever
+   is already in powerups/localStorage if the server didn't send it). */
+function pzLoadLifelines(){ try{ if(typeof _usr!=='undefined'&&_usr&&_usr.lifelines){ const l=_usr.lifelines; powerups={p5050:l.p5050??2,psecond:l.psecond??1,pstats:l.pstats??5}; localStorage.setItem('pz_lifelines',JSON.stringify(powerups)); if(typeof renderPowerups==='function')renderPowerups(); } }catch(e){} }
 /* Second Chance (انتخاب دوم): armed by usePower('second'); if the first answer
    is wrong it grants one more pick, then disarms. Reset per question. */
 let pzSecondArmed=false,pzSecondUsedRound=false;
@@ -5034,39 +5044,34 @@ function showAnswerCelebration(el,isCorrect){
     setTimeout(()=>w.remove(),1100+i*90);
   }
 }
-/* Three helper items, each usable ONCE per match (start count = 1 → disabled
-   after use): remove-two, remove-one, swap-question. */
+/* Exactly three lifelines, each usable ONCE per match (puUsed), and each use
+   consumes one from the persistent inventory (powerups). */
+function _puAvail(key){ return !puUsed[key] && (powerups[key]||0)>0; }
 function renderPowerups(){
-  const defs=[['5050','✂️','حذف دو گزینه','p5050'],['1opt','➖','حذف یک گزینه','p1opt'],['swap','🔄','تعویض سؤال','pswap']];
+  const defs=[['5050','✂️','حذف دو گزینه','p5050'],['second','🔁','حق دو انتخاب','psecond'],['stats','📊','درصد پاسخ دیگران','pstats']];
   document.querySelectorAll('[data-pwslot]').forEach(slot=>{
-    slot.innerHTML=defs.map(d=>'<div class="pu'+((powerups[d[3]]||0)<=0?' disabled':'')+'" onclick="usePower(\''+d[0]+'\')"><span class="pu-i">'+d[1]+'</span><span class="pu-l">'+d[2]+'</span><span class="pu-c">×'+fa(powerups[d[3]]||0)+'</span></div>').join('');
+    slot.innerHTML=defs.map(d=>'<div class="pu'+(_puAvail(d[3])?'':' disabled used')+'" onclick="usePower(\''+d[0]+'\')"><span class="pu-i">'+d[1]+'</span><span class="pu-l">'+d[2]+'</span><span class="pu-c">'+(puUsed[d[3]]?'استفاده شد':'×'+fa(powerups[d[3]]||0))+'</span></div>').join('');
   });
 }
+function _puConsume(key){ puUsed[key]=true; powerups[key]=Math.max(0,(powerups[key]||0)-1); savePowerups(); }
 function usePower(type){
   if(qLocked)return;
   if(type==='5050'){
-    if((powerups.p5050||0)<=0)return;
+    if(!_puAvail('p5050'))return;
     const all=[...document.querySelectorAll('#'+curBox+' .ans')];let removed=0;
     all.forEach((b,i)=>{if(i!==curCorrect&&removed<2&&!b.disabled){b.classList.add('dim','pz-removed');b.disabled=true;b.classList.remove('selected');if(curSel===i)curSel=-1;removed++;}});
-    if(removed){powerups.p5050--;sfx('select');vib([15,10]);}
-  }else if(type==='1opt'){
-    if((powerups.p1opt||0)<=0)return;
-    const all=[...document.querySelectorAll('#'+curBox+' .ans')];
-    const wrong=all.map((b,i)=>({b,i})).filter(x=>x.i!==curCorrect && !x.b.classList.contains('dim') && !x.b.disabled);
-    if(!wrong.length)return;
-    const pick=wrong[Math.floor(Math.random()*wrong.length)];
-    pick.b.classList.add('dim','pz-removed');pick.b.disabled=true;pick.b.classList.remove('selected');if(curSel===pick.i)curSel=-1;
-    powerups.p1opt--;sfx('select');vib([12]);
-  }else if(type==='swap'){
-    if((powerups.pswap||0)<=0)return;
-    const src=window._pzQs||[]; let cand=null;
-    for(let k=src.length-1;k>dQ;k--){ if(src[k]&&src[k]._id){ cand=src[k]; break; } }
-    if(!cand){ toast('سوال دیگری برای تعویض موجود نیست'); return; }
-    powerups.pswap--;
-    if(window._pzQs) window._pzQs[dQ]=cand;
-    if(typeof duelRoundQs!=='undefined') duelRoundQs[dQ]={t:cand.t,q:cand.q,a:cand.a,c:cand.c,_id:cand._id};
-    dAnswered=false; sfx('found'); vib([15,10]);
-    try{ loadDuelQ(true); startDTimer(); }catch(_){}
+    if(removed){_puConsume('p5050');sfx('select');vib([15,10]);}
+  }else if(type==='second'){
+    /* حق دو انتخاب: if the FIRST answer is wrong, the answer handler grants one
+       more pick (see the Second-Chance wrapper). */
+    if(!_puAvail('psecond')||pzSecondArmed||pzSecondUsedRound)return;
+    pzSecondArmed=true; _puConsume('psecond'); sfx('found'); vib([20,10]);
+    toast('🔁 حق دو انتخاب فعال شد — اگر جواب اول غلط بود، یک انتخاب دیگر داری',2200);
+  }else if(type==='stats'){
+    if(!_puAvail('pstats')||statsShown)return;
+    statsShown=true; _puConsume('pstats');
+    /* Inline (no modal): paint the answer-distribution % onto the options. */
+    revealOthersPct(curBox,curSel);
   }
   renderPowerups();
 }
@@ -5751,8 +5756,8 @@ function exportWalletStatement(){const data=JSON.stringify({wallet, walletReserv
 const SHOP={
   util:[
     {i:'✂️',n:'حذف دو گزینه',d:'یک استفاده به کمک‌هات اضافه می‌شه',p:20000,key:'p5050'},
-    {i:'➖',n:'حذف یک گزینه',d:'یک گزینهٔ نادرست حذف می‌شود',p:15000,key:'p1opt'},
-    {i:'🔄',n:'تعویض سؤال',d:'سؤال فعلی با سؤال دیگری عوض می‌شود',p:30000,key:'pswap'},
+    {i:'🔁',n:'حق دو انتخاب',d:'اگر جواب اول غلط بود، یک انتخاب دیگر',p:30000,key:'psecond'},
+    {i:'📊',n:'درصد پاسخ دیگران',d:'درصد پاسخ بقیه روی گزینه‌ها',p:25000,key:'pstats'},
     {i:'❤️',n:'جان اضافی',d:'برای حالت‌های دارای جان',p:50000,key:'heart'},
     {i:'⚡',n:'شتاب‌دهنده XP',d:'دو برابر امتیاز برای ۱ ساعت',p:40000,key:'xp'},
   ],
@@ -5786,7 +5791,7 @@ function buyItem(it,el){
   setTimeout(()=>{pr.textContent=fa(it.p)+' ت';el.classList.remove('pop');},1400);
   const r=el.getBoundingClientRect(),v=document.getElementById('vp').getBoundingClientRect();
   burstAt(r.left-v.left+r.width/2,r.top-v.top+r.height/2);
-  if(it.key==='p5050'||it.key==='p1opt'||it.key==='pswap'){powerups[it.key]++;renderPowerups();toast(it.n+' به کمک‌هات اضافه شد ✅');}
+  if(it.key==='p5050'||it.key==='psecond'||it.key==='pstats'){powerups[it.key]=(powerups[it.key]||0)+1;savePowerups();renderPowerups();toast(it.n+' به کمک‌هات اضافه شد ✅');}
   else if(it.key==='heart'){hearts++;updateWalletUI();toast('یک جان اضافه شد ❤️');}
   else if(it.key==='xp'){toast('شتاب‌دهنده XP فعال شد! ⚡ (۱ ساعت)');}
   else if(it.key&&it.key.startsWith('skin')){applySkin(it.key);toast(it.n+' فعال شد!');}
@@ -5954,7 +5959,7 @@ const SPIN_PRIZES=[
   {ico:'⚡',label:'XP',title:'۲۵۰ XP',type:'xp',amount:250,color:'#B57bff'},
   {ico:'✂️',label:'۵۰/۵۰',title:'۱ کمک حذف دو گزینه',type:'power',amount:1,key:'p5050',color:'#FF5A48'},
   {ico:'💰',label:'۲۰هزار',title:'۲۰٬۰۰۰ تومان',type:'cash',amount:20000,color:'#7ce8ab'},
-  {ico:'🔄',label:'تعویض',title:'۱ کمک تعویض سؤال',type:'power',amount:1,key:'pswap',color:'#ff5db1'},
+  {ico:'🔁',label:'دو انتخاب',title:'۱ کمک حق دو انتخاب',type:'power',amount:1,key:'psecond',color:'#ff5db1'},
   {ico:'💎',label:'ویژه',title:'۲۰۰٬۰۰۰ تومان',type:'cash',amount:200000,color:'#ffb443'}
 ];
 /* گردونه روزانه: هر ۲۴ ساعت یک‌بار (شبیه‌سازی‌شده در پروتوتایپ) */
@@ -6577,7 +6582,7 @@ let wtaPlayers=[],wtaCur=0,wtaTimeLeft=15,wtaTimer,wtaPickMode=false,wtaCorrect=
 /* ============ WTA — TV STUDIO ENGINE ============ */
 let wtaSeatEls=[];
 function beginWTA(){
-  gameType='wta';acStrikes=0;powerups={p5050:1,p1opt:1,pswap:1};
+  gameType='wta';acStrikes=0;puUsed={};
   wtaPot=(userPlan==='free'?0:curStake*15);wtaPlayers=[];
   const meIdx=Math.floor(Math.random()*15);
   for(let i=0;i<15;i++)wtaPlayers.push({name:i===meIdx?'تو':names[i%names.length],av:avatars[i%avatars.length],lives:3,out:false,me:i===meIdx});
@@ -6954,6 +6959,7 @@ function applyMyName(){
   ['hdrName','profName'].forEach(id=>{const el=document.getElementById(id); if(el) el.textContent=n;});
   const pu=document.getElementById('profUser'); if(pu) pu.textContent='@'+((_usr&&_usr.username)||'player');
   ['duelMeName','duelMeName2'].forEach(id=>{const el=document.getElementById(id); if(el) el.textContent=uid;});
+  try{ pzLoadLifelines(); }catch(e){}
 }
 async function submitRegister(){
   const full=(document.getElementById('regFullName')?.value||'').trim();
@@ -7542,25 +7548,27 @@ readyGate=function(cb,label){
 /* ---- Result modal after each question: your result + opponent result +
    animated score, 5s countdown, then auto-advance to the next question. ---- */
 function pzResultGate(myRight,oppRight,cb,label){
-  const meId=(window.myUserId||window.myName||'من'), opId=((pzRt&&pzRt.oppName)||'حریف');
-  const badge=(ok,txt)=>'<span style="font-size:12px;font-weight:900;padding:5px 11px;border-radius:100px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background:'+(ok?'var(--ok-soft)':'var(--red-soft)')+';color:'+(ok?'var(--ok)':'var(--red)')+'">'+txt+' '+(ok?'✅':'❌')+'</span>';
-  /* Standard colors: leader = green, trailing = red (equal = neutral). */
-  const meCol=myScore>oppScore?'var(--ok)':(myScore<oppScore?'var(--red)':'inherit');
-  const opCol=oppScore>myScore?'var(--ok)':(oppScore<myScore?'var(--red)':'inherit');
-  /* Previous scores, so the number rolls UP from old→new instead of snapping. */
+  const meId=(window.myUserId||window.myName||'تو'), opId=((pzRt&&pzRt.oppName)||'حریف');
+  const meAv='🦁', opAv=(pzRt&&pzRt.oppAv)||oppAv||'🦊';
+  const meCol=myScore>oppScore?'var(--ok)':(myScore<oppScore?'var(--red)':'var(--text)');
+  const opCol=oppScore>myScore?'var(--ok)':(oppScore<myScore?'var(--red)':'var(--text)');
   const prevMy=myScore-(myRight?1:0), prevOpp=oppScore-(oppRight?1:0);
-  /* Two columns — each player's NAME sits directly above their OWN number, and
-     the order matches the in-game row (opponent left, you right) so nothing looks
-     swapped. */
-  const col=(id,name,ok,col2,val)=>'<div style="text-align:center;min-width:96px">'+badge(ok,name)+
-      '<div id="'+id+'" style="font-size:40px;font-weight:900;margin-top:8px;color:'+col2+'">'+fa(val)+'</div></div>';
-  const sub='<div style="display:flex;justify-content:center;align-items:center;gap:16px;direction:ltr">'+
-      col('pzScOpp',opId,oppRight,opCol,prevOpp)+
-      '<div style="font-size:26px;font-weight:900;opacity:.4">-</div>'+
-      col('pzScMe',meId,myRight,meCol,prevMy)+
+  /* Each side: big avatar + name + clear درست/غلط status + big animated score.
+     Opponent on the left, you on the right (matches the in-game row). */
+  const side=(id,name,av,ok,scoreCol,val,avBg)=>
+    '<div style="flex:1;text-align:center;min-width:0">'+
+      '<div style="width:66px;height:66px;margin:0 auto;border-radius:20px;border:2.5px solid #000;background:'+avBg+';display:grid;place-items:center;font-size:36px;box-shadow:0 4px 0 #000;animation:pzPop .45s cubic-bezier(.2,1.4,.4,1)">'+av+'</div>'+
+      '<div style="font-size:13px;font-weight:900;margin-top:7px;max-width:112px;margin-inline:auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+name+'</div>'+
+      '<div style="display:inline-block;margin-top:5px;font-size:11.5px;font-weight:900;padding:3px 11px;border-radius:100px;background:'+(ok?'var(--ok-soft)':'var(--red-soft)')+';color:'+(ok?'var(--ok)':'var(--red)')+'">'+(ok?'درست ✅':'غلط ❌')+'</div>'+
+      '<div id="'+id+'" style="font-size:46px;font-weight:900;line-height:1;margin-top:9px;color:'+scoreCol+';text-shadow:0 0 18px rgba(0,0,0,.3)">'+fa(val)+'</div>'+
+    '</div>';
+  const sub='<div style="display:flex;align-items:flex-start;gap:4px;direction:ltr">'+
+      side('pzScOpp',opId,opAv,oppRight,opCol,prevOpp,'var(--red-soft)')+
+      '<div style="align-self:flex-start;padding-top:96px;font-size:24px;font-weight:900;opacity:.35">-</div>'+
+      side('pzScMe',meId,meAv,myRight,meCol,prevMy,'linear-gradient(180deg,#B9F0FF,#55C9F5)')+
     '</div>'+
-    (label?'<div style="text-align:center;font-size:12px;color:var(--muted);margin-top:12px;font-weight:800">'+label+'</div>':'');
-  showAaaModal({ icon: myRight?'🎉':'💪', title: myRight?'آفرین! جوابت درست بود':'اشکالی نداره — ادامه بده', sub:sub, seconds:5, hideActions:true, dismissible:false, onDone:cb });
+    (label?'<div style="text-align:center;font-size:13px;color:var(--bolt);margin-top:14px;font-weight:900">'+label+'</div>':'');
+  showAaaModal({ icon: myRight?'🎉':'💪', title: myRight?'آفرین! درست جواب دادی':'اشکالی نداره — ادامه بده', sub:sub, seconds:5, hideActions:true, dismissible:false, onDone:cb });
   /* Roll the changed number up with a pop, ~0.5s after the modal appears. */
   setTimeout(()=>{
     const me=document.getElementById('pzScMe'), op=document.getElementById('pzScOpp');
@@ -7591,7 +7599,10 @@ function pzAutoAdvance(myRight,oppRight){
   }else{
     if(myRight&&!oppRight) return duelRoundWin();
     if(!myRight&&oppRight) return duelRoundLose();
-    return next('⚡ ادامهٔ مرگ ناگهانی');
+    /* Still tied in the golden question → NEVER go to a result/end modal; run the
+       golden-question flow again (modal + countdown + new question) until exactly
+       one winner remains. */
+    return pzGoldenQuestionModal(()=>loadDuelQWithFocus());
   }
 }
 
