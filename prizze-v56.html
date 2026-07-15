@@ -3125,6 +3125,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
         <img id="resultChar" alt="" style="display:none;width:150px;height:auto;margin:0 auto 4px;filter:drop-shadow(0 10px 18px rgba(0,0,0,.45));animation:pzPop .5s cubic-bezier(.2,1.4,.4,1)">
         <h1 style="font-size:26px;font-weight:900" id="resultTitle">برنده شدی!</h1>
         <p style="color:var(--muted);margin-top:6px;font-size:14px" id="resultSub">تو آخرین بازمانده بودی</p>
+        <div id="resultDuelScore" style="display:none;width:100%;margin:12px 0 6px"></div>
         <div style="font-size:38px;font-weight:900;color:var(--green);margin:16px 0"><span id="resultAmt">+۱۸۰٬۰۰۰</span> <small style="font-size:16px;color:var(--muted)">تومان</small></div>
         <div class="stat-grid" style="width:100%">
           <div class="stat"><b class="y" id="stat-q">۹</b><span>پاسخ درست</span></div>
@@ -4279,7 +4280,7 @@ function askArena(){
 
 let arenaTotal=10,miAuto;
 function beginArena(total){
-  gameType=curMode;qIndex=0;arenaTotal=total;arenaOthers=total-1;prize=curStake;acStrikes=0;powerups={p5050:2,psecond:1,pstats:3};
+  gameType=curMode;qIndex=0;arenaTotal=total;arenaOthers=total-1;prize=curStake;acStrikes=0;powerups={p5050:1,p1opt:1,pswap:1};
   document.getElementById('q-mode').textContent=MODES[curMode].name;
   const pg=document.getElementById('qProgress');pg.innerHTML='';
   for(let i=0;i<12;i++)pg.appendChild(document.createElement('i'));
@@ -4376,7 +4377,7 @@ function duelIntro(){
   gameType='duel';
   if(duelChain){duelChain=false;}
   else{duelStage=1;duelStakeVal=curStake;}
-  prize=duelStakeVal*2;acStrikes=0;powerups={p5050:2,psecond:1,pstats:3};
+  prize=duelStakeVal*2;acStrikes=0;powerups={p5050:1,p1opt:1,pswap:1};
   pickOpponent();updateDuelVs();go('duel-vs');
   let n=5;document.getElementById('vsCount').textContent=fa(n);
   clearInterval(vsTimer);
@@ -4828,6 +4829,18 @@ function endGame(won,amount,isWithdraw,customSub){
   const badge=document.getElementById('resultBadge'),emoji=document.getElementById('resultEmoji');
   const title=document.getElementById('resultTitle'),sub=document.getElementById('resultSub'),amt=document.getElementById('resultAmt');
   const isDuel=gameType==='duel';
+  /* Big, distinct final score — the focal point of the result screen. */
+  (function(){ const el=document.getElementById('resultDuelScore'); if(!el) return;
+    if(!isDuel){ el.style.display='none'; return; }
+    const meN=(window.myUserId||window.myName||'تو'), opN=((pzRt&&pzRt.oppName)||oppName||'حریف');
+    const meCol=won?'var(--ok)':'var(--red)', opCol=won?'var(--red)':'var(--ok)';
+    el.style.display='';
+    el.innerHTML='<div style="display:flex;justify-content:center;align-items:center;gap:14px;direction:ltr">'+
+      '<div style="text-align:center;min-width:84px"><div style="font-size:11px;font-weight:900;color:var(--muted);max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+opN+'</div><div style="font-size:46px;font-weight:900;line-height:1;color:'+opCol+';text-shadow:0 0 22px rgba(0,0,0,.35)">'+fa(oppScore)+'</div></div>'+
+      '<div style="font-size:30px;font-weight:900;opacity:.35">-</div>'+
+      '<div style="text-align:center;min-width:84px"><div style="font-size:11px;font-weight:900;color:var(--muted);max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+meN+'</div><div style="font-size:46px;font-weight:900;line-height:1;color:'+meCol+';text-shadow:0 0 22px rgba(0,0,0,.35)">'+fa(myScore)+'</div></div>'+
+    '</div>';
+  })();
   if(userPlan==='free'&&isDuel&&won&&!leagueDuelActive&&!leagueWtaActive){
     lastPracticeCoinsEarned=Math.max(0,duelStage*45+80);
     lastPracticeCoinBefore=practiceCoins;
@@ -4928,7 +4941,7 @@ function quitGame(){
 
 /* ============ SHARED ANSWERS + POWERUPS ============ */
 let curBox='answers',curCorrect=0,qLocked=false,curSel=-1,statsShown=false;
-let powerups={p5050:2,psecond:1,pstats:3};
+let powerups={p5050:1,p1opt:1,pswap:1};
 /* Second Chance (انتخاب دوم): armed by usePower('second'); if the first answer
    is wrong it grants one more pick, then disarms. Reset per question. */
 let pzSecondArmed=false,pzSecondUsedRound=false;
@@ -5021,30 +5034,39 @@ function showAnswerCelebration(el,isCorrect){
     setTimeout(()=>w.remove(),1100+i*90);
   }
 }
+/* Three helper items, each usable ONCE per match (start count = 1 → disabled
+   after use): remove-two, remove-one, swap-question. */
 function renderPowerups(){
-  const defs=[['5050','✂️','حذف دو گزینه','p5050'],['second','🔁','انتخاب دوم','psecond'],['stats','📊','پاسخ اکثریت','pstats']];
+  const defs=[['5050','✂️','حذف دو گزینه','p5050'],['1opt','➖','حذف یک گزینه','p1opt'],['swap','🔄','تعویض سؤال','pswap']];
   document.querySelectorAll('[data-pwslot]').forEach(slot=>{
-    slot.innerHTML=defs.map(d=>'<div class="pu'+(powerups[d[3]]<=0?' disabled':'')+'" onclick="usePower(\''+d[0]+'\')"><span class="pu-i">'+d[1]+'</span><span class="pu-l">'+d[2]+'</span><span class="pu-c">×'+fa(powerups[d[3]])+'</span></div>').join('');
+    slot.innerHTML=defs.map(d=>'<div class="pu'+((powerups[d[3]]||0)<=0?' disabled':'')+'" onclick="usePower(\''+d[0]+'\')"><span class="pu-i">'+d[1]+'</span><span class="pu-l">'+d[2]+'</span><span class="pu-c">×'+fa(powerups[d[3]]||0)+'</span></div>').join('');
   });
 }
 function usePower(type){
   if(qLocked)return;
   if(type==='5050'){
-    if(powerups.p5050<=0)return;
+    if((powerups.p5050||0)<=0)return;
     const all=[...document.querySelectorAll('#'+curBox+' .ans')];let removed=0;
     all.forEach((b,i)=>{if(i!==curCorrect&&removed<2&&!b.disabled){b.classList.add('dim','pz-removed');b.disabled=true;b.classList.remove('selected');if(curSel===i)curSel=-1;removed++;}});
     if(removed){powerups.p5050--;sfx('select');vib([15,10]);}
-  }else if(type==='second'){
-    /* Second Chance: arm it now; if the FIRST answer is wrong, the answer
-       handler gives one more pick (and consumes it) — see the wrapper below. */
-    if(powerups.psecond<=0||pzSecondArmed||pzSecondUsedRound)return;
-    pzSecondArmed=true; sfx('found'); vib([20,10]);
-    toast('🔁 انتخاب دوم فعال شد — اگر جواب اول غلط بود، یک شانس دیگر داری',2200);
-  }else if(type==='stats'){
-    if(powerups.pstats<=0||statsShown)return;powerups.pstats--;statsShown=true;
-    /* Inline (no modal): paint the answer-distribution % directly onto the
-       current question's options so the player can still pick immediately. */
-    revealOthersPct(curBox,curSel);
+  }else if(type==='1opt'){
+    if((powerups.p1opt||0)<=0)return;
+    const all=[...document.querySelectorAll('#'+curBox+' .ans')];
+    const wrong=all.map((b,i)=>({b,i})).filter(x=>x.i!==curCorrect && !x.b.classList.contains('dim') && !x.b.disabled);
+    if(!wrong.length)return;
+    const pick=wrong[Math.floor(Math.random()*wrong.length)];
+    pick.b.classList.add('dim','pz-removed');pick.b.disabled=true;pick.b.classList.remove('selected');if(curSel===pick.i)curSel=-1;
+    powerups.p1opt--;sfx('select');vib([12]);
+  }else if(type==='swap'){
+    if((powerups.pswap||0)<=0)return;
+    const src=window._pzQs||[]; let cand=null;
+    for(let k=src.length-1;k>dQ;k--){ if(src[k]&&src[k]._id){ cand=src[k]; break; } }
+    if(!cand){ toast('سوال دیگری برای تعویض موجود نیست'); return; }
+    powerups.pswap--;
+    if(window._pzQs) window._pzQs[dQ]=cand;
+    if(typeof duelRoundQs!=='undefined') duelRoundQs[dQ]={t:cand.t,q:cand.q,a:cand.a,c:cand.c,_id:cand._id};
+    dAnswered=false; sfx('found'); vib([15,10]);
+    try{ loadDuelQ(true); startDTimer(); }catch(_){}
   }
   renderPowerups();
 }
@@ -5729,8 +5751,8 @@ function exportWalletStatement(){const data=JSON.stringify({wallet, walletReserv
 const SHOP={
   util:[
     {i:'✂️',n:'حذف دو گزینه',d:'یک استفاده به کمک‌هات اضافه می‌شه',p:20000,key:'p5050'},
-    {i:'🔁',n:'انتخاب دوم',d:'اگر جواب اول غلط بود، یک شانس دیگر',p:30000,key:'psecond'},
-    {i:'📊',n:'پاسخ اکثریت',d:'درصد پاسخ بقیه روی گزینه‌ها',p:25000,key:'pstats'},
+    {i:'➖',n:'حذف یک گزینه',d:'یک گزینهٔ نادرست حذف می‌شود',p:15000,key:'p1opt'},
+    {i:'🔄',n:'تعویض سؤال',d:'سؤال فعلی با سؤال دیگری عوض می‌شود',p:30000,key:'pswap'},
     {i:'❤️',n:'جان اضافی',d:'برای حالت‌های دارای جان',p:50000,key:'heart'},
     {i:'⚡',n:'شتاب‌دهنده XP',d:'دو برابر امتیاز برای ۱ ساعت',p:40000,key:'xp'},
   ],
@@ -5764,7 +5786,7 @@ function buyItem(it,el){
   setTimeout(()=>{pr.textContent=fa(it.p)+' ت';el.classList.remove('pop');},1400);
   const r=el.getBoundingClientRect(),v=document.getElementById('vp').getBoundingClientRect();
   burstAt(r.left-v.left+r.width/2,r.top-v.top+r.height/2);
-  if(it.key==='p5050'||it.key==='psecond'||it.key==='pstats'){powerups[it.key]++;renderPowerups();toast(it.n+' به کمک‌هات اضافه شد ✅');}
+  if(it.key==='p5050'||it.key==='p1opt'||it.key==='pswap'){powerups[it.key]++;renderPowerups();toast(it.n+' به کمک‌هات اضافه شد ✅');}
   else if(it.key==='heart'){hearts++;updateWalletUI();toast('یک جان اضافه شد ❤️');}
   else if(it.key==='xp'){toast('شتاب‌دهنده XP فعال شد! ⚡ (۱ ساعت)');}
   else if(it.key&&it.key.startsWith('skin')){applySkin(it.key);toast(it.n+' فعال شد!');}
@@ -5932,7 +5954,7 @@ const SPIN_PRIZES=[
   {ico:'⚡',label:'XP',title:'۲۵۰ XP',type:'xp',amount:250,color:'#B57bff'},
   {ico:'✂️',label:'۵۰/۵۰',title:'۱ کمک حذف دو گزینه',type:'power',amount:1,key:'p5050',color:'#FF5A48'},
   {ico:'💰',label:'۲۰هزار',title:'۲۰٬۰۰۰ تومان',type:'cash',amount:20000,color:'#7ce8ab'},
-  {ico:'🔁',label:'دوم',title:'۱ کمک انتخاب دوم',type:'power',amount:1,key:'psecond',color:'#ff5db1'},
+  {ico:'🔄',label:'تعویض',title:'۱ کمک تعویض سؤال',type:'power',amount:1,key:'pswap',color:'#ff5db1'},
   {ico:'💎',label:'ویژه',title:'۲۰۰٬۰۰۰ تومان',type:'cash',amount:200000,color:'#ffb443'}
 ];
 /* گردونه روزانه: هر ۲۴ ساعت یک‌بار (شبیه‌سازی‌شده در پروتوتایپ) */
@@ -6555,7 +6577,7 @@ let wtaPlayers=[],wtaCur=0,wtaTimeLeft=15,wtaTimer,wtaPickMode=false,wtaCorrect=
 /* ============ WTA — TV STUDIO ENGINE ============ */
 let wtaSeatEls=[];
 function beginWTA(){
-  gameType='wta';acStrikes=0;powerups={p5050:2,psecond:1,pstats:3};
+  gameType='wta';acStrikes=0;powerups={p5050:1,p1opt:1,pswap:1};
   wtaPot=(userPlan==='free'?0:curStake*15);wtaPlayers=[];
   const meIdx=Math.floor(Math.random()*15);
   for(let i=0;i<15;i++)wtaPlayers.push({name:i===meIdx?'تو':names[i%names.length],av:avatars[i%avatars.length],lives:3,out:false,me:i===meIdx});
@@ -7546,6 +7568,15 @@ function pzResultGate(myRight,oppRight,cb,label){
     if(op&&oppRight){ op.textContent=fa(oppScore); op.classList.remove('pz-pop'); void op.offsetWidth; op.classList.add('pz-pop'); }
   },550);
 }
+/* Professional "golden question" modal shown the moment the match ties. */
+function pzGoldenQuestionModal(cb){
+  const sub='<div style="text-align:center">'+
+    '<div style="font-size:34px;font-weight:900;color:var(--bolt);text-shadow:0 0 26px var(--bolt-glow);letter-spacing:1px;margin:2px 0 8px">⭐ سؤال طلایی ⭐</div>'+
+    '<div style="direction:ltr;font-size:30px;font-weight:900;letter-spacing:2px;margin:2px 0 10px">'+fa(oppScore)+' <span style="opacity:.4">-</span> '+fa(myScore)+'</div>'+
+    '<div style="font-size:15px;font-weight:900;color:var(--red)">⚠️ مواظب باش حذف نشی!</div>'+
+    '</div>';
+  showAaaModal({ iconHTML:'🏆', title:'<span style="font-size:26px;font-weight:900">بازی مساوی شد</span>', sub:sub, seconds:5, hideActions:true, dismissible:false, onDone:cb });
+}
 function pzAutoAdvance(myRight,oppRight){
   const next=(label)=>pzResultGate(myRight,oppRight,()=>loadDuelQWithFocus(),label);
   if(!suddenDeath){
@@ -7553,7 +7584,8 @@ function pzAutoAdvance(myRight,oppRight){
       if(myScore>oppScore) return duelRoundWin();
       if(myScore<oppScore) return duelRoundLose();
       suddenDeath=true;
-      return next('مساوی شد! ⚡ مرگ ناگهانی');
+      /* Tie → dedicated golden-question modal (not a plain line), then continue. */
+      return pzGoldenQuestionModal(()=>loadDuelQWithFocus());
     }
     return next();
   }else{
