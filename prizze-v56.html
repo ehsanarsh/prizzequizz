@@ -3136,10 +3136,9 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
       </div>
       <div style="width:100%;display:flex;flex-direction:column;gap:10px">
         <div id="duelActions" style="display:none;flex-direction:column;gap:10px">
-          <button class="btn btn-red money-only" id="rematchBtn" onclick="rematch()">🔁 بازی مجدد با همین حریف</button>
-          <button class="btn btn-primary practice-cost-card" id="practiceRematchBtn" onclick="practiceRematch()">🔁 بازی مجدد تمرینی — ۱ قلب + <span id="practiceRematchCoins">۲۵</span> سکه</button>
+          <button class="btn btn-primary" id="rematchBtn" onclick="rematch()">🔁 بازی مجدد با همین حریف</button>
           <div style="display:flex;gap:10px">
-            <button class="btn btn-ghost btn-sm" style="flex:1" onclick="showFriendRequestSnackbar(oppName||'حریف')">➕ درخواست دوستی</button>
+            <button class="btn btn-ghost btn-sm" style="flex:1" onclick="requestFriend(oppName||'حریف')">➕ درخواست دوستی</button>
             <button class="btn btn-ghost btn-sm" style="flex:1" onclick="showCurrentOpponentProfile()">👤 پروفایل حریف</button>
           </div>
         </div>
@@ -3276,14 +3275,15 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
     <!-- ============ PROFILE ============ -->
     <section class="screen" id="profile">
       <div class="topbar"><button class="iconbtn" onclick="menuBack('home')">→</button><h1>پروفایل کاربر</h1><button class="iconbtn" onclick="go('settings')">⚙️</button></div>
-      <div class="char-carousel" style="margin-top:10px">
-        <div class="char-slot"><svg class="mascot" width="52" height="52" viewBox="0 0 120 120"></svg></div>
-        <div class="char-slot sel"><svg class="mascot" width="60" height="60" viewBox="0 0 120 120" id="mascotProfile"></svg></div>
-        <div class="char-slot"><svg class="mascot" width="52" height="52" viewBox="0 0 120 120"></svg></div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:4px;margin:16px 0 4px">
+        <div style="width:98px;height:98px;border-radius:28px;background:var(--ink-2);border:var(--stroke);display:grid;place-items:center;box-shadow:var(--hard-sm),0 0 26px var(--bolt-glow)">
+          <svg class="mascot" width="72" height="72" viewBox="0 0 120 120" id="mascotProfile"></svg>
+        </div>
+        <b id="profName" style="font-size:19px;font-weight:900;margin-top:8px">بازیکن</b>
+        <span id="profUser" style="font-size:12px;color:var(--muted);font-weight:800" dir="ltr">@player</span>
       </div>
       <div class="pad" style="padding-top:0">
-        <div class="section-title" style="text-align:center;margin-top:0">کاراکتر</div>
-        <button class="btn btn-ghost btn-sm" style="width:100%;margin-bottom:12px" onclick="charBack='profile';go('character')">🎭 ویرایش کاراکتر</button>
+        <button class="btn btn-ghost btn-sm" style="width:100%;margin-bottom:14px" onclick="charBack='profile';go('character')">🎭 ویرایش کاراکتر</button>
         <div class="field"><label>نام و نام خانوادگی</label><input class="input" id="profEditName" placeholder="نام و نام خانوادگی"></div>
         <div class="field"><label>نام کاربری</label><input class="input" id="profEditUsername" dir="ltr" placeholder="username"></div>
         <button class="btn btn-primary" onclick="submitProfileEdit()">ذخیره تغییرات</button>
@@ -3879,6 +3879,10 @@ function showScreen(id){
   const el=document.getElementById(id);
   if(!el || !el.classList.contains('screen')) return false;
 
+  // Drop focus first: a focused control inside a screen we're about to mark
+  // aria-hidden triggers a browser accessibility warning ("aria-hidden on an
+  // element whose descendant retained focus").
+  try{ const a=document.activeElement; if(a&&a!==document.body&&a.blur) a.blur(); }catch(_){}
   // Guarantee a single rendered route: remove stale .active from every
   // screen and activate only the requested one. No game state/timers touched.
   document.querySelectorAll('.screen').forEach(s=>{
@@ -6875,6 +6879,7 @@ function applyMyName(){
   const uid=(_usr&&_usr.username&&!/^user_\d+$/.test(_usr.username))?_usr.username:n; window.myUserId=uid;
   /* Header/profile show the name; in-game labels show the User ID (never "تو"). */
   ['hdrName','profName'].forEach(id=>{const el=document.getElementById(id); if(el) el.textContent=n;});
+  const pu=document.getElementById('profUser'); if(pu) pu.textContent='@'+((_usr&&_usr.username)||'player');
   ['duelMeName','duelMeName2'].forEach(id=>{const el=document.getElementById(id); if(el) el.textContent=uid;});
 }
 async function submitRegister(){
@@ -6986,10 +6991,10 @@ startMatchmaking = async function(){
     secs+=2;
     /* Left the search screen (back/nav/close) → CANCEL the ticket so we never
        leave a zombie in the queue that another player could match into. */
-    if(!document.getElementById('matchmaking').classList.contains('active')){clearInterval(_mmi); if(_mmt) pzApi('DELETE','/matchmaking/'+_mmt); return;}
+    if(!document.getElementById('matchmaking').classList.contains('active')){clearInterval(_mmi); if(_mmt) pzApi('POST','/matchmaking/'+_mmt+'/cancel',{}); return;}
     if(secs>=60){
       clearInterval(_mmi); clearInterval(mmTimer); clearInterval(mmPingT);
-      if(_mmt) pzApi('DELETE','/matchmaking/'+_mmt);
+      if(_mmt) pzApi('POST','/matchmaking/'+_mmt+'/cancel',{});
       _pzRefundEntry();
       toast('حریفی برای شما یافت نشد — ورودی برگشت',3000); setTimeout(()=>go('home'),600);
       return;
@@ -7003,7 +7008,7 @@ startMatchmaking = async function(){
 
 cancelMatchmaking=function(){
   clearInterval(_mmi); clearInterval(mmTimer); clearInterval(mmPingT);
-  if(_mmt) pzApi('DELETE','/matchmaking/'+_mmt);
+  if(_mmt) pzApi('POST','/matchmaking/'+_mmt+'/cancel',{});
   _pzRefundEntry();
   go('home');
 };
@@ -7080,12 +7085,17 @@ function pzHandleWs(m){
   if(m.type==='server:match_finished'){ pzRt.serverFinished=true; return; }
   if(m.type==='server:chat'){
     const t=String(p.text||''); const uid=p.userId;
-    if(uid&&uid!==pzRt.myId){ pzRt.oppPresent=true; pzOppBack(); if(t.indexOf('PZ1:')===0){ try{ pzOnPeer(JSON.parse(t.slice(4))); }catch(_){} } }
+    if(uid&&uid!==pzRt.myId){ pzRt.oppPresent=true; pzOppBack();
+      if(t.indexOf('PZ1:')===0){ try{ pzOnPeer(JSON.parse(t.slice(4))); }catch(_){} }
+      else if(t.indexOf('PZC:')===0){ try{ spawnTaunt(t.slice(4),'them'); }catch(_){} }   /* real opponent chat */
+    }
     return;
   }
 }
 /* Custom client-to-client sync ride on the room chat channel (no backend change). */
 function pzWsSay(obj){ try{ if(pzRt.ws&&pzRt.ws.readyState===1) pzRt.ws.send(JSON.stringify({type:'client:send_chat',payload:{matchId:pzRt.matchId,text:'PZ1:'+JSON.stringify(obj)}})); }catch(_){} }
+/* Real in-game chat/taunt to the opponent (prefix PZC: to separate from PZ1 sync). */
+function pzWsSayChat(text){ try{ if(pzRt.ws&&pzRt.ws.readyState===1) pzRt.ws.send(JSON.stringify({type:'client:send_chat',payload:{matchId:pzRt.matchId,text:'PZC:'+String(text)}})); }catch(_){} }
 function pzOnPeer(msg){
   if(!msg||!msg.k) return;
   if(msg.k==='toss'){ pzRt.tossOpp={correct:!!msg.correct,t:Number(msg.t)||99999}; if(pzRt.tossWaiter) pzRt.tossWaiter(); return; }
@@ -7632,6 +7642,23 @@ quitGame=function(){
     onDismiss:()=>{ exitPromptOpen=false; resumeCurrentGameTimers(); }
   });
 };
+
+/* Real in-game chat: in a live duel, send the taunt to the ACTUAL opponent over
+   the room socket (no fake random reply); the opponent's message arrives via the
+   PZC: chat handler and shows as a "them" bubble. */
+const _origSendTaunt=sendTaunt;
+sendTaunt=function(text){
+  if(typeof pzRt!=='undefined'&&pzRt&&pzRt.active&&pzRt.matchId){
+    spawnTaunt(text,'me'); pzWsSayChat(text); return;
+  }
+  return _origSendTaunt.apply(this,arguments);
+};
+/* Real friend request to the current opponent (hits the friends endpoint). */
+async function requestFriend(name){
+  const oppId=(typeof pzRt!=='undefined'&&pzRt&&pzRt.oppId)?pzRt.oppId:null;
+  try{ await pzApi('POST','/friends/requests',{targetUserId:oppId,username:name}); }catch(e){}
+  try{ showFriendRequestSnackbar(name); }catch(e){}
+}
 
 /* Intro + Splash Loading Bar */
 function startIntroFlow(){
