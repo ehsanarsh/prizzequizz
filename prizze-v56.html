@@ -2789,7 +2789,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
     <section class="screen" id="character">
       <!-- header -->
       <div class="cc-top">
-        <div class="cc-back" onclick="go('register')">‹</div>
+        <div class="cc-back" onclick="go(charBack||'plans')">‹</div>
         <div class="cc-title">
           <h1>ساخت کاراکتر <span class="spk">✨</span></h1>
           <p>کاراکتر خودت رو بساز و وارد بازی شو!</p>
@@ -2851,6 +2851,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
           <div class="cc-sw" style="background:#22C7BE" data-c="#22C7BE"><span class="chk">✓</span></div>
         </div>
         <button class="btn btn-primary" onclick="ccConfirm()">ادامه و تایید</button>
+        <button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="ccSkip()">بعداً می‌سازم — رد کن</button>
       </div>
     </section>
 
@@ -3281,7 +3282,8 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
         <div class="char-slot"><svg class="mascot" width="52" height="52" viewBox="0 0 120 120"></svg></div>
       </div>
       <div class="pad" style="padding-top:0">
-        <div class="section-title" style="text-align:center;margin-top:0">انتخاب کاراکتر</div>
+        <div class="section-title" style="text-align:center;margin-top:0">کاراکتر</div>
+        <button class="btn btn-ghost btn-sm" style="width:100%;margin-bottom:12px" onclick="charBack='profile';go('character')">🎭 ویرایش کاراکتر</button>
         <div class="field"><label>نام و نام خانوادگی</label><input class="input" id="profEditName" placeholder="نام و نام خانوادگی"></div>
         <div class="field"><label>نام کاربری</label><input class="input" id="profEditUsername" dir="ltr" placeholder="username"></div>
         <button class="btn btn-primary" onclick="submitProfileEdit()">ذخیره تغییرات</button>
@@ -3318,6 +3320,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
       <div class="set-group-title">تجربه بازی</div>
       <div class="row" onclick="openSettingDetail('notifications')"><div class="r-ico">🔔</div><div class="r-txt"><b>اعلان‌ها</b><span id="setSumNotifications">مدیریت پیام‌ها و یادآوری‌ها</span></div><span class="r-arrow">‹</span></div>
       <div class="row" onclick="openSettingDetail('audio')"><div class="r-ico">🔊</div><div class="r-txt"><b>صدا و لرزش</b><span id="setSumAudio">افکت‌های صوتی بازی</span></div><span class="r-arrow">‹</span></div>
+      <div class="row" onclick="charBack='settings';go('character')"><div class="r-ico">🎭</div><div class="r-txt"><b>ویرایش کاراکتر</b><span>ظاهر، رنگ، لباس و اکسسوری شخصیت</span></div><span class="r-arrow">‹</span></div>
       <div class="row" onclick="openSettingDetail('gameplay')"><div class="r-ico">🎮</div><div class="r-txt"><b>تنظیمات بازی</b><span id="setSumGameplay">راهنماها، چت سریع و تایمرها</span></div><span class="r-arrow">‹</span></div>
       <div class="row" onclick="openSettingDetail('appearance')"><div class="r-ico">🎨</div><div class="r-txt"><b>ظاهر و دسترس‌پذیری</b><span id="setSumAppearance">کنتراست، انیمیشن و تراکم صفحه</span></div><span class="r-arrow">‹</span></div>
       <div class="set-group-title">حساب و حریم خصوصی</div>
@@ -3863,7 +3866,12 @@ function ccRandom(){
   vib([30,50,30]);sfx('found');
 }
 
-function ccConfirm(){toast('کاراکترت ساخته شد! 🎉');plansBack='home';go('plans');}
+/* Where to go after the character screen: 'plans' during first-time onboarding,
+   or 'settings' when editing later. (var → reachable from inline onclick.) */
+var charBack='plans';
+function _ccFinish(){ try{localStorage.setItem('pz_charDone','1');}catch(e){} const b=charBack||'plans'; if(b==='plans')plansBack='home'; charBack='plans'; go(b); }
+function ccConfirm(){ toast('کاراکترت ساخته شد! 🎉'); _ccFinish(); }
+function ccSkip(){ toast('باشه؛ هر وقت خواستی از تنظیمات کاراکترت رو بساز'); _ccFinish(); }
 
 
 /* ============ NAVIGATION (with back-button safety) ============ */
@@ -6881,7 +6889,7 @@ async function submitRegister(){
   if(btn){btn.disabled=false;btn.textContent=_t;}
   if(r.ok){
     _usr=r.data; try{localStorage.setItem('pz_usr',JSON.stringify(_usr));}catch(e){}
-    applyMyName(); toast('اطلاعاتت ثبت شد ✅'); go('plans');
+    applyMyName(); toast('اطلاعاتت ثبت شد ✅'); charBack='plans'; go('character');
   } else {
     toast(r.error?.message || 'این نام کاربری قبلاً گرفته شده — یکی دیگه بزن');
   }
