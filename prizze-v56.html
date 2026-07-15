@@ -3137,10 +3137,6 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
       <div style="width:100%;display:flex;flex-direction:column;gap:10px">
         <div id="duelActions" style="display:none;flex-direction:column;gap:10px">
           <button class="btn btn-primary" id="rematchBtn" onclick="rematch()">🔁 بازی مجدد با همین حریف</button>
-          <div style="display:flex;gap:10px">
-            <button class="btn btn-ghost btn-sm" style="flex:1" onclick="requestFriend(oppName||'حریف')">➕ درخواست دوستی</button>
-            <button class="btn btn-ghost btn-sm" style="flex:1" onclick="showCurrentOpponentProfile()">👤 پروفایل حریف</button>
-          </div>
         </div>
         <button class="btn btn-orange" onclick="startGame()">🆕 حریف جدید</button>
         <button class="btn btn-primary" onclick="go('home')">🏠 بازگشت به خانه</button>
@@ -4749,9 +4745,9 @@ function renderDuelResultPanel(won){
   const score=fa(oppScore)+' - '+fa(myScore),wrong=myResults.filter(x=>x==='no').length;
   const coins=won?(lastPracticeCoinsEarned||Math.max(0,duelStage*45+80)):0,xp=duelStage*80;
   if(userPlan==='free'){
-    box.innerHTML='<div class="duel-summary-aaa"><div class="duel-summary-card"><div class="duel-summary-top"><div class="duel-side me"><div class="av">🦁</div><b>'+(window.myUserId||window.myName||'من')+'</b><span>بازیکن</span></div><div class="duel-final"><div class="state '+(won?'':'lose')+'">'+(won?'پیروزی':'پایان دوئل')+'</div><div class="score">'+score+'</div></div><div class="duel-side"><div class="av" onclick="showCurrentOpponentProfile()">'+(oppAv||'🦊')+'</div><b>'+(oppName||'حریف')+'</b><span>حریف</span></div></div><div class="duel-summary-kpis"><div class="duel-kpi"><b>'+fa(myScore)+'</b><span>پاسخ درست</span></div><div class="duel-kpi"><b>'+fa(wrong)+'</b><span>پاسخ اشتباه</span></div><div class="duel-kpi"><b>'+fa(xp)+'</b><span>XP</span></div><div class="duel-kpi"><b>'+fa(duelStage)+'</b><span>مرحله</span></div><div class="duel-kpi"><b>~'+fa(duelStage*52)+'ث</b><span>مدت مسابقه</span></div><div class="duel-kpi"><b>'+fa(coins)+'</b><span>سکه برده</span></div></div><div class="duel-reward-strip"><span class="bigcoin">🪙</span><b>+'+fa(coins)+' سکه</b><small>اگر پلن پولی بود، جایزه نقدی واقعی می‌گرفتی.</small></div><div class="duel-social-actions"><button onclick="showFriendRequestSnackbar(oppName||\'حریف\')"><span class="ico">➕</span>دوستی</button><button onclick="showCurrentOpponentProfile()"><span class="ico">👤</span>پروفایل</button><button onclick="reportOpponent()"><span class="ico">🚩</span>گزارش</button><button onclick="blockOpponent()"><span class="ico">🚫</span>بلاک</button></div><div class="duel-bottom-actions"><button class="btn btn-primary" onclick="collectPracticeCoinsExit()">خروج بعد از دریافت سکه</button><button class="btn btn-blue" onclick="continueDoublePracticeCoins()">ادامه و دوبرابر کردن سکه</button></div></div></div>';
+    box.innerHTML='<div class="duel-summary-aaa"><div class="duel-summary-card"><div class="duel-summary-top"><div class="duel-side me"><div class="av">🦁</div><b>'+(window.myUserId||window.myName||'من')+'</b><span>بازیکن</span></div><div class="duel-final"><div class="state '+(won?'':'lose')+'">'+(won?'پیروزی':'پایان دوئل')+'</div><div class="score">'+score+'</div></div><div class="duel-side"><div class="av" onclick="showCurrentOpponentProfile()">'+(oppAv||'🦊')+'</div><b>'+(oppName||'حریف')+'</b><span>حریف</span></div></div><div class="duel-summary-kpis"><div class="duel-kpi"><b>'+fa(myScore)+'</b><span>پاسخ درست</span></div><div class="duel-kpi"><b>'+fa(wrong)+'</b><span>پاسخ اشتباه</span></div><div class="duel-kpi"><b>'+fa(xp)+'</b><span>XP</span></div><div class="duel-kpi"><b>'+fa(duelStage)+'</b><span>مرحله</span></div><div class="duel-kpi"><b>~'+fa(duelStage*52)+'ث</b><span>مدت مسابقه</span></div><div class="duel-kpi"><b>'+fa(coins)+'</b><span>سکه برده</span></div></div><div class="duel-reward-strip"><span class="bigcoin">🪙</span><b>+'+fa(coins)+' سکه</b><small>اگر پلن پولی بود، جایزه نقدی واقعی می‌گرفتی.</small></div><div class="duel-social-actions"><button onclick="requestFriend(oppName||\'حریف\')"><span class="ico">➕</span>دوستی</button><button onclick="showCurrentOpponentProfile()"><span class="ico">👤</span>پروفایل</button><button onclick="reportOpponent()"><span class="ico">🚩</span>گزارش</button><button onclick="blockOpponent()"><span class="ico">🚫</span>بلاک</button></div><div class="duel-bottom-actions"><button class="btn btn-primary" onclick="collectPracticeCoinsExit()">خروج بعد از دریافت سکه</button><button class="btn btn-blue" onclick="continueDoublePracticeCoins()">ادامه و دوبرابر کردن سکه</button></div></div></div>';
   }else{
-    box.innerHTML='<div class="duel-result-card"><div class="opp-av" onclick="showCurrentOpponentProfile()">'+(oppAv||'🦊')+'</div><div class="dr-info"><b>'+(won?'نتیجه دوئل: پیروزی':'نتیجه دوئل: پایان مسابقه')+'</b><span>حریف: '+(oppName||'حریف')+' · مرحله '+fa(duelStage)+' · پاسخ‌های تو: '+fa(myScore)+'</span></div><div class="dr-score">'+score+'</div></div><div class="duel-result-actions"><button class="btn btn-ghost" onclick="showCurrentOpponentProfile()">پروفایل حریف</button><button class="btn btn-ghost" onclick="showFriendRequestSnackbar(oppName||\'حریف\')">درخواست دوستی</button></div>';
+    box.innerHTML='<div class="duel-result-card"><div class="opp-av" onclick="showCurrentOpponentProfile()">'+(oppAv||'🦊')+'</div><div class="dr-info"><b>'+(won?'نتیجه دوئل: پیروزی':'نتیجه دوئل: پایان مسابقه')+'</b><span>حریف: '+(oppName||'حریف')+' · مرحله '+fa(duelStage)+' · پاسخ‌های تو: '+fa(myScore)+'</span></div><div class="dr-score">'+score+'</div></div><div class="duel-result-actions"><button class="btn btn-ghost" onclick="showCurrentOpponentProfile()">پروفایل حریف</button><button class="btn btn-ghost" onclick="requestFriend(oppName||\'حریف\')">درخواست دوستی</button></div>';
   }
 }
 function collectPracticeCoinsExit(){go('home');}
@@ -5158,11 +5154,28 @@ function normalizeProfile(o){
 }
 function showOpponentProfile(data){
   const p=normalizeProfile(data);
-  const sub='<div class="opp-profile"><div class="opp-avatar">'+p.a+'</div><div class="opp-user">'+p.u+' · '+p.status+'</div><div class="opp-tags"><span class="opp-tag y">'+p.league+'</span><span class="opp-tag">لول '+fa(p.lvl)+'</span><span class="opp-tag">'+p.source+'</span></div><div class="opp-kpis"><div class="opp-kpi"><b>'+p.xp+'</b><span>XP / امتیاز</span></div><div class="opp-kpi"><b>'+p.winRate+'</b><span>نرخ موفقیت</span></div><div class="opp-kpi"><b>'+p.prize+'</b><span>جایزه کسب‌شده</span></div><div class="opp-kpi"><b>'+fa((p.lvl*3)+7)+'</b><span>بردهای ثبت‌شده</span></div></div><div class="opp-strength">نقاط قوت: سرعت پاسخ بالا · موضوعات قوی: فیلم، جغرافیا و ورزش</div></div>';
+  const sub='<div class="opp-profile"><div class="opp-user">'+p.u+' · '+p.status+'</div><div class="opp-tags"><span class="opp-tag y">'+p.league+'</span><span class="opp-tag">لول '+fa(p.lvl)+'</span><span class="opp-tag">'+p.source+'</span></div><div class="opp-kpis"><div class="opp-kpi"><b>'+p.xp+'</b><span>XP / امتیاز</span></div><div class="opp-kpi"><b>'+p.winRate+'</b><span>نرخ موفقیت</span></div><div class="opp-kpi"><b>'+p.prize+'</b><span>جایزه کسب‌شده</span></div><div class="opp-kpi"><b>'+fa((p.lvl*3)+7)+'</b><span>بردهای ثبت‌شده</span></div></div><div class="opp-strength">نقاط قوت: سرعت پاسخ بالا · موضوعات قوی: فیلم، جغرافیا و ورزش</div></div>';
   showAaaModal({icon:p.a,title:p.n,sub,primaryText:'ارسال درخواست دوستی',secondaryText:'دعوت به بازی',onPrimary:()=>{closeAaaModal(false);if(typeof showFriendRequestSnackbar==='function')showFriendRequestSnackbar(p.n);else showAaaModal({icon:'🤝',title:'درخواست دوستی ارسال شد',sub:'درخواست برای '+p.n+' ارسال شد.',primaryText:'باشه',secondaryText:''});},onSecondary:()=>{closeAaaModal(false);showAaaModal({icon:'🎮',title:'دعوت ارسال شد',sub:'دعوت بازی برای '+p.n+' ارسال شد. اگر قبول کند وارد مسابقه می‌شوید.',primaryText:'باشه',secondaryText:''});}});
 }
 function showOpponentProfileByData(n,a,unit,p){showOpponentProfile({n:n,a:a,unit:unit,p:p,source:unit==='تومان'?'رنکینگ مبلغ':'رنکینگ XP'});}
-function showCurrentOpponentProfile(){showOpponentProfile({n:oppName||document.getElementById('duelOppName')?.textContent||'حریف',a:oppAv||document.getElementById('duelOppAv')?.textContent||'🦊',source:'حریف فعلی',status:'در حال Duel',league:'🥉 برنزی',lvl:5});}
+async function showCurrentOpponentProfile(){
+  const nm=oppName||document.getElementById('duelOppName')?.textContent||'حریف';
+  const av=oppAv||document.getElementById('duelOppAv')?.textContent||'🦊';
+  const oppId=(typeof pzRt!=='undefined'&&pzRt&&pzRt.oppId)?pzRt.oppId:null;
+  let data={n:nm,a:av,source:'حریف فعلی',status:'در حال Duel',league:'🥉 برنزی',lvl:5};
+  if(oppId){
+    try{ const r=await pzApi('GET','/users/'+encodeURIComponent(oppId)+'/profile');
+      if(r&&r.ok&&r.data){ const d=r.data;
+        data={ n:d.username||nm, a:av, u:'@'+(d.username||'player'), source:'حریف فعلی', status:'در حال Duel',
+          league:d.league||'🥉 برنزی', lvl:d.level||5,
+          winRate:(d.winRate!=null?fa(d.winRate)+'٪':undefined),
+          prize:(d.totalPrize!=null?fa(d.totalPrize):undefined),
+          xp:(d.xp!=null?fa(d.xp):undefined) };
+      }
+    }catch(e){}
+  }
+  showOpponentProfile(data);
+}
 function showFriendProfile(id){const f=(typeof FRIENDS_DATA!=='undefined'?FRIENDS_DATA.find(x=>x.id===id):null)||{};showOpponentProfile({...f,source:'دوستان'});}
 /* ============ RANKINGS + LEAGUES ============ */
 const RANK_W=[
@@ -7535,30 +7548,35 @@ rematch=function(){
 };
 function _pzResetRematchBtn(){ const btn=document.getElementById('rematchBtn'); if(btn){ btn.disabled=false; btn.textContent='🔁 بازی مجدد با همین حریف'; } }
 function _pzPollRematchAsRequester(){
-  clearInterval(_pzRematchPoll); const t0=Date.now();
+  clearInterval(_pzRematchPoll); const mid=_pzRematchMid; const t0=Date.now();
   _pzRematchPoll=setInterval(async()=>{
-    if(!_pzRematchMid||!document.getElementById('result').classList.contains('active')){ clearInterval(_pzRematchPoll); return; }
+    if(!_pzRematchMid||_pzRematchMid!==mid){ clearInterval(_pzRematchPoll); return; }
     try{
-      const r=await pzApi('GET','/matches/'+_pzRematchMid+'/rematch');
+      const r=await pzApi('GET','/matches/'+mid+'/rematch');
       if(r.ok&&r.data){
         if(r.data.status==='accepted'&&r.data.newMatchId){ clearInterval(_pzRematchPoll); return pzEnterRematch(r.data.newMatchId); }
         if(r.data.status==='rejected'){ clearInterval(_pzRematchPoll); _pzResetRematchBtn(); toast(((pzRt&&pzRt.oppName)||'حریف')+' درخواست بازی مجدد را رد کرد',2600); return; }
       }
     }catch(e){}
-    if(Date.now()-t0>45000){ clearInterval(_pzRematchPoll); _pzResetRematchBtn(); toast('پاسخی از حریف نیامد',2600); }
+    if(Date.now()-t0>60000){ clearInterval(_pzRematchPoll); _pzResetRematchBtn(); toast('پاسخی از حریف نیامد',2600); }
   },1500);
 }
+/* Watch for an incoming rematch request. Runs regardless of which post-game
+   screen we're on (a premium WINNER sits on the checkpoint screen, not the
+   result screen) and stops after 90s. */
 function _pzWatchRematchAsOpponent(){
   if(!_pzRematchMid) return;
   clearInterval(_pzRematchWatch);
+  const mid=_pzRematchMid; const t0=Date.now();
   _pzRematchWatch=setInterval(async()=>{
-    if(!_pzRematchMid||!document.getElementById('result').classList.contains('active')){ clearInterval(_pzRematchWatch); return; }
+    if(!_pzRematchMid||_pzRematchMid!==mid){ clearInterval(_pzRematchWatch); return; }
+    if(Date.now()-t0>90000){ clearInterval(_pzRematchWatch); return; }
     if(_pzRematchModalOpen) return;
     try{
-      const r=await pzApi('GET','/matches/'+_pzRematchMid+'/rematch');
+      const r=await pzApi('GET','/matches/'+mid+'/rematch');
       if(r.ok&&r.data&&r.data.status==='pending'&&r.data.by&&r.data.by!==(pzRt&&pzRt.myId)){ clearInterval(_pzRematchWatch); _pzShowRematchPrompt(); }
     }catch(e){}
-  },1500);
+  },2000);
 }
 function _pzShowRematchPrompt(){
   _pzRematchModalOpen=true;
