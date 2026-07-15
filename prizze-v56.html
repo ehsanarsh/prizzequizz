@@ -694,7 +694,7 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
 .aaa-check{display:none;align-items:center;justify-content:center;gap:8px;margin:10px 0 12px;color:var(--muted);font-size:12px;font-weight:800;cursor:pointer}.aaa-check.show{display:flex}.aaa-check input{accent-color:#FFD21F;width:16px;height:16px}
 .aaa-actions{display:flex;gap:10px;margin-top:8px}.aaa-actions .btn{box-shadow:var(--hard-sm);padding:12px 10px;font-size:13px}.aaa-actions .btn:only-child{width:100%}
 .cash-pop{position:absolute;z-index:86;left:50%;top:128px;transform:translateX(-50%);padding:9px 14px;border-radius:999px;border:2px solid #000;background:linear-gradient(180deg,#4ff09a,#1eaf5f);color:#04160B;font-weight:900;font-size:16px;box-shadow:var(--hard-sm),0 0 28px rgba(51,217,124,.45);pointer-events:none;animation:cashPop 1.25s cubic-bezier(.2,1.15,.4,1) forwards}@keyframes cashPop{0%{opacity:0;transform:translate(-50%,16px) scale(.7)}18%,70%{opacity:1;transform:translate(-50%,0) scale(1)}100%{opacity:0;transform:translate(-50%,-44px) scale(.82)}}
-#duel .q-body.next-fade,#q-screen .q-body.next-fade,#wta .wta-qpanel.next-fade{animation:questionFadeIn .42s cubic-bezier(.2,.9,.3,1) both}@keyframes questionFadeIn{from{opacity:0;transform:translateY(14px);filter:blur(6px)}to{opacity:1;transform:none;filter:none}}
+#duel .q-body.next-fade,#duel .pzm-qcard.next-fade,#q-screen .q-body.next-fade,#wta .wta-qpanel.next-fade{animation:questionFadeIn .42s cubic-bezier(.2,.9,.3,1) both}@keyframes questionFadeIn{from{opacity:0;transform:translateY(14px);filter:blur(6px)}to{opacity:1;transform:none;filter:none}}
 /* WTA whitespace + studio picking/hitbox fixes */
 #wta .q-head{padding:calc(10px + env(safe-area-inset-top,0px)) 14px 6px;gap:10px}#wta .pad{padding-left:14px!important;padding-right:14px!important;gap:8px!important}#wtaStage{min-height:330px;overflow:visible!important}#wtaStage.picking{overflow:visible!important}#wtaStage.picking .wta-center{opacity:.55}#wtaStage.picking .wta-seat:not(.pickable){pointer-events:none;z-index:1;filter:saturate(.8) brightness(.82)}#wtaStage.picking .wta-seat.pickable{z-index:30;pointer-events:auto}#wtaStage.picking .wta-seat.pickable .wav{transform:scale(1.08);box-shadow:0 4px 0 #000,0 0 26px rgba(51,217,124,.75)}.wta-seat.pickable::after{content:"";position:absolute;inset:-12px;border-radius:26px;z-index:1;pointer-events:auto}.wta-seat .wav{z-index:2}.wta-seat.turn{z-index:8}.wta-seat.turn.pickable{z-index:32}.me-hud{bottom:6px}#wtaPickArea{margin-top:4px!important;padding:10px 12px!important}.wta-qpanel{padding:0 2px}.wta-qpanel .answers{gap:8px}.wta-qpanel .ans{min-height:52px;padding:9px 10px}
 @media(max-height:740px){#wtaStage{min-height:292px}.wta-seat .wav{width:48px;height:48px;font-size:24px}.wta-seat small{font-size:8px}.me-hud{transform:translateX(-50%) scale(.92);bottom:4px}.wta-qpanel .q-text{font-size:15px!important;line-height:1.5!important;padding:14px 12px 12px!important}}
@@ -1058,6 +1058,63 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
 .pen-slot.ok{background:radial-gradient(circle at 35% 30%,#7dffb4,#1eaf5f);animation:slotPop .4s cubic-bezier(.2,1.5,.4,1)}
 .pen-slot.no{background:radial-gradient(circle at 35% 30%,#ff9d8f,#e64533);animation:slotPop .4s cubic-bezier(.2,1.5,.4,1)}
 @keyframes slotPop{0%{transform:scale(.4)}60%{transform:scale(1.25)}100%{transform:scale(1)}}
+/* ===== MOTHER-SCREEN (Game Screen) — Phase 1 fixed shell ===== */
+#duel{display:flex;flex-direction:column;overflow:hidden}
+.pzm-head{flex:0 0 auto;padding:calc(8px + env(safe-area-inset-top,0px)) 12px 8px;position:relative;z-index:5;background:linear-gradient(180deg,rgba(0,0,0,.22),transparent)}
+.pzm-quit{position:absolute;top:calc(8px + env(safe-area-inset-top,0px));left:10px;width:30px;height:30px;border-radius:10px;border:1.5px solid var(--line);background:rgba(0,0,0,.28);color:var(--muted);font-size:15px;font-weight:900;z-index:6}
+.pzm-players{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;padding:0 34px}
+.pzm-player{display:flex;align-items:center;gap:7px;min-width:0;flex:1}
+.pzm-opp{flex-direction:row-reverse}
+.pzm-av{width:40px;height:40px;border-radius:13px;display:grid;place-items:center;flex:0 0 auto;font-size:22px}
+.pzm-av-me{background:var(--green-soft);border:1.5px solid var(--green)}
+.pzm-av-opp{background:var(--red-soft);border:1.5px solid var(--red);cursor:pointer}
+.pzm-pmeta{display:flex;flex-direction:column;min-width:0}
+.pzm-opp .pzm-pmeta{align-items:flex-end}
+.pzm-pname{font-size:11.5px;font-weight:800;max-width:72px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pzm-pscore{font-size:24px;font-weight:900;line-height:1.05}
+.pzm-me .pzm-pscore{color:var(--green)}
+.pzm-opp .pzm-pscore{color:var(--red)}
+.pzm-center{display:flex;flex-direction:column;align-items:center;gap:3px;flex:0 0 auto;padding-top:1px}
+.pzm-half{font-size:11px;font-weight:900;color:var(--bolt);background:rgba(255,210,31,.12);border:1px solid rgba(255,210,31,.3);border-radius:20px;padding:2px 10px;white-space:nowrap}
+.pzm-qnum{font-size:10.5px;font-weight:800;color:var(--muted);white-space:nowrap}
+.pzm-conn{display:flex;align-items:center;gap:4px;font-size:9.5px;font-weight:800;color:var(--green)}
+.pzm-conn-dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green);animation:pzmPulseDot 1.6s infinite}
+.pzm-conn.off{color:var(--red)}
+.pzm-conn.off .pzm-conn-dot{background:var(--red);box-shadow:0 0 6px var(--red);animation:none}
+@keyframes pzmPulseDot{0%,100%{opacity:1}50%{opacity:.35}}
+.pzm-progress{display:flex;align-items:center;justify-content:center;gap:6px;margin-top:10px}
+.pzm-sq{width:23px;height:23px;border-radius:7px;background:rgba(255,255,255,.92);border:2px solid #000;box-shadow:0 2px 0 #000;display:grid;place-items:center;font-size:12px;font-weight:900;color:#000;transition:transform .25s,background .25s;flex:0 0 auto}
+.pzm-sq-gap{margin-right:12px}
+.pzm-sq.pzm-ok{background:radial-gradient(circle at 35% 30%,#7dffb4,#1eaf5f);color:#043d22}
+.pzm-sq.pzm-no{background:#fff;color:var(--red)}
+.pzm-sq.pzm-cur{background:#fff;box-shadow:0 0 0 2px var(--bolt),0 2px 0 #000;animation:pzmCur 1s infinite}
+@keyframes pzmCur{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}
+.pzm-central{flex:1;display:flex;flex-direction:column;padding:8px 16px 4px;position:relative;z-index:2;overflow-y:auto}
+.pzm-qcard{display:flex;flex-direction:column;flex:1;animation:pzmFade .3s ease}
+.pzm-qtext{margin:8px 0 2px}
+.pzm-answers{margin-top:4px}
+.pzm-timer{display:flex;align-items:center;justify-content:center;margin:16px 0 14px;height:48px}
+.pzm-timer-bar{flex:1;height:10px;border-radius:6px;overflow:hidden;background:rgba(255,255,255,.1);position:relative;max-width:38%}
+.pzm-timer-bar i{position:absolute;top:0;bottom:0;left:0;width:100%;background:linear-gradient(90deg,var(--green),var(--bolt));transition:transform .95s linear}
+.pzm-timer-left{margin-right:10px}
+.pzm-timer-left i{transform-origin:right}
+.pzm-timer-right{margin-left:10px}
+.pzm-timer-right i{transform-origin:left}
+.pzm-timer-circle{flex:0 0 auto;width:50px;height:50px;border-radius:50%;display:grid;place-items:center;background:#151518;border:3px solid var(--bolt);font-size:21px;font-weight:900;box-shadow:0 0 14px rgba(255,210,31,.35)}
+.pzm-timer.danger .pzm-timer-bar i{background:linear-gradient(90deg,#ff6b5e,var(--red));animation:pzmBlink .5s infinite}
+.pzm-timer.danger .pzm-timer-circle{border-color:var(--red);color:var(--red);box-shadow:0 0 16px rgba(230,69,51,.55);animation:pzmPulse .6s infinite}
+@keyframes pzmBlink{0%,100%{opacity:1}50%{opacity:.4}}
+@keyframes pzmPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.12)}}
+.pzm-lifebar{flex:0 0 auto;padding:7px 14px calc(9px + env(safe-area-inset-bottom,0px));border-top:1px solid var(--line);background:rgba(0,0,0,.16)}
+.pzm-powerups{justify-content:center;gap:8px;padding:0!important;max-width:100%;overflow-x:auto}
+.pzm-powerups>*{transform:scale(.9);transform-origin:center}
+.pzm-status{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:12px;padding:20px 8px;animation:pzmFade .35s ease}
+.pzm-status-ico{font-size:52px;animation:pzmPop .45s cubic-bezier(.2,1.5,.4,1)}
+.pzm-status-title{font-size:20px;font-weight:900}
+.pzm-status-sub{font-size:13px;color:var(--muted);max-width:270px;line-height:1.7}
+@keyframes pzmFade{from{opacity:0}to{opacity:1}}
+@keyframes pzmPop{from{transform:scale(.55);opacity:0}to{transform:scale(1);opacity:1}}
+@media(max-width:370px){.pzm-sq{width:20px;height:20px}.pzm-pscore{font-size:21px}.pzm-timer-circle{width:46px;height:46px;font-size:19px}}
 /* rules gate */
 #rulesGate{position:absolute;inset:0;z-index:64;display:none;flex-direction:column;background:rgba(8,8,10,.96);backdrop-filter:blur(6px);padding:0}
 #rulesGate.show{display:flex}
@@ -3044,24 +3101,50 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
       </div>
     </section>
 
-    <!-- ============ DUEL ============ -->
+    <!-- ============ DUEL — MOTHER SCREEN ============ -->
     <section class="screen" id="duel">
-      <div class="q-head">
-        <button class="iconbtn" onclick="quitGame()">✕</button>
-        <div class="chip">مرحله <b id="duelStage2">۱</b> · جایزه <b style="color:var(--gold)" id="duelPot">۴۰٬۰۰۰</b></div>
-        <div class="timer-ring" id="dRing"><svg width="54" height="54"><circle cx="27" cy="27" r="23" fill="none" stroke="rgba(255,255,255,.14)" stroke-width="5"/><circle id="dTimerArc" cx="27" cy="27" r="23" fill="none" stroke="#FFD23F" stroke-width="5" stroke-linecap="round" stroke-dasharray="145"/></svg><div class="timer-num" id="dTimerNum">۱۰</div></div>
+      <!-- FIXED HEADER: both players, connection, half, question #, progress -->
+      <div class="pzm-head">
+        <button class="pzm-quit" onclick="quitGame()">✕</button>
+        <div class="pzm-players">
+          <div class="pzm-player pzm-me">
+            <div class="pzm-av pzm-av-me"><svg class="mascot" width="30" height="30" viewBox="0 0 120 120" id="mascotDuelMe2"></svg></div>
+            <div class="pzm-pmeta"><b class="pzm-pname" id="duelMeName2">تو</b><span class="pzm-pscore duel-me-score">۰</span></div>
+          </div>
+          <div class="pzm-center">
+            <div class="pzm-half" id="pzDuelHalf">نیمهٔ اول</div>
+            <div class="pzm-qnum" id="pzDuelQnum">سؤال ۱ از ۵</div>
+            <div class="pzm-conn" id="pzDuelConn"><span class="pzm-conn-dot"></span><span id="pzDuelConnTxt">آنلاین</span></div>
+          </div>
+          <div class="pzm-player pzm-opp">
+            <div class="pzm-av pzm-av-opp" id="duelOppAv2" onclick="showCurrentOpponentProfile()">🦊</div>
+            <div class="pzm-pmeta"><b class="pzm-pname" id="duelOppName2">حریف</b><span class="pzm-pscore duel-opp-score">۰</span></div>
+          </div>
+        </div>
+        <div class="pzm-progress" id="pzDuelProgress"></div>
       </div>
-      <div class="duel-score-row" style="display:flex;align-items:center;justify-content:space-between;padding:4px 18px 10px;gap:10px;position:relative;z-index:2">
-        <div class="duel-player-box duel-me-box" style="display:flex;align-items:center;gap:8px"><div class="duel-mini-av" style="width:38px;height:38px;border-radius:12px;background:var(--green-soft);border:1.5px solid var(--green);display:grid;place-items:center"><svg class="mascot" width="28" height="28" viewBox="0 0 120 120" id="mascotDuelMe2"></svg></div><div class="duel-player-meta"><b style="font-size:12px" id="duelMeName2">تو</b><span class="duel-side-score duel-me-score">۰</span><div class="pen-slots" id="myDots"></div></div></div>
-        <div style="font-size:20px;font-weight:900" id="duelScore">۰ - ۰</div>
-        <div class="duel-player-box duel-opp-box" style="display:flex;align-items:center;gap:8px;flex-direction:row-reverse"><div class="duel-mini-av" style="width:38px;height:38px;border-radius:12px;background:var(--red-soft);border:1.5px solid var(--red);display:grid;place-items:center;font-size:20px" id="duelOppAv2" onclick="showCurrentOpponentProfile()">🦊</div><div class="duel-player-meta" style="text-align:left"><b style="font-size:12px" id="duelOppName2">Sara</b><span class="duel-side-score duel-opp-score">۰</span><div class="pen-slots" id="oppDots"></div></div></div>
+      <!-- DYNAMIC CENTRAL AREA (question card / status states) -->
+      <div class="pzm-central" id="pzDuelCentral">
+        <div class="pzm-qcard" id="pzDuelQCard">
+          <span class="chip q-topic" id="dTopic">🎬 موضوع: سینما</span>
+          <div class="q-text pzm-qtext" id="dText">سوال</div>
+          <!-- NEW TIMER: horizontal bars converging to a central circle -->
+          <div class="pzm-timer" id="pzTimer">
+            <div class="pzm-timer-bar pzm-timer-left"><i id="pzTimerLeft"></i></div>
+            <div class="pzm-timer-circle"><span id="dTimerNum">۱۰</span></div>
+            <div class="pzm-timer-bar pzm-timer-right"><i id="pzTimerRight"></i></div>
+          </div>
+          <div class="answers pzm-answers" id="dAnswers"></div>
+        </div>
       </div>
-      <div class="q-body" style="padding-top:2px">
-        <svg class="mascot q-mascot" width="66" height="66" viewBox="0 0 120 120"></svg>
-        <span class="chip q-topic" id="dTopic">🎬 موضوع: سینما</span>
-        <div class="q-text" id="dText">سوال</div>
-        <div class="powerups" data-pwslot style="margin-bottom:12px"></div>
-        <div class="answers" id="dAnswers"></div>
+      <!-- BOTTOM LIFELINES (smaller, always fixed) -->
+      <div class="pzm-lifebar"><div class="powerups pzm-powerups" data-pwslot></div></div>
+      <!-- hidden legacy hooks kept so existing JS never crashes -->
+      <div style="display:none">
+        <b id="duelStage2">۱</b><b id="duelPot">۴۰٬۰۰۰</b>
+        <div id="duelScore">۰ - ۰</div>
+        <div class="timer-ring" id="dRing"><svg width="54" height="54"><circle cx="27" cy="27" r="23" fill="none" stroke="rgba(255,255,255,.14)" stroke-width="5"/><circle id="dTimerArc" cx="27" cy="27" r="23" fill="none" stroke="#FFD23F" stroke-width="5" stroke-linecap="round" stroke-dasharray="145"/></svg></div>
+        <div class="pen-slots" id="myDots"></div><div class="pen-slots" id="oppDots"></div>
       </div>
       <div class="qc-fab" onclick="toggleQC('dAnswers')">💬</div>
       <div class="qc-bar" id="qc-dAnswers"></div>
@@ -4562,8 +4645,9 @@ function loadDuelQ(deferTimer){
   renderPowerups();
   dTimeLeft=10;document.getElementById('dTimerNum').textContent=fa(dTimeLeft);
   const arc=document.getElementById('dTimerArc'),ring=document.getElementById('dRing');if(arc)arc.style.strokeDashoffset=0;if(ring)ring.classList.remove('danger');
+  pzDuelTimerBar();pzDuelHud();
   refreshDuelPot();
-  const body=document.querySelector('#duel .q-body');if(body){body.classList.add('next-fade');setTimeout(()=>body.classList.remove('next-fade'),460);}
+  const body=document.getElementById('pzDuelQCard');if(body){body.classList.remove('next-fade');void body.offsetWidth;body.classList.add('next-fade');setTimeout(()=>body.classList.remove('next-fade'),460);}
   const q=document.getElementById('dText');if(q){q.setAttribute('tabindex','-1');setTimeout(()=>q.focus({preventScroll:true}),90);}
   if(!deferTimer)startDTimer();
 }
@@ -4589,11 +4673,50 @@ function startDTimer(){dTimeLeft=10;runDuelTimer();}
 function runDuelTimer(){
   const arc=document.getElementById('dTimerArc'),ring=document.getElementById('dRing'),C=151;
   document.getElementById('dTimerNum').textContent=fa(dTimeLeft);
-  arc.style.strokeDashoffset=C*(1-dTimeLeft/10);updateRingDanger(ring,arc,dTimeLeft,3);
+  arc.style.strokeDashoffset=C*(1-dTimeLeft/10);updateRingDanger(ring,arc,dTimeLeft,3);pzDuelTimerBar();
   clearInterval(dTimer);
   dTimer=setInterval(()=>{dTimeLeft--;document.getElementById('dTimerNum').textContent=fa(Math.max(0,dTimeLeft));
-    arc.style.strokeDashoffset=C*(1-dTimeLeft/10);updateRingDanger(ring,arc,dTimeLeft,3);
+    arc.style.strokeDashoffset=C*(1-dTimeLeft/10);updateRingDanger(ring,arc,dTimeLeft,3);pzDuelTimerBar();
     if(dTimeLeft<=0){clearInterval(dTimer);ring.classList.remove('danger');if(!dAnswered){if(tossPhase)tossAnswer(curSel,dCorrect);else answerDuel(curSel,dCorrect);}}},1000);
+}
+/* ===== Mother-screen HUD (Phase 1): timer bars, progress, half, connection ===== */
+let pzDuelHalfNo=1;                 /* Phase 2 will flip this to 2 for the second half */
+let pzLastTick=-1;
+function pzDuelTimerBar(){
+  const t=Math.max(0,Math.min(10,dTimeLeft)),frac=t/10;
+  const L=document.getElementById('pzTimerLeft'),R=document.getElementById('pzTimerRight'),T=document.getElementById('pzTimer');
+  if(L)L.style.transform='scaleX('+frac+')';
+  if(R)R.style.transform='scaleX('+frac+')';
+  if(T){const danger=t<=5&&!dAnswered;T.classList.toggle('danger',danger);
+    /* Tick-Tock on each of the last 5 seconds (guarded so it fires once/second). */
+    if(danger&&t>0&&t<=5&&pzLastTick!==t){pzLastTick=t;try{sfx('blip');}catch(e){}vib([t<=2?30:14]);}
+    if(t>5||dAnswered)pzLastTick=-1;
+  }
+}
+function pzDuelHud(){
+  const half=document.getElementById('pzDuelHalf');if(half)half.textContent=(pzDuelHalfNo===2?'نیمهٔ دوم':'نیمهٔ اول');
+  const qn=document.getElementById('pzDuelQnum');
+  if(qn)qn.textContent=(typeof suddenDeath!=='undefined'&&suddenDeath)?'⚡ مرگ ناگهانی':('سؤال '+fa(Math.min(5,(dQ||0)+1))+' از ۵');
+  pzDuelProgressRender();pzDuelConnRender();
+}
+function pzDuelProgressRender(){
+  const box=document.getElementById('pzDuelProgress');if(!box)return;
+  if(box.children.length!==10){box.innerHTML='';for(let i=0;i<10;i++){const s=document.createElement('span');s.className='pzm-sq'+(i===5?' pzm-sq-gap':'');box.appendChild(s);}}
+  const sqs=box.querySelectorAll('.pzm-sq'),cur=(dQ||0);
+  for(let i=0;i<10;i++){
+    const sq=sqs[i];sq.className='pzm-sq'+(i===5?' pzm-sq-gap':'');sq.textContent='';
+    const group=i<5?1:2,idx=i<5?i:i-5;
+    if(group===pzDuelHalfNo){
+      if(idx<cur){const r=myResults[myResults.length-cur+idx];sq.classList.add(r==='ok'?'pzm-ok':'pzm-no');if(r!=='ok')sq.textContent='✕';}
+      else if(idx===cur&&idx<5){sq.classList.add('pzm-cur');sq.textContent='⏳';}
+    }else if(group<pzDuelHalfNo){sq.classList.add('pzm-ok');sq.style.opacity='.5';}
+  }
+}
+function pzDuelConnRender(){
+  const c=document.getElementById('pzDuelConn'),t=document.getElementById('pzDuelConnTxt');
+  const off=!!(window.pzRt&&pzRt.oppGraceTimer);
+  if(c)c.classList.toggle('off',off);
+  if(t)t.textContent=off?'حریف قطع':'آنلاین';
 }
 let myResults=[],oppResults=[];
 function renderSlots(id,results){
@@ -4622,6 +4745,7 @@ function updateDuelScore(){
   const ms=document.querySelector('.duel-me-score');if(ms)ms.textContent=fa(myScore);
   const os=document.querySelector('.duel-opp-score');if(os)os.textContent=fa(oppScore);
   renderSlots('myDots',myResults);renderSlots('oppDots',oppResults);
+  if(typeof pzDuelHud==='function')pzDuelHud();
 }
 function answerDuel(sel,correct){
   if(dAnswered)return;dAnswered=true;clearInterval(dTimer);
@@ -7142,7 +7266,7 @@ function pzWsSubmit(round,sel){
 }
 function pzResolveWaiter(round,res){ const w=pzRt.waiters[round]; if(w) w(res); }
 /* Opponent reconnected within the grace window → cancel the pending forfeit. */
-function pzOppBack(){ if(pzRt.oppGraceTimer){ clearTimeout(pzRt.oppGraceTimer); pzRt.oppGraceTimer=null; const top=document.getElementById('dTopic'); if(top&&pzRt._prevTopic&&/اتصال حریف قطع/.test(top.textContent)){ top.textContent=pzRt._prevTopic; } } }
+function pzOppBack(){ if(pzRt.oppGraceTimer){ clearTimeout(pzRt.oppGraceTimer); pzRt.oppGraceTimer=null; const top=document.getElementById('dTopic'); if(top&&pzRt._prevTopic&&/اتصال حریف قطع/.test(top.textContent)){ top.textContent=pzRt._prevTopic; } } if(typeof pzDuelConnRender==='function')pzDuelConnRender(); }
 function pzHandleWs(m){
   if(!m||!m.type) return; const p=m.payload||{};
   if(m.type==='server:connected'){ if(!pzRt.myId&&p.userId)pzRt.myId=p.userId; return; }
@@ -7170,6 +7294,7 @@ function pzHandleWs(m){
     if(pzRt.active&&!pzRt.finished&&!pzRt.oppGraceTimer){
       const top=document.getElementById('dTopic'); const duelOn=document.getElementById('duel')&&document.getElementById('duel').classList.contains('active');
       if(top&&duelOn){ pzRt._prevTopic=top.textContent; top.textContent='⏳ اتصال حریف قطع شد؛ منتظر بازگشت...'; }
+      if(typeof pzDuelConnRender==='function')pzDuelConnRender();
       pzRt.oppGraceTimer=setTimeout(()=>{ pzRt.oppGraceTimer=null; if(pzRt.active&&!pzRt.finished){ pzRt.oppLeft=true; for(const k in pzRt.waiters) pzResolveWaiter(k,null); pzForfeitWin(); } },15000);
     }
     return;
