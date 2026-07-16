@@ -7384,13 +7384,18 @@ cancelMatchmaking=function(){
    the next question) with a timeout so it can NEVER hard-freeze.
    The UI/CSS is untouched; only the DATA source and flow control change. */
 const PZ_PREFETCH=15;              /* main 5 + up to 10 sudden-death rounds */
+/* The AUTHORITATIVE id the server tags THIS connection's answers with (from
+   server:connected). Answer attribution MUST use this — not _usr.id, which can
+   differ (e.g. token edge cases) and would make my own answers look like the
+   opponent's, breaking the score. */
+let pzWsMyId=null;
 function pzNewRt(matchId){
   /* NOTE: must NOT reference pzRt here — this runs while `let pzRt` is still
      initializing, and `typeof pzRt` on a let in the temporal dead zone throws
      ("Cannot access 'pzRt' before initialization"), which broke startMatchmaking. */
   return { ws:null, hb:null,
            active:false, finished:false, serverFinished:false, oppLeft:false,
-           matchId:matchId, myId:(_usr&&_usr.id)?_usr.id:null, oppId:null,
+           matchId:matchId, myId:pzWsMyId||((_usr&&_usr.id)?_usr.id:null), oppId:null,
            oppPresent:false,
            myByRound:{}, oppByRound:{}, waiters:{}, snapshot:null, presence:1 };
 }
@@ -7432,25 +7437,14 @@ function pzResolveWaiter(round,res){ const w=pzRt.waiters[round]; if(w) w(res); 
 function pzOppBack(){ if(pzRt.oppGraceTimer){ clearTimeout(pzRt.oppGraceTimer); pzRt.oppGraceTimer=null; const top=document.getElementById('dTopic'); if(top&&pzRt._prevTopic&&/اتصال حریف قطع/.test(top.textContent)){ top.textContent=pzRt._prevTopic; } } if(typeof pzDuelConnRender==='function')pzDuelConnRender(); }
 function pzHandleWs(m){
   if(!m||!m.type) return; const p=m.payload||{};
-  if(m.type==='server:connected'){ if(!pzRt.myId&&p.userId)pzRt.myId=p.userId; return; }
+  if(m.type==='server:connected'){ if(p.userId){ pzWsMyId=p.userId; pzRt.myId=p.userId; } return; }   /* WS id is authoritative for answer attribution */
   if(m.type==='server:answer_result'){
     const uid=p.userId, rnd=Number(p.round);
     if(uid&&uid!==pzRt.myId){ pzRt.oppPresent=true; pzOppBack(); if(!pzRt.oppId)pzRt.oppId=uid; pzRt.oppByRound[rnd]={correct:!!p.correct,sel:p.selectedIndex}; if(typeof pzMarkSquare==='function')pzMarkSquare('opp',rnd,!!p.correct); pzResolveWaiter(rnd,pzRt.oppByRound[rnd]); }
     return;
   }
   if(m.type==='server:match_snapshot'){
-    if(Array.isArray(p.players)){
-      pzRt.snapshot=p.players;
-      /* Server is the single source of truth for the SCORE too: sync the displayed
-         totals from the snapshot so both devices always show identical numbers
-         (the local WS tally can drift if a broadcast is missed). */
-      let sm=null,so=null;
-      for(const pl of p.players){ if(String(pl.userId)===String(pzRt.myId)) sm=pl.score; else if(so===null) so=pl.score; }
-      if(typeof sm==='number'&&typeof so==='number'&&pzRt.active&&!pzRt.finished){
-        myScore=sm; oppScore=so;
-        try{ if(document.getElementById('duel')&&document.getElementById('duel').classList.contains('active')) updateDuelScore(); }catch(e){}
-      }
-    }
+    if(Array.isArray(p.players))pzRt.snapshot=p.players;
     /* The match is already OVER on the server (we likely reconnected after the
        opponent won by forfeit): do NOT resume — close out on the real result so
        a finished match can never keep running on this device. */
@@ -8079,8 +8073,9 @@ function pzSrvScores(){
 }
 function pzAutoAdvance(myRight,oppRight){
   const within=(dQ||0)-pzHalfBase;
-  const sv=pzSrvScores();
-  const dMe=sv?sv.me:myScore, dOp=sv?sv.op:oppScore;   /* server-authoritative when available */
+  /* Decide from the local tally (my own correct-count + the opponent's
+     server-validated correct-count). Both clients agree on each player's count. */
+  const dMe=myScore, dOp=oppScore;
   const next=(label)=>pzResultGate(myRight,oppRight,()=>loadDuelQWithFocus(),label);
   if(!suddenDeath){
     if(within>=5){
@@ -8124,11 +8119,10 @@ answerDuel=function(sel,correct){
       if(pzRt.finished) return;
       revealAnswers('dAnswers',sel,correct,()=>{
         const oppRight=!!(oppRes&&oppRes.correct);
-        /* Prefer the server-authoritative totals so both devices always agree; fall
-           back to the local WS tally only if no snapshot has arrived yet. */
-        const _sv=(typeof pzSrvScores==='function')?pzSrvScores():null;
-        if(_sv){ myScore=_sv.me; oppScore=_sv.op; }
-        else { myScore=pzCount(pzRt.myByRound); oppScore=pzCount(pzRt.oppByRound); }
+        /* My score from my own local judgement (always right for the question I
+           saw); the opponent's from their server-validated broadcasts. Both clients
+           therefore agree on each player's correct-count. */
+        myScore=pzCount(pzRt.myByRound); oppScore=pzCount(pzRt.oppByRound);
         if(myRight){ recordMissionEvent('correct',1); recordMissionEvent('duelCorrect',1); }
         if(leagueDuelActive&&myRight) showLeagueDuelReward();
         myResults.push(myRight?'ok':'no');
