@@ -1131,10 +1131,11 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
 .pzm-lifebar{flex:0 0 auto;padding:7px 14px calc(9px + env(safe-area-inset-bottom,0px));border-top:1px solid var(--line);background:rgba(0,0,0,.16)}
 .pzm-powerups{justify-content:center;gap:9px;padding:0!important;max-width:100%}
 /* Lifelines: readable, evenly-sized cards (no shrink) with two-line labels. */
-.pzm-sheet .pzm-powerups .pu{flex:1 1 0;min-width:0;padding:10px 6px;border-radius:15px;gap:3px}
-.pzm-sheet .pzm-powerups .pu .pu-i{font-size:22px}
-.pzm-sheet .pzm-powerups .pu .pu-l{font-size:10.5px;line-height:1.3;white-space:normal;overflow-wrap:break-word;color:var(--text)}
-.pzm-sheet .pzm-powerups .pu .pu-c{font-size:11px;margin-top:1px}
+.pzm-sheet .pzm-powerups{overflow:visible!important;flex-wrap:nowrap}
+.pzm-sheet .pzm-powerups .pu{flex:1 1 0;min-width:0;min-height:66px;padding:10px 4px;border-radius:16px;gap:4px;justify-content:center}
+.pzm-sheet .pzm-powerups .pu .pu-i{font-size:24px;line-height:1}
+.pzm-sheet .pzm-powerups .pu .pu-l{font-size:12px;font-weight:900;line-height:1.25;white-space:normal;overflow-wrap:break-word;color:var(--text)}
+.pzm-sheet .pzm-powerups .pu .pu-c{font-size:12px;margin-top:1px}
 .pzm-status{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:14px;padding:22px 16px;width:100%;box-sizing:border-box;animation:pzmFade .35s ease}
 .pzm-status>*{max-width:100%}
 .pzm-status-ico{font-size:54px;line-height:1;animation:pzmPop .45s cubic-bezier(.2,1.5,.4,1)}
@@ -4306,10 +4307,12 @@ function startGame(){recordMissionEvent('play',1);
 }
 
 /* ============ AAA MODALS + READY GATE ============ */
-let readyT=[],aaaTimers=[],aaaModalDone=null,aaaModalDismiss=null;
+let readyT=[],aaaTimers=[],aaaModalDone=null,aaaModalDismiss=null,aaaPersistKey=null;
 function clearAaaTimers(){aaaTimers.forEach(clearTimeout);aaaTimers=[];}
 function closeAaaModal(runCb){
   clearAaaTimers();
+  /* Honor "دیگر نشان نده" no matter HOW the modal is closed (button OR X). */
+  if(aaaPersistKey){ const c=document.getElementById('aaaCheck'); if(c&&c.checked){ try{localStorage.setItem('aaa_hide_'+aaaPersistKey,'1');}catch(e){} } aaaPersistKey=null; }
   const ov=document.getElementById('aaaModal');
   if(ov){ov.classList.remove('show');ov.setAttribute('aria-hidden','true');ov.dataset.timed='0';ov.dataset.dismissible='1';}
   const ph=document.querySelector('.phone');if(ph)ph.classList.remove('modal-open');
@@ -4321,7 +4324,11 @@ function dismissAaaModal(){
   else closeAaaModal(false);
 }
 function showAaaModal(opts){
-  opts=opts||{};clearAaaTimers();aaaModalDone=opts.onDone||null;aaaModalDismiss=opts.onDismiss||null;
+  opts=opts||{};
+  /* "دیگر نشان نده": if the user previously dismissed this keyed modal, skip it. */
+  if(opts.persistKey){ try{ if(localStorage.getItem('aaa_hide_'+opts.persistKey)==='1'){ if(opts.onDone)opts.onDone(); return; } }catch(e){} opts.checkbox=true; }
+  aaaPersistKey=opts.persistKey||null;
+  clearAaaTimers();aaaModalDone=opts.onDone||null;aaaModalDismiss=opts.onDismiss||null;
   const ph=document.querySelector('.phone'),ov=document.getElementById('aaaModal');
   if(!ov)return opts.onDone&&opts.onDone();
   const icon=document.getElementById('aaaIcon'),title=document.getElementById('aaaTitle'),sub=document.getElementById('aaaSub');
@@ -4695,6 +4702,13 @@ function loadDuelQ(deferTimer){
      deferred "prepare" pass, which runs while a central gate is still counting). */
   if(!deferTimer&&typeof pzHideStatus==='function')pzHideStatus();
   pzSecondArmed=false; pzSecondUsedRound=false;   /* fresh Second-Chance per question */
+  // Golden question (two-half sudden death, dQ>=10): ALTERNATE the topic — the
+  // 1st golden from the FIRST-half topic, the 2nd from the SECOND-half topic, the
+  // 3rd from the first again, and so on, until someone wins.
+  if(suddenDeath&&pzTwoHalf&&dQ>=10&&typeof pzGoldenQuestion==='function'){
+    const gq=pzGoldenQuestion(dQ);
+    if(gq&&gq._id) duelRoundQs[dQ]={t:gq.t,q:gq.q,a:gq.a,c:gq.c,_id:gq._id};
+  }
   // Prefer the synced per-match question (works for main rounds AND sudden-death
   // when extra synced questions were prefetched); fall back to a local random
   // only when no synced question exists for this index (WTA/offline paths).
@@ -5270,7 +5284,7 @@ function showAnswerCelebration(el,isCorrect){
    consumes one from the persistent inventory (powerups). */
 function _puAvail(key){ return !puUsed[key] && (powerups[key]||0)>0; }
 function renderPowerups(){
-  const defs=[['5050','✂️','حذف دو گزینه','p5050'],['second','🔁','حق دو انتخاب','psecond'],['stats','📊','درصد پاسخ دیگران','pstats']];
+  const defs=[['5050','✂️','۵۰:۵۰','p5050'],['second','🔁','انتخاب دوم','psecond'],['stats','📊','درصد بقیه','pstats']];
   document.querySelectorAll('[data-pwslot]').forEach(slot=>{
     slot.innerHTML=defs.map(d=>'<div class="pu'+(_puAvail(d[3])?'':' disabled used')+'" onclick="usePower(\''+d[0]+'\')"><span class="pu-i">'+d[1]+'</span><span class="pu-l">'+d[2]+'</span><span class="pu-c">'+(puUsed[d[3]]?'استفاده شد':'×'+fa(powerups[d[3]]||0))+'</span></div>').join('');
   });
@@ -5600,14 +5614,11 @@ function claimLeagueTicketReward(){
 
 function showLeagueGuideIfNeeded(){
   if(window.appSettings&&appSettings.leagueGuide===false)return;
-  let seen=false;try{seen=localStorage.getItem('pq_league_guide_seen')==='1';}catch(e){}
-  if(seen)return;
   showAaaModal({
     icon:'🏆',title:'راهنمای سریع لیگ هفتگی',
     sub:'با بلیت وارد لیگ می‌شی. در «از کی بپرسم؟» با ۳ جان می‌مونی؛ حذف نشی به فینال می‌رسی و فینال به دوئل تبدیل می‌شه. جایزه با برد و پاسخ‌های درست بیشتر می‌شه.',
-    checkbox:true,checkboxText:'دیگر این پیام را نمایش نده',primaryText:'شروع',secondaryText:'متوجه شدم',
-    onPrimary:(checked)=>{if(checked){try{localStorage.setItem('pq_league_guide_seen','1');}catch(e){}if(window.appSettings){appSettings.leagueGuide=false;saveSettings();}}closeAaaModal(false);},
-    onSecondary:(checked)=>{if(checked){try{localStorage.setItem('pq_league_guide_seen','1');}catch(e){}if(window.appSettings){appSettings.leagueGuide=false;saveSettings();}}closeAaaModal(false);}
+    checkboxText:'دیگر این پیام را نمایش نده',primaryText:'شروع',secondaryText:'متوجه شدم',
+    persistKey:'league_guide'   /* checking the box reliably hides it forever (any close path) */
   });
 }
 function openLeagues(){
@@ -7818,7 +7829,9 @@ async function pzLoadTopicQuestions(topic,half2){
       if(half2){
         /* Half 2: keep the 5 half-1 questions at 0-4 and append the half-2 topic's
            questions at 5+ so the continuous round index (dQ 5-9) maps correctly and
-           round keys stay unique across the match. */
+           round keys stay unique across the match. Keep the full half-2 pool too so
+           the golden question can alternate topics. */
+        window._pzHalf2Qs=qs;
         duelRoundQs=duelRoundQs.slice(0,5).concat(qs.map(q=>({t:q.t,q:q.q,a:q.a,c:q.c,_id:q._id})));
         pzRt.topic2=topic;
       }else{ window._pzQs=qs; pzRt.topic=topic; }
@@ -8051,6 +8064,15 @@ function pzResultGate(myRight,oppRight,cb,label){
 }
 /* Golden-question (sudden death) state shown the moment the match ties — in the
    central area, not a popup. */
+/* Golden question source: alternate between the two halves' topics.
+   round 10 → half-1 topic, 11 → half-2 topic, 12 → half-1, 13 → half-2, … */
+function pzGoldenQuestion(round){
+  const g=round-10; if(g<0) return null;
+  const pool=(g%2===0)?(window._pzQs||[]):(window._pzHalf2Qs||[]);
+  if(!pool||pool.length<6) return (pool&&pool[0])||null;
+  const idx=5+(Math.floor(g/2)%(pool.length-5));   /* cycle through the sudden-death portion */
+  return pool[idx]||pool[5]||null;
+}
 function pzGoldenQuestionModal(cb){
   const html='<div style="text-align:center">'+
     '<div style="font-size:34px;font-weight:900;color:var(--bolt);text-shadow:0 0 26px var(--bolt-glow);letter-spacing:1px;margin:2px 0 8px">⭐ سؤال طلایی ⭐</div>'+
