@@ -596,7 +596,7 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
 .radar{width:230px;height:230px;border-radius:50%;position:relative;margin:0 auto;border:var(--stroke);
   background:radial-gradient(circle,rgba(255,210,31,.1),rgba(13,13,16,.55) 76%);overflow:hidden;box-shadow:var(--hard)}
 .radar::before{content:"";position:absolute;inset:-2px;border-radius:50%;background:conic-gradient(from 0deg,rgba(255,210,31,.5),transparent 55%);animation:sweep 2.2s linear infinite}
-@keyframes sweep{to{transform:rotate(360deg)}}
+@keyframes sweep{to{transform:rotate(-360deg)}}
 @keyframes tkFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
 .pz-pop{display:inline-block;animation:pzPop .6s cubic-bezier(.2,1.4,.4,1)}
 /* 50/50: the two wrong options break/fade away but their SLOT stays empty
@@ -1086,18 +1086,28 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
 .pzm-sq{width:25px;height:28px;border-radius:7px;border:2px solid #000;box-shadow:0 2px 0 #000;overflow:hidden;display:flex;flex-direction:column;position:relative;background:#fff;flex:0 0 auto;transition:transform .25s}
 .pzm-sq-gap{margin-right:12px}
 .pzm-sqh{flex:1;display:grid;place-items:center;font-size:9px;font-weight:900;line-height:1;color:var(--red)}
-.pzm-sqh.sq-opp{border-bottom:1px solid rgba(0,0,0,.28)}
+.pzm-sqh.sq-opp{border-bottom:1px solid rgba(0,0,0,.28);background:rgba(230,69,51,.16)}   /* faint red = opponent (top) */
+.pzm-sqh.sq-me{background:rgba(30,175,95,.16)}                                          /* faint green = you (bottom) */
 .pzm-sqh.sq-ok{background:radial-gradient(circle at 40% 35%,#7dffb4,#1eaf5f);color:#043d22}
 .pzm-sqh.sq-no{background:#fff}
+.pzm-prog-legend{display:flex;align-items:center;justify-content:center;gap:14px;margin-top:5px;font-size:9.5px;font-weight:900}
+.pzm-prog-legend .pzl-opp{color:var(--red)}
+.pzm-prog-legend .pzl-me{color:var(--green)}
 .pzm-sqcur{position:absolute;inset:0;display:grid;place-items:center;font-size:12px;background:rgba(255,255,255,.55)}
 .pzm-sq-cur{box-shadow:0 0 0 2px var(--bolt),0 2px 0 #000;animation:pzmCur 1s infinite}
 .pzm-sq-done .pzm-sqprev{opacity:.55}
 @keyframes pzmCur{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}
 .pzm-central{flex:1;display:flex;flex-direction:column;padding:8px 16px 4px;position:relative;z-index:2;overflow-y:auto}
-.pzm-qcard{display:flex;flex-direction:column;flex:1;animation:pzmFade .3s ease}
-.pzm-qtext{margin:8px 0 2px}
-.pzm-answers{margin-top:4px}
-.pzm-timer{display:flex;align-items:center;justify-content:center;margin:16px 0 14px;height:48px}
+/* Question bottom sheet */
+.pzm-sheet{position:absolute;left:0;right:0;bottom:0;height:82%;z-index:7;display:flex;flex-direction:column;padding:8px 18px calc(14px + env(safe-area-inset-bottom,0px));background:linear-gradient(180deg,#1b1b21,#141419);border-radius:26px 26px 0 0;box-shadow:0 -12px 34px rgba(0,0,0,.5);border-top:1.5px solid rgba(255,255,255,.08);transform:translateY(103%);transition:transform .42s cubic-bezier(.2,.85,.25,1);overflow-y:auto}
+.pzm-sheet.up{transform:translateY(0)}
+.pzm-sheet-grip{width:44px;height:5px;border-radius:3px;background:rgba(255,255,255,.2);margin:2px auto 8px;flex:0 0 auto}
+.pzm-sheet .q-topic{align-self:center;flex:0 0 auto}
+.pzm-qtext{margin:12px 0 2px;font-size:19px;line-height:1.6;text-align:center;flex:0 0 auto}
+.pzm-answers{margin-top:6px;flex:0 0 auto}
+.pzm-sheet .pzm-powerups{margin-top:auto;padding-top:12px}
+#duel.sheet-up .pzm-progress,#duel.sheet-up .pzm-prog-legend{opacity:0;pointer-events:none;transition:opacity .3s}
+.pzm-timer{display:flex;align-items:center;justify-content:center;margin:16px 0 14px;height:48px;direction:ltr}
 .pzm-timer-bar{flex:1;height:10px;border-radius:6px;overflow:hidden;background:rgba(255,255,255,.1);position:relative;max-width:38%}
 .pzm-timer-bar i{position:absolute;top:0;bottom:0;left:0;width:100%;background:linear-gradient(90deg,var(--green),var(--bolt));transition:transform .95s linear}
 .pzm-timer-left{margin-right:10px}
@@ -3150,24 +3160,26 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
           </div>
         </div>
         <div class="pzm-progress" id="pzDuelProgress"></div>
+        <div class="pzm-prog-legend"><span class="pzl pzl-opp">▲ حریف</span><span class="pzl pzl-me">تو ▼</span></div>
       </div>
-      <!-- DYNAMIC CENTRAL AREA (question card / status states) -->
+      <!-- DYNAMIC CENTRAL AREA (status states: waiting / result / transition …) -->
       <div class="pzm-central" id="pzDuelCentral">
         <div class="pzm-status" id="pzDuelStatus" style="display:none"></div>
-        <div class="pzm-qcard" id="pzDuelQCard">
-          <span class="chip q-topic" id="dTopic">🎬 موضوع: سینما</span>
-          <div class="q-text pzm-qtext" id="dText">سوال</div>
-          <!-- NEW TIMER: horizontal bars converging to a central circle -->
-          <div class="pzm-timer" id="pzTimer">
-            <div class="pzm-timer-bar pzm-timer-left"><i id="pzTimerLeft"></i></div>
-            <div class="pzm-timer-circle"><span id="dTimerNum">۱۰</span></div>
-            <div class="pzm-timer-bar pzm-timer-right"><i id="pzTimerRight"></i></div>
-          </div>
-          <div class="answers pzm-answers" id="dAnswers"></div>
-        </div>
       </div>
-      <!-- BOTTOM LIFELINES (smaller, always fixed) -->
-      <div class="pzm-lifebar"><div class="powerups pzm-powerups" data-pwslot></div></div>
+      <!-- QUESTION BOTTOM SHEET: slides up (~82% height) when a question is active.
+           Order: question text → timer → 4 options → lifelines at the bottom. -->
+      <div class="pzm-sheet" id="pzDuelQCard">
+        <div class="pzm-sheet-grip"></div>
+        <span class="chip q-topic" id="dTopic">🎬 موضوع: سینما</span>
+        <div class="q-text pzm-qtext" id="dText">سوال</div>
+        <div class="pzm-timer" id="pzTimer">
+          <div class="pzm-timer-bar pzm-timer-left"><i id="pzTimerLeft"></i></div>
+          <div class="pzm-timer-circle"><span id="dTimerNum">۱۰</span></div>
+          <div class="pzm-timer-bar pzm-timer-right"><i id="pzTimerRight"></i></div>
+        </div>
+        <div class="answers pzm-answers" id="dAnswers"></div>
+        <div class="powerups pzm-powerups" data-pwslot></div>
+      </div>
       <!-- hidden legacy hooks kept so existing JS never crashes -->
       <div style="display:none">
         <b id="duelStage2">۱</b><b id="duelPot">۴۰٬۰۰۰</b>
@@ -4701,7 +4713,7 @@ function showLeagueDuelReward(){
   const pot=document.getElementById('duelPot');if(pot){pot.style.transform='scale(1.18)';pot.style.color='var(--ok)';setTimeout(()=>{pot.style.transform='';pot.style.color='var(--bolt)';},450);}
   sfx('correct');vib([20,30,20]);
 }
-function startDTimer(){dTimeLeft=10;runDuelTimer();}
+function startDTimer(){dTimeLeft=10;/* question is now active → ensure the sheet is up */if(typeof pzHideStatus==='function'){const d=document.getElementById('duel');if(d&&d.classList.contains('active'))pzHideStatus();}runDuelTimer();}
 function runDuelTimer(){
   const arc=document.getElementById('dTimerArc'),ring=document.getElementById('dRing'),C=151;
   document.getElementById('dTimerNum').textContent=fa(dTimeLeft);
@@ -7330,9 +7342,21 @@ function pzHandleWs(m){
        opponent won by forfeit): do NOT resume — close out on the real result so
        a finished match can never keep running on this device. */
     if((p.phase==='finished'||p.phase==='result') && pzRt.active && !pzRt.finished){
-      for(const k in pzRt.waiters) pzResolveWaiter(k,null);
-      const iWon = p.winnerUserId && String(p.winnerUserId)===String(pzRt.myId);
-      if(iWon) pzForfeitWin(); else pzForfeitLoss();
+      /* The match is over on the server. Give the NORMAL end-of-match flow
+         (reveal + result + server-authoritative decision) a moment to settle it
+         locally; only force-end if it hasn't (e.g. a genuine reconnect), using the
+         server's winnerUserId so both devices agree. */
+      const win=p.winnerUserId;
+      if(!pzRt._srvEndTimer){
+        pzRt._srvEndTimer=setTimeout(()=>{
+          pzRt._srvEndTimer=null;
+          if(pzRt.active&&!pzRt.finished){
+            for(const k in pzRt.waiters) pzResolveWaiter(k,null);
+            const iWon = win && String(win)===String(pzRt.myId);
+            if(iWon) pzForfeitWin(); else pzForfeitLoss();
+          }
+        },2600);
+      }
     }
     return;
   }
@@ -7534,6 +7558,7 @@ function pzShowTossQ(){
   const rnd=pzRt.tossRound||0;
   const qd=TOSS_QS[pzHash(pzRt.matchId+':'+rnd)%TOSS_QS.length];   /* identical for both players, per round */
   dCorrect=qd.c; dAnswered=false; tossPhase=true;
+  if(typeof pzHideStatus==='function')pzHideStatus();   /* slide the question sheet up for the toss */
   const top=document.getElementById('dTopic');
   if(top) top.textContent=(rnd>0?'🔁 هر دو اشتباه زدید — سوال سرعتیِ جدید':'⚡ سوال سرعتی — هر کی زودتر و درست، موضوع رو انتخاب می‌کنه');
   document.getElementById('dText').textContent=qd.q;
@@ -7763,13 +7788,16 @@ openTopicPick=function(mine){
 /* Status states render inside the mother-screen central area WITHOUT destroying
    the question card's DOM hooks (dText/dAnswers/timer): we just hide the card and
    show a sibling status node. */
+/* Status (waiting/result/transition) shows in the central area with the question
+   bottom-sheet slid DOWN; a question slides the sheet UP over the central area. */
 function pzShowStatus(html){
-  const s=document.getElementById('pzDuelStatus'),q=document.getElementById('pzDuelQCard');
-  if(!s)return; if(q)q.style.display='none'; s.innerHTML=html; s.style.display='flex';
+  const s=document.getElementById('pzDuelStatus'),q=document.getElementById('pzDuelQCard'),d=document.getElementById('duel');
+  if(q)q.classList.remove('up'); if(d)d.classList.remove('sheet-up');
+  if(!s)return; s.innerHTML=html; s.style.display='flex';
 }
 function pzHideStatus(){
-  const s=document.getElementById('pzDuelStatus'),q=document.getElementById('pzDuelQCard');
-  if(s){ s.style.display='none'; s.innerHTML=''; } if(q)q.style.display='flex';
+  const s=document.getElementById('pzDuelStatus'),q=document.getElementById('pzDuelQCard'),d=document.getElementById('duel');
+  if(s){ s.style.display='none'; s.innerHTML=''; } if(q)q.classList.add('up'); if(d)d.classList.add('sheet-up');
 }
 /* Waiting player's rich panel: opponent avatar/name/level/record + last-5 +
    best-topics (graceful fallback when the backend has no history yet). */
@@ -7924,8 +7952,22 @@ function pzGoldenQuestionModal(cb){
     '</div>';
   pzCentralGate({ iconHTML:'🏆', title:'بازی مساوی شد', html:html, seconds:5, onDone:cb });
 }
+/* Authoritative per-player scores from the latest server snapshot (players[].score
+   is the server's own tally of correct answers across all rounds). Using these for
+   the END decision guarantees BOTH clients decide identically — no more "one sees a
+   winner, the other sees a golden question". Falls back to the local tally only if
+   no snapshot has arrived. */
+function pzSrvScores(){
+  const s=pzRt&&pzRt.snapshot; if(!Array.isArray(s)||s.length<2)return null;
+  let me=null,op=null;
+  for(const pl of s){ if(String(pl.userId)===String(pzRt.myId)){ me=pl.score; } else if(op===null){ op=pl.score; } }
+  if(typeof me!=='number'||typeof op!=='number')return null;
+  return {me:me,op:op};
+}
 function pzAutoAdvance(myRight,oppRight){
   const within=(dQ||0)-pzHalfBase;
+  const sv=pzSrvScores();
+  const dMe=sv?sv.me:myScore, dOp=sv?sv.op:oppScore;   /* server-authoritative when available */
   const next=(label)=>pzResultGate(myRight,oppRight,()=>loadDuelQWithFocus(),label);
   if(!suddenDeath){
     if(within>=5){
@@ -7934,19 +7976,18 @@ function pzAutoAdvance(myRight,oppRight){
          if the half is tied. */
       if(pzTwoHalf&&pzDuelHalfNo===1){ return pzResultGate(myRight,oppRight,()=>pzEndOfFirstHalf(),'پایان نیمهٔ اول'); }
       /* End of half 2 (or a single-half match) → decide by the TOTAL score. */
-      if(myScore>oppScore) return duelRoundWin();
-      if(myScore<oppScore) return duelRoundLose();
+      if(dMe>dOp) return duelRoundWin();
+      if(dMe<dOp) return duelRoundLose();
       suddenDeath=true;
-      /* Tie → dedicated golden-question modal (not a plain line), then continue. */
+      /* Tie → dedicated golden-question state, then continue. */
       return pzGoldenQuestionModal(()=>loadDuelQWithFocus());
     }
     return next();
   }else{
-    if(myRight&&!oppRight) return duelRoundWin();
-    if(!myRight&&oppRight) return duelRoundLose();
-    /* Still tied in the golden question → NEVER go to a result/end modal; run the
-       golden-question flow again (modal + countdown + new question) until exactly
-       one winner remains. */
+    /* Golden question: decide from the authoritative totals so both clients agree. */
+    if(dMe>dOp) return duelRoundWin();
+    if(dMe<dOp) return duelRoundLose();
+    /* Still tied → run the golden-question flow again until exactly one leads. */
     return pzGoldenQuestionModal(()=>loadDuelQWithFocus());
   }
 }

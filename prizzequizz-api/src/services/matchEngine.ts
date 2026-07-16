@@ -69,8 +69,10 @@ export interface SubmitAnswerInput {
   round?: number;
 }
 
-const DUEL_BASE_ROUNDS = 5;      // fixed-length portion of a duel
-const DUEL_MAX_ROUNDS = 15;      // hard cap so a tie can never loop forever
+const DUEL_BASE_ROUNDS = 10;     // two halves × 5 questions — the match must NOT
+                                 // finish (and reject answers) after the first half
+const DUEL_MAX_ROUNDS = 24;      // hard cap so a tie can never loop forever (base
+                                 // 10 + up to 14 sudden-death/golden rounds)
 
 // Serialize answer processing per match so two players submitting at nearly the
 // same instant can't lose-update each other's scores (read-modify-write race).
