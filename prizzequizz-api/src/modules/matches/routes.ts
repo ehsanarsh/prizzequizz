@@ -136,16 +136,23 @@ export function registerMatchRoutes(router: Router, base: string): void {
   // single source of truth (no client-to-client rebroadcast to the loser).
   router.add('POST', `${base}/matches/:id/topic`, async (ctx) => {
     const match = await getMatch(ctx.params.id!);
-    const topic = String((ctx.body as any)?.topic ?? '').trim() || '__popular__';
-    match.duelTopic = topic;
+    const body = (ctx.body ?? {}) as any;
+    const topic = String(body.topic ?? '').trim() || '__popular__';
+    const half = String(Math.max(1, Math.floor(Number(body.half ?? 1)) || 1));
+    if (!match.duelTopics) match.duelTopics = {};
+    match.duelTopics[half] = topic;
+    if (half === '1') match.duelTopic = topic; // back-compat: half 1 mirrors duelTopic
     match.updatedAt = new Date().toISOString();
     await persist(match);
-    json(ctx.res, 200, { topic });
+    json(ctx.res, 200, { topic, half: Number(half) });
   });
-  // The loser polls this until the winner has chosen (topic !== null).
+  // The waiting player polls this until the picker has chosen (topic !== null).
+  // ?half=2 reads the second-half topic (chosen by the toss loser).
   router.add('GET', `${base}/matches/:id/topic`, async (ctx) => {
     const match = await getMatch(ctx.params.id!);
-    json(ctx.res, 200, { topic: match.duelTopic ?? null });
+    const half = String(Math.max(1, Math.floor(Number(ctx.query.get('half') ?? 1)) || 1));
+    const t = (match.duelTopics && match.duelTopics[half]) ?? (half === '1' ? match.duelTopic : undefined) ?? null;
+    json(ctx.res, 200, { topic: t, half: Number(half) });
   });
 
   // Same question for the same (matchId, round, topic) for BOTH players. Callable

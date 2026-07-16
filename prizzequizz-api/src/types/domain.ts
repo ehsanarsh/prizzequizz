@@ -69,6 +69,10 @@ export interface Match {
    *  truth: the winner POSTs it, the loser reads it, and both fetch questions
    *  filtered by it — no client-to-client rebroadcast. */
   duelTopic?: string;
+  /** Per-half chosen topics for the two-half (نیمه اول/دوم) structure. Key is the
+   *  half number as a string ("1" | "2"). duelTopic mirrors half 1 for back-compat.
+   *  The half-2 picker (the toss loser) stores "2"; the waiting player polls it. */
+  duelTopics?: Record<string, string>;
   /** Speed-round (toss) submissions keyed by userId (with the toss round they
    *  belong to), and the resolved winner. The server decides the winner. If BOTH
    *  players answer the toss wrong, nobody wins: duelTossRound is bumped and a

@@ -1083,11 +1083,15 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
 .pzm-conn.off .pzm-conn-dot{background:var(--red);box-shadow:0 0 6px var(--red);animation:none}
 @keyframes pzmPulseDot{0%,100%{opacity:1}50%{opacity:.35}}
 .pzm-progress{display:flex;align-items:center;justify-content:center;gap:6px;margin-top:10px}
-.pzm-sq{width:23px;height:23px;border-radius:7px;background:rgba(255,255,255,.92);border:2px solid #000;box-shadow:0 2px 0 #000;display:grid;place-items:center;font-size:12px;font-weight:900;color:#000;transition:transform .25s,background .25s;flex:0 0 auto}
+.pzm-sq{width:25px;height:28px;border-radius:7px;border:2px solid #000;box-shadow:0 2px 0 #000;overflow:hidden;display:flex;flex-direction:column;position:relative;background:#fff;flex:0 0 auto;transition:transform .25s}
 .pzm-sq-gap{margin-right:12px}
-.pzm-sq.pzm-ok{background:radial-gradient(circle at 35% 30%,#7dffb4,#1eaf5f);color:#043d22}
-.pzm-sq.pzm-no{background:#fff;color:var(--red)}
-.pzm-sq.pzm-cur{background:#fff;box-shadow:0 0 0 2px var(--bolt),0 2px 0 #000;animation:pzmCur 1s infinite}
+.pzm-sqh{flex:1;display:grid;place-items:center;font-size:9px;font-weight:900;line-height:1;color:var(--red)}
+.pzm-sqh.sq-opp{border-bottom:1px solid rgba(0,0,0,.28)}
+.pzm-sqh.sq-ok{background:radial-gradient(circle at 40% 35%,#7dffb4,#1eaf5f);color:#043d22}
+.pzm-sqh.sq-no{background:#fff}
+.pzm-sqcur{position:absolute;inset:0;display:grid;place-items:center;font-size:12px;background:rgba(255,255,255,.55)}
+.pzm-sq-cur{box-shadow:0 0 0 2px var(--bolt),0 2px 0 #000;animation:pzmCur 1s infinite}
+.pzm-sq-done .pzm-sqprev{opacity:.55}
 @keyframes pzmCur{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}
 .pzm-central{flex:1;display:flex;flex-direction:column;padding:8px 16px 4px;position:relative;z-index:2;overflow-y:auto}
 .pzm-qcard{display:flex;flex-direction:column;flex:1;animation:pzmFade .3s ease}
@@ -1114,7 +1118,25 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
 .pzm-status-sub{font-size:13px;color:var(--muted);max-width:270px;line-height:1.7}
 @keyframes pzmFade{from{opacity:0}to{opacity:1}}
 @keyframes pzmPop{from{transform:scale(.55);opacity:0}to{transform:scale(1);opacity:1}}
-@media(max-width:370px){.pzm-sq{width:20px;height:20px}.pzm-pscore{font-size:21px}.pzm-timer-circle{width:46px;height:46px;font-size:19px}}
+/* half-transition score block */
+.pzm-half-scores{display:flex;align-items:flex-start;justify-content:center;gap:16px;margin:6px 0}
+.pzm-hs{text-align:center;min-width:96px}
+.pzm-hs-n{font-size:13px;font-weight:900;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-inline:auto}
+.pzm-hs-v{font-size:52px;font-weight:900;line-height:1;text-shadow:0 0 18px rgba(0,0,0,.3)}
+.pzm-hs-cw{font-size:11px;font-weight:800;color:var(--muted);margin-top:4px}
+.pzm-hs-sep{align-self:center;font-size:28px;font-weight:900;opacity:.35;padding-top:22px}
+/* opponent info card in the waiting state */
+.pzm-oppcard{margin-top:6px;width:100%;max-width:300px;background:var(--card,#151518);border:1.5px solid var(--line);border-radius:18px;padding:16px 14px;text-align:center}
+.pzm-oppav{width:66px;height:66px;margin:0 auto;border-radius:20px;border:2px solid var(--red);background:var(--red-soft);display:grid;place-items:center;font-size:36px}
+.pzm-oppname{font-size:16px;font-weight:900;margin-top:8px}
+.pzm-oppmeta{font-size:12px;color:var(--muted);font-weight:800;margin-top:3px}
+.pzm-oppsec{margin-top:12px;text-align:right}
+.pzm-oppsec-t{font-size:12px;font-weight:900;color:var(--bolt);margin-bottom:5px}
+.pzm-opprow{display:flex;gap:5px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
+/* disabled (already-used) topic button in half 2 */
+.topic-btn.topic-used{opacity:.42;filter:grayscale(.7);position:relative;cursor:not-allowed}
+.topic-used-tag{display:block;font-size:10px;font-weight:900;color:var(--red);margin-top:3px}
+@media(max-width:370px){.pzm-sq{width:22px;height:25px}.pzm-pscore{font-size:21px}.pzm-timer-circle{width:46px;height:46px;font-size:19px}.pzm-hs-v{font-size:42px}}
 /* rules gate */
 #rulesGate{position:absolute;inset:0;z-index:64;display:none;flex-direction:column;background:rgba(8,8,10,.96);backdrop-filter:blur(6px);padding:0}
 #rulesGate.show{display:flex}
@@ -3125,6 +3147,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
       </div>
       <!-- DYNAMIC CENTRAL AREA (question card / status states) -->
       <div class="pzm-central" id="pzDuelCentral">
+        <div class="pzm-status" id="pzDuelStatus" style="display:none"></div>
         <div class="pzm-qcard" id="pzDuelQCard">
           <span class="chip q-topic" id="dTopic">🎬 موضوع: سینما</span>
           <div class="q-text pzm-qtext" id="dText">سوال</div>
@@ -4633,6 +4656,7 @@ function updateDuelVs(){
 }
 function loadDuelQ(deferTimer){
   dAnswered=false;
+  if(typeof pzHideStatus==='function')pzHideStatus();   /* ensure the question card is visible */
   pzSecondArmed=false; pzSecondUsedRound=false;   /* fresh Second-Chance per question */
   // Prefer the synced per-match question (works for main rounds AND sudden-death
   // when extra synced questions were prefetched); fall back to a local random
@@ -4680,7 +4704,13 @@ function runDuelTimer(){
     if(dTimeLeft<=0){clearInterval(dTimer);ring.classList.remove('danger');if(!dAnswered){if(tossPhase)tossAnswer(curSel,dCorrect);else answerDuel(curSel,dCorrect);}}},1000);
 }
 /* ===== Mother-screen HUD (Phase 1): timer bars, progress, half, connection ===== */
-let pzDuelHalfNo=1;                 /* Phase 2 will flip this to 2 for the second half */
+let pzDuelHalfNo=1;                 /* Phase 2 flips this to 2 for the second half */
+let pzHalfArchive={};               /* {1:{me:[],opp:[]}} — finished halves for the progress bar */
+let pzHalfBase=0;                   /* dQ offset for the current half (0 for half 1, 5 for half 2) */
+let pzHalf1=null;                   /* {me,opp} scores captured at the first-half end */
+let pzHalf1Topic=null;             /* topic used in half 1 — disabled in half 2 */
+let pzTwoHalf=false;               /* true only for a real duel that runs two halves */
+const PZ_MAIN=['اطلاعات عمومی','فوتبال','سینما و سریال','علم و دانش'];
 let pzLastTick=-1;
 function pzDuelTimerBar(){
   const t=Math.max(0,Math.min(10,dTimeLeft)),frac=t/10;
@@ -4696,20 +4726,31 @@ function pzDuelTimerBar(){
 function pzDuelHud(){
   const half=document.getElementById('pzDuelHalf');if(half)half.textContent=(pzDuelHalfNo===2?'نیمهٔ دوم':'نیمهٔ اول');
   const qn=document.getElementById('pzDuelQnum');
-  if(qn)qn.textContent=(typeof suddenDeath!=='undefined'&&suddenDeath)?'⚡ مرگ ناگهانی':('سؤال '+fa(Math.min(5,(dQ||0)+1))+' از ۵');
+  if(qn)qn.textContent=(typeof suddenDeath!=='undefined'&&suddenDeath)?'⚡ مرگ ناگهانی':('سؤال '+fa(Math.min(5,Math.max(0,(dQ||0)-pzHalfBase)+1))+' از ۵');
   pzDuelProgressRender();pzDuelConnRender();
 }
 function pzDuelProgressRender(){
   const box=document.getElementById('pzDuelProgress');if(!box)return;
   if(box.children.length!==10){box.innerHTML='';for(let i=0;i<10;i++){const s=document.createElement('span');s.className='pzm-sq'+(i===5?' pzm-sq-gap':'');box.appendChild(s);}}
-  const sqs=box.querySelectorAll('.pzm-sq'),cur=(dQ||0);
-  for(let i=0;i<10;i++){
-    const sq=sqs[i];sq.className='pzm-sq'+(i===5?' pzm-sq-gap':'');sq.textContent='';
-    const group=i<5?1:2,idx=i<5?i:i-5;
-    if(group===pzDuelHalfNo){
-      if(idx<cur){const r=myResults[myResults.length-cur+idx];sq.classList.add(r==='ok'?'pzm-ok':'pzm-no');if(r!=='ok')sq.textContent='✕';}
-      else if(idx===cur&&idx<5){sq.classList.add('pzm-cur');sq.textContent='⏳';}
-    }else if(group<pzDuelHalfNo){sq.classList.add('pzm-ok');sq.style.opacity='.5';}
+  const sqs=box.querySelectorAll('.pzm-sq'),cur=Math.max(0,(dQ||0)-pzHalfBase),H=pzDuelHalfNo;
+  // Results for a given half: the active half reads the live arrays; finished
+  // halves come from the archive (Phase 2). Each square shows BOTH players —
+  // top strip = opponent, bottom strip = me.
+  function resFor(halfNo){
+    if(halfNo===H)return{me:myResults.slice(myResults.length-cur),opp:oppResults.slice(oppResults.length-cur)};
+    if(pzHalfArchive[halfNo])return pzHalfArchive[halfNo];
+    return{me:[],opp:[]};
+  }
+  const strip=(cls,r)=>'<div class="pzm-sqh '+cls+(r==='ok'?' sq-ok':(r==='no'?' sq-no':''))+'">'+(r==='no'?'✕':'')+'</div>';
+  for(let g=1;g<=2;g++){
+    const R=resFor(g),base=(g-1)*5;
+    for(let idx=0;idx<5;idx++){
+      const sq=sqs[base+idx];sq.className='pzm-sq'+((base+idx)===5?' pzm-sq-gap':'');
+      const isCur=(g===H&&idx===cur&&cur<5);
+      let html=strip('sq-opp',R.opp[idx])+strip('sq-me',R.me[idx]);
+      if(isCur){sq.classList.add('pzm-sq-cur');html+='<div class="pzm-sqcur">⏳</div>';}
+      sq.innerHTML=html;
+    }
   }
 }
 function pzDuelConnRender(){
@@ -7457,6 +7498,9 @@ function _pzQsValid(list){
 }
 const _origRDR=runDuelRound;
 runDuelRound=function(){
+  /* Fresh match → reset the two-half state before the (single) first half runs. */
+  pzDuelHalfNo=1; pzHalfBase=0; pzHalfArchive={}; pzHalf1=null; pzHalf1Topic=null;
+  pzTwoHalf=!!(pzRt.active&&pzRt.matchId);
   _origRDR();
   try{ if(pzRt.active&&pzRt.realOpp) pzApplyDuelNames(); }catch(e){}
   if(_pzQsValid(window._pzQs)){
@@ -7493,6 +7537,10 @@ function pzShowTossQ(){
 _runTossQuestion=function(){
   if(!(pzRt.active&&pzRt.matchId)) return _origRunToss();
   pzRt.tossRound=0; pzRt.tossWinner=false; pzRt.tossMe=null;
+  /* Reset the two-half state at the very START of each match (the half-1 topic
+     pick happens before runDuelRound, so it must be clean here). */
+  pzDuelHalfNo=1; pzHalfBase=0; pzHalfArchive={}; pzHalf1=null; pzHalf1Topic=null;
+  pzRt._matchTopics=null; pzTwoHalf=!!(pzRt.active&&pzRt.matchId);
   pzApplyDuelNames();
   pzShowTossQ();
 };
@@ -7539,24 +7587,27 @@ function pzTossServerDecide(){
      gone) → win by forfeit instead of hanging. Retries resolve in seconds. */
   pzRt.tossSafety=setTimeout(()=>{ if(!done){ done=true; clearInterval(pzRt.tossPoll); pzForfeitWin(); } },30000);
 }
-function pzShowWaitTopic(){
+function pzShowWaitTopic(half){
+  half=Math.max(1,Number(half)||1);
+  const dOn=document.getElementById('duel')&&document.getElementById('duel').classList.contains('active');
+  if(dOn) pzRenderWaitPanel(half);
   const top=document.getElementById('dTopic');
   if(top) top.textContent='⏳ '+((pzRt&&pzRt.oppName)||'حریف')+' در حال انتخاب موضوع است، منتظر بمان...';
   let done=false;
   const enter=async (topic)=>{
     if(done)return; done=true; clearInterval(pzRt.topicPoll); clearTimeout(pzRt.topicSafety); duelTopic=topic;
     if(top)top.textContent='📥 موضوع «'+pzTopicLabel(topic)+'» — در حال آماده‌سازی سوالات...';
-    await pzLoadTopicQuestions(topic);
-    pzStartBarrier(()=>runDuelRound());
+    if(half===1){ await pzLoadTopicQuestions(topic,false); pzStartBarrier(()=>runDuelRound(),0); }
+    else { await pzLoadTopicQuestions(topic,true); pzStartBarrier(()=>pzBeginHalf2(),91); }
   };
-  /* Server is the single source of truth: poll the match until the winner has
-     stored their chosen topic. No client-to-client rebroadcast. */
+  /* Server is the single source of truth: poll the match until the picker has
+     stored their chosen topic for THIS half. No client-to-client rebroadcast. */
   clearInterval(pzRt.topicPoll);
   pzRt.topicPoll=setInterval(async()=>{
     if(done||!pzRt.active){ clearInterval(pzRt.topicPoll); return; }
-    try{ const r=await pzApi('GET','/matches/'+pzRt.matchId+'/topic'); if(r.ok&&r.data&&r.data.topic) enter(r.data.topic); }catch(e){}
+    try{ const r=await pzApi('GET','/matches/'+pzRt.matchId+'/topic?half='+half); if(r.ok&&r.data&&r.data.topic) enter(r.data.topic); }catch(e){}
   },600);
-  /* Last-resort so the loser can never hang if the topic never lands. */
+  /* Last-resort so the waiting player can never hang if the topic never lands. */
   pzRt.topicSafety=setTimeout(()=>{ enter('__popular__'); },20000);
 }
 const _origPickTopic=pickTopic;
@@ -7567,13 +7618,21 @@ pickTopic=function(topic,mine){
     if(pzRt._topicPicked) return;
     pzRt._topicPicked=true;
     clearInterval(tpTimer); duelTopic=topic; sfx('found');
+    const half=pzDuelHalfNo;
+    if(half===1) pzHalf1Topic=topic;
     try{ document.querySelectorAll('#topicGrid .topic-btn').forEach(b=>{ b.disabled=true; b.style.pointerEvents='none'; if(b.textContent&&b.textContent.indexOf(topic)<0) b.style.opacity='.5'; }); }catch(_){}
     const top=document.getElementById('dTopic'); if(top)top.textContent='✅ موضوع «'+pzTopicLabel(topic)+'» — در حال آماده‌سازی سوالات...';
     (async()=>{
-      /* Winner stores the topic on the server; the loser reads it from there. */
-      if(pzRt.tossWinner){ try{ await pzApi('POST','/matches/'+pzRt.matchId+'/topic',{topic:topic}); }catch(e){} }
-      await pzLoadTopicQuestions(topic);
-      pzStartBarrier(()=>runDuelRound());
+      /* The picker for THIS half stores the topic on the server (half 1 = toss
+         winner, half 2 = toss loser); the waiting player reads it back. */
+      try{ await pzApi('POST','/matches/'+pzRt.matchId+'/topic',{topic:topic,half:half}); }catch(e){}
+      if(half===1){
+        await pzLoadTopicQuestions(topic,false);
+        pzStartBarrier(()=>runDuelRound(),0);
+      }else{
+        await pzLoadTopicQuestions(topic,true);
+        pzStartBarrier(()=>pzBeginHalf2(),91);
+      }
     })();
     return;
   }
@@ -7582,24 +7641,25 @@ pickTopic=function(topic,mine){
 function pzTopicLabel(t){ return (t==='__popular__')?'محبوب':(t||'عمومی'); }
 /* Start barrier: both players mark ready for round 0 and wait until BOTH are
    ready, so they enter the first question together (no 5–10s head start). */
-function pzStartBarrier(cb){
+function pzStartBarrier(cb,round){
   const mid=pzRt.matchId; if(!mid) return cb();
+  const rnd=Math.max(0,Math.floor(round||0));
   let done=false; const t0=Date.now();
-  const top=document.getElementById('dTopic'); if(top) top.textContent='⏳ منتظر آماده شدن حریف...';
+  const top=document.getElementById('dTopic'); if(top&&rnd===0) top.textContent='⏳ منتظر آماده شدن حریف...';
   const finish=()=>{ if(done)return; done=true; clearInterval(pzRt.readyPoll); cb(); };
-  pzApi('POST','/matches/'+mid+'/ready',{round:0}).catch(()=>{});
+  pzApi('POST','/matches/'+mid+'/ready',{round:rnd}).catch(()=>{});
   clearInterval(pzRt.readyPoll);
   pzRt.readyPoll=setInterval(async()=>{
     if(done||!pzRt.active){ clearInterval(pzRt.readyPoll); return; }
-    try{ const r=await pzApi('GET','/matches/'+mid+'/ready?round=0'); if(r.ok&&r.data&&r.data.allReady) return finish(); }catch(e){}
-    pzApi('POST','/matches/'+mid+'/ready',{round:0}).catch(()=>{});   /* resend if lost */
+    try{ const r=await pzApi('GET','/matches/'+mid+'/ready?round='+rnd); if(r.ok&&r.data&&r.data.allReady) return finish(); }catch(e){}
+    pzApi('POST','/matches/'+mid+'/ready',{round:rnd}).catch(()=>{});   /* resend if lost */
     if(Date.now()-t0>8000) return finish();   /* never hang */
   },500);
 }
 /* Fetch the 15 per-match questions FILTERED BY the chosen topic. Same matchId +
    same topic on both clients → byte-identical set in identical order, with no
    repeat until the topic's pool is exhausted. */
-async function pzLoadTopicQuestions(topic){
+async function pzLoadTopicQuestions(topic,half2){
   const mid=pzRt.matchId; if(!mid) return;
   const qp=(topic&&topic!=='__popular__')?('&topic='+encodeURIComponent(topic)):'';
   /* Retry the whole batch a couple of times: a one-sided fetch failure would put
@@ -7614,7 +7674,17 @@ async function pzLoadTopicQuestions(topic){
       if(q&&q.id&&Array.isArray(q.options)&&q.options.length>=4&&Number.isInteger(q.correctIndex)){ qs[i]={t:q.category||pzTopicLabel(topic),q:q.text||'',a:q.options.slice(0,4),c:q.correctIndex,_id:q.id}; }
       else break;
     }
-    if(qs.length>=5){ window._pzQs=qs; pzRt.topic=topic; console.log('[PZ] Loaded',qs.length,'questions for topic',pzTopicLabel(topic)); return; }
+    if(qs.length>=5){
+      if(half2){
+        /* Half 2: keep the 5 half-1 questions at 0-4 and append the half-2 topic's
+           questions at 5+ so the continuous round index (dQ 5-9) maps correctly and
+           round keys stay unique across the match. */
+        duelRoundQs=duelRoundQs.slice(0,5).concat(qs.map(q=>({t:q.t,q:q.q,a:q.a,c:q.c,_id:q._id})));
+        pzRt.topic2=topic;
+      }else{ window._pzQs=qs; pzRt.topic=topic; }
+      console.log('[PZ] Loaded',qs.length,'questions for topic',pzTopicLabel(topic),half2?'(half 2)':'');
+      return;
+    }
     await new Promise(r=>setTimeout(r,400));
   }
   console.warn('[PZ] topic',topic,'could not load a full set; keeping prior (matchId-only) set');
@@ -7628,16 +7698,37 @@ function pzTopicEmoji(name){
   const pool=['🧠','💡','🎯','🌟','📌','🔎','🎲','🧩','🏆','✨'];
   return pool[pzHash(String(name||''))%pool.length];
 }
-/* Show EXACTLY the 12 canonical categories (no random subset, no "popular"). */
+/* Deterministic per-match topic set: 2 "main" + 4 random, IDENTICAL on both
+   clients (seeded by matchId). The same 6 appear in both halves; the half-1
+   topic is disabled in half 2. */
+function pzSeededShuffle(arr,seed){
+  const a=arr.slice(); let s=(seed>>>0)||1;
+  for(let i=a.length-1;i>0;i--){ s=(s*1103515245+12345)&0x7fffffff; const j=s%(i+1); const tmp=a[i];a[i]=a[j];a[j]=tmp; }
+  return a;
+}
+function pzMatchTopics(){
+  if(pzRt._matchTopics) return pzRt._matchTopics;
+  const seed=pzHash(String(pzRt.matchId||'x'));
+  const mains=TOPICS.filter(t=>PZ_MAIN.indexOf(t[1])>=0);
+  const others=TOPICS.filter(t=>PZ_MAIN.indexOf(t[1])<0);
+  const pick2=pzSeededShuffle(mains,seed).slice(0,2);
+  const pick4=pzSeededShuffle(others,seed+7).slice(0,4);
+  const six=pzSeededShuffle(pick2.concat(pick4),seed+13);
+  pzRt._matchTopics=six; return six;
+}
+/* Show the 6 per-match topics. In half 2 the half-1 topic is disabled. */
 function pzRenderTopicChoices(){
   const g=document.getElementById('topicGrid'); if(!g) return;
   pzRt._topicPicked=false;
-  pzRt._topicChoices=TOPICS.map(t=>t[1]);
+  const six=pzMatchTopics();
+  pzRt._topicChoices=six.map(t=>t[1]).filter(name=>!(pzDuelHalfNo===2&&name===pzHalf1Topic));
   g.innerHTML='';
-  TOPICS.forEach(t=>{
+  six.forEach(t=>{
     const b=document.createElement('button'); b.className='topic-btn';
-    b.innerHTML='<span class="ti">'+t[0]+'</span>'+t[1];
-    b.onclick=()=>pickTopic(t[1],true);
+    const used=(pzDuelHalfNo===2&&t[1]===pzHalf1Topic);
+    b.innerHTML='<span class="ti">'+t[0]+'</span>'+t[1]+(used?'<span class="topic-used-tag">استفاده‌شده</span>':'');
+    if(used){ b.disabled=true; b.classList.add('topic-used'); }
+    else b.onclick=()=>pickTopic(t[1],true);
     g.appendChild(b);
   });
 }
@@ -7659,6 +7750,86 @@ openTopicPick=function(mine){
     }
   },1000);
 };
+
+/* ================= PHASE 2: two-half (نیمه اول/دوم) structure ================= */
+/* Status states render inside the mother-screen central area WITHOUT destroying
+   the question card's DOM hooks (dText/dAnswers/timer): we just hide the card and
+   show a sibling status node. */
+function pzShowStatus(html){
+  const s=document.getElementById('pzDuelStatus'),q=document.getElementById('pzDuelQCard');
+  if(!s)return; if(q)q.style.display='none'; s.innerHTML=html; s.style.display='flex';
+}
+function pzHideStatus(){
+  const s=document.getElementById('pzDuelStatus'),q=document.getElementById('pzDuelQCard');
+  if(s){ s.style.display='none'; s.innerHTML=''; } if(q)q.style.display='flex';
+}
+/* Waiting player's rich panel: opponent avatar/name/level/record + last-5 +
+   best-topics (graceful fallback when the backend has no history yet). */
+function pzRenderWaitPanel(half){
+  const av=(pzRt&&pzRt.oppAv)||oppAv||'🦊', nm=(pzRt&&pzRt.oppName)||oppName||'حریف';
+  const html=
+    '<div class="pzm-status-ico">🎯</div>'+
+    '<div class="pzm-status-title">حریف در حال انتخاب موضوع...</div>'+
+    '<div class="pzm-status-sub">لطفاً منتظر بمان'+(half===1?'<br><b style="color:var(--bolt)">نگران نباش! در نیمهٔ دوم انتخاب موضوع با تو خواهد بود.</b>':'')+'</div>'+
+    '<div class="pzm-oppcard">'+
+      '<div class="pzm-oppav">'+av+'</div>'+
+      '<div class="pzm-oppname">'+nm+'</div>'+
+      '<div class="pzm-oppmeta" id="pzOppMeta">در حال دریافت اطلاعات...</div>'+
+      '<div class="pzm-oppsec"><div class="pzm-oppsec-t">آخرین مسابقات</div><div class="pzm-opprow" id="pzOppLast">اطلاعات کافی موجود نیست</div></div>'+
+      '<div class="pzm-oppsec"><div class="pzm-oppsec-t">بهترین موضوع‌ها</div><div id="pzOppTopics" style="font-size:12px;color:var(--muted)">اطلاعات کافی موجود نیست</div></div>'+
+    '</div>';
+  pzShowStatus(html);
+  pzFetchOppInfo();
+}
+function pzFetchOppInfo(){
+  const oid=pzRt&&pzRt.oppId; if(!oid)return;
+  pzApi('GET','/users/'+oid+'/profile').then(r=>{
+    if(!r||!r.ok||!r.data)return;
+    const m=document.getElementById('pzOppMeta');
+    if(m) m.textContent='سطح '+fa(r.data.level||1)+(r.data.league?(' · '+r.data.league):'')+(r.data.winRate!=null?(' · نرخ برد '+fa(r.data.winRate)+'٪'):'');
+  }).catch(()=>{});
+}
+/* First half ended → archive results, show a transition, then (synced) move both
+   players into the half-2 topic phase. The match does NOT end here. */
+function pzEndOfFirstHalf(){
+  clearInterval(dTimer);
+  pzHalfArchive[1]={me:myResults.slice(),opp:oppResults.slice()};
+  const myOk=myResults.filter(r=>r==='ok').length, opOk=oppResults.filter(r=>r==='ok').length;
+  pzHalf1={me:myOk,opp:opOk};
+  pzHalf1Topic=duelTopic||pzHalf1Topic;
+  pzRenderHalfTransition();
+  setTimeout(()=>{ pzStartBarrier(()=>pzStartHalf2TopicPick(),90); },3500);
+}
+function pzRenderHalfTransition(){
+  const meN=(window.myName||'تو'), opN=(pzRt&&pzRt.oppName)||oppName||'حریف';
+  const h=pzHalf1||{me:0,opp:0}, iPickNext=!pzRt.tossWinner;
+  const html=
+    '<div class="pzm-status-ico">⏱️</div>'+
+    '<div class="pzm-status-title">پایان نیمهٔ اول</div>'+
+    '<div class="pzm-half-scores" style="direction:ltr">'+
+      '<div class="pzm-hs"><div class="pzm-hs-n">'+opN+'</div><div class="pzm-hs-v" style="color:var(--red)">'+fa(h.opp)+'</div><div class="pzm-hs-cw">✅ '+fa(h.opp)+' · ❌ '+fa(5-h.opp)+'</div></div>'+
+      '<div class="pzm-hs-sep">-</div>'+
+      '<div class="pzm-hs"><div class="pzm-hs-n">'+meN+'</div><div class="pzm-hs-v" style="color:var(--green)">'+fa(h.me)+'</div><div class="pzm-hs-cw">✅ '+fa(h.me)+' · ❌ '+fa(5-h.me)+'</div></div>'+
+    '</div>'+
+    '<div class="pzm-status-sub">نیمهٔ دوم به‌زودی آغاز می‌شود'+(iPickNext?'<br><b style="color:var(--bolt)">این بار انتخاب موضوع با توست!</b>':'<br>این بار انتخاب موضوع با حریف است.')+'</div>';
+  pzShowStatus(html); sfx('found'); vib([30,40,30]);
+}
+function pzStartHalf2TopicPick(){
+  pzDuelHalfNo=2; pzHalfBase=5;
+  myResults=[]; oppResults=[]; suddenDeath=false;
+  pzRt._topicPicked=false;
+  try{ pzDuelHud(); }catch(e){}
+  const iPick=!pzRt.tossWinner;   /* half-2 picker = the toss LOSER */
+  if(iPick){ pzHideStatus(); openTopicPick(true); }
+  else { pzShowWaitTopic(2); }
+}
+function pzBeginHalf2(){
+  pzDuelHalfNo=2; pzHalfBase=5; suddenDeath=false;
+  if(dQ<5) dQ=5;
+  pzRt._topicPicked=false;
+  go('duel'); pzHideStatus(); updateDuelScore();
+  loadDuelQ(false);
+}
 
 /* Real-duel ready gate: a 5s countdown with NO "شروع سریع" button that
    auto-advances — so both players move to the next question together. Overrides
@@ -7713,9 +7884,15 @@ function pzGoldenQuestionModal(cb){
   showAaaModal({ iconHTML:'🏆', title:'<span style="font-size:26px;font-weight:900">بازی مساوی شد</span>', sub:sub, seconds:5, hideActions:true, dismissible:false, onDone:cb });
 }
 function pzAutoAdvance(myRight,oppRight){
+  const within=(dQ||0)-pzHalfBase;
   const next=(label)=>pzResultGate(myRight,oppRight,()=>loadDuelQWithFocus(),label);
   if(!suddenDeath){
-    if(dQ>=5){
+    if(within>=5){
+      /* End of the FIRST half of a two-half match → show the last result, then a
+         transition screen, then the second half. The match does NOT end here even
+         if the half is tied. */
+      if(pzTwoHalf&&pzDuelHalfNo===1){ return pzResultGate(myRight,oppRight,()=>pzEndOfFirstHalf(),'پایان نیمهٔ اول'); }
+      /* End of half 2 (or a single-half match) → decide by the TOTAL score. */
       if(myScore>oppScore) return duelRoundWin();
       if(myScore<oppScore) return duelRoundLose();
       suddenDeath=true;
