@@ -1102,21 +1102,21 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
 @keyframes pzmCur{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}
 .pzm-central{flex:1;display:flex;flex-direction:column;padding:8px 16px 4px;position:relative;z-index:2;overflow-y:auto}
 /* Question bottom sheet */
-.pzm-sheet{position:absolute;left:0;right:0;bottom:0;height:85%;z-index:7;display:flex;flex-direction:column;padding:8px 20px calc(14px + env(safe-area-inset-bottom,0px));background:linear-gradient(180deg,#1e1e25,#141419);border-radius:28px 28px 0 0;box-shadow:0 -12px 34px rgba(0,0,0,.5);border-top:1.5px solid rgba(255,255,255,.08);transform:translateY(103%);transition:transform .42s cubic-bezier(.2,.85,.25,1);overflow-y:auto}
+.pzm-sheet{position:absolute;left:0;right:0;bottom:0;height:86%;z-index:7;display:flex;flex-direction:column;padding:8px 20px calc(12px + env(safe-area-inset-bottom,0px));background:linear-gradient(180deg,#1e1e25,#141419);border-radius:28px 28px 0 0;box-shadow:0 -12px 34px rgba(0,0,0,.5);border-top:1.5px solid rgba(255,255,255,.08);transform:translateY(103%);transition:transform .42s cubic-bezier(.2,.85,.25,1);overflow:hidden}
 .pzm-sheet.up{transform:translateY(0)}
 .pzm-sheet-grip{width:44px;height:5px;border-radius:3px;background:rgba(255,255,255,.2);margin:2px auto 6px;flex:0 0 auto}
 .pzm-sheet .q-topic{align-self:center;flex:0 0 auto}
 /* Question text: large, bold, wide, centered (item 1). */
-.pzm-qtext{margin:12px 2px 4px;font-size:22px;font-weight:800;line-height:1.6;text-align:center;flex:0 0 auto;word-break:normal;overflow-wrap:break-word}
+.pzm-qtext{margin:8px 2px 2px;font-size:clamp(17px,4.6vw,22px);font-weight:800;line-height:1.5;text-align:center;flex:0 0 auto;word-break:normal;overflow-wrap:break-word;overflow-y:auto;max-height:34%}
 /* Answers: single column, full width, tall, evenly spaced, touch feedback. */
 .pzm-answers{margin-top:6px;flex:0 0 auto}
-.pzm-sheet .pzm-answers{display:flex!important;flex-direction:column!important;grid-template-columns:none!important;gap:12px!important;width:100%}
-.pzm-sheet .pzm-answers .ans{display:flex;align-items:center;gap:10px;width:100%!important;max-width:100%!important;min-height:62px!important;font-size:15.5px!important;line-height:1.5!important;padding:14px 16px!important;border-radius:16px!important;text-align:right;overflow:visible!important;transition:transform .12s ease,box-shadow .12s ease}
+.pzm-sheet .pzm-answers{display:flex!important;flex-direction:column!important;grid-template-columns:none!important;gap:10px!important;width:100%;flex:1 1 auto;min-height:0;justify-content:center}
+.pzm-sheet .pzm-answers .ans{display:flex;align-items:center;gap:10px;width:100%!important;max-width:100%!important;flex:1 1 0;min-height:46px!important;max-height:72px!important;font-size:15px!important;line-height:1.4!important;padding:10px 16px!important;border-radius:16px!important;text-align:right;overflow:hidden!important;transition:transform .12s ease,box-shadow .12s ease}
 .pzm-sheet .pzm-answers .ans .atxt{overflow-wrap:anywhere;white-space:normal}
 .pzm-sheet .pzm-answers .ans:active{transform:scale(.975)}
 .pzm-sheet .pzm-powerups{margin-top:auto;padding-top:14px}
 #duel.sheet-up .pzm-prog-wrap{opacity:0;pointer-events:none;transition:opacity .3s}
-.pzm-timer{display:flex;align-items:center;justify-content:center;margin:16px 0 14px;height:48px;direction:ltr}
+.pzm-timer{display:flex;align-items:center;justify-content:center;margin:10px 0 10px;height:44px;flex:0 0 auto;direction:ltr}
 .pzm-timer-bar{flex:1;height:10px;border-radius:6px;overflow:hidden;background:rgba(255,255,255,.1);position:relative;max-width:38%}
 .pzm-timer-bar i{position:absolute;top:0;bottom:0;left:0;width:100%;background:linear-gradient(90deg,var(--green),var(--bolt));transition:transform .95s linear}
 .pzm-timer-left{margin-right:10px}
@@ -1164,6 +1164,18 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
 .pzm-oppsec{margin-top:12px;text-align:right}
 .pzm-oppsec-t{font-size:12px;font-weight:900;color:var(--bolt);margin-bottom:5px}
 .pzm-opprow{display:flex;gap:5px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
+.pzm-oppstats{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-top:8px}
+.pzm-stat{font-size:11px;font-weight:900;padding:4px 9px;border-radius:100px;border:1.5px solid #000}
+.pzm-stat.ok{background:var(--ok-soft,rgba(51,217,124,.16));color:var(--green)}
+.pzm-stat.no{background:var(--red-soft,rgba(230,69,51,.16));color:var(--red)}
+.pzm-stat.y{background:rgba(255,210,31,.14);color:var(--bolt)}
+.pzm-wl{font-size:10.5px;font-weight:900;padding:3px 8px;border-radius:8px;border:1.5px solid #000}
+.pzm-wl.w{background:var(--green);color:#053}
+.pzm-wl.l{background:var(--red);color:#fff}
+.pzm-wl.d{background:#888;color:#fff}
+.pzm-topics{display:flex;flex-direction:column;gap:4px}
+.pzm-trow{display:flex;justify-content:space-between;align-items:center;font-size:12px;font-weight:800;color:var(--text)}
+.pzm-trow b{color:var(--green)}
 /* disabled (already-used) topic button in half 2 */
 .topic-btn.topic-used{opacity:.42;filter:grayscale(.7);position:relative;cursor:not-allowed}
 .topic-used-tag{display:block;font-size:10px;font-weight:900;color:var(--red);margin-top:3px}
@@ -2794,6 +2806,37 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
 #duelScore{direction:ltr!important;unicode-bidi:isolate!important;display:inline-flex!important;flex-direction:row!important;align-items:center!important;justify-content:center!important;gap:5px!important;min-width:72px!important;max-width:78px!important;height:34px!important;padding:3px 5px!important;border:2px solid #000;border-radius:13px;background:rgba(0,0,0,.30);box-shadow:0 3px 0 #000;font-size:16px!important;line-height:1!important;flex:0 0 74px!important;white-space:nowrap!important}.score-side{display:inline-grid;place-items:center;min-width:20px;font-weight:900;line-height:1}.score-me{color:var(--ok)!important}.score-opp{color:var(--bad)!important}.score-sep{color:var(--muted);font-weight:900;line-height:1}
 #duel .q-body{padding-left:12px!important;padding-right:12px!important;box-sizing:border-box;max-width:100%;overflow-x:hidden}#duel .q-text{max-width:100%;box-sizing:border-box;overflow-wrap:anywhere}
 @media(max-width:370px){.duel-score-row{padding-left:7px!important;padding-right:7px!important;gap:3px!important}.duel-player-box{max-width:96px!important;flex-basis:96px!important}.duel-mini-av{width:33px!important;height:33px!important;flex-basis:33px!important}.duel-player-meta{max-width:58px!important}.duel-player-meta b{max-width:35px;font-size:10.5px!important}.duel-side-score{min-width:20px;height:18px;font-size:10px}.pen-slot{width:11px!important;height:11px!important}.pen-slots{gap:2px!important}#duelScore{min-width:64px!important;max-width:68px!important;flex-basis:66px!important;font-size:14px!important;gap:3px!important}}
+/* ===== PREMIUM DUEL HERO BUTTON (primary action) ===== */
+.duel-hero{position:relative;width:100%;display:flex;align-items:center;gap:14px;padding:15px 18px;margin:2px 0 14px;border:2.5px solid #000;border-radius:22px;background:linear-gradient(120deg,#FF7A3D 0%,#FF3D6E 55%,#B24BFF 100%);box-shadow:0 6px 0 #000,0 12px 30px rgba(255,61,110,.5);overflow:hidden;cursor:pointer;transition:transform .12s ease,box-shadow .12s ease;animation:duelHeroPulse 2.4s ease-in-out infinite}
+.duel-hero:active{transform:translateY(4px);box-shadow:0 2px 0 #000,0 6px 18px rgba(255,61,110,.4)}
+@keyframes duelHeroPulse{0%,100%{box-shadow:0 6px 0 #000,0 12px 30px rgba(255,61,110,.42)}50%{box-shadow:0 6px 0 #000,0 14px 44px rgba(255,61,110,.72)}}
+.duel-hero .dh-glow{position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.3),transparent);transform:translateX(-120%);pointer-events:none;animation:dhShine 2.9s ease-in-out infinite}
+@keyframes dhShine{0%{transform:translateX(-120%)}55%,100%{transform:translateX(120%)}}
+.duel-hero .dh-play{flex:0 0 auto;width:54px;height:54px;border-radius:50%;background:rgba(255,255,255,.96);display:grid;place-items:center;box-shadow:0 3px 0 rgba(0,0,0,.32),0 0 22px rgba(255,255,255,.55);z-index:1}
+.duel-hero .dh-play svg{width:22px;height:22px;margin-left:3px;fill:#FF3D6E}
+.duel-hero .dh-txt{flex:1;text-align:right;z-index:1;color:#fff;text-shadow:0 2px 3px rgba(0,0,0,.35);min-width:0}
+.duel-hero .dh-txt b{display:block;font-size:20px;font-weight:900;line-height:1.25}
+.duel-hero .dh-txt small{font-size:12px;font-weight:800;opacity:.96}
+.duel-hero .dh-bolt{font-size:24px;z-index:1;filter:drop-shadow(0 2px 2px rgba(0,0,0,.4));animation:dhBolt 1.2s ease-in-out infinite}
+@keyframes dhBolt{50%{transform:scale(1.2) rotate(-8deg)}}
+/* ===== VICTORY celebration overlay ===== */
+.pz-victory{position:absolute;inset:0;z-index:120;display:grid;place-items:center;overflow:hidden;background:radial-gradient(circle at 50% 40%,rgba(255,210,31,.3),rgba(8,8,12,.94) 72%);animation:pzvIn .3s ease}
+.pz-victory.out{animation:pzvOut .45s ease forwards}
+@keyframes pzvIn{from{opacity:0}to{opacity:1}}@keyframes pzvOut{to{opacity:0}}
+.pzv-flash{position:absolute;inset:0;background:radial-gradient(circle,rgba(255,255,255,.9),transparent 30%);opacity:0;animation:pzvFlash .6s ease}
+@keyframes pzvFlash{0%{opacity:.9;transform:scale(.2)}100%{opacity:0;transform:scale(2.2)}}
+.pzv-rays{position:absolute;width:620px;height:620px;background:conic-gradient(from 0deg,transparent 0 10deg,rgba(255,210,31,.22) 10deg 20deg,transparent 20deg 40deg);border-radius:50%;animation:pzvRays 9s linear infinite;opacity:.65}
+@keyframes pzvRays{to{transform:rotate(360deg)}}
+.pzv-text{position:relative;font-size:52px;font-weight:900;color:#FFD21F;text-shadow:0 0 30px rgba(255,210,31,.7),0 4px 0 #000;letter-spacing:2px;animation:pzvPop .6s cubic-bezier(.2,1.5,.3,1)}
+.pzv-sub{position:relative;font-size:22px;font-weight:900;color:#fff;letter-spacing:6px;opacity:.92;margin-top:2px;text-shadow:0 2px 8px rgba(0,0,0,.6);animation:pzvPop .75s cubic-bezier(.2,1.5,.3,1)}
+@keyframes pzvPop{0%{transform:scale(.3) rotate(-6deg);opacity:0}70%{transform:scale(1.15) rotate(2deg)}100%{transform:scale(1);opacity:1}}
+.pzv-conf{position:absolute;top:-24px;width:11px;height:14px;border-radius:2px;font-size:22px;line-height:1;pointer-events:none;animation:pzvFall calc(1.7s + var(--d)) ease-in var(--d) forwards}
+.pzv-conf.coin{width:auto;height:auto;background:none!important}
+@keyframes pzvFall{to{transform:translate(var(--x),110vh) rotate(var(--rot));opacity:.15}}
+/* inline form validation */
+.input.err{border-color:var(--red)!important;box-shadow:0 0 0 2px rgba(230,69,51,.25)!important}
+.field-err{color:var(--red);font-size:11.5px;font-weight:800;line-height:1.5;margin-top:5px;min-height:0;display:none}
+.field-err.show{display:block;animation:pzmFade .2s ease}
 
 </style>
 </head>
@@ -2886,8 +2929,8 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
     <section class="screen pad" id="register">
       <div class="topbar" style="padding:0 0 12px;background:none"><button class="iconbtn" onclick="go('otp')">→</button><h1>تکمیل اطلاعات</h1></div>
       <p style="color:var(--muted);font-size:13px;margin-bottom:20px">این اطلاعات توی پروفایل و رنکینگ نمایش داده می‌شه</p>
-      <div class="field"><label>نام و نام خانوادگی</label><input class="input" id="regFullName" placeholder="شهاب ساعدی"></div>
-      <div class="field"><label>نام کاربری (یکتا)</label><input class="input" id="regUsername" placeholder="shahab_9421" dir="ltr"></div>
+      <div class="field"><label>نام و نام خانوادگی</label><input class="input" id="regFullName" placeholder="نام و نام خانوادگی را به فارسی وارد کنید" oninput="clearFieldErr('regFullName')"><div class="field-err" id="errFullName"></div></div>
+      <div class="field"><label>نام کاربری (یکتا)</label><input class="input" id="regUsername" placeholder="نام کاربری را با حروف انگلیسی وارد کنید" dir="ltr" oninput="clearFieldErr('regUsername')"><div class="field-err" id="errUsername"></div></div>
       <div class="field"><label>کد معرف (اختیاری)</label><input class="input" id="regReferral" placeholder="کد دوستت رو وارد کن و جایزه بگیر" dir="ltr"></div>
       <div class="card" style="display:flex;gap:12px;align-items:center;background:linear-gradient(180deg,#FFDD5C,#F1B211);color:var(--gold-ink);margin-bottom:20px">
         <span style="font-size:26px">🎁</span><div style="font-size:13px;font-weight:700;line-height:1.6">با هر دوستی که دعوت کنی، هر دو <b>پاداش نقدی</b> می‌گیرید!</div></div>
@@ -3014,8 +3057,13 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
           </div>
         </div>
 
-        <div class="section-title">حالت‌های بازی</div>
-        <div class="mode-pill" onclick="enterMode('survivor')"><div class="mi">🏆</div><div class="mt"><b>دوئل ۱به‌۱ ⚡</b><span>شاخ‌به‌شاخ · برنده پول رو دو برابر می‌کنه</span></div><span style="font-size:18px">‹</span></div>
+        <button class="duel-hero" onclick="enterMode('survivor')" aria-label="شروع دوئل">
+          <span class="dh-glow"></span>
+          <span class="dh-play"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></span>
+          <span class="dh-txt"><b>دوئل ۱به‌۱</b><small>شروع سریع مسابقه · شاخ‌به‌شاخ، برنده پول رو دوبرابر می‌کنه</small></span>
+          <span class="dh-bolt">⚡</span>
+        </button>
+        <div class="section-title">حالت‌های دیگر</div>
         <div class="mode-pill" onclick="enterMode('arena')"><div class="mi">⚔️</div><div class="mt"><b>آخرین بازمانده 🏆</b><span>۱۲ سوال حذفی · بمون تا جایزه مال تو شه</span></div><span style="font-size:18px">‹</span></div>
         <div class="mode-pill" onclick="enterMode('consensus')"><div class="mi">🤝</div><div class="mt"><b>همه یا هیچ 🤝</b><span>تیمی بازی کن · سرنوشت با رأی جمع</span></div><span style="font-size:18px">‹</span></div>
         <div class="league-cta" onclick="openLeagues()">
@@ -4901,6 +4949,7 @@ function coinHTML(n){return '<span class="free-coin-inline"><span>+'+fa(n)+'</sp
 const CP_AUTO_SECONDS=10; /* قابل تنظیم از پنل مدیریت */
 let cpTimer,cpLeft=10;
 function showCheckpoint(kind){
+  if(kind==='duel'){ try{ pzVictoryAnim(); }catch(e){} }   /* winning a duel stage → VICTORY */
   document.getElementById('voteCard').style.display='none';
   const coinReward=practiceCoinRewardForProgress(kind);
   document.getElementById('cpPrize').innerHTML=(userPlan==='free'?coinHTML(coinReward):fa(prize)+' <small style="font-size:16px">تومان</small>');
@@ -5052,8 +5101,29 @@ function animatePracticeCoinReward(amount,before,after){
 }
 
 /* ================= END GAME ================= */
+/* Full-screen VICTORY celebration — shown ONLY to the winner, over the result. */
+function pzVictoryAnim(){
+  const ph=document.querySelector('.phone'); if(!ph||ph.querySelector('.pz-victory')) return;
+  const ov=document.createElement('div'); ov.className='pz-victory';
+  ov.innerHTML='<div class="pzv-flash"></div><div class="pzv-rays"></div><div class="pzv-text">پیروزی</div><div class="pzv-sub">VICTORY</div>';
+  ph.appendChild(ov);
+  const emo=['🪙','💰','💵','🎉','✨'];
+  for(let i=0;i<44;i++){ const c=document.createElement('div'); const coin=(i%2===0);
+    c.className='pzv-conf'+(coin?' coin':''); if(coin)c.textContent=emo[i%emo.length];
+    else c.style.background=['#FFD21F','#33D97C','#5DB7EC','#FF5A48','#B24BFF'][i%5];
+    c.style.left=(Math.random()*100)+'%';
+    c.style.setProperty('--d',(Math.random()*0.6).toFixed(2)+'s');
+    c.style.setProperty('--x',(Math.random()*140-70).toFixed(0)+'px');
+    c.style.setProperty('--rot',(Math.random()*720-360).toFixed(0)+'deg');
+    ov.appendChild(c);
+  }
+  try{ sfx('found'); setTimeout(()=>sfx('correct'),240); setTimeout(()=>sfx('correct'),520); }catch(e){}
+  try{ vib([40,60,120,60,160]); }catch(e){}
+  setTimeout(()=>{ ov.classList.add('out'); setTimeout(()=>{try{ov.remove();}catch(e){}},480); },2600);
+}
 function endGame(won,amount,isWithdraw,customSub){
   clearInterval(timer);clearInterval(dTimer);
+  if(won){ try{ pzVictoryAnim(); }catch(e){} }   /* full-screen VICTORY (winner only) */
   /* Win/lose character image (happy on win, sad on loss). Falls back to the SVG
      mascot if the image file hasn't been uploaded to the web root yet. */
   (function(){ const rc=document.getElementById('resultChar'), ms=document.getElementById('mascotResult');
@@ -7241,27 +7311,34 @@ function _pzNeedsRegister(){
   const un=(_usr.username||'');
   return (!dn || dn==='بازیکن جدید') || /^user_\d+$/.test(un);
 }
+/* Everywhere in the app the player is shown by USERNAME only (never the display
+   name) — one consistent identity across header, profile, leaderboard, duel, etc. */
 function pzDisplayName(){
   if(!_usr) return 'بازیکن';
-  const dn=(_usr.displayName||'').trim();
-  if(dn && dn!=='بازیکن جدید') return dn;
-  return _usr.username || 'بازیکن';
+  return (_usr.username||'').trim() || 'بازیکن';
 }
 function applyMyName(){
-  const n=pzDisplayName(); window.myName=n;
-  const uid=(_usr&&_usr.username&&!/^user_\d+$/.test(_usr.username))?_usr.username:n; window.myUserId=uid;
-  /* Header/profile show the name; in-game labels show the User ID (never "تو"). */
+  const n=pzDisplayName(); window.myName=n; window.myUserId=n;
   ['hdrName','profName'].forEach(id=>{const el=document.getElementById(id); if(el) el.textContent=n;});
   const pu=document.getElementById('profUser'); if(pu) pu.textContent='@'+((_usr&&_usr.username)||'player');
-  ['duelMeName','duelMeName2'].forEach(id=>{const el=document.getElementById(id); if(el) el.textContent=uid;});
+  ['duelMeName','duelMeName2'].forEach(id=>{const el=document.getElementById(id); if(el) el.textContent=n;});
   try{ pzLoadLifelines(); }catch(e){}
 }
+/* Inline field-error helpers (red border + message under the field). */
+function setFieldErr(inputId,errId,msg){ const i=document.getElementById(inputId),e=document.getElementById(errId); if(i)i.classList.add('err'); if(e){e.textContent=msg;e.classList.add('show');} }
+function clearFieldErr(inputId){ const i=document.getElementById(inputId); if(i)i.classList.remove('err'); const e=document.getElementById('err'+inputId.replace(/^reg/,'')); if(e)e.classList.remove('show'); }
 async function submitRegister(){
   const full=(document.getElementById('regFullName')?.value||'').trim();
   const uname=(document.getElementById('regUsername')?.value||'').trim();
   const ref=(document.getElementById('regReferral')?.value||'').trim();
-  if(full.length<2){toast('نام و نام خانوادگی را وارد کن');return;}
-  if(!/^[A-Za-z0-9_]{3,20}$/.test(uname)){toast('نام کاربری: ۳ تا ۲۰ حرف انگلیسی، عدد یا _');return;}
+  /* Validate: full name required + Persian only; username required + English only. */
+  let ok=true;
+  clearFieldErr('regFullName'); clearFieldErr('regUsername');
+  if(!full){ setFieldErr('regFullName','errFullName','نام و نام خانوادگی الزامی است'); ok=false; }
+  else if(!/^[؀-ۿ‌\s]+$/.test(full)){ setFieldErr('regFullName','errFullName','لطفاً نام و نام خانوادگی را به فارسی وارد کنید'); ok=false; }
+  if(!uname){ setFieldErr('regUsername','errUsername','نام کاربری الزامی است'); ok=false; }
+  else if(!/^[A-Za-z0-9_]{3,20}$/.test(uname)){ setFieldErr('regUsername','errUsername','نام کاربری باید فقط با حروف انگلیسی وارد شود (۳ تا ۲۰ کاراکتر)'); ok=false; }
+  if(!ok){ try{sfx('wrong');vib([40,30,40]);}catch(e){} return; }
   const btn=document.querySelector('#register .btn-primary'); const _t=btn?btn.textContent:'';
   if(btn){btn.disabled=true;btn.textContent='در حال ذخیره...';}
   const r=await pzApi('PATCH','/users/me',{displayName:full,username:uname,referralCode:ref});
@@ -7593,7 +7670,8 @@ async function _pzMatchFound(mid){
   if(!r.ok){toast('خطا در ورود');go('home');return;}
 
   /* Set opponent from the REAL backend player package (fixes wrong/fake names) */
-  const opp=(r.data.players||[]).find(p=>p.userId!==_usr?.id)||r.data.players?.[1]||{};
+  const _myid=(typeof pzWsMyId!=='undefined'&&pzWsMyId)||_usr?.id;
+  const opp=(r.data.players||[]).find(p=>String(p.userId)!==String(_myid))||r.data.players?.[1]||{};
   if(opp&&opp.userId) pzRt.oppId=opp.userId;
   pzRt.realOpp=true;
   pzRt.oppName=(opp&&opp.username)?opp.username:'حریف';
@@ -7924,25 +8002,31 @@ function pzHideStatus(){
 function pzRenderWaitPanel(half){
   const av=(pzRt&&pzRt.oppAv)||oppAv||'🦊', nm=(pzRt&&pzRt.oppName)||oppName||'حریف';
   const html=
-    '<div class="pzm-status-ico">🎯</div>'+
-    '<div class="pzm-status-title">حریف در حال انتخاب موضوع...</div>'+
-    '<div class="pzm-status-sub">لطفاً منتظر بمان'+(half===1?'<br><b style="color:var(--bolt)">نگران نباش! در نیمهٔ دوم انتخاب موضوع با تو خواهد بود.</b>':'')+'</div>'+
+    '<div class="pzm-status-ico">🔍</div>'+
+    '<div class="pzm-status-title">حریف خود را بیشتر بشناس</div>'+
+    '<div class="pzm-status-sub">حریف در حال انتخاب موضوع است...'+(half===1?'<br><b style="color:var(--bolt)">در نیمهٔ دوم انتخاب موضوع با توست.</b>':'')+'</div>'+
     '<div class="pzm-oppcard">'+
       '<div class="pzm-oppav">'+av+'</div>'+
-      '<div class="pzm-oppname">'+nm+'</div>'+
-      '<div class="pzm-oppmeta" id="pzOppMeta">در حال دریافت اطلاعات...</div>'+
-      '<div class="pzm-oppsec"><div class="pzm-oppsec-t">آخرین مسابقات</div><div class="pzm-opprow" id="pzOppLast">اطلاعات کافی موجود نیست</div></div>'+
-      '<div class="pzm-oppsec"><div class="pzm-oppsec-t">بهترین موضوع‌ها</div><div id="pzOppTopics" style="font-size:12px;color:var(--muted)">اطلاعات کافی موجود نیست</div></div>'+
+      '<div class="pzm-oppname">@'+frEsc(nm)+'</div>'+
+      '<div class="pzm-oppmeta" id="pzOppMeta">در حال دریافت آمار...</div>'+
+      '<div class="pzm-oppstats" id="pzOppStats"></div>'+
+      '<div class="pzm-oppsec"><div class="pzm-oppsec-t">آخرین مسابقات</div><div class="pzm-opprow" id="pzOppLast">—</div></div>'+
+      '<div class="pzm-oppsec"><div class="pzm-oppsec-t">بهترین موضوع‌ها</div><div class="pzm-topics" id="pzOppTopics">—</div></div>'+
     '</div>';
   pzShowStatus(html);
   pzFetchOppInfo();
 }
 function pzFetchOppInfo(){
   const oid=pzRt&&pzRt.oppId; if(!oid)return;
-  pzApi('GET','/users/'+oid+'/profile').then(r=>{
-    if(!r||!r.ok||!r.data)return;
-    const m=document.getElementById('pzOppMeta');
-    if(m) m.textContent='سطح '+fa(r.data.level||1)+(r.data.league?(' · '+r.data.league):'')+(r.data.winRate!=null?(' · نرخ برد '+fa(r.data.winRate)+'٪'):'');
+  pzApi('GET','/users/'+oid+'/stats').then(r=>{
+    if(!r||!r.ok||!r.data)return; const d=r.data;
+    const m=document.getElementById('pzOppMeta'); if(m) m.textContent='سطح '+fa(d.level||1)+' · '+fa(d.matches||0)+' مسابقه';
+    const s=document.getElementById('pzOppStats');
+    if(s) s.innerHTML='<span class="pzm-stat ok">برد '+fa(d.wins||0)+'</span><span class="pzm-stat no">باخت '+fa(d.losses||0)+'</span><span class="pzm-stat y">نرخ برد '+fa(d.winRate||0)+'٪</span>';
+    const last=document.getElementById('pzOppLast');
+    if(last){ last.innerHTML=(d.last5&&d.last5.length)? d.last5.map(x=>'<span class="pzm-wl '+(x==='W'?'w':(x==='L'?'l':'d'))+'">'+(x==='W'?'برد':(x==='L'?'باخت':'م'))+'</span>').join('') : '<span style="color:var(--muted);font-size:12px">اطلاعات کافی موجود نیست</span>'; }
+    const tp=document.getElementById('pzOppTopics');
+    if(tp){ tp.innerHTML=(d.topTopics&&d.topTopics.length)? d.topTopics.map(t=>'<div class="pzm-trow"><span>'+frEsc(t.category)+'</span><b>'+fa(t.pct)+'٪</b></div>').join('') : '<span style="color:var(--muted);font-size:12px">اطلاعات کافی موجود نیست</span>'; }
   }).catch(()=>{});
 }
 /* First half ended → archive results, show a transition, then (synced) move both
