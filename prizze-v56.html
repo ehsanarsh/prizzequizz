@@ -5792,12 +5792,21 @@ async function frLoadMessages(id){
     f.unread=0;
   }
 }
+/* Update ONLY the message list — never the input — so typing is never disturbed. */
+function renderChatMessages(id){
+  const f=FRIENDS_DATA.find(x=>x.id===id),b=document.getElementById('chatBody');
+  if(!f||!b) return;
+  const sig=f.m.length+'|'+(((f.m[f.m.length-1]||[])[1])||'');
+  if(b.dataset.sig===sig) return;                 /* nothing changed → don't disturb */
+  b.innerHTML=f.m.map(m=>'<div class="msg '+m[0]+'">'+m[1]+'<small>'+m[2]+'</small></div>').join('');
+  b.dataset.sig=sig; b.scrollTop=b.scrollHeight;
+}
 function frStartChatPoll(id){
   clearInterval(_frChatPoll);
   _frChatPoll=setInterval(async()=>{
     if(frActiveChat!==id){ clearInterval(_frChatPoll); return; }
     await frLoadMessages(id);
-    if(frActiveChat===id) renderChatView(id);
+    if(frActiveChat===id) renderChatMessages(id);   /* messages only — keeps the input + focus intact */
   },3000);
 }
 function renderFriendsHub(){
@@ -5844,9 +5853,10 @@ async function openFriendChat(id){frActiveChat=id;frActiveTab='chats';document.q
 function renderChatView(id){
   const c=document.getElementById('friendsContent'),f=FRIENDS_DATA.find(x=>x.id===id);if(!c||!f)return;
   c.innerHTML='<div class="chat-view"><div class="chat-head"><button class="iconbtn" style="width:38px;height:38px;border-radius:12px" onclick="frActiveChat=null;renderFriendsHub()">→</button><div class="fav" onclick="showFriendProfile(\''+f.id+'\')">'+f.a+'</div><div style="flex:1" onclick="showFriendProfile(\''+f.id+'\')"><b>'+f.n+'</b><span>'+f.s+' · @'+f.u+'</span></div><button class="iconbtn" style="width:38px;height:38px;border-radius:12px" onclick="friendMore(\''+f.id+'\')">⋯</button></div><div class="chat-body" id="chatBody">'+f.m.map(m=>'<div class="msg '+m[0]+'">'+m[1]+'<small>'+m[2]+'</small></div>').join('')+'</div><div class="chat-send"><input class="input" id="chatInput" placeholder="پیام بنویس..." onkeydown="if(event.key===\'Enter\')sendChatMsg()"><button class="btn btn-primary" onclick="sendChatMsg()">➤</button></div></div>';
-  setTimeout(()=>{const b=document.getElementById('chatBody');if(b)b.scrollTop=b.scrollHeight;const i=document.getElementById('chatInput');if(i)i.focus();},60);
+  const b=document.getElementById('chatBody'); if(b){b.dataset.sig=f.m.length+'|'+(((f.m[f.m.length-1]||[])[1])||'');}
+  setTimeout(()=>{const bb=document.getElementById('chatBody');if(bb)bb.scrollTop=bb.scrollHeight;},60);
 }
-async function sendChatMsg(){const i=document.getElementById('chatInput'),id=frActiveChat,f=FRIENDS_DATA.find(x=>x.id===id);if(!i||!f)return;const txt=i.value.trim();if(!txt)return;i.value='';f.m.push(['me',frEsc(txt),'الان']);f.last=txt;renderChatView(id);const r=await pzApi('POST','/friends/'+id+'/messages',{body:txt});if(!r||!r.ok){toast((r&&r.error&&r.error.message)||'پیام ارسال نشد');}await frLoadMessages(id);if(frActiveChat===id)renderChatView(id);}
+async function sendChatMsg(){const i=document.getElementById('chatInput'),id=frActiveChat,f=FRIENDS_DATA.find(x=>x.id===id);if(!i||!f)return;const txt=i.value.trim();if(!txt)return;i.value='';f.m.push(['me',frEsc(txt),'الان']);f.last=txt;renderChatMessages(id);i.focus();const r=await pzApi('POST','/friends/'+id+'/messages',{body:txt});if(!r||!r.ok){toast((r&&r.error&&r.error.message)||'پیام ارسال نشد');}await frLoadMessages(id);if(frActiveChat===id)renderChatMessages(id);}
 function inviteFriend(id){const f=FRIENDS_DATA.find(x=>x.id===id);if(!f)return;toast('دعوت بازی برای '+f.n+' ارسال شد 🎮');sfx('found');}
 async function sendFriendRequest(){const i=document.getElementById('friendAddInput');const v=(i?.value||'').trim();if(!v){toast('یوزرنیم دوستت رو وارد کن');return;}const r=await pzApi('POST','/friends/requests',{username:v.replace(/^@/,'')});if(r&&r.ok){const st=r.data&&r.data.status;toast(st==='accepted'?'حالا دوست شدید ✅':'درخواست دوستی ارسال شد 🤝');recordMissionEvent('social',1);if(i)i.value='';friendsLoad();}else{toast((r&&r.error&&r.error.message)||'خطا در ارسال درخواست');}}
 async function addSuggestedFriend(id){const s=(typeof FRIEND_SUGGESTIONS!=='undefined'?FRIEND_SUGGESTIONS.find(x=>x.id===id):null);if(!s)return;const r=await pzApi('POST','/friends/requests',{username:s.u});if(r&&r.ok){toast('درخواست دوستی ارسال شد 🤝');recordMissionEvent('social',1);friendsLoad();}else{toast((r&&r.error&&r.error.message)||'خطا');}}
@@ -6206,7 +6216,17 @@ const SPIN_PRIZES=[
   {ico:'💎',label:'ویژه',title:'۲۰۰٬۰۰۰ تومان',type:'cash',amount:200000,color:'#ffb443'}
 ];
 /* گردونه روزانه: هر ۲۴ ساعت یک‌بار (شبیه‌سازی‌شده در پروتوتایپ) */
-let spinAvailable=true,spinAutoShown=false;
+/* Lucky wheel: a REAL 24-hour cooldown persisted across reloads/sessions. */
+const SPIN_COOLDOWN_MS=24*60*60*1000;
+let spinLast=0; try{ spinLast=Number(localStorage.getItem('pz_spin_last'))||0; }catch(e){}
+function spinRemainingMs(){ return Math.max(0, SPIN_COOLDOWN_MS-(Date.now()-spinLast)); }
+function spinCanSpin(){ return spinRemainingMs()<=0; }
+function spinRemainingText(){
+  const ms=spinRemainingMs(); if(ms<=0) return '';
+  const h=Math.floor(ms/3600000), m=Math.floor((ms%3600000)/60000);
+  return h>0 ? (fa(h)+' ساعت'+(m>0?(' و '+fa(m)+' دقیقه'):'')) : (fa(Math.max(1,m))+' دقیقه');
+}
+let spinAvailable=spinCanSpin(),spinAutoShown=false;
 function renderLuckyWheel(){
   const w=document.getElementById('wheel');if(!w)return;
   if(w.dataset.built)return;w.dataset.built='1';
@@ -6217,8 +6237,9 @@ function openSpin(){
   renderLuckyWheel();
   const btn=document.getElementById('spinBtn'),res=document.getElementById('spinResult');
   if(res)res.classList.remove('show');document.getElementById('spinSheet').classList.remove('done');
+  spinAvailable=spinCanSpin();   /* re-check the real 24h cooldown on every open */
   if(spinAvailable){btn.disabled=false;btn.textContent='بچرخون!';btn.style.opacity='';document.getElementById('spinNote').textContent='بعد از چرخش، جایزه با موشن به هدر منتقل می‌شود.';document.getElementById('wheel').classList.add('pre-spin');}
-  else{btn.disabled=true;btn.textContent='⏳ فعال‌سازی بعدی: تا ۲۴ ساعت دیگر';btn.style.opacity='.6';document.getElementById('spinNote').textContent='جایزه امروزت دریافت شده؛ فردا دوباره بیا 🎡';}
+  else{btn.disabled=true;btn.textContent='⏳ فعال‌سازی بعدی: '+spinRemainingText()+' دیگر';btn.style.opacity='.6';document.getElementById('spinNote').textContent='جایزه امروزت دریافت شده؛ '+spinRemainingText()+' دیگر دوباره بیا 🎡';}
   document.getElementById('spinBg').classList.add('show');document.getElementById('spinSheet').classList.add('show');
 }
 function closeSpin(){if(spinning){toast('تا پایان چرخش صبر کن 🎡');return;}document.getElementById('spinBg').classList.remove('show');document.getElementById('spinSheet').classList.remove('show');setTimeout(()=>document.getElementById('spinSheet').classList.remove('done'),250);}
@@ -6304,10 +6325,11 @@ function finishNaturalSpin(finalRot,prize,wheel,pointer,btn){
   if(pointer)pointer.classList.remove('ticking');
   setTimeout(()=>wheel.classList.remove('natural-stop'),760);
   spinning=false;spinAvailable=false;
-  btn.style.opacity='.6';btn.textContent='⏳ فعال‌سازی بعدی: تا ۲۴ ساعت دیگر';
+  spinLast=Date.now(); try{localStorage.setItem('pz_spin_last',String(spinLast));}catch(e){}
+  btn.style.opacity='.6';btn.textContent='⏳ فعال‌سازی بعدی: '+spinRemainingText()+' دیگر';
   const hb=document.getElementById('spinHdrBtn');if(hb)hb.style.opacity='.5';
   sfx('found');vib([40,60,120]);awardSpinPrize(prize);
-  document.getElementById('spinNote').textContent='جایزه امروز دریافت شد؛ فردا دوباره بچرخون 🎡';
+  document.getElementById('spinNote').textContent='جایزه امروز دریافت شد؛ '+spinRemainingText()+' دیگر دوباره بچرخون 🎡';
 }
 
 /* ============ KYC ============ */
@@ -7393,7 +7415,18 @@ function pzHandleWs(m){
     return;
   }
   if(m.type==='server:match_snapshot'){
-    if(Array.isArray(p.players))pzRt.snapshot=p.players;
+    if(Array.isArray(p.players)){
+      pzRt.snapshot=p.players;
+      /* Server is the single source of truth for the SCORE too: sync the displayed
+         totals from the snapshot so both devices always show identical numbers
+         (the local WS tally can drift if a broadcast is missed). */
+      let sm=null,so=null;
+      for(const pl of p.players){ if(String(pl.userId)===String(pzRt.myId)) sm=pl.score; else if(so===null) so=pl.score; }
+      if(typeof sm==='number'&&typeof so==='number'&&pzRt.active&&!pzRt.finished){
+        myScore=sm; oppScore=so;
+        try{ if(document.getElementById('duel')&&document.getElementById('duel').classList.contains('active')) updateDuelScore(); }catch(e){}
+      }
+    }
     /* The match is already OVER on the server (we likely reconnected after the
        opponent won by forfeit): do NOT resume — close out on the real result so
        a finished match can never keep running on this device. */
@@ -8066,9 +8099,12 @@ answerDuel=function(sel,correct){
     setTimeout(()=>{                        /* 1.2s suspense, then reveal together */
       if(pzRt.finished) return;
       revealAnswers('dAnswers',sel,correct,()=>{
-        myScore=pzCount(pzRt.myByRound);
         const oppRight=!!(oppRes&&oppRes.correct);
-        oppScore=pzCount(pzRt.oppByRound);
+        /* Prefer the server-authoritative totals so both devices always agree; fall
+           back to the local WS tally only if no snapshot has arrived yet. */
+        const _sv=(typeof pzSrvScores==='function')?pzSrvScores():null;
+        if(_sv){ myScore=_sv.me; oppScore=_sv.op; }
+        else { myScore=pzCount(pzRt.myByRound); oppScore=pzCount(pzRt.oppByRound); }
         if(myRight){ recordMissionEvent('correct',1); recordMissionEvent('duelCorrect',1); }
         if(leagueDuelActive&&myRight) showLeagueDuelReward();
         myResults.push(myRight?'ok':'no');
