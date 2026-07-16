@@ -1129,8 +1129,12 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
 @keyframes pzmBlink{0%,100%{opacity:1}50%{opacity:.4}}
 @keyframes pzmPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.12)}}
 .pzm-lifebar{flex:0 0 auto;padding:7px 14px calc(9px + env(safe-area-inset-bottom,0px));border-top:1px solid var(--line);background:rgba(0,0,0,.16)}
-.pzm-powerups{justify-content:center;gap:8px;padding:0!important;max-width:100%;overflow-x:auto}
-.pzm-powerups>*{transform:scale(.9);transform-origin:center}
+.pzm-powerups{justify-content:center;gap:9px;padding:0!important;max-width:100%}
+/* Lifelines: readable, evenly-sized cards (no shrink) with two-line labels. */
+.pzm-sheet .pzm-powerups .pu{flex:1 1 0;min-width:0;padding:10px 6px;border-radius:15px;gap:3px}
+.pzm-sheet .pzm-powerups .pu .pu-i{font-size:22px}
+.pzm-sheet .pzm-powerups .pu .pu-l{font-size:10.5px;line-height:1.3;white-space:normal;overflow-wrap:break-word;color:var(--text)}
+.pzm-sheet .pzm-powerups .pu .pu-c{font-size:11px;margin-top:1px}
 .pzm-status{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:14px;padding:22px 16px;width:100%;box-sizing:border-box;animation:pzmFade .35s ease}
 .pzm-status>*{max-width:100%}
 .pzm-status-ico{font-size:54px;line-height:1;animation:pzmPop .45s cubic-bezier(.2,1.5,.4,1)}
@@ -5780,6 +5784,8 @@ async function friendsLoad(){
     const [fr,rq]=await Promise.all([pzApi('GET','/friends'),pzApi('GET','/friends/requests')]);
     if(fr&&fr.ok&&Array.isArray(fr.data)){ const mapped=fr.data.map(mapFriend); FRIENDS_DATA.length=0; mapped.forEach(x=>FRIENDS_DATA.push(x)); }
     if(rq&&rq.ok&&rq.data){ FRIEND_REQUESTS=(rq.data.incoming||[]).map(mapReq); _frOutgoing=(rq.data.outgoing||[]).map(mapReq); }
+    /* keep the nav red-dot in sync with real requests + unread messages */
+    try{ const unread=FRIENDS_DATA.reduce((s,f)=>s+(Number(f.unread)||0),0); badges.friends=(unread>0||FRIEND_REQUESTS.length>0); saveBadges(); renderBadges(); }catch(e){}
   }catch(e){}
   _frLoading=false;
   renderFriendsHub();
@@ -6643,6 +6649,19 @@ function renderBadges(){
   document.querySelectorAll('[data-badge-key]').forEach(el=>el.classList.toggle('show-badge',!!badges[el.dataset.badgeKey]));
 }
 function markBadgeViewed(key){badges[key]=false;saveBadges();renderBadges();}
+/* Real friends indicator: red dot when there are pending friend requests OR
+   unread messages. Polled in the background so it shows anywhere in the app. */
+async function pzFriendsBadge(){
+  if(typeof _tok==='undefined'||!_tok) return;
+  try{
+    const [fr,rq]=await Promise.all([pzApi('GET','/friends'),pzApi('GET','/friends/requests')]);
+    let unread=0,reqs=0;
+    if(fr&&fr.ok&&Array.isArray(fr.data)) unread=fr.data.reduce((s,f)=>s+(Number(f.unread)||0),0);
+    if(rq&&rq.ok&&rq.data) reqs=((rq.data.incoming)||[]).length;
+    badges.friends=(unread>0||reqs>0); saveBadges(); renderBadges();
+  }catch(e){}
+}
+try{ setInterval(pzFriendsBadge,30000); setTimeout(pzFriendsBadge,3500); }catch(e){}
 let dailyState={day:4,claimed:false,last:0};try{dailyState={...dailyState,...JSON.parse(localStorage.getItem('pq_daily_v1')||'{}')};}catch(e){}
 const dailyRewards=[['🪙','100'],['XP','150'],['❤️','1'],['🎫','1'],['🪙','250'],['⚡','Boost'],['💰','Cash'],['🎡','Spin'],['🪙','400'],['❤️','2'],['🎫','2'],['💎','Box'],['🏆','Frame'],['🪙','700'],['👑','Avatar']];
 function saveDaily(){try{localStorage.setItem('pq_daily_v1',JSON.stringify(dailyState));}catch(e){}}
@@ -7397,7 +7416,12 @@ function pzHeartbeat(on){
   if(on) pzRt.hb=setInterval(()=>{ try{ if(pzRt.ws&&pzRt.ws.readyState===1) pzRt.ws.send(JSON.stringify({type:'client:ping'})); }catch(_){} },20000);
 }
 function pzWsSubmit(round,sel){
-  const q=(window._pzQs||[])[round]; if(!q||!q._id) return;
+  /* CRITICAL: read the question the player ACTUALLY saw (duelRoundQs), not _pzQs.
+     In the second half the displayed questions live in duelRoundQs at indices 5+
+     (a different topic); _pzQs still holds only the first-half questions, so using
+     it here sent the WRONG questionId and the server validated against the wrong
+     question → second-half scores came out wrong/reversed. */
+  const q=(duelRoundQs||[])[round]||(window._pzQs||[])[round]; if(!q||!q._id) return;
   const payload={matchId:pzRt.matchId,questionId:q._id,selectedIndex:sel,round:round,answerTimeMs:5000,idempotencyKey:'a-'+pzRt.matchId+'-'+round+'-'+sel};
   if(pzRt.ws&&pzRt.ws.readyState===1){ try{ pzRt.ws.send(JSON.stringify({type:'client:submit_answer',payload})); return; }catch(_){} }
   /* Fallback: HTTP if the socket is momentarily down (scoring still real). */
