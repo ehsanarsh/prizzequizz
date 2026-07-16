@@ -3,3 +3,6 @@ dist/
 *.log
 .env
 .DS_Store
+
+# backend src delivery tarball (build artifact, regenerated per deploy)
+prizzequizz-api-src.tgz
