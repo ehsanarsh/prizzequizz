@@ -4027,6 +4027,7 @@ function go(id){
   if(!target || !target.classList.contains('screen')) return;
   if(cur&&cur.id!==id)screenStack.push(cur.id);
   showScreen(id);
+  if(id==='friends'&&typeof friendsLoad==='function'){try{friendsLoad();}catch(e){}}
   try{history.pushState({id},'');}catch(e){}
 }
 function goBack(){
@@ -5719,22 +5720,10 @@ renderSupportStats();renderSupport();
 
 /* ============ FRIENDS HUB (chat / requests / add friend) ============ */
 let frActiveTab='friends',frActiveChat=null;
-const FRIENDS_DATA=[
-  {id:'reza',a:'🦊',n:'رضا محمدی',u:'reza_fast',s:'در حال بازی Duel',on:true,lvl:5,league:'🥈 نقره‌ای',fav:true,last:'داداش امشب لیگ بریم؟',unread:2,m:[['them','سلام شهاب! پایه دوئل هستی؟','۱۴:۲۰'],['me','آره بعد لیگ میام','۱۴:۲۲'],['them','داداش امشب لیگ بریم؟','۱۴:۲۳']]},
-  {id:'negar',a:'🐼',n:'نگار احمدی',u:'negar_panda',s:'آنلاین',on:true,lvl:4,league:'🥉 برنزی',fav:false,last:'تبریک بابت بردت 🎉',unread:0,m:[['them','تبریک بابت بردت 🎉','۱۳:۱۰']]},
-  {id:'amir',a:'🐯',n:'امیر کریمی',u:'amir_tiger',s:'۲ ساعت پیش',on:false,lvl:7,league:'🥇 طلایی',fav:false,last:'فردا رکورد می‌زنیم',unread:0,m:[['me','فردا هستی؟','دیروز'],['them','فردا رکورد می‌زنیم','دیروز']]},
-  {id:'leila',a:'🦁',n:'لیلا نوری',u:'leila_lion',s:'دیروز',on:false,lvl:3,league:'🥉 برنزی',fav:true,last:'مرسی بابت دعوت',unread:1,m:[['them','مرسی بابت دعوت','دیروز']]},
-  {id:'sana',a:'🐙',n:'سانا گیمر',u:'SanaGamer01',s:'آنلاین',on:true,lvl:8,league:'🥇 طلایی',fav:false,last:'چالش جدید داری؟',unread:0,m:[['them','چالش جدید داری؟','۱۲:۰۵']]}
-];
-let FRIEND_REQUESTS=[
-  {id:'tina',a:'🦊',n:'تینا XP',u:'TinaXP2025',lvl:6,mutual:3,msg:'از رنکینگ پیدات کردم؛ بازی کنیم؟'},
-  {id:'kian',a:'🐯',n:'کیان اسنایپر',u:'KianSniper88',lvl:5,mutual:1,msg:'دعوت به لیگ هفتگی'}
-];
-const FRIEND_SUGGESTIONS=[
-  {id:'nima',a:'👾',n:'NimaX77',u:'NimaX77',lvl:9,league:'🥇 طلایی',mutual:5},
-  {id:'raha',a:'🐼',n:'رها شادو',u:'RahaShadow9',lvl:4,league:'🥈 نقره‌ای',mutual:2},
-  {id:'meli',a:'🐵',n:'ملی نوا',u:'MeliNova14',lvl:3,league:'🥉 برنزی',mutual:4}
-];
+/* Live, server-backed data — populated by friendsLoad() from the real API. */
+const FRIENDS_DATA=[];
+let FRIEND_REQUESTS=[];
+const FRIEND_SUGGESTIONS=[];
 function frQuery(){return (document.getElementById('frSearch')?.value||'').trim().toLowerCase();}
 function friendMatch(f,q){return !q||(f.n+' '+f.u+' '+(f.s||'')+' '+(f.league||'')).toLowerCase().includes(q);}
 function renderFriendStats(){
@@ -5745,6 +5734,42 @@ function renderFriendStats(){
 function openFriendTab(tab){frActiveTab=tab;frActiveChat=null;document.querySelectorAll('#frTabs .fr-tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));renderFriendsHub();}
 function filterFriends(){renderFriendsHub();}
 function clearFriendSearch(){const i=document.getElementById('frSearch');if(i){i.value='';i.focus();}renderFriendsHub();}
+/* ===== Real, DB-backed friends + chat (server is the source of truth) ===== */
+let _frOutgoing=[], _frChatPoll=null, _frLoading=false;
+function frEsc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function frTime(iso){ try{ const d=new Date(iso); if(isNaN(d))return 'الان'; return fa(('0'+d.getHours()).slice(-2))+':'+fa(('0'+d.getMinutes()).slice(-2)); }catch(e){ return 'الان'; } }
+function mapFriend(sf){
+  return { id:sf.id, a:sf.avatar||'🦊', n:sf.displayName||sf.username, u:sf.username, lvl:sf.level||1,
+           on:!!sf.online, unread:sf.unread||0, fav:false, s:(sf.online?'آنلاین':'آفلاین'),
+           league:'سطح '+fa(sf.level||1), last:sf.lastMessage||'', m:(FRIENDS_DATA.find(x=>x.id===sf.id)||{}).m||[] };
+}
+function mapReq(r){ return { id:r.id, userId:r.userId, a:r.avatar||'🦊', n:r.displayName||r.username, u:r.username, lvl:r.level||1, mutual:0, msg:'می‌خواهد با تو دوست شود' }; }
+async function friendsLoad(){
+  if(_frLoading) return; _frLoading=true;
+  try{
+    const [fr,rq]=await Promise.all([pzApi('GET','/friends'),pzApi('GET','/friends/requests')]);
+    if(fr&&fr.ok&&Array.isArray(fr.data)){ const mapped=fr.data.map(mapFriend); FRIENDS_DATA.length=0; mapped.forEach(x=>FRIENDS_DATA.push(x)); }
+    if(rq&&rq.ok&&rq.data){ FRIEND_REQUESTS=(rq.data.incoming||[]).map(mapReq); _frOutgoing=(rq.data.outgoing||[]).map(mapReq); }
+  }catch(e){}
+  _frLoading=false;
+  renderFriendsHub();
+}
+async function frLoadMessages(id){
+  const f=FRIENDS_DATA.find(x=>x.id===id); if(!f) return;
+  const r=await pzApi('GET','/friends/'+id+'/messages');
+  if(r&&r.ok&&r.data&&Array.isArray(r.data.messages)){
+    f.m=r.data.messages.map(m=>[m.mine?'me':'them', frEsc(m.body), frTime(m.at)]);
+    f.unread=0;
+  }
+}
+function frStartChatPoll(id){
+  clearInterval(_frChatPoll);
+  _frChatPoll=setInterval(async()=>{
+    if(frActiveChat!==id){ clearInterval(_frChatPoll); return; }
+    await frLoadMessages(id);
+    if(frActiveChat===id) renderChatView(id);
+  },3000);
+}
 function renderFriendsHub(){
   renderFriendStats();
   const sec=document.getElementById('friends');if(sec)sec.classList.toggle('chat-mode',!!frActiveChat);
@@ -5778,29 +5803,30 @@ function renderChatsList(c,q){
 }
 function renderRequests(c,q){
   const list=FRIEND_REQUESTS.filter(f=>friendMatch(f,q));
-  c.innerHTML=list.length?list.map(r=>'<div class="friend-card request-card"><div class="fav">'+r.a+'</div><div class="info"><b>'+r.n+'</b><span>@'+r.u+' · لول '+fa(r.lvl)+' · '+fa(r.mutual)+' دوست مشترک</span><div class="meta"><span class="mini-badge y">'+r.msg+'</span></div></div><div class="fr-actions"><button class="btn btn-ghost btn-sm" onclick="showOpponentProfile({n:\''+jsStr(r.n)+'\',a:\''+jsStr(r.a)+'\',u:\''+jsStr(r.u)+'\',lvl:'+r.lvl+',source:\'درخواست دوستی\'})">پروفایل</button><button class="btn btn-green btn-sm" onclick="acceptFriendRequest(\''+r.id+'\')">قبول</button><button class="btn btn-red btn-sm" onclick="declineFriendRequest(\''+r.id+'\')">رد</button></div></div>').join(''):'<div class="fr-empty"><span class="big">📭</span>درخواست جدیدی نداری.</div>';
+  c.innerHTML=list.length?list.map(r=>'<div class="friend-card request-card"><div class="fav">'+r.a+'</div><div class="info"><b>'+frEsc(r.n)+'</b><span>@'+frEsc(r.u)+' · لول '+fa(r.lvl)+'</span><div class="meta"><span class="mini-badge y">'+r.msg+'</span></div></div><div class="fr-actions"><button class="btn btn-ghost btn-sm" onclick="showOpponentProfile({n:\''+jsStr(r.n)+'\',a:\''+jsStr(r.a)+'\',u:\''+jsStr(r.u)+'\',lvl:'+r.lvl+',source:\'درخواست دوستی\'})">پروفایل</button><button class="btn btn-green btn-sm" onclick="acceptFriendRequest(\''+r.id+'\')">قبول</button><button class="btn btn-red btn-sm" onclick="declineFriendRequest(\''+r.id+'\')">رد</button></div></div>').join(''):'<div class="fr-empty"><span class="big">📭</span>درخواست جدیدی نداری.</div>';
 }
 function renderAddFriend(c,q){
-  const sug=FRIEND_SUGGESTIONS.filter(f=>friendMatch(f,q)&&!FRIENDS_DATA.some(x=>x.u===f.u));
-  c.innerHTML='<div class="add-panel"><h3>افزودن دوست با یوزرنیم یا کد دعوت</h3><p>یوزرنیم دوستت رو وارد کن یا لینک دعوت خودت رو براش بفرست.</p><div style="display:flex;gap:8px"><input class="input" id="friendAddInput" placeholder="مثلاً NimaX77 یا کد دعوت" dir="ltr"><button class="btn btn-primary btn-sm" style="height:48px" onclick="sendFriendRequest()">ارسال</button></div><div class="qr-card"><div class="qr-box"></div><div style="flex:1"><b style="font-size:13px">کد دعوت تو</b><div style="font-size:12px;color:var(--bolt);font-weight:900;margin-top:4px" dir="ltr">PQ-SHAHAB-9865</div></div><button class="btn btn-ghost btn-sm" onclick="copyInviteLink()">کپی</button></div></div><div class="section-title" style="margin-top:4px">پیشنهادهای دوستی</div>'+(sug.length?sug.map(s=>'<div class="friend-card"><div class="fav">'+s.a+'</div><div class="info"><b>'+s.n+'</b><span>@'+s.u+' · لول '+fa(s.lvl)+' · '+fa(s.mutual)+' دوست مشترک</span><div class="meta"><span class="mini-badge y">'+s.league+'</span></div></div><div class="fr-actions"><button class="btn btn-primary btn-sm" onclick="addSuggestedFriend(\''+s.id+'\')">افزودن</button></div></div>').join(''):'<div class="fr-empty"><span class="big">✨</span>پیشنهاد جدیدی نیست.</div>');
+  const out=(_frOutgoing||[]);
+  const outHtml=out.length?('<div class="section-title" style="margin-top:4px">درخواست‌های ارسالی (در انتظار پاسخ)</div>'+out.map(s=>'<div class="friend-card"><div class="fav">'+s.a+'</div><div class="info"><b>'+frEsc(s.n)+'</b><span>@'+frEsc(s.u)+' · لول '+fa(s.lvl)+'</span><div class="meta"><span class="mini-badge y">در انتظار پاسخ ⏳</span></div></div></div>').join('')):'';
+  c.innerHTML='<div class="add-panel"><h3>افزودن دوست با یوزرنیم</h3><p>یوزرنیم دقیق دوستت رو وارد کن تا درخواست دوستی براش بره.</p><div style="display:flex;gap:8px"><input class="input" id="friendAddInput" placeholder="مثلاً Sara_1452" dir="ltr" onkeydown="if(event.key===\'Enter\')sendFriendRequest()"><button class="btn btn-primary btn-sm" style="height:48px" onclick="sendFriendRequest()">ارسال</button></div><div class="qr-card"><div class="qr-box"></div><div style="flex:1"><b style="font-size:13px">لینک دعوت تو</b><div style="font-size:12px;color:var(--bolt);font-weight:900;margin-top:4px" dir="ltr">'+frEsc(((typeof _usr!=='undefined'&&_usr&&_usr.username)||'PRIZZE'))+'</div></div><button class="btn btn-ghost btn-sm" onclick="copyInviteLink()">کپی</button></div></div>'+outHtml;
 }
-function openFriendChat(id){frActiveChat=id;frActiveTab='chats';document.querySelectorAll('#frTabs .fr-tab').forEach(b=>b.classList.toggle('active',b.dataset.tab==='chats'));const f=FRIENDS_DATA.find(x=>x.id===id);if(f)f.unread=0;renderFriendsHub();}
+async function openFriendChat(id){frActiveChat=id;frActiveTab='chats';document.querySelectorAll('#frTabs .fr-tab').forEach(b=>b.classList.toggle('active',b.dataset.tab==='chats'));const f=FRIENDS_DATA.find(x=>x.id===id);if(f)f.unread=0;renderFriendsHub();await frLoadMessages(id);if(frActiveChat===id)renderChatView(id);frStartChatPoll(id);}
 function renderChatView(id){
   const c=document.getElementById('friendsContent'),f=FRIENDS_DATA.find(x=>x.id===id);if(!c||!f)return;
   c.innerHTML='<div class="chat-view"><div class="chat-head"><button class="iconbtn" style="width:38px;height:38px;border-radius:12px" onclick="frActiveChat=null;renderFriendsHub()">→</button><div class="fav" onclick="showFriendProfile(\''+f.id+'\')">'+f.a+'</div><div style="flex:1" onclick="showFriendProfile(\''+f.id+'\')"><b>'+f.n+'</b><span>'+f.s+' · @'+f.u+'</span></div><button class="iconbtn" style="width:38px;height:38px;border-radius:12px" onclick="friendMore(\''+f.id+'\')">⋯</button></div><div class="chat-body" id="chatBody">'+f.m.map(m=>'<div class="msg '+m[0]+'">'+m[1]+'<small>'+m[2]+'</small></div>').join('')+'</div><div class="chat-send"><input class="input" id="chatInput" placeholder="پیام بنویس..." onkeydown="if(event.key===\'Enter\')sendChatMsg()"><button class="btn btn-primary" onclick="sendChatMsg()">➤</button></div></div>';
   setTimeout(()=>{const b=document.getElementById('chatBody');if(b)b.scrollTop=b.scrollHeight;const i=document.getElementById('chatInput');if(i)i.focus();},60);
 }
-function sendChatMsg(){const i=document.getElementById('chatInput'),f=FRIENDS_DATA.find(x=>x.id===frActiveChat);if(!i||!f)return;const txt=i.value.trim();if(!txt)return;f.m.push(['me',txt,'الان']);f.last=txt;i.value='';renderChatView(f.id);setTimeout(()=>{f.m.push(['them',['باشه، بزن بریم 🔥','الان تو بازی‌ام، بعداً','دمت گرم!'][Math.floor(Math.random()*3)],'الان']);renderChatView(f.id);},900);}
+async function sendChatMsg(){const i=document.getElementById('chatInput'),id=frActiveChat,f=FRIENDS_DATA.find(x=>x.id===id);if(!i||!f)return;const txt=i.value.trim();if(!txt)return;i.value='';f.m.push(['me',frEsc(txt),'الان']);f.last=txt;renderChatView(id);const r=await pzApi('POST','/friends/'+id+'/messages',{body:txt});if(!r||!r.ok){toast((r&&r.error&&r.error.message)||'پیام ارسال نشد');}await frLoadMessages(id);if(frActiveChat===id)renderChatView(id);}
 function inviteFriend(id){const f=FRIENDS_DATA.find(x=>x.id===id);if(!f)return;toast('دعوت بازی برای '+f.n+' ارسال شد 🎮');sfx('found');}
-function sendFriendRequest(){const i=document.getElementById('friendAddInput');const v=(i?.value||'').trim();if(!v){showAaaModal({icon:'🤝',title:'یوزرنیم خالیه',sub:'یوزرنیم یا کد دعوت دوستت رو وارد کن.',primaryText:'باشه',secondaryText:''});return;}if(FRIENDS_DATA.some(f=>f.u.toLowerCase()===v.toLowerCase())){showAaaModal({icon:'👥',title:'قبلاً دوست هستید',sub:'این کاربر همین حالا در لیست دوستان توست.',primaryText:'باشه',secondaryText:''});return;}showFriendRequestSnackbar(v);if(i)i.value='';}
-function addSuggestedFriend(id){const s=FRIEND_SUGGESTIONS.find(x=>x.id===id);if(!s)return;FRIENDS_DATA.push({...s,s:'درخواست ارسال شد',on:false,fav:false,last:'',unread:0,m:[['me','سلام! درخواست دوستی فرستادم 🤝','الان']]});recordMissionEvent('social',1);showFriendRequestSnackbar(s.n);renderFriendsHub();}
-function acceptFriendRequest(id){const r=FRIEND_REQUESTS.find(x=>x.id===id);if(!r)return;FRIEND_REQUESTS=FRIEND_REQUESTS.filter(x=>x.id!==id);FRIENDS_DATA.push({...r,s:'همین حالا دوست شدید',on:true,fav:false,league:'🥉 برنزی',last:'سلام، خوش اومدی!',unread:0,m:[['them',r.msg,'الان']]});recordMissionEvent('social',1);toast(r.n+' به دوستانت اضافه شد ✅');renderFriendsHub();}
-function declineFriendRequest(id){FRIEND_REQUESTS=FRIEND_REQUESTS.filter(x=>x.id!==id);toast('درخواست رد شد');renderFriendsHub();}
+async function sendFriendRequest(){const i=document.getElementById('friendAddInput');const v=(i?.value||'').trim();if(!v){toast('یوزرنیم دوستت رو وارد کن');return;}const r=await pzApi('POST','/friends/requests',{username:v.replace(/^@/,'')});if(r&&r.ok){const st=r.data&&r.data.status;toast(st==='accepted'?'حالا دوست شدید ✅':'درخواست دوستی ارسال شد 🤝');recordMissionEvent('social',1);if(i)i.value='';friendsLoad();}else{toast((r&&r.error&&r.error.message)||'خطا در ارسال درخواست');}}
+async function addSuggestedFriend(id){const s=(typeof FRIEND_SUGGESTIONS!=='undefined'?FRIEND_SUGGESTIONS.find(x=>x.id===id):null);if(!s)return;const r=await pzApi('POST','/friends/requests',{username:s.u});if(r&&r.ok){toast('درخواست دوستی ارسال شد 🤝');recordMissionEvent('social',1);friendsLoad();}else{toast((r&&r.error&&r.error.message)||'خطا');}}
+async function acceptFriendRequest(id){const r=await pzApi('POST','/friends/requests/'+id+'/accept',{});if(r&&r.ok){toast('دوست جدید اضافه شد ✅');recordMissionEvent('social',1);}else{toast((r&&r.error&&r.error.message)||'خطا');}friendsLoad();}
+async function declineFriendRequest(id){const r=await pzApi('POST','/friends/requests/'+id+'/reject',{});toast(r&&r.ok?'درخواست رد شد':'خطا');friendsLoad();}
 function copyInviteLink(){try{navigator.clipboard&&navigator.clipboard.writeText('https://prizze.quiz/invite/PQ-SHAHAB-9865');}catch(e){}recordMissionEvent('social',1);toast('لینک دعوت کپی شد 🎁');}
 function sortFriendsOnline(){FRIENDS_DATA.sort((a,b)=>(b.on-a.on));renderFriendsHub();}
 function showFavoritesOnly(){const i=document.getElementById('frSearch');if(i)i.value='⭐';const c=document.getElementById('friendsContent');const list=FRIENDS_DATA.filter(f=>f.fav);c.innerHTML=list.length?list.map(f=>friendCard(f,'friend')).join(''):'<div class="fr-empty"><span class="big">⭐</span>هنوز دوست محبوب نداری.</div>';}
 function friendMore(id){const f=FRIENDS_DATA.find(x=>x.id===id);if(!f)return;showAaaModal({icon:f.a,title:f.n,sub:'چه کاری انجام بدیم؟',primaryText:f.fav?'حذف از محبوب‌ها':'افزودن به محبوب‌ها',secondaryText:'حذف دوست',primaryClass:'btn-primary',secondaryClass:'btn-red',onPrimary:()=>{f.fav=!f.fav;closeAaaModal(false);renderChatView(id);toast('ذخیره شد ⭐');},onSecondary:()=>{closeAaaModal(false);removeFriend(id);}});}
-function removeFriend(id){const f=FRIENDS_DATA.find(x=>x.id===id);if(!f)return;showAaaModal({icon:'🗑️',title:'حذف دوست؟',sub:'آیا '+f.n+' از لیست دوستان حذف شود؟ گفتگو در این پروتوتایپ پاک می‌شود.',primaryText:'حذف',secondaryText:'انصراف',primaryClass:'btn-red',onPrimary:()=>{const idx=FRIENDS_DATA.findIndex(x=>x.id===id);if(idx>-1)FRIENDS_DATA.splice(idx,1);frActiveChat=null;closeAaaModal(false);renderFriendsHub();toast('دوست حذف شد');},onSecondary:()=>closeAaaModal(false)});}
+function removeFriend(id){const f=FRIENDS_DATA.find(x=>x.id===id);if(!f)return;showAaaModal({icon:'🗑️',title:'حذف دوست؟',sub:'آیا '+f.n+' از لیست دوستان حذف شود؟ گفتگوی شما هم پاک می‌شود.',primaryText:'حذف',secondaryText:'انصراف',primaryClass:'btn-red',onPrimary:async()=>{clearInterval(_frChatPoll);frActiveChat=null;closeAaaModal(false);const r=await pzApi('DELETE','/friends/'+id,{});toast(r&&r.ok?'دوست حذف شد':'خطا در حذف');friendsLoad();},onSecondary:()=>closeAaaModal(false)});}
 renderFriendStats();renderFriendsHub();
 
 /* ============ ECONOMY: wallet / txns / withdraw ============ */
@@ -8176,8 +8202,11 @@ sendTaunt=function(text){
 /* Real friend request to the current opponent (hits the friends endpoint). */
 async function requestFriend(name){
   const oppId=(typeof pzRt!=='undefined'&&pzRt&&pzRt.oppId)?pzRt.oppId:null;
-  try{ await pzApi('POST','/friends/requests',{targetUserId:oppId,username:name}); }catch(e){}
-  try{ showFriendRequestSnackbar(name); }catch(e){}
+  try{
+    const r=await pzApi('POST','/friends/requests',oppId?{userId:oppId}:{username:name});
+    if(r&&r.ok){ const st=r.data&&r.data.status; try{ showFriendRequestSnackbar(name); }catch(e){} if(st==='accepted')try{toast('حالا دوست شدید ✅');}catch(e){} }
+    else { try{ toast((r&&r.error&&r.error.message)||'خطا در ارسال درخواست دوستی'); }catch(e){} }
+  }catch(e){ try{ showFriendRequestSnackbar(name); }catch(_){} }
 }
 
 /* Intro + Splash Loading Bar */
