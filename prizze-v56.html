@@ -1116,6 +1116,12 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
 .pzm-status-ico{font-size:52px;animation:pzmPop .45s cubic-bezier(.2,1.5,.4,1)}
 .pzm-status-title{font-size:20px;font-weight:900}
 .pzm-status-sub{font-size:13px;color:var(--muted);max-width:270px;line-height:1.7}
+.pzm-gate-count{position:relative;width:52px;height:52px;margin-top:8px;display:grid;place-items:center}
+.pzm-gate-ring{position:absolute;inset:0;transform:rotate(-90deg)}
+.pzm-gate-ring circle{fill:none;stroke-width:4}
+.pzm-gate-ring circle:first-child{stroke:rgba(255,255,255,.14)}
+.pzm-gate-arc{stroke:var(--bolt);stroke-linecap:round;stroke-dasharray:119.4;transition:stroke-dashoffset 1s linear}
+.pzm-gate-count span{font-size:20px;font-weight:900;position:relative;z-index:1}
 @keyframes pzmFade{from{opacity:0}to{opacity:1}}
 @keyframes pzmPop{from{transform:scale(.55);opacity:0}to{transform:scale(1);opacity:1}}
 /* half-transition score block */
@@ -4656,7 +4662,9 @@ function updateDuelVs(){
 }
 function loadDuelQ(deferTimer){
   dAnswered=false;
-  if(typeof pzHideStatus==='function')pzHideStatus();   /* ensure the question card is visible */
+  /* Reveal the question card only when actually SHOWING a question (not during a
+     deferred "prepare" pass, which runs while a central gate is still counting). */
+  if(!deferTimer&&typeof pzHideStatus==='function')pzHideStatus();
   pzSecondArmed=false; pzSecondUsedRound=false;   /* fresh Second-Chance per question */
   // Prefer the synced per-match question (works for main rounds AND sudden-death
   // when extra synced questions were prefetched); fall back to a local random
@@ -7834,8 +7842,37 @@ function pzBeginHalf2(){
 /* Real-duel ready gate: a 5s countdown with NO "شروع سریع" button that
    auto-advances — so both players move to the next question together. Overrides
    readyGate only while in a real match; arena/WTA keep the original gate. */
+/* ===== PHASE 3: in-play gates render in the CENTRAL AREA, not as popups =====
+   pzCentralGate replaces an auto-advancing modal with an in-place state change
+   in the mother-screen central area. Falls back to the old modal ONLY if the
+   status node is missing (old cached HTML), so the flow can never hang. */
+let _pzGateTimer=null;
+function pzCentralGate(opts){
+  opts=opts||{};
+  const s=document.getElementById('pzDuelStatus');
+  const secs=Math.max(1,opts.seconds||5);
+  if(!s){ return showAaaModal({icon:opts.icon,iconHTML:opts.iconHTML,title:opts.title,sub:(opts.html||'')+(opts.sub||''),seconds:secs,hideActions:true,dismissible:false,onDone:opts.onDone}); }
+  const inner=
+    ((opts.iconHTML||opts.icon)?'<div class="pzm-status-ico">'+(opts.iconHTML||opts.icon)+'</div>':'')+
+    (opts.title?'<div class="pzm-status-title">'+opts.title+'</div>':'')+
+    (opts.html||'')+
+    (opts.sub?'<div class="pzm-status-sub">'+opts.sub+'</div>':'')+
+    '<div class="pzm-gate-count"><svg viewBox="0 0 44 44" class="pzm-gate-ring"><circle cx="22" cy="22" r="19"></circle><circle cx="22" cy="22" r="19" class="pzm-gate-arc" id="pzGateArc"></circle></svg><span id="pzGateNum">'+fa(secs)+'</span></div>';
+  pzShowStatus(inner);
+  if(opts.onShow){ try{opts.onShow();}catch(e){} }
+  clearInterval(_pzGateTimer);
+  let n=secs; const C=119.4;
+  const paint=()=>{ const num=document.getElementById('pzGateNum'),arc=document.getElementById('pzGateArc'); if(num)num.textContent=fa(Math.max(0,n)); if(arc)arc.style.strokeDashoffset=C*(1-Math.max(0,n)/secs); };
+  paint();
+  _pzGateTimer=setInterval(()=>{
+    n--; paint();
+    if(n>0)sfx('blip'); else if(n===0)sfx('correct');
+    if(n<=0){ clearInterval(_pzGateTimer); if(opts.onDone)opts.onDone(); }
+  },1000);
+}
 function pzReadyGate(cb,label){
-  showAaaModal({icon:'🎯',title:'آماده‌ای؟',sub:label||'سوال بعدی خودکار شروع می‌شود',seconds:5,hideActions:true,dismissible:false,onDone:cb});
+  /* onDone restores the question card (the gate hid it) before the timer starts. */
+  pzCentralGate({icon:'🎯',title:'آماده‌ای؟',sub:label||'سؤال بعدی خودکار شروع می‌شود',seconds:5,onDone:()=>{ if(typeof pzHideStatus==='function')pzHideStatus(); if(cb)cb(); }});
 }
 const _origReadyGate=readyGate;
 readyGate=function(cb,label){
@@ -7866,22 +7903,26 @@ function pzResultGate(myRight,oppRight,cb,label){
       side('pzScMe',meId,meAv,myRight,meCol,prevMy,'linear-gradient(180deg,#B9F0FF,#55C9F5)')+
     '</div>'+
     (label?'<div style="text-align:center;font-size:13px;color:var(--bolt);margin-top:14px;font-weight:900">'+label+'</div>':'');
-  showAaaModal({ icon: myRight?'🎉':'💪', title: myRight?'آفرین! درست جواب دادی':'اشکالی نداره — ادامه بده', sub:sub, seconds:5, hideActions:true, dismissible:false, onDone:cb });
-  /* Roll the changed number up with a pop, ~0.5s after the modal appears. */
-  setTimeout(()=>{
-    const me=document.getElementById('pzScMe'), op=document.getElementById('pzScOpp');
-    if(me&&myRight){ me.textContent=fa(myScore); me.classList.remove('pz-pop'); void me.offsetWidth; me.classList.add('pz-pop'); }
-    if(op&&oppRight){ op.textContent=fa(oppScore); op.classList.remove('pz-pop'); void op.offsetWidth; op.classList.add('pz-pop'); }
-  },550);
+  /* Central-area result state (no popup): shows both players' درست/غلط + animated
+     score, 5s countdown, then auto-advances to the next question. */
+  pzCentralGate({ icon: myRight?'🎉':'💪', title: myRight?'آفرین! درست جواب دادی':'اشکالی نداره — ادامه بده', html:sub, seconds:5, onDone:cb, onShow:()=>{
+    /* Roll the changed number up with a pop, ~0.5s after it appears. */
+    setTimeout(()=>{
+      const me=document.getElementById('pzScMe'), op=document.getElementById('pzScOpp');
+      if(me&&myRight){ me.textContent=fa(myScore); me.classList.remove('pz-pop'); void me.offsetWidth; me.classList.add('pz-pop'); }
+      if(op&&oppRight){ op.textContent=fa(oppScore); op.classList.remove('pz-pop'); void op.offsetWidth; op.classList.add('pz-pop'); }
+    },550);
+  } });
 }
-/* Professional "golden question" modal shown the moment the match ties. */
+/* Golden-question (sudden death) state shown the moment the match ties — in the
+   central area, not a popup. */
 function pzGoldenQuestionModal(cb){
-  const sub='<div style="text-align:center">'+
+  const html='<div style="text-align:center">'+
     '<div style="font-size:34px;font-weight:900;color:var(--bolt);text-shadow:0 0 26px var(--bolt-glow);letter-spacing:1px;margin:2px 0 8px">⭐ سؤال طلایی ⭐</div>'+
     '<div style="direction:ltr;font-size:30px;font-weight:900;letter-spacing:2px;margin:2px 0 10px">'+fa(oppScore)+' <span style="opacity:.4">-</span> '+fa(myScore)+'</div>'+
     '<div style="font-size:15px;font-weight:900;color:var(--red)">⚠️ مواظب باش حذف نشی!</div>'+
     '</div>';
-  showAaaModal({ iconHTML:'🏆', title:'<span style="font-size:26px;font-weight:900">بازی مساوی شد</span>', sub:sub, seconds:5, hideActions:true, dismissible:false, onDone:cb });
+  pzCentralGate({ iconHTML:'🏆', title:'بازی مساوی شد', html:html, seconds:5, onDone:cb });
 }
 function pzAutoAdvance(myRight,oppRight){
   const within=(dQ||0)-pzHalfBase;
