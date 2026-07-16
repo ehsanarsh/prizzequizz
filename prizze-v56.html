@@ -1083,30 +1083,39 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
 .pzm-conn.off .pzm-conn-dot{background:var(--red);box-shadow:0 0 6px var(--red);animation:none}
 @keyframes pzmPulseDot{0%,100%{opacity:1}50%{opacity:.35}}
 .pzm-progress{display:flex;align-items:center;justify-content:center;gap:6px;margin-top:10px}
-.pzm-sq{width:25px;height:28px;border-radius:7px;border:2px solid #000;box-shadow:0 2px 0 #000;overflow:hidden;display:flex;flex-direction:column;position:relative;background:#fff;flex:0 0 auto;transition:transform .25s}
-.pzm-sq-gap{margin-right:12px}
-.pzm-sqh{flex:1;display:grid;place-items:center;font-size:9px;font-weight:900;line-height:1;color:var(--red)}
-.pzm-sqh.sq-opp{border-bottom:1px solid rgba(0,0,0,.28);background:rgba(230,69,51,.16)}   /* faint red = opponent (top) */
-.pzm-sqh.sq-me{background:rgba(30,175,95,.16)}                                          /* faint green = you (bottom) */
-.pzm-sqh.sq-ok{background:radial-gradient(circle at 40% 35%,#7dffb4,#1eaf5f);color:#043d22}
-.pzm-sqh.sq-no{background:#fff}
-.pzm-prog-legend{display:flex;align-items:center;justify-content:center;gap:14px;margin-top:5px;font-size:9.5px;font-weight:900}
-.pzm-prog-legend .pzl-opp{color:var(--red)}
-.pzm-prog-legend .pzl-me{color:var(--green)}
-.pzm-sqcur{position:absolute;inset:0;display:grid;place-items:center;font-size:12px;background:rgba(255,255,255,.55)}
-.pzm-sq-cur{box-shadow:0 0 0 2px var(--bolt),0 2px 0 #000;animation:pzmCur 1s infinite}
-.pzm-sq-done .pzm-sqprev{opacity:.55}
+.pzm-sq{width:28px;height:32px;border-radius:8px;border:2px solid #000;box-shadow:0 2px 0 #000;overflow:hidden;display:flex;flex-direction:column;position:relative;background:#fff;flex:0 0 auto;transition:transform .25s}
+.pzm-sq-gap{margin-right:14px}
+.pzm-sqh{flex:1;display:grid;place-items:center;font-size:11px;font-weight:900;line-height:1;color:#111;transition:background .2s}
+.pzm-sqh.sq-opp{border-bottom:1px solid rgba(0,0,0,.28);background:rgba(230,69,51,.14)}   /* faint red tint = opponent (top) */
+.pzm-sqh.sq-me{background:rgba(30,175,95,.14)}                                          /* faint green tint = you (bottom) */
+.pzm-sqh.sq-ok{background:radial-gradient(circle at 40% 35%,#7dffb4,#1eaf5f);color:#043d22}       /* correct = green ✓ */
+.pzm-sqh.sq-no{background:radial-gradient(circle at 40% 35%,#ffd86b,#f5a623);color:#5a3a00}       /* wrong = amber ✕ */
+.pzm-sqh.sq-wait{background:rgba(255,255,255,.95);color:#000;animation:pzmWaitBlink 1s infinite}   /* still answering */
+@keyframes pzmWaitBlink{0%,100%{opacity:1}50%{opacity:.5}}
+.pzm-sq-cur{box-shadow:0 0 0 2px var(--bolt),0 2px 0 #000}
+/* per-row player labels beside the squares (item 6) */
+.pzm-prog-wrap{display:flex;align-items:center;justify-content:center;gap:9px;margin-top:10px}
+.pzm-prog-names{display:flex;flex-direction:column;gap:4px}
+.pzm-prog-names b{font-size:10px;font-weight:900;line-height:1;max-width:66px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pzm-pn-opp{color:var(--red)}
+.pzm-pn-me{color:var(--green)}
 @keyframes pzmCur{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}
 .pzm-central{flex:1;display:flex;flex-direction:column;padding:8px 16px 4px;position:relative;z-index:2;overflow-y:auto}
 /* Question bottom sheet */
-.pzm-sheet{position:absolute;left:0;right:0;bottom:0;height:82%;z-index:7;display:flex;flex-direction:column;padding:8px 18px calc(14px + env(safe-area-inset-bottom,0px));background:linear-gradient(180deg,#1b1b21,#141419);border-radius:26px 26px 0 0;box-shadow:0 -12px 34px rgba(0,0,0,.5);border-top:1.5px solid rgba(255,255,255,.08);transform:translateY(103%);transition:transform .42s cubic-bezier(.2,.85,.25,1);overflow-y:auto}
+.pzm-sheet{position:absolute;left:0;right:0;bottom:0;height:85%;z-index:7;display:flex;flex-direction:column;padding:8px 20px calc(14px + env(safe-area-inset-bottom,0px));background:linear-gradient(180deg,#1e1e25,#141419);border-radius:28px 28px 0 0;box-shadow:0 -12px 34px rgba(0,0,0,.5);border-top:1.5px solid rgba(255,255,255,.08);transform:translateY(103%);transition:transform .42s cubic-bezier(.2,.85,.25,1);overflow-y:auto}
 .pzm-sheet.up{transform:translateY(0)}
-.pzm-sheet-grip{width:44px;height:5px;border-radius:3px;background:rgba(255,255,255,.2);margin:2px auto 8px;flex:0 0 auto}
+.pzm-sheet-grip{width:44px;height:5px;border-radius:3px;background:rgba(255,255,255,.2);margin:2px auto 6px;flex:0 0 auto}
 .pzm-sheet .q-topic{align-self:center;flex:0 0 auto}
-.pzm-qtext{margin:12px 0 2px;font-size:19px;line-height:1.6;text-align:center;flex:0 0 auto}
+/* Question text: large, bold, wide, centered (item 1). */
+.pzm-qtext{margin:12px 2px 4px;font-size:22px;font-weight:800;line-height:1.6;text-align:center;flex:0 0 auto;word-break:normal;overflow-wrap:break-word}
+/* Answers: single column, full width, tall, evenly spaced, touch feedback. */
 .pzm-answers{margin-top:6px;flex:0 0 auto}
-.pzm-sheet .pzm-powerups{margin-top:auto;padding-top:12px}
-#duel.sheet-up .pzm-progress,#duel.sheet-up .pzm-prog-legend{opacity:0;pointer-events:none;transition:opacity .3s}
+.pzm-sheet .pzm-answers{display:flex!important;flex-direction:column!important;grid-template-columns:none!important;gap:12px!important;width:100%}
+.pzm-sheet .pzm-answers .ans{display:flex;align-items:center;gap:10px;width:100%!important;max-width:100%!important;min-height:62px!important;font-size:15.5px!important;line-height:1.5!important;padding:14px 16px!important;border-radius:16px!important;text-align:right;overflow:visible!important;transition:transform .12s ease,box-shadow .12s ease}
+.pzm-sheet .pzm-answers .ans .atxt{overflow-wrap:anywhere;white-space:normal}
+.pzm-sheet .pzm-answers .ans:active{transform:scale(.975)}
+.pzm-sheet .pzm-powerups{margin-top:auto;padding-top:14px}
+#duel.sheet-up .pzm-prog-wrap{opacity:0;pointer-events:none;transition:opacity .3s}
 .pzm-timer{display:flex;align-items:center;justify-content:center;margin:16px 0 14px;height:48px;direction:ltr}
 .pzm-timer-bar{flex:1;height:10px;border-radius:6px;overflow:hidden;background:rgba(255,255,255,.1);position:relative;max-width:38%}
 .pzm-timer-bar i{position:absolute;top:0;bottom:0;left:0;width:100%;background:linear-gradient(90deg,var(--green),var(--bolt));transition:transform .95s linear}
@@ -1122,10 +1131,11 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
 .pzm-lifebar{flex:0 0 auto;padding:7px 14px calc(9px + env(safe-area-inset-bottom,0px));border-top:1px solid var(--line);background:rgba(0,0,0,.16)}
 .pzm-powerups{justify-content:center;gap:8px;padding:0!important;max-width:100%;overflow-x:auto}
 .pzm-powerups>*{transform:scale(.9);transform-origin:center}
-.pzm-status{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:12px;padding:20px 8px;animation:pzmFade .35s ease}
-.pzm-status-ico{font-size:52px;animation:pzmPop .45s cubic-bezier(.2,1.5,.4,1)}
-.pzm-status-title{font-size:20px;font-weight:900}
-.pzm-status-sub{font-size:13px;color:var(--muted);max-width:270px;line-height:1.7}
+.pzm-status{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:14px;padding:22px 16px;width:100%;box-sizing:border-box;animation:pzmFade .35s ease}
+.pzm-status>*{max-width:100%}
+.pzm-status-ico{font-size:54px;line-height:1;animation:pzmPop .45s cubic-bezier(.2,1.5,.4,1)}
+.pzm-status-title{font-size:21px;font-weight:900;line-height:1.5;max-width:340px}
+.pzm-status-sub{font-size:14px;color:var(--muted);max-width:330px;line-height:1.85;margin:0 auto}
 .pzm-gate-count{position:relative;width:52px;height:52px;margin-top:8px;display:grid;place-items:center}
 .pzm-gate-ring{position:absolute;inset:0;transform:rotate(-90deg)}
 .pzm-gate-ring circle{fill:none;stroke-width:4}
@@ -3159,8 +3169,10 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
             <div class="pzm-pmeta"><b class="pzm-pname" id="duelOppName2">حریف</b><span class="pzm-pscore duel-opp-score">۰</span></div>
           </div>
         </div>
-        <div class="pzm-progress" id="pzDuelProgress"></div>
-        <div class="pzm-prog-legend"><span class="pzl pzl-opp">▲ حریف</span><span class="pzl pzl-me">تو ▼</span></div>
+        <div class="pzm-prog-wrap">
+          <div class="pzm-prog-names"><b class="pzm-pn-opp" id="pzPnOpp">حریف</b><b class="pzm-pn-me" id="pzPnMe">تو</b></div>
+          <div class="pzm-progress" id="pzDuelProgress"></div>
+        </div>
       </div>
       <!-- DYNAMIC CENTRAL AREA (status states: waiting / result / transition …) -->
       <div class="pzm-central" id="pzDuelCentral">
@@ -4732,6 +4744,18 @@ let pzHalf1=null;                   /* {me,opp} scores captured at the first-hal
 let pzHalf1Topic=null;             /* topic used in half 1 — disabled in half 2 */
 let pzTwoHalf=false;               /* true only for a real duel that runs two halves */
 const PZ_MAIN=['اطلاعات عمومی','فوتبال','سینما و سریال','علم و دانش'];
+/* Live per-answer square state for the CURRENT half, indexed by within-half index
+   (0..4). Each side updates the INSTANT that player answers — not at reveal time —
+   so the progress square goes green/red immediately and syncs per player. */
+let pzCurMe=[], pzCurOpp=[];
+function pzResetHalfSquares(){ pzCurMe=[]; pzCurOpp=[]; }
+/* Mark one player's strip for a given absolute round; re-render immediately. */
+function pzMarkSquare(who, round, ok){
+  const within=(round|0)-pzHalfBase;
+  if(within<0||within>=5) return;              /* not in the current half */
+  (who==='me'?pzCurMe:pzCurOpp)[within]= ok?'ok':'no';
+  try{ pzDuelProgressRender(); }catch(e){}
+}
 let pzLastTick=-1;
 function pzDuelTimerBar(){
   const t=Math.max(0,Math.min(10,dTimeLeft)),frac=t/10;
@@ -4748,28 +4772,34 @@ function pzDuelHud(){
   const half=document.getElementById('pzDuelHalf');if(half)half.textContent=(pzDuelHalfNo===2?'نیمهٔ دوم':'نیمهٔ اول');
   const qn=document.getElementById('pzDuelQnum');
   if(qn)qn.textContent=(typeof suddenDeath!=='undefined'&&suddenDeath)?'⚡ مرگ ناگهانی':('سؤال '+fa(Math.min(5,Math.max(0,(dQ||0)-pzHalfBase)+1))+' از ۵');
+  const pnO=document.getElementById('pzPnOpp'); if(pnO)pnO.textContent=((pzRt&&pzRt.oppName)||oppName||'حریف');
+  const pnM=document.getElementById('pzPnMe'); if(pnM)pnM.textContent=(window.myName||'تو');
   pzDuelProgressRender();pzDuelConnRender();
 }
 function pzDuelProgressRender(){
   const box=document.getElementById('pzDuelProgress');if(!box)return;
   if(box.children.length!==10){box.innerHTML='';for(let i=0;i<10;i++){const s=document.createElement('span');s.className='pzm-sq'+(i===5?' pzm-sq-gap':'');box.appendChild(s);}}
   const sqs=box.querySelectorAll('.pzm-sq'),cur=Math.max(0,(dQ||0)-pzHalfBase),H=pzDuelHalfNo;
-  // Results for a given half: the active half reads the live arrays; finished
-  // halves come from the archive (Phase 2). Each square shows BOTH players —
-  // top strip = opponent, bottom strip = me.
+  // The ACTIVE half reads the live per-answer arrays (each strip updates the
+  // instant that player answers); finished halves come from the archive.
   function resFor(halfNo){
-    if(halfNo===H)return{me:myResults.slice(myResults.length-cur),opp:oppResults.slice(oppResults.length-cur)};
-    if(pzHalfArchive[halfNo])return pzHalfArchive[halfNo];
-    return{me:[],opp:[]};
+    if(halfNo===H) return {me:pzCurMe, opp:pzCurOpp};
+    if(pzHalfArchive[halfNo]) return pzHalfArchive[halfNo];
+    return {me:[], opp:[]};
   }
-  const strip=(cls,r)=>'<div class="pzm-sqh '+cls+(r==='ok'?' sq-ok':(r==='no'?' sq-no':''))+'">'+(r==='no'?'✕':'')+'</div>';
+  // A strip: green when correct, amber ✕ when wrong, ⏳ while that player is still
+  // answering the current question, otherwise empty.
+  const strip=(cls,r,pending)=> r==='ok' ? '<div class="pzm-sqh '+cls+' sq-ok">✓</div>'
+    : r==='no' ? '<div class="pzm-sqh '+cls+' sq-no">✕</div>'
+    : pending ? '<div class="pzm-sqh '+cls+' sq-wait">⏳</div>'
+    : '<div class="pzm-sqh '+cls+'"></div>';
   for(let g=1;g<=2;g++){
     const R=resFor(g),base=(g-1)*5;
     for(let idx=0;idx<5;idx++){
       const sq=sqs[base+idx];sq.className='pzm-sq'+((base+idx)===5?' pzm-sq-gap':'');
       const isCur=(g===H&&idx===cur&&cur<5);
-      let html=strip('sq-opp',R.opp[idx])+strip('sq-me',R.me[idx]);
-      if(isCur){sq.classList.add('pzm-sq-cur');html+='<div class="pzm-sqcur">⏳</div>';}
+      const html=strip('sq-opp',R.opp[idx],isCur&&R.opp[idx]===undefined)+strip('sq-me',R.me[idx],isCur&&R.me[idx]===undefined);
+      if(isCur)sq.classList.add('pzm-sq-cur');
       sq.innerHTML=html;
     }
   }
@@ -7359,7 +7389,7 @@ function pzHandleWs(m){
   if(m.type==='server:connected'){ if(!pzRt.myId&&p.userId)pzRt.myId=p.userId; return; }
   if(m.type==='server:answer_result'){
     const uid=p.userId, rnd=Number(p.round);
-    if(uid&&uid!==pzRt.myId){ pzRt.oppPresent=true; pzOppBack(); if(!pzRt.oppId)pzRt.oppId=uid; pzRt.oppByRound[rnd]={correct:!!p.correct,sel:p.selectedIndex}; pzResolveWaiter(rnd,pzRt.oppByRound[rnd]); }
+    if(uid&&uid!==pzRt.myId){ pzRt.oppPresent=true; pzOppBack(); if(!pzRt.oppId)pzRt.oppId=uid; pzRt.oppByRound[rnd]={correct:!!p.correct,sel:p.selectedIndex}; if(typeof pzMarkSquare==='function')pzMarkSquare('opp',rnd,!!p.correct); pzResolveWaiter(rnd,pzRt.oppByRound[rnd]); }
     return;
   }
   if(m.type==='server:match_snapshot'){
@@ -7557,7 +7587,7 @@ function _pzQsValid(list){
 const _origRDR=runDuelRound;
 runDuelRound=function(){
   /* Fresh match → reset the two-half state before the (single) first half runs. */
-  pzDuelHalfNo=1; pzHalfBase=0; pzHalfArchive={}; pzHalf1=null; pzHalf1Topic=null;
+  pzDuelHalfNo=1; pzHalfBase=0; pzHalfArchive={}; pzHalf1=null; pzHalf1Topic=null; pzResetHalfSquares();
   pzTwoHalf=!!(pzRt.active&&pzRt.matchId);
   _origRDR();
   try{ if(pzRt.active&&pzRt.realOpp) pzApplyDuelNames(); }catch(e){}
@@ -7598,7 +7628,7 @@ _runTossQuestion=function(){
   pzRt.tossRound=0; pzRt.tossWinner=false; pzRt.tossMe=null;
   /* Reset the two-half state at the very START of each match (the half-1 topic
      pick happens before runDuelRound, so it must be clean here). */
-  pzDuelHalfNo=1; pzHalfBase=0; pzHalfArchive={}; pzHalf1=null; pzHalf1Topic=null;
+  pzDuelHalfNo=1; pzHalfBase=0; pzHalfArchive={}; pzHalf1=null; pzHalf1Topic=null; pzResetHalfSquares();
   pzRt._matchTopics=null; pzTwoHalf=!!(pzRt.active&&pzRt.matchId);
   pzApplyDuelNames();
   pzShowTossQ();
@@ -7855,8 +7885,8 @@ function pzFetchOppInfo(){
    players into the half-2 topic phase. The match does NOT end here. */
 function pzEndOfFirstHalf(){
   clearInterval(dTimer);
-  pzHalfArchive[1]={me:myResults.slice(),opp:oppResults.slice()};
-  const myOk=myResults.filter(r=>r==='ok').length, opOk=oppResults.filter(r=>r==='ok').length;
+  pzHalfArchive[1]={me:pzCurMe.slice(),opp:pzCurOpp.slice()};
+  const myOk=pzCurMe.filter(r=>r==='ok').length, opOk=pzCurOpp.filter(r=>r==='ok').length;
   pzHalf1={me:myOk,opp:opOk};
   pzHalf1Topic=duelTopic||pzHalf1Topic;
   pzRenderHalfTransition();
@@ -7878,7 +7908,7 @@ function pzRenderHalfTransition(){
 }
 function pzStartHalf2TopicPick(){
   pzDuelHalfNo=2; pzHalfBase=5;
-  myResults=[]; oppResults=[]; suddenDeath=false;
+  myResults=[]; oppResults=[]; pzResetHalfSquares(); suddenDeath=false;
   pzRt._topicPicked=false;
   try{ pzDuelHud(); }catch(e){}
   const iPick=!pzRt.tossWinner;   /* half-2 picker = the toss LOSER */
@@ -7951,9 +7981,9 @@ function pzResultGate(myRight,oppRight,cb,label){
       '<div style="display:inline-block;margin-top:5px;font-size:11.5px;font-weight:900;padding:3px 11px;border-radius:100px;background:'+(ok?'var(--ok-soft)':'var(--red-soft)')+';color:'+(ok?'var(--ok)':'var(--red)')+'">'+(ok?'درست ✅':'غلط ❌')+'</div>'+
       '<div id="'+id+'" style="font-size:46px;font-weight:900;line-height:1;margin-top:9px;color:'+scoreCol+';text-shadow:0 0 18px rgba(0,0,0,.3)">'+fa(val)+'</div>'+
     '</div>';
-  const sub='<div style="display:flex;align-items:flex-start;gap:4px;direction:ltr">'+
+  const sub='<div style="display:flex;align-items:flex-end;justify-content:center;gap:8px;direction:ltr;max-width:340px;margin:0 auto">'+
       side('pzScOpp',opId,opAv,oppRight,opCol,prevOpp,'var(--red-soft)')+
-      '<div style="align-self:flex-start;padding-top:96px;font-size:24px;font-weight:900;opacity:.35">-</div>'+
+      '<div style="font-size:24px;font-weight:900;opacity:.35;padding-bottom:12px">-</div>'+
       side('pzScMe',meId,meAv,myRight,meCol,prevMy,'linear-gradient(180deg,#B9F0FF,#55C9F5)')+
     '</div>'+
     (label?'<div style="text-align:center;font-size:13px;color:var(--bolt);margin-top:14px;font-weight:900">'+label+'</div>':'');
@@ -8029,6 +8059,7 @@ answerDuel=function(sel,correct){
   if(dAnswered) return; dAnswered=true; clearInterval(dTimer);
   const roundIdx=dQ; const myRight=(sel===correct);
   pzRt.myByRound[roundIdx]={correct:myRight,sel:sel};
+  pzMarkSquare('me',roundIdx,myRight);      /* my square turns green/amber the instant I answer */
   pzWsSubmit(roundIdx,sel);                 /* real submit → server scores + broadcasts */
   pzWaitOpp(roundIdx,(oppRes)=>{            /* shows "در انتظار پاسخ حریف" until both answered */
     if(pzRt.finished) return;
