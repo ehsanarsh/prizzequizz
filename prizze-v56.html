@@ -7895,7 +7895,7 @@ function pzStartBarrier(cb,round,opts){
   const mid=pzRt.matchId; if(!mid) return cb();
   const rnd=Math.max(0,Math.floor(round||0));
   const timeout=opts.timeout||8000;
-  let done=false; const t0=Date.now();
+  let done=false, sawOk=false, errStreak=0; const t0=Date.now();
   const top=document.getElementById('dTopic'); if(top&&rnd===0) top.textContent='⏳ منتظر آماده شدن حریف...';
   if(opts.status){ try{ pzShowStatus('<div class="pzm-status-ico">⏳</div><div class="pzm-status-title">'+opts.status+'</div>'); }catch(e){} }
   const finish=()=>{ if(done)return; done=true; clearInterval(pzRt.readyPoll); cb(); };
@@ -7905,13 +7905,23 @@ function pzStartBarrier(cb,round,opts){
     if(done||!pzRt.active){ clearInterval(pzRt.readyPoll); return; }
     /* Opponent genuinely gone → stop; the forfeit/opponent-left path takes over. */
     if(pzRt.oppLeft||pzRt.finished){ clearInterval(pzRt.readyPoll); return; }
-    try{ const r=await pzApi('GET','/matches/'+mid+'/ready?round='+rnd); if(r.ok&&r.data&&r.data.allReady) return finish(); }catch(e){}
+    let ok=false;
+    try{ const r=await pzApi('GET','/matches/'+mid+'/ready?round='+rnd);
+      if(r&&r.ok){ ok=true; sawOk=true; errStreak=0; if(r.data&&r.data.allReady) return finish(); } }catch(e){}
+    if(!ok) errStreak++;
     pzApi('POST','/matches/'+mid+'/ready',{round:rnd}).catch(()=>{});   /* resend if lost */
-    /* Wait for BOTH — a long ceiling so a slow question-load can never make one
-       client start the questions alone (the reported half-2 desync). A real
-       departure is caught above via oppLeft, so this only fires in a true stall. */
-    if(Date.now()-t0>timeout) return finish();
-  },500);
+    /* Server unreachable (a 503 burst / dropped link surfaces here as ok:false):
+       NEVER let one client start the half alone — that is the reported desync.
+       Show a reconnect notice and keep retrying instead of racing ahead. */
+    if(errStreak>=3){ try{ pzShowStatus('<div class="pzm-status-ico">📡</div><div class="pzm-status-title">اتصال به سرور ناپایدار است؛ در حال تلاش مجدد...</div>'); }catch(e){}
+      if(opts.status){ setTimeout(()=>{ if(!done){ try{ pzShowStatus('<div class="pzm-status-ico">⏳</div><div class="pzm-status-title">'+opts.status+'</div>'); }catch(e){} } },1200); } }
+    /* Proceed on the stall ceiling ONLY when the server is actually answering
+       (opponent merely slow). If we have NEVER had a good response, keep waiting —
+       a one-sided 503 must not push one device ahead of the other. */
+    if(sawOk && Date.now()-t0>timeout) return finish();
+    /* Absolute safety ceiling so even a fully dead link eventually resolves. */
+    if(Date.now()-t0>timeout*3) return finish();
+  },900);
 }
 /* Fetch the 15 per-match questions FILTERED BY the chosen topic. Same matchId +
    same topic on both clients → byte-identical set in identical order, with no
@@ -8257,8 +8267,8 @@ function pzServerEnd(){
         if(srvRound>=(dQ||0) && tries>=3) return cont();
       }
     }catch(e){}
-    if(tries>=25) return cont();   /* hard cap so it can never hang (opponent gone → forfeit path) */
-    setTimeout(poll,400);
+    if(tries>=16) return cont();   /* hard cap so it can never hang (opponent gone → forfeit path) */
+    setTimeout(poll,700);
   };
   poll();
 }
