@@ -7526,6 +7526,12 @@ function pzOppBack(){ if(pzRt.oppGraceTimer){ clearTimeout(pzRt.oppGraceTimer); 
 function pzHandleWs(m){
   if(!m||!m.type) return; const p=m.payload||{};
   if(m.type==='server:connected'){ if(p.userId){ pzWsMyId=p.userId; pzRt.myId=p.userId; } return; }   /* WS id is authoritative for answer attribution */
+  /* Drop stale/late messages that belong to a DIFFERENT (e.g. previous) match, so
+     a finished/old room can NEVER touch the current match's state. */
+  if(p&&p.matchId&&pzRt.matchId&&String(p.matchId)!==String(pzRt.matchId)) return;
+  /* Once this match is finished on THIS device, ignore further game events (no
+     late reprocessing changes the outcome). Presence/chat still allowed above. */
+  if(pzRt.finished&&(m.type==='server:answer_result'||m.type==='server:match_snapshot')) return;
   if(m.type==='server:answer_result'){
     const uid=p.userId, rnd=Number(p.round);
     if(uid&&uid!==pzRt.myId){ pzRt.oppPresent=true; pzOppBack(); if(!pzRt.oppId)pzRt.oppId=uid; pzRt.oppByRound[rnd]={correct:!!p.correct,sel:p.selectedIndex}; if(typeof pzMarkSquare==='function')pzMarkSquare('opp',rnd,!!p.correct); pzResolveWaiter(rnd,pzRt.oppByRound[rnd]); }
@@ -7533,6 +7539,7 @@ function pzHandleWs(m){
   }
   if(m.type==='server:match_snapshot'){
     if(Array.isArray(p.players))pzRt.snapshot=p.players;
+    pzRt.srvPhase=p.phase; if(p.winnerUserId!=null)pzRt.srvWinner=p.winnerUserId;   /* server = only source of the end decision */
     /* The match is already OVER on the server (we likely reconnected after the
        opponent won by forfeit): do NOT resume — close out on the real result so
        a finished match can never keep running on this device. */
@@ -7550,7 +7557,7 @@ function pzHandleWs(m){
             const iWon = win && String(win)===String(pzRt.myId);
             if(iWon) pzForfeitWin(); else pzForfeitLoss();
           }
-        },2600);
+        },9000);   /* long safety: the normal server-decide flow (pzServerEnd) ends first; this only catches a genuine stall/reconnect */
       }
     }
     return;
@@ -7656,8 +7663,11 @@ async function _pzMatchFound(mid){
   sfx('found');
 
   /* Fresh real-time state for this match, then open the room socket early so
-     both players are present well before the first question. */
-  window._pzQs=null;
+     both players are present well before the first question. A Replay must start
+     completely clean — no question pools, scores, halves, or squares from before. */
+  window._pzQs=null; window._pzHalf2Qs=null; duelRoundQs=[];
+  try{ myScore=0; oppScore=0; dQ=0; suddenDeath=false; myResults=[]; oppResults=[];
+       pzDuelHalfNo=1; pzHalfBase=0; pzHalfArchive={}; pzHalf1=null; pzHalf1Topic=null; if(typeof pzResetHalfSquares==='function')pzResetHalfSquares(); }catch(e){}
   try{ if(pzRt.hb) clearInterval(pzRt.hb); }catch(_){}
   try{ if(pzRt.ws){ pzRt.ws.onclose=null; pzRt.ws.close(); } }catch(_){}
   pzRt=pzNewRt(mid);
@@ -8179,31 +8189,53 @@ function pzSrvScores(){
 }
 function pzAutoAdvance(myRight,oppRight){
   const within=(dQ||0)-pzHalfBase;
-  /* Decide from the local tally (my own correct-count + the opponent's
-     server-validated correct-count). Both clients agree on each player's count. */
-  const dMe=myScore, dOp=oppScore;
   const next=(label)=>pzResultGate(myRight,oppRight,()=>loadDuelQWithFocus(),label);
   if(!suddenDeath){
     if(within>=5){
-      /* End of the FIRST half of a two-half match → show the last result, then a
-         transition screen, then the second half. The match does NOT end here even
-         if the half is tied. */
+      /* End of the FIRST half → transition to the second half (no winner here). */
       if(pzTwoHalf&&pzDuelHalfNo===1){ return pzResultGate(myRight,oppRight,()=>pzEndOfFirstHalf(),'پایان نیمهٔ اول'); }
-      /* End of half 2 (or a single-half match) → decide by the TOTAL score. */
-      if(dMe>dOp) return duelRoundWin();
-      if(dMe<dOp) return duelRoundLose();
-      suddenDeath=true;
-      /* Tie → dedicated golden-question state, then continue. */
-      return pzGoldenQuestionModal(()=>loadDuelQWithFocus());
+      /* End of half 2 → the SERVER decides win/lose/continue, never the client. */
+      return pzResultGate(myRight,oppRight,()=>pzServerEnd(),'');
     }
     return next();
   }else{
-    /* Golden question: decide from the authoritative totals so both clients agree. */
-    if(dMe>dOp) return duelRoundWin();
-    if(dMe<dOp) return duelRoundLose();
-    /* Still tied → run the golden-question flow again until exactly one leads. */
-    return pzGoldenQuestionModal(()=>loadDuelQWithFocus());
+    /* After each golden question the SERVER decides; a tie continues the golden. */
+    return pzResultGate(myRight,oppRight,()=>pzServerEnd(),'');
   }
+}
+/* Ask the SERVER whether the match is decided (single source of truth). The client
+   NEVER declares the winner from its own tally — that caused two winners for one
+   match. If the server has finished → end with the server's winnerUserId; if it is
+   still 'question' (a tie) → run one more golden question. */
+function pzServerEnd(){
+  const mid=pzRt.matchId;
+  if(!mid){ /* offline fallback: decide locally */ return (myScore>oppScore)?duelRoundWin():(myScore<oppScore?duelRoundLose():(function(){suddenDeath=true;return pzGoldenQuestionModal(()=>loadDuelQWithFocus());})()); }
+  try{ pzShowStatus('<div class="pzm-status-ico">⚖️</div><div class="pzm-status-title">در حال تعیین نتیجه...</div>'); }catch(e){}
+  let tries=0, done=false;
+  const decide=(win)=>{
+    if(done)return; done=true;
+    if(pzRt.finished) return;   /* already ended (e.g. via the snapshot force-end) */
+    const iWon = win && String(win)===String(pzRt.myId);
+    if(win) return iWon?duelRoundWin():duelRoundLose();
+    /* server finished with no winner (draw at the hard cap) → treat as a loss/neutral */
+    return duelRoundLose();
+  };
+  const cont=()=>{ if(done||pzRt.finished)return; done=true; suddenDeath=true; pzGoldenQuestionModal(()=>loadDuelQWithFocus()); };
+  const poll=async()=>{
+    if(done||pzRt.finished)return; tries++;
+    /* Fast path: the WS snapshot already told us the outcome. */
+    if(pzRt.srvPhase==='result'||pzRt.srvPhase==='finished') return decide(pzRt.srvWinner);
+    try{
+      const r=await pzApi('GET','/matches/'+mid);
+      if(r&&r.ok&&r.data){
+        const ph=r.data.phase, win=r.data.winnerUserId;
+        if(ph==='result'||ph==='finished') return decide(win);
+      }
+    }catch(e){}
+    if(tries>=8) return cont();   /* server still 'question' after both answered → tie → golden */
+    setTimeout(poll,300);
+  };
+  poll();
 }
 
 /* Synced answer handler for REAL matches:

@@ -203,7 +203,9 @@ export function registerMatchRoutes(router: Router, base: string): void {
 }
 
 function toSnapshot(match: any) {
-  return { matchId: match.id, modeId: match.modeId, phase: match.phase, round: match.round, timerSeconds: 10, players: match.players, rewardPreview: match.rewardPreview };
+  // winnerUserId + duelSettled are the SERVER's authoritative end decision — the
+  // client reads these and never decides the winner itself.
+  return { matchId: match.id, modeId: match.modeId, phase: match.phase, round: match.round, timerSeconds: 10, players: match.players, winnerUserId: match.winnerUserId ?? null, duelSettled: !!match.duelSettled, rewardPreview: match.rewardPreview };
 }
 
 // Decide the toss winner for the CURRENT round once BOTH players have submitted:
