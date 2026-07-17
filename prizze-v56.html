@@ -1476,9 +1476,13 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
 #friends.chat-mode .fr-hero,
 #friends.chat-mode .fr-tabs,
 #friends.chat-mode .fr-search-row{display:none!important}
-#friends.chat-mode .pad{padding-top:4px!important;padding-bottom:calc(10px + env(safe-area-inset-bottom,0px))!important}
-#friends.chat-mode .chat-view{height:calc(100vh - 165px);min-height:0;max-height:none;margin-bottom:0}
-#friends.chat-mode .chat-body{min-height:0}
+#friends.chat-mode{overflow:hidden!important}
+#friends.chat-mode .pad{padding-top:4px!important;padding-bottom:calc(8px + env(safe-area-inset-bottom,0px))!important;overflow:hidden!important;height:100%;box-sizing:border-box}
+/* dvh (dynamic viewport) shrinks when the keyboard opens, so the composer stays
+   pinned just above the keyboard; with no keyboard it sits at the bottom. */
+#friends.chat-mode .chat-view{height:calc(100dvh - 150px)!important;min-height:0!important;max-height:none!important;margin-bottom:0}
+#friends.chat-mode .chat-body{min-height:0;flex:1 1 auto;overflow-y:auto}
+#friends.chat-mode .chat-send{position:sticky;bottom:0;flex:0 0 auto}
 .chat-send{position:relative;z-index:8;flex-shrink:0}
 .chat-send .input{min-width:0;display:block!important}
 .chat-send .btn{display:flex!important;align-items:center;justify-content:center;flex-shrink:0}
@@ -1489,8 +1493,8 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
 .sup-chat-send .input{min-width:0;display:block!important}
 .sup-chat-send .btn{display:flex!important;align-items:center;justify-content:center;flex-shrink:0}
 @media(max-height:740px){
-  #friends.chat-mode .chat-view{height:calc(100vh - 145px)}
-  #support.chat-mode .sup-chat{height:calc(100vh - 148px)}
+  #friends.chat-mode .chat-view{height:calc(100dvh - 132px)!important}
+  #support.chat-mode .sup-chat{height:calc(100dvh - 148px)}
 }
 
 
@@ -7439,7 +7443,7 @@ startMatchmaking = async function(){
   clearInterval(_mmi);
   let secs=0;
   _mmi=setInterval(async()=>{
-    secs+=2;
+    secs+=1;
     /* Left the search screen (back/nav/close) → CANCEL the ticket so we never
        leave a zombie in the queue that another player could match into. */
     if(!document.getElementById('matchmaking').classList.contains('active')){clearInterval(_mmi); if(_mmt) pzApi('POST','/matchmaking/'+_mmt+'/cancel',{}); return;}
@@ -7454,7 +7458,7 @@ startMatchmaking = async function(){
     if(tr.ok&&tr.data?.status==='matched'&&tr.data.matchId){
       clearInterval(_mmi); _pzMatchFound(tr.data.matchId);
     }
-  },2000);
+  },1000);   /* poll every 1s for fast, symmetric match detection */
 };
 
 cancelMatchmaking=function(){
@@ -7721,8 +7725,11 @@ async function _pzMatchFound(mid){
     setTimeout(()=>go('home'),700);
     return;
   }
-  if(_mmStat) _mmStat.textContent='✅ حریف آماده است!';
-  setTimeout(()=>duelIntro(),600);
+  if(_mmStat) _mmStat.textContent='✅ حریف آماده است! در حال همگام‌سازی...';
+  /* MUTUAL START BARRIER: both players wait here until BOTH have posted ready, so
+     the toss/match starts at the SAME moment on both devices (no head start that
+     desyncs the whole match). round=700 is a dedicated match-start rendezvous. */
+  pzStartBarrier(()=>{ if(pzRt.active&&pzRt.matchId===mid) setTimeout(()=>duelIntro(),250); },700);
 }
 
 /* Inject synced questions into duelRoundQs when the duel starts.
@@ -8228,12 +8235,16 @@ function pzServerEnd(){
     try{
       const r=await pzApi('GET','/matches/'+mid);
       if(r&&r.ok&&r.data){
-        const ph=r.data.phase, win=r.data.winnerUserId;
+        const ph=r.data.phase, win=r.data.winnerUserId, srvRound=Number(r.data.round||0);
         if(ph==='result'||ph==='finished') return decide(win);
+        /* Still 'question' → it's a real TIE only once the server confirms BOTH
+           players have answered up to this round (server round >= dQ). If the
+           opponent is just behind, keep waiting instead of racing to a golden. */
+        if(srvRound>=(dQ||0) && tries>=3) return cont();
       }
     }catch(e){}
-    if(tries>=8) return cont();   /* server still 'question' after both answered → tie → golden */
-    setTimeout(poll,300);
+    if(tries>=25) return cont();   /* hard cap so it can never hang (opponent gone → forfeit path) */
+    setTimeout(poll,400);
   };
   poll();
 }
@@ -8294,6 +8305,9 @@ rematch=function(){
   if(btn){ btn.disabled=true; btn.textContent='⏳ منتظر پاسخ '+oppLbl+'...'; }
   pzApi('POST','/matches/'+_pzRematchMid+'/rematch/request',{}).then(r=>{
     if(!r||!r.ok){ if(btn){btn.disabled=false;btn.textContent='🔁 بازی مجدد با همین حریف';} toast('خطا در ارسال درخواست'); _pzWatchRematchAsOpponent(); return; }
+    /* MUTUAL: the opponent had already pressed rematch → the server paired us now.
+       Enter the fresh match instantly, no waiting/prompt. */
+    if(r.data&&r.data.status==='accepted'&&r.data.newMatchId){ if(btn)btn.textContent='✅ بازی مجدد!'; return pzEnterRematch(r.data.newMatchId); }
     _pzPollRematchAsRequester();
   });
 };

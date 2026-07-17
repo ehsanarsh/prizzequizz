@@ -39,7 +39,17 @@ export function registerMatchRoutes(router: Router, base: string): void {
   router.add('POST', `${base}/matches/:id/rematch/request`, async (ctx) => {
     const match = await getMatch(ctx.params.id!);
     const by = ctx.userId ?? 'u1';
-    // A fresh request (or re-request after a rejection) resets the handshake.
+    // MUTUAL rematch: if the OTHER player already has a pending request, both want
+    // a rematch → create the fresh match immediately (no accept prompt needed).
+    if (match.rematch && match.rematch.status === 'pending' && match.rematch.by !== by) {
+      const opponentId = match.rematch.by;
+      const fresh = await createMatchForPlayers(by, opponentId, match.modeId, match.economyType, undefined, false);
+      match.rematch = { by: match.rematch.by, status: 'accepted', newMatchId: fresh.id, at: new Date().toISOString() };
+      match.updatedAt = new Date().toISOString();
+      await persist(match);
+      return json(ctx.res, 200, match.rematch);
+    }
+    // Otherwise record this player's pending request (or re-request after a reject).
     if (!match.rematch || match.rematch.status !== 'pending' || match.rematch.by !== by) {
       match.rematch = { by, status: 'pending', at: new Date().toISOString() };
       match.updatedAt = new Date().toISOString();
