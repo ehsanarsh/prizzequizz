@@ -65,6 +65,15 @@ export interface Match {
   duelAnswers?: Record<string, { selectedIndex: number; correct: boolean }>;
   /** Set to true once the finish/reward side-effects have run, so they run once. */
   duelSettled?: boolean;
+  /** Server-authoritative XP/🏆cup scoring accumulated during the match (keyed by
+   *  userId), the current correct-streak per player, and which player answered a
+   *  given round first (for the speed bonus). Applied to the users at finish. */
+  duelPoints?: Record<string, { xp: number; cup: number }>;
+  duelStreak?: Record<string, number>;
+  duelFirstCorrect?: Record<string, string>;
+  /** Final XP/cup awarded to each player at finish, exposed to the client so it
+   *  can show the breakdown (+XP / +🏆) and the new level. */
+  duelPointsFinal?: Record<string, { xp: number; cup: number; result: string; totalXp: number; totalCup: number; level: number }>;
   /** Category chosen by the toss winner. The server is the single source of
    *  truth: the winner POSTs it, the loser reads it, and both fetch questions
    *  filtered by it — no client-to-client rebroadcast. */

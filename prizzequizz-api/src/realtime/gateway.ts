@@ -144,7 +144,7 @@ function readUserId(req: IncomingMessage): string | null {
 }
 
 function snapshot(match: any) {
-  return { matchId: match.id, modeId: match.modeId, phase: match.phase, round: match.round, players: match.players, winnerUserId: match.winnerUserId };
+  return { matchId: match.id, modeId: match.modeId, phase: match.phase, round: match.round, players: match.players, winnerUserId: match.winnerUserId, duelPointsFinal: match.duelPointsFinal };
 }
 
 function normalizeLeaderboardKind(value: unknown): LeaderboardKind {

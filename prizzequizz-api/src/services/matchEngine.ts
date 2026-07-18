@@ -6,8 +6,49 @@ import { activeMatchState } from './matchStateStore.js';
 import { updateSkillAfterMatch } from './skillRating.js';
 import { notifications } from './notificationService.js';
 import { integrity } from './integrityService.js';
+import { leaderboards } from './leaderboardService.js';
+import { PZ_SCORING, isoWeekId, levelForXp } from './scoringConfig.js';
+import { getPgPool } from '../database/postgres.js';
 import type { GameModeId, Match, MatchEvent, MatchPlayer, PlanType } from '../types/domain.js';
 import { id } from '../utils/id.js';
+
+// Persist an XP + weekly-cup award to a user, resetting the weekly cup when the
+// ISO week rolls over — done in ONE atomic UPDATE so concurrent match-ends can't
+// lose-update. Falls back to the repository (dev/memory driver) if there is no
+// Postgres pool. Returns the user's new totals.
+let _scoringSchemaReady = false;
+async function ensureScoringSchema(pool: ReturnType<typeof getPgPool>): Promise<void> {
+  if (_scoringSchemaReady) return;
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS weekly_week VARCHAR(8) NOT NULL DEFAULT ''`);
+  _scoringSchemaReady = true;
+}
+async function awardScoring(userId: string, xp: number, cup: number): Promise<{ xp: number; cup: number; level: number }> {
+  const week = isoWeekId();
+  try {
+    const pool = getPgPool();
+    await ensureScoringSchema(pool);
+    const { rows } = await pool.query(
+      `UPDATE users SET
+         xp = xp + $2,
+         weekly_score = CASE WHEN weekly_week = $4 THEN weekly_score + $3 ELSE $3 END,
+         weekly_week = $4,
+         level = GREATEST(1, floor(sqrt((xp + $2) / 100.0))::int + 1),
+         updated_at = now()
+       WHERE id = $1
+       RETURNING xp, weekly_score, level`,
+      [userId, xp, cup, week]
+    );
+    const r = rows[0];
+    if (r) return { xp: Number(r.xp), cup: Number(r.weekly_score), level: Number(r.level) };
+  } catch { /* no pg pool (memory driver) → fall back below */ }
+  const u = await repositories.users.findById(userId);
+  if (!u) return { xp, cup, level: 1 };
+  u.xp = Number(u.xp ?? 0) + xp;
+  u.weeklyScore = Number(u.weeklyScore ?? 0) + cup; // memory mode: no weekly reset
+  u.level = levelForXp(u.xp);
+  await repositories.users.save(u);
+  return { xp: u.xp, cup: u.weeklyScore, level: u.level };
+}
 
 export async function createMatch(userId: string, modeId: GameModeId, economyType: PlanType, coinStake?: number): Promise<Match> {
   return createMatchForPlayers(userId, 'op1', modeId, economyType, coinStake, true);
@@ -114,6 +155,30 @@ async function submitAnswerLocked(input: SubmitAnswerInput): Promise<{ match: Ma
   if (!match.duelAnswers[key]) {
     match.duelAnswers[key] = { selectedIndex: input.selectedIndex, correct: input.correct };
     if (input.correct) { player.score += 1; player.correctAnswers += 1; } else player.wrongAnswers += 1;
+
+    // --- Server-authoritative XP + 🏆cup accumulation (difficulty / streak / speed) ---
+    if (!match.duelPoints) match.duelPoints = {};
+    if (!match.duelStreak) match.duelStreak = {};
+    if (!match.duelFirstCorrect) match.duelFirstCorrect = {};
+    const mult = match.economyType === 'paid' ? PZ_SCORING.paidMultiplier : 1;
+    const pts = match.duelPoints[input.userId] ?? { xp: 0, cup: 0 };
+    if (input.correct) {
+      const q = await repositories.questions.findById(input.questionId).catch(() => null);
+      const diff = (q && q.difficulty) ? q.difficulty : 'medium';
+      const pq = PZ_SCORING.perQuestion[diff] ?? PZ_SCORING.perQuestion.medium!;
+      pts.xp += pq.xp * mult; pts.cup += pq.cup * mult;
+      const s = (match.duelStreak[input.userId] ?? 0) + 1;
+      match.duelStreak[input.userId] = s;
+      const sb = PZ_SCORING.streak.find((x) => x.n === s);
+      if (sb) { pts.xp += sb.xp * mult; pts.cup += sb.cup * mult; }
+      const rk = String(round);
+      if (!match.duelFirstCorrect[rk]) { match.duelFirstCorrect[rk] = input.userId; pts.xp += PZ_SCORING.speedFirstCorrect.xp * mult; pts.cup += PZ_SCORING.speedFirstCorrect.cup * mult; }
+    } else {
+      match.duelStreak[input.userId] = 0;
+      pts.xp += PZ_SCORING.perQuestion.wrong!.xp * mult;
+      pts.cup += PZ_SCORING.perQuestion.wrong!.cup * mult;
+    }
+    match.duelPoints[input.userId] = pts;
   }
 
   await repositories.answers.save({ id: id(), matchId: input.matchId, userId: input.userId, questionId: input.questionId, selectedIndex: input.selectedIndex, correct: input.correct, answerTimeMs: input.answerTimeMs, idempotencyKey: input.idempotencyKey, createdAt: new Date().toISOString() });
@@ -139,6 +204,27 @@ async function submitAnswerLocked(input: SubmitAnswerInput): Promise<{ match: Ma
     match.winnerUserId = decisiveLeader ? sorted[0]!.userId : undefined; // undefined => draw (only at hard cap)
     const user = await repositories.users.findById(input.userId);
     if (user && match.winnerUserId === input.userId) await applyReward(user, calculateDuelReward(match, user), match.id);
+
+    // Award XP + weekly 🏆cup to BOTH players (server-authoritative → real, cheat-proof
+    // leaderboard). Add the win/draw/loss bonus on top of the per-question total, apply
+    // atomically (with weekly reset), sync the leaderboard, and expose the breakdown.
+    match.duelPointsFinal = {};
+    const outcomeMult = match.economyType === 'paid' ? PZ_SCORING.paidMultiplier : 1;
+    for (const p of match.players) {
+      if (p.userId.startsWith('bot_')) continue;
+      const base = match.duelPoints?.[p.userId] ?? { xp: 0, cup: 0 };
+      const outcome = !match.winnerUserId ? 'draw' : (match.winnerUserId === p.userId ? 'win' : 'loss');
+      const rb = PZ_SCORING.result[outcome]!;
+      const gainXp = base.xp + rb.xp * outcomeMult;
+      const gainCup = base.cup + rb.cup * outcomeMult;
+      try {
+        const applied = await awardScoring(p.userId, gainXp, gainCup);
+        match.duelPointsFinal[p.userId] = { xp: gainXp, cup: gainCup, result: outcome, totalXp: applied.xp, totalCup: applied.cup, level: applied.level };
+        const u = await repositories.users.findById(p.userId);
+        if (u) await leaderboards.updateUser(u);
+      } catch { /* never let scoring break the match end */ }
+    }
+
     await integrity.inspectMatchFinished(match);
     await updateSkillAfterMatch(match);
     await Promise.all(match.players.filter((p) => !p.userId.startsWith('bot_')).map((p) => notifications.create({ userId: p.userId, type: 'match_update', title: p.userId === match.winnerUserId ? 'بردی! 🎉' : 'نتیجه دوئل آماده است', body: p.userId === match.winnerUserId ? 'نتیجه عالی بود؛ جایزه و امتیاز تو ثبت شد.' : 'دوئل تمام شد؛ نتیجه و امتیاز تو ثبت شد.', data: { matchId: match.id, winnerUserId: match.winnerUserId, url: '/result' }, push: true })));

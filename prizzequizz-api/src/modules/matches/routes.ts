@@ -39,17 +39,7 @@ export function registerMatchRoutes(router: Router, base: string): void {
   router.add('POST', `${base}/matches/:id/rematch/request`, async (ctx) => {
     const match = await getMatch(ctx.params.id!);
     const by = ctx.userId ?? 'u1';
-    // MUTUAL rematch: if the OTHER player already has a pending request, both want
-    // a rematch → create the fresh match immediately (no accept prompt needed).
-    if (match.rematch && match.rematch.status === 'pending' && match.rematch.by !== by) {
-      const opponentId = match.rematch.by;
-      const fresh = await createMatchForPlayers(by, opponentId, match.modeId, match.economyType, undefined, false);
-      match.rematch = { by: match.rematch.by, status: 'accepted', newMatchId: fresh.id, at: new Date().toISOString() };
-      match.updatedAt = new Date().toISOString();
-      await persist(match);
-      return json(ctx.res, 200, match.rematch);
-    }
-    // Otherwise record this player's pending request (or re-request after a reject).
+    // A fresh request (or re-request after a rejection) resets the handshake.
     if (!match.rematch || match.rematch.status !== 'pending' || match.rematch.by !== by) {
       match.rematch = { by, status: 'pending', at: new Date().toISOString() };
       match.updatedAt = new Date().toISOString();
@@ -213,9 +203,7 @@ export function registerMatchRoutes(router: Router, base: string): void {
 }
 
 function toSnapshot(match: any) {
-  // winnerUserId + duelSettled are the SERVER's authoritative end decision — the
-  // client reads these and never decides the winner itself.
-  return { matchId: match.id, modeId: match.modeId, phase: match.phase, round: match.round, timerSeconds: 10, players: match.players, winnerUserId: match.winnerUserId ?? null, duelSettled: !!match.duelSettled, rewardPreview: match.rewardPreview };
+  return { matchId: match.id, modeId: match.modeId, phase: match.phase, round: match.round, timerSeconds: 10, players: match.players, rewardPreview: match.rewardPreview, winnerUserId: match.winnerUserId, duelPointsFinal: match.duelPointsFinal };
 }
 
 // Decide the toss winner for the CURRENT round once BOTH players have submitted:
