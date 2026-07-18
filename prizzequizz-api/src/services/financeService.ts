@@ -2,6 +2,7 @@ import { repositories } from '../repositories/index.js';
 import type { Transaction } from '../types/domain.js';
 import { id } from '../utils/id.js';
 import { notifications } from './notificationService.js';
+import { postEntry } from './walletLedgerService.js';
 
 export interface FinanceDiagnostics {
   totalTopups: number;
@@ -53,9 +54,8 @@ export async function reviewWithdrawal(id: string, action: 'approve' | 'reject',
   }
   const user = await repositories.users.findById(txn.userId);
   if (user && txn.status !== 'failed') {
-    user.wallet += txn.amount;
-    await repositories.users.save(user);
-    await repositories.transactions.save({ id: idGen(), userId: user.id, type: 'withdraw_refund', currency: 'cash', amount: txn.amount, direction: 'in', status: 'ok', reference: txn.id, createdAt: new Date().toISOString() });
+    // Legacy path refund goes through the ledger too — idempotent per txn.
+    await postEntry({ userId: user.id, entryType: 'refund', kind: 'credit', amount: txn.amount, idempotencyKey: `legacy_wd_refund:${txn.id}`, refType: 'withdraw', refId: txn.id, description: 'برگشت وجه برداشت ردشده (مسیر قدیمی)' });
   }
   const updated = await repositories.transactions.updateStatus(id, 'failed', `rejected:${reviewedBy}:${txn.reference ?? id}`);
   if (updated) await notifications.create({ userId: updated.userId, type: 'wallet_update', title: 'برداشت رد شد', body: `درخواست برداشت ${updated.amount.toLocaleString('fa-IR')} تومان رد شد و مبلغ به کیف پول برگشت.`, data: { transactionId: updated.id, url: '/wallet' }, push: true });

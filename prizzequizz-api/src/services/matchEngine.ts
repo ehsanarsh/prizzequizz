@@ -1,7 +1,8 @@
 import { gameConfig } from '../core/config.js';
 import { repositories } from '../repositories/index.js';
 import { chargeEntry } from './economyEngine.js';
-import { applyReward, calculateDuelReward } from './rewardEngine.js';
+import { applyReward, calculateDuelReward, duelStake } from './rewardEngine.js';
+import { postEntry } from './walletLedgerService.js';
 import { activeMatchState } from './matchStateStore.js';
 import { updateSkillAfterMatch } from './skillRating.js';
 import { notifications } from './notificationService.js';
@@ -202,8 +203,25 @@ async function submitAnswerLocked(input: SubmitAnswerInput): Promise<{ match: Ma
   if (finished && !match.duelSettled) {
     match.duelSettled = true;
     match.winnerUserId = decisiveLeader ? sorted[0]!.userId : undefined; // undefined => draw (only at hard cap)
-    const user = await repositories.users.findById(input.userId);
-    if (user && match.winnerUserId === input.userId) await applyReward(user, calculateDuelReward(match, user), match.id);
+    // Pay the WINNER (looked up directly — not only when the finishing submit
+    // happens to be the winner's own), exactly once via the reward idempotency.
+    if (match.winnerUserId && !match.winnerUserId.startsWith('bot_')) {
+      const winner = await repositories.users.findById(match.winnerUserId);
+      if (winner) {
+        try { await applyReward(winner, calculateDuelReward(match, winner), match.id); }
+        catch { /* reward failure must never break match end; ledger stays consistent */ }
+      }
+    }
+    // Paid draw → both stakes go back (idempotent per player per match).
+    if (!match.winnerUserId && /^v\d+$/.test(String(match.economyType))) {
+      const stake = duelStake(match);
+      for (const p of match.players) {
+        if (p.userId.startsWith('bot_')) continue;
+        try {
+          await postEntry({ userId: p.userId, entryType: 'stake_refund', kind: 'credit', amount: stake, idempotencyKey: `stake_refund_draw:${match.id}:${p.userId}`, refType: 'match', refId: match.id, description: 'برگشت ورودی: نتیجه مساوی' });
+        } catch { /* refund failure is auditable via ledger absence; never break match end */ }
+      }
+    }
 
     // Award XP + weekly 🏆cup to BOTH players (server-authoritative → real, cheat-proof
     // leaderboard). Add the win/draw/loss bonus on top of the per-question total, apply

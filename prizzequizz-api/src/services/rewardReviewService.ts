@@ -5,6 +5,7 @@ import { calculateUserRisk } from './deviceRiskService.js';
 import { leaderboards } from './leaderboardService.js';
 import { logger } from './logger.js';
 import { notifications } from './notificationService.js';
+import { postEntry } from './walletLedgerService.js';
 
 export interface RewardHoldDiagnostics {
   pending: number;
@@ -92,12 +93,18 @@ export async function releaseRewardHold(id: string, reviewedBy = 'system'): Prom
   if (hold.status !== 'pending' && hold.status !== 'approved') return hold;
   const user = await repositories.users.findById(hold.userId);
   if (!user) return null;
-  if (hold.rewardType === 'cash') user.wallet += hold.amount;
-  if (hold.rewardType === 'coins') user.coins += hold.amount;
-  if (hold.rewardType === 'xp') user.xp += hold.amount;
-  await repositories.users.save(user);
+  if (hold.rewardType === 'cash') {
+    // Cash releases go through the ledger — atomic + idempotent per hold (the
+    // ledger also writes the legacy reward transaction row).
+    const posted = await postEntry({ userId: hold.userId, entryType: 'match_reward', kind: 'credit', amount: hold.amount, idempotencyKey: `hold_release:${hold.id}`, refType: 'match', refId: hold.matchId, description: 'جایزه آزادشده پس از بررسی' });
+    user.wallet = posted.account.available;
+  } else {
+    if (hold.rewardType === 'coins') user.coins += hold.amount;
+    if (hold.rewardType === 'xp') user.xp += hold.amount;
+    await repositories.users.save(user);
+    await repositories.transactions.save({ id: idGen(), userId: hold.userId, type: 'reward', currency: hold.rewardType, amount: hold.amount, direction: 'in', status: 'ok', reference: hold.matchId, createdAt: new Date().toISOString() });
+  }
   await repositories.rewards.save({ id: hold.rewardId, userId: hold.userId, matchId: hold.matchId, type: hold.rewardType, amount: hold.amount, status: 'granted', idempotencyKey: hold.idempotencyKey });
-  await repositories.transactions.save({ id: idGen(), userId: hold.userId, type: 'reward', currency: hold.rewardType, amount: hold.amount, direction: 'in', status: 'ok', reference: hold.matchId, createdAt: new Date().toISOString() });
   await leaderboards.recordReward(user, { type: hold.rewardType, amount: hold.amount, status: 'granted' });
   const released = await repositories.rewardHolds.updateStatus(hold.id, 'released', reviewedBy, { releasedAt: new Date().toISOString() });
   await notifications.create({ userId: hold.userId, type: 'wallet_update', title: 'جایزه آزاد شد', body: `${hold.amount.toLocaleString('fa-IR')} ${hold.rewardType === 'cash' ? 'تومان' : 'سکه'} بعد از بررسی به حساب تو اضافه شد.`, data: { holdId: hold.id, matchId: hold.matchId, amount: hold.amount, url: '/wallet' }, push: true });

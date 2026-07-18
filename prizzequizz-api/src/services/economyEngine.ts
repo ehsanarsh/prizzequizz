@@ -13,9 +13,10 @@ export async function chargeEntry(user: User, modeId: GameModeId, economyType: P
     user.hearts -= hearts;
     user.coins -= coins;
   } else {
-    const cash = mode.entry?.paid?.cash ?? 0;
-    if (user.wallet < cash) throw new Error('INSUFFICIENT_BALANCE');
-    user.wallet -= cash;
+    // Paid (cash) entries are charged as a real ledger `match_stake` at
+    // matchmaking-enqueue time (see modules/matchmaking/routes.ts). Charging
+    // here too would double-debit, and direct wallet mutation is forbidden —
+    // the ledger is the only money authority.
   }
   await repositories.users.save(user);
 }
