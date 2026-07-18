@@ -98,10 +98,20 @@ class RedisLeaderboardAdapter implements LeaderboardAdapter {
   async top(kind: LeaderboardKind, limit: number): Promise<RawScoreRow[]> {
     const client = await this.getClient();
     const raw = await client.sendCommand(['ZREVRANGE', this.key(kind), '0', String(Math.max(0, limit - 1)), 'WITHSCORES']);
-    const rows = Array.isArray(raw) ? raw : [];
+    const rows: any[] = Array.isArray(raw) ? raw : [];
     const result: RawScoreRow[] = [];
-    for (let i = 0; i < rows.length; i += 2) {
-      result.push({ userId: String(rows[i]), score: Number(rows[i + 1] ?? 0) });
+    // Handle BOTH shapes: RESP2 flat [member, score, member, score, …] and RESP3
+    // tuples [[member, score], …]. The old code assumed only the flat form, so
+    // under RESP3 it stringified the whole [id, score] pair into the userId
+    // (e.g. "a08b29…,191") — an invalid UUID that crashed the enrich lookup.
+    if (rows.length && Array.isArray(rows[0])) {
+      for (const pair of rows) {
+        result.push({ userId: String((pair as any[])[0]), score: Number((pair as any[])[1] ?? 0) });
+      }
+    } else {
+      for (let i = 0; i < rows.length; i += 2) {
+        result.push({ userId: String(rows[i]), score: Number(rows[i + 1] ?? 0) });
+      }
     }
     return result;
   }
@@ -259,18 +269,23 @@ export class LeaderboardService {
 
   private async enrich(kind: LeaderboardKind, rows: RawScoreRow[], viewerUserId?: string): Promise<LeaderboardEntry[]> {
     const entries: LeaderboardEntry[] = [];
-    for (const [index, row] of rows.entries()) {
-      const user = await repositories.users.findById(row.userId);
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    for (const row of rows) {
+      const uid = String(row.userId);
+      if (!UUID_RE.test(uid)) continue; // defensively skip any corrupt id — never 500 the board
+      let user = null;
+      try { user = await repositories.users.findById(uid); } catch { user = null; }
+      const rank = entries.length + 1;
       entries.push({
-        rank: index + 1,
-        userId: row.userId,
-        username: user?.username ?? row.userId,
-        displayName: user?.displayName ?? user?.username ?? row.userId,
-        avatar: avatarFor(index, row.userId),
+        rank,
+        userId: uid,
+        username: user?.username ?? uid,
+        displayName: user?.displayName ?? user?.username ?? uid,
+        avatar: avatarFor(rank - 1, uid),
         level: user?.level ?? 1,
         score: Math.round(Number(row.score ?? 0)),
         metric: kind,
-        highlighted: viewerUserId === row.userId
+        highlighted: viewerUserId === uid
       });
     }
     return entries;
