@@ -36,7 +36,27 @@ export const PZ_SCORING = {
 
   // Speed = a small BONUS only (never a big point gap) for the first correct
   // answer of a round, so a faster connection can't dominate the leaderboard.
-  speedFirstCorrect: { xp: 3, cup: 1 } as Points
+  speedFirstCorrect: { xp: 3, cup: 1 } as Points,
+
+  // Ascension: reward pushing further (stage 1..N). NOT wired to awarding yet —
+  // ready for the next phase (the client will report the stage, capped server-side).
+  stageBonus: [
+    { stage: 1, xp: 20, cup: 10 },
+    { stage: 2, xp: 30, cup: 15 },
+    { stage: 3, xp: 40, cup: 20 }
+    // …每 stage +10 XP / +5 cup; final (stage 10) ≈ { xp: 100, cup: 50 }.
+  ] as Array<{ stage: number } & Points>,
+  stageStepXp: 10,   // extra XP per stage beyond the table
+  stageStepCup: 5,   // extra cup per stage beyond the table
+
+  // Missions (phase 2): XP-heavy, cup light — for the collector / progression player.
+  missions: {
+    firstWinToday: { xp: 50, cup: 5 },
+    play5: { xp: 80, cup: 5 },
+    tenNoMistake: { xp: 100, cup: 10 },
+    inviteFriend: { xp: 150, cup: 10 },
+    winByFive: { xp: 120, cup: 10 }
+  } as Record<string, Points>
 };
 
 // ISO-week id like "2026-W29". The weekly cup board resets when this changes.
