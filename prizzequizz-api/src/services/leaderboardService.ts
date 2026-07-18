@@ -164,8 +164,17 @@ export class LeaderboardService {
 
   async get(kind: LeaderboardKind, limit = 50, viewerUserId?: string): Promise<LeaderboardResponse> {
     const safeLimit = clampLimit(limit);
-    let rows = await this.safeAdapterTop(kind, safeLimit);
-    if (!rows.length) rows = await this.deriveRows(kind, safeLimit);
+    // weekly (🏆cup) and overall (XP) are read STRAIGHT from the users table so the
+    // board always reflects the real, current scores — the in-memory/redis adapter
+    // is only a cache and could be stale/empty (which showed an empty leaderboard
+    // even though users had real xp/cup). 'winnings' still uses the adapter/txns.
+    let rows: RawScoreRow[];
+    if (kind === 'winnings') {
+      rows = await this.safeAdapterTop(kind, safeLimit);
+      if (!rows.length) rows = await this.deriveRows(kind, safeLimit);
+    } else {
+      rows = await this.deriveRows(kind, safeLimit);
+    }
     const entries = await this.enrich(kind, rows, viewerUserId);
     return {
       kind,
