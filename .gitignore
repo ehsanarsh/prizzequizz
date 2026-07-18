@@ -4,5 +4,6 @@ dist/
 .env
 .DS_Store
 
-# backend src delivery tarball (build artifact, regenerated per deploy)
+# backend src delivery tarballs (build artifacts, regenerated per deploy)
 prizzequizz-api-src.tgz
+prizzequizz-wallet-src.tgz
