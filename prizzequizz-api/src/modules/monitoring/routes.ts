@@ -3,9 +3,14 @@ import { error, json } from '../../http/response.js';
 import { requireAdmin } from '../../services/adminGuard.js';
 import { createErrorReport, errorReportDiagnostics, listErrorReports, updateErrorReportStatus } from '../../services/errorReportService.js';
 import type { ErrorReportSeverity, ErrorReportSource, ErrorReportStatus } from '../../types/domain.js';
+import { getPublicConfig } from '../../services/configService.js';
 import { bodyObject, optionalString, requiredString } from '../../utils/validation.js';
 
 export function registerMonitoringRoutes(router: Router, base: string): void {
+  // Public, non-sensitive economy config so the game client uses LIVE values
+  // (rake %, ticket prices, wallet limits) without a redeploy.
+  router.add('GET', `${base}/config/public`, (ctx) => json(ctx.res, 200, getPublicConfig()));
+
   router.add('POST', `${base}/monitoring/reports`, async (ctx) => {
     const body = bodyObject(ctx.body);
     const report = await createErrorReport({

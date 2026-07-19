@@ -1,6 +1,6 @@
 import type { Router } from '../../http/router.js';
 import { error, json } from '../../http/response.js';
-import { getEditableGameConfig, updateGameConfig, updateModeConfig, validateGameConfig } from '../../services/configService.js';
+import { getEditableGameConfig, patchGameConfig, updateGameConfig, updateModeConfig, validateGameConfig } from '../../services/configService.js';
 import { requireAdmin } from '../../services/adminGuard.js';
 import { repositories } from '../../repositories/index.js';
 import { db } from '../../repositories/memory.js';
@@ -37,9 +37,23 @@ export function registerAdminRoutes(router: Router, base: string): void {
 
   router.add('PATCH', `${base}/admin/config/modes/:modeId`, (ctx) => {
     if (!requireAdmin(ctx)) return;
-    const updated = updateModeConfig(ctx.params.modeId!, ctx.body);
+    const updated = updateModeConfig(ctx.params.modeId!, ctx.body, ctx.userId);
     audit(ctx.userId, 'MODE_CONFIG_PATCHED', 'mode_config', ctx.params.modeId, { patch: ctx.body as Record<string, unknown> });
     json(ctx.res, 200, updated);
+  });
+
+  // Partial config patch — the admin panel edits a few fields (rake %, ticket
+  // prices, wallet limits, a mode's stake) and sends just those; deep-merged,
+  // validated, and PERSISTED so it survives restarts.
+  router.add('PATCH', `${base}/admin/config`, (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    try {
+      const updated = patchGameConfig(ctx.body, ctx.userId);
+      audit(ctx.userId, 'CONFIG_PATCHED', 'game_config', updated.version, { patch: ctx.body as Record<string, unknown> });
+      json(ctx.res, 200, updated);
+    } catch (e) {
+      return error(ctx.res, 422, 'CONFIG_INVALID', e instanceof Error ? e.message : 'Invalid config patch.');
+    }
   });
 
   router.add('GET', `${base}/admin/questions`, async (ctx) => {

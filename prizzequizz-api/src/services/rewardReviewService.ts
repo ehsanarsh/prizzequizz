@@ -5,7 +5,8 @@ import { calculateUserRisk } from './deviceRiskService.js';
 import { leaderboards } from './leaderboardService.js';
 import { logger } from './logger.js';
 import { notifications } from './notificationService.js';
-import { postEntry } from './walletLedgerService.js';
+import { getRakePercent } from './economyConfig.js';
+import { getAccount, postEntry } from './walletLedgerService.js';
 
 export interface RewardHoldDiagnostics {
   pending: number;
@@ -94,10 +95,14 @@ export async function releaseRewardHold(id: string, reviewedBy = 'system'): Prom
   const user = await repositories.users.findById(hold.userId);
   if (!user) return null;
   if (hold.rewardType === 'cash') {
-    // Cash releases go through the ledger — atomic + idempotent per hold (the
-    // ledger also writes the legacy reward transaction row).
-    const posted = await postEntry({ userId: hold.userId, entryType: 'match_reward', kind: 'credit', amount: hold.amount, idempotencyKey: `hold_release:${hold.id}`, refType: 'match', refId: hold.matchId, description: 'جایزه آزادشده پس از بررسی' });
-    user.wallet = posted.account.available;
+    // Cash releases go through the ledger — atomic + idempotent per hold — and
+    // take the same platform rake as a normal win so a held win nets the same.
+    const gross = hold.amount;
+    const rakePercent = getRakePercent();
+    const fee = Math.round((gross * rakePercent) / 100);
+    const posted = await postEntry({ userId: hold.userId, entryType: 'match_reward', kind: 'credit', amount: gross, idempotencyKey: `hold_release:${hold.id}`, refType: 'match', refId: hold.matchId, description: 'جایزه آزادشده پس از بررسی', metadata: { gross, rakePercent, fee } });
+    if (fee > 0) await postEntry({ userId: hold.userId, entryType: 'fee', kind: 'debit', amount: fee, idempotencyKey: `hold_release_fee:${hold.id}`, refType: 'match', refId: hold.matchId, description: `کارمزد پلتفرم ${rakePercent}٪` });
+    user.wallet = (await getAccount(hold.userId)).available;
   } else {
     if (hold.rewardType === 'coins') user.coins += hold.amount;
     if (hold.rewardType === 'xp') user.xp += hold.amount;

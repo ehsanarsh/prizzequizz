@@ -9,6 +9,7 @@ import {
   listAudit, listEntries, listWithdraws, postEntry, reportSummary, reportSuspicious, reportTopUsers,
   requestWithdraw, transitionWithdraw, verifyConsistency
 } from '../../services/walletLedgerService.js';
+import { getTicketPrices } from '../../services/economyConfig.js';
 import { id } from '../../utils/id.js';
 import { bodyObject, optionalString, requiredNumber, requiredString } from '../../utils/validation.js';
 
@@ -44,11 +45,7 @@ function walletError(ctx: RequestContext, e: unknown): void {
   throw e;
 }
 
-const TICKET_PRICES: Record<string, number> = {
-  bronze: Number(process.env.WALLET_TICKET_PRICE_BRONZE ?? 50_000),
-  silver: Number(process.env.WALLET_TICKET_PRICE_SILVER ?? 150_000),
-  gold: Number(process.env.WALLET_TICKET_PRICE_GOLD ?? 400_000)
-};
+// Ticket prices come from the live economy config (admin-editable).
 
 export function registerWalletRoutes(router: Router, base: string): void {
   // ---------- Dashboard (balances + totals; backward-compatible fields kept) ----------
@@ -125,8 +122,9 @@ export function registerWalletRoutes(router: Router, base: string): void {
     const body = bodyObject(ctx.body);
     const tier = requiredString(body, 'tier');
     const meta = reqMeta(ctx);
-    if (!TICKET_PRICES[tier]) return error(ctx.res, 400, 'TICKET_TIER_INVALID', 'Tier must be bronze|silver|gold.');
-    const price = TICKET_PRICES[tier]!;
+    const prices = getTicketPrices();
+    if (!prices[tier]) return error(ctx.res, 400, 'TICKET_TIER_INVALID', 'Tier must be bronze|silver|gold.');
+    const price = prices[tier]!;
     const idem = `ticket:${uid}:${optionalString(body, 'idempotencyKey') ?? id()}`;
     try {
       const posted = await postEntry({ userId: uid, entryType: 'ticket_purchase', kind: 'debit', amount: price, idempotencyKey: idem, refType: 'ticket', refId: tier, description: `خرید بلیت لیگ ${tier}`, ...meta });

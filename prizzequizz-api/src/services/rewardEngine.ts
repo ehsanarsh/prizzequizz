@@ -4,7 +4,8 @@ import { id } from '../utils/id.js';
 import { leaderboards } from './leaderboardService.js';
 import { notifications } from './notificationService.js';
 import { createRewardHold, shouldHoldReward } from './rewardReviewService.js';
-import { postEntry } from './walletLedgerService.js';
+import { getRakePercent } from './economyConfig.js';
+import { getAccount, postEntry } from './walletLedgerService.js';
 
 /* Stake of a paid duel: the value tier is encoded in economyType ('v25000' →
  * 25,000 تومان per player). The server — never the client — derives it. */
@@ -33,15 +34,30 @@ export async function applyReward(user: User, reward: Reward, matchId: string): 
 
   if (reward.type === 'cash') {
     // Ledger is the only money authority: atomic, idempotent, audit-ready.
-    // (postEntry also writes the legacy `reward` transaction row and mirrors
-    // users.wallet, so old screens keep working.)
+    // The winner is credited the GROSS pot, then the platform commission (rake)
+    // is taken as a real `fee` ledger entry — so the wallet ends up with exactly
+    // the NET the result screen shows (gross − rake), and the fee rows sum to
+    // platform revenue. (postEntry also mirrors users.wallet + writes the legacy
+    // reward transaction row so old screens keep working.)
+    const gross = reward.amount;
+    const rakePercent = getRakePercent();
+    const fee = Math.round((gross * rakePercent) / 100);
+    const net = gross - fee;
     const posted = await postEntry({
-      userId: user.id, entryType: 'match_reward', kind: 'credit', amount: reward.amount,
+      userId: user.id, entryType: 'match_reward', kind: 'credit', amount: gross,
       idempotencyKey: `reward:${idempotencyKey}`, refType: 'match', refId: matchId,
-      description: 'جایزه برد مسابقه'
+      description: 'جایزه برد مسابقه', metadata: { gross, rakePercent, fee, net }
     });
     if (posted.duplicate) return;
-    user.wallet = posted.account.available;
+    if (fee > 0) {
+      await postEntry({
+        userId: user.id, entryType: 'fee', kind: 'debit', amount: fee,
+        idempotencyKey: `reward_fee:${idempotencyKey}`, refType: 'match', refId: matchId,
+        description: `کارمزد پلتفرم ${rakePercent}٪`, metadata: { gross, rakePercent }
+      });
+    }
+    user.wallet = (await getAccount(user.id)).available;
+    reward = { ...reward, amount: net }; // record/leaderboard reflect NET winnings
   } else {
     if (reward.type === 'coins') user.coins += reward.amount;
     if (reward.type === 'xp') user.xp += reward.amount;

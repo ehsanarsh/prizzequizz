@@ -133,6 +133,29 @@ async function main(): Promise<void> {
   assert.equal(dash.accountStatus, 'active');
   console.log('✔ dashboard aggregates');
 
+  // ---------- 9) Match reward applies the platform rake (net credit + fee) ----------
+  const { gameConfig } = await import('../core/config.js');
+  (gameConfig as any).economy = { ...(gameConfig as any).economy, paid: { ...(gameConfig as any).economy?.paid, rakePercent: 5 } };
+  const { getRakePercent } = await import('../services/economyConfig.js');
+  assert.equal(getRakePercent(), 5, 'rake read from live config');
+  const { applyReward } = await import('../services/rewardEngine.js');
+  const u5 = await makeUser('5');
+  // gross 50,000 → 5% fee (2,500) → net 47,500
+  await applyReward({ id: u5 } as any, { type: 'cash', amount: 50_000, status: 'granted' } as any, 'match-rake-1');
+  assert.equal((await getAccount(u5)).available, 47_500, 'winner nets gross minus 5% rake');
+  const led = await listEntries(u5, { sort: 'asc' });
+  assert.ok(led.rows.some((e) => e.entryType === 'match_reward' && e.amount === 50_000), 'gross reward entry recorded');
+  assert.ok(led.rows.some((e) => e.entryType === 'fee' && e.amount === 2_500), 'platform fee entry recorded');
+  // Idempotent: replaying the same match reward does not pay twice.
+  await applyReward({ id: u5 } as any, { type: 'cash', amount: 50_000, status: 'granted' } as any, 'match-rake-1');
+  assert.equal((await getAccount(u5)).available, 47_500, 'reward is paid exactly once');
+  // Live rake change takes effect immediately (10% → net 45,000).
+  (gameConfig as any).economy.paid.rakePercent = 10;
+  const u6 = await makeUser('6');
+  await applyReward({ id: u6 } as any, { type: 'cash', amount: 50_000, status: 'granted' } as any, 'match-rake-2');
+  assert.equal((await getAccount(u6)).available, 45_000, 'rake change applies live');
+  console.log('✔ match reward rake: net credit + fee entry + idempotent + live-configurable');
+
   console.log('\nALL WALLET TESTS PASSED');
 }
 

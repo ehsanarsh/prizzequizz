@@ -7,7 +7,21 @@
 // computes, so the leaderboard stays real and cheat-resistant.
 // ============================================================================
 
+import { gameConfig } from '../core/config.js';
+
 export interface Points { xp: number; cup: number; }
+
+/* Live end-of-match outcome bonus — reads the admin-editable `scoring` config
+ * (winBonusXp/winBonusCup/…) and falls back to the constants below. So the
+ * panel's XP/cup edits take effect immediately without a redeploy. */
+export function getResultBonus(outcome: 'win' | 'draw' | 'loss'): Points {
+  const s: any = (gameConfig as any)?.scoring ?? {};
+  const map = { win: ['winBonusXp', 'winBonusCup'], draw: ['drawBonusXp', 'drawBonusCup'], loss: ['lossBonusXp', 'lossBonusCup'] } as const;
+  const base = PZ_SCORING.result[outcome] ?? { xp: 0, cup: 0 };
+  const [xk, ck] = map[outcome];
+  const xp = Number(s[xk]); const cup = Number(s[ck]);
+  return { xp: Number.isFinite(xp) ? xp : base.xp, cup: Number.isFinite(cup) ? cup : base.cup };
+}
 
 export const PZ_SCORING = {
   paidMultiplier: 3,

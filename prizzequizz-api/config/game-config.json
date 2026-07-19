@@ -2,12 +2,30 @@
   "version": "2026.07.07-api-001",
   "economy": {
     "free": { "heartCostPerMatch": 1, "heartRechargeMinutes": 60, "maxFreeHearts": 5, "defaultCoins": 350 },
-    "paid": { "walletCurrency": "IRR", "withdrawFeePercent": 5 }
+    "paid": { "walletCurrency": "IRR", "withdrawFeePercent": 5, "rakePercent": 5 },
+    "wallet": {
+      "minDeposit": 10000,
+      "maxDeposit": 100000000,
+      "minWithdraw": 200000,
+      "maxWithdraw": 50000000,
+      "dailyWithdrawCap": 10000000,
+      "withdrawFee": 0,
+      "ticketPrices": { "bronze": 50000, "silver": 150000, "gold": 400000 }
+    }
   },
   "modes": {
     "duel": { "questionCount": 5, "timerSeconds": 10, "entry": { "free": { "hearts": 1, "coins": 25 }, "paid": { "cash": 30000 } }, "reward": { "free": { "type": "coins", "base": 80, "perStage": 45 }, "paid": { "type": "cash", "multiplier": 2 } } },
     "lastSurvivor": { "questionCount": 12, "timerSeconds": 15, "entry": { "free": { "hearts": 1, "coins": 30 }, "paid": { "cash": 60000 } }, "reward": { "free": { "type": "coins", "base": 50, "perQuestion": 30 }, "paid": { "type": "cash", "pool": true } } },
     "allOrNothing": { "timerSeconds": 15, "chatSeconds": 60, "entry": { "free": { "hearts": 1, "coins": 30 }, "paid": { "cash": 60000 } }, "reward": { "free": { "type": "coins", "base": 50, "perQuestion": 30 }, "paid": { "type": "cash", "pool": true } } },
     "weeklyLeague": { "entry": { "ticket": 1 }, "reward": { "free": { "type": "league" }, "paid": { "type": "league" } } }
+  },
+  "scoring": {
+    "paidMultiplier": 2,
+    "winBonusXp": 40,
+    "winBonusCup": 30,
+    "drawBonusXp": 15,
+    "drawBonusCup": 10,
+    "lossBonusXp": 8,
+    "lossBonusCup": 0
   }
 }

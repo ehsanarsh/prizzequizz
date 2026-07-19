@@ -49,15 +49,12 @@ export class WalletError extends Error {
   constructor(public code: string, message: string) { super(message); }
 }
 
-export const WALLET_LIMITS = {
-  minDeposit: envInt('WALLET_MIN_DEPOSIT', 10_000),
-  maxDeposit: envInt('WALLET_MAX_DEPOSIT', 100_000_000),
-  minWithdraw: envInt('WALLET_MIN_WITHDRAW', 200_000),
-  maxWithdraw: envInt('WALLET_MAX_WITHDRAW', 50_000_000),
-  dailyWithdrawCap: envInt('WALLET_DAILY_WITHDRAW_CAP', 10_000_000),
-  withdrawFee: envInt('WALLET_WITHDRAW_FEE', 0)
-};
-function envInt(name: string, dflt: number): number { const v = Number(process.env[name]); return Number.isFinite(v) && v >= 0 ? v : dflt; }
+// Live limits — read from the editable economy config on every access so admin
+// changes apply instantly. `WALLET_LIMITS` kept as a Proxy for the few existing
+// call sites that read it like a static object.
+import { getWalletLimits } from './economyConfig.js';
+export const WALLET_LIMITS: WalletLimits = new Proxy({} as WalletLimits, { get: (_t, prop: string) => (getWalletLimits() as any)[prop] });
+type WalletLimits = ReturnType<typeof getWalletLimits>;
 
 // ---------------------------------------------------------------------------
 // Schema (runtime-ensured so a plain build+restart deploy works; mirrors
@@ -357,7 +354,7 @@ export async function getDashboard(userId: string): Promise<Record<string, unkno
     lastTransactionAt: await lastEntryAt(userId),
     kycStatus: user ? 'phone_verified' : 'unknown',
     accountStatus: user ? (user.status ?? 'active') : 'unknown',
-    limits: WALLET_LIMITS
+    limits: getWalletLimits() // plain object (the Proxy JSON-serializes empty)
   };
 }
 

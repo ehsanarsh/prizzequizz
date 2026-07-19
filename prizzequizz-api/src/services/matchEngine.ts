@@ -7,7 +7,7 @@ import { updateSkillAfterMatch } from './skillRating.js';
 import { notifications } from './notificationService.js';
 import { integrity } from './integrityService.js';
 import { leaderboards } from './leaderboardService.js';
-import { PZ_SCORING, isoWeekId, levelForXp } from './scoringConfig.js';
+import { PZ_SCORING, getResultBonus, isoWeekId, levelForXp } from './scoringConfig.js';
 import { getPgPool } from '../database/postgres.js';
 import type { GameModeId, Match, MatchEvent, MatchPlayer, PlanType } from '../types/domain.js';
 import { id } from '../utils/id.js';
@@ -237,7 +237,7 @@ async function settleDuel(match: Match, winnerUserId: string | undefined, reason
     if (p.userId.startsWith('bot_')) continue;
     const base = match.duelPoints?.[p.userId] ?? { xp: 0, cup: 0 };
     const outcome = !match.winnerUserId ? 'draw' : (match.winnerUserId === p.userId ? 'win' : 'loss');
-    const rb = PZ_SCORING.result[outcome]!;
+    const rb = getResultBonus(outcome as 'win' | 'draw' | 'loss');
     const gainXp = base.xp + rb.xp * outcomeMult;
     const gainCup = base.cup + rb.cup * outcomeMult;
     try {

@@ -1,0 +1,368 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>PrizzeQuizz — پنل مدیریت</title>
+<style>
+:root{--bg:#0d0f14;--panel:#161a22;--panel2:#1d2230;--line:#2a3040;--ink:#e7ecf3;--muted:#8b94a7;--gold:#ffd21f;--ok:#33d97c;--bad:#ff5a48;--info:#5db7ec;--accent:#7b8bff;--radius:14px}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:'Segoe UI',Tahoma,system-ui,sans-serif;font-size:14px;-webkit-font-smoothing:antialiased}
+button{font-family:inherit;cursor:pointer}
+a{color:var(--info)}
+.hidden{display:none!important}
+input,select,textarea{font-family:inherit;background:#0c0f16;border:1.5px solid var(--line);border-radius:10px;color:var(--ink);padding:9px 11px;font-size:13px;width:100%}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent)}
+.btn{border:1.5px solid var(--line);border-radius:10px;background:var(--panel2);color:var(--ink);padding:8px 14px;font-weight:700;font-size:13px;transition:.15s}
+.btn:hover{filter:brightness(1.15)}
+.btn.pri{background:linear-gradient(180deg,#ffe24a,#f5b90d);color:#1a1400;border-color:#000}
+.btn.ok{background:var(--ok);color:#062611;border-color:#000}
+.btn.bad{background:var(--bad);color:#2a0500;border-color:#000}
+.btn.info{background:var(--info);color:#03202f;border-color:#000}
+.btn.sm{padding:5px 9px;font-size:11.5px;border-radius:8px}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+/* login */
+#login{min-height:100vh;display:grid;place-items:center;padding:20px}
+.login-card{background:var(--panel);border:1.5px solid var(--line);border-radius:20px;padding:30px;width:100%;max-width:400px;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+.login-card h1{margin:0 0 4px;font-size:22px}
+.login-card p{margin:0 0 22px;color:var(--muted);font-size:13px}
+.field{margin-bottom:14px}
+.field label{display:block;font-size:12px;color:var(--muted);font-weight:700;margin-bottom:6px}
+/* shell */
+#shell{display:grid;grid-template-columns:230px 1fr;min-height:100vh}
+aside{background:var(--panel);border-left:1.5px solid var(--line);padding:18px 12px;position:sticky;top:0;height:100vh;overflow:auto}
+.brand{font-size:17px;font-weight:900;padding:6px 10px 16px;display:flex;align-items:center;gap:8px}
+.brand small{color:var(--muted);font-weight:600;font-size:10.5px}
+.nav{display:flex;flex-direction:column;gap:3px}
+.nav button{display:flex;align-items:center;gap:10px;text-align:right;background:none;border:none;color:var(--muted);padding:10px 12px;border-radius:10px;font-size:13.5px;font-weight:700;width:100%}
+.nav button.active{background:var(--panel2);color:var(--ink)}
+.nav button:hover{color:var(--ink)}
+.nav .ico{width:20px;text-align:center}
+.logout{margin-top:18px;color:var(--bad);font-size:12px}
+main{padding:24px 26px;overflow:auto;max-height:100vh}
+.head{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;gap:12px;flex-wrap:wrap}
+.head h2{margin:0;font-size:20px}
+.head .sub{color:var(--muted);font-size:12.5px;margin-top:3px}
+/* cards */
+.grid{display:grid;gap:14px}
+.g4{grid-template-columns:repeat(4,1fr)}.g3{grid-template-columns:repeat(3,1fr)}.g2{grid-template-columns:repeat(2,1fr)}
+@media(max-width:1100px){.g4{grid-template-columns:repeat(2,1fr)}.g3{grid-template-columns:1fr 1fr}}
+@media(max-width:720px){#shell{grid-template-columns:1fr}aside{position:static;height:auto}.g4,.g3,.g2{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1.5px solid var(--line);border-radius:var(--radius);padding:16px}
+.stat{background:linear-gradient(160deg,var(--panel2),var(--panel));border:1.5px solid var(--line);border-radius:var(--radius);padding:16px}
+.stat .k{color:var(--muted);font-size:12px;font-weight:700}
+.stat .v{font-size:24px;font-weight:900;margin-top:6px;letter-spacing:.3px}
+.stat .v.gold{color:var(--gold)}.stat .v.ok{color:var(--ok)}.stat .v.bad{color:var(--bad)}.stat .v.info{color:var(--info)}
+.card h3{margin:0 0 12px;font-size:15px}
+/* table */
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th,td{padding:9px 8px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+th{color:var(--muted);font-weight:700;font-size:11.5px;position:sticky;top:0;background:var(--panel)}
+tbody tr:hover{background:var(--panel2)}
+.tbl-wrap{overflow:auto;border-radius:12px;border:1.5px solid var(--line)}
+.mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px}
+.pill{display:inline-block;padding:2px 9px;border-radius:100px;font-size:10.5px;font-weight:800;border:1.5px solid #000}
+.pill.pend{background:#3a3320;color:#ffd67a}.pill.ok{background:#0f3323;color:#5cffa8}.pill.bad{background:#3a1512;color:#ff8f82}.pill.info{background:#0e2c3d;color:#8fd6ff}
+.toolbar{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
+.toolbar input,.toolbar select{width:auto;min-width:150px}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--panel2);border:1.5px solid var(--line);border-radius:12px;padding:12px 18px;font-weight:700;z-index:99;box-shadow:0 10px 30px rgba(0,0,0,.5);opacity:0;transition:.3s;pointer-events:none}
+.toast.show{opacity:1;bottom:30px}
+.toast.ok{border-color:var(--ok)}.toast.bad{border-color:var(--bad)}
+.empty{padding:34px;text-align:center;color:var(--muted);font-weight:700}
+.cfg-section{margin-bottom:18px}
+.cfg-section h4{margin:0 0 10px;font-size:13.5px;color:var(--gold)}
+.cfg-row{display:grid;grid-template-columns:1fr 160px;gap:10px;align-items:center;margin-bottom:8px}
+.cfg-row label{font-size:12.5px;color:var(--muted)}
+textarea.json{min-height:320px;font-family:ui-monospace,monospace;font-size:12px;line-height:1.6;white-space:pre;direction:ltr;text-align:left}
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.6);display:grid;place-items:center;z-index:50;padding:16px}
+.modal{background:var(--panel);border:1.5px solid var(--line);border-radius:16px;padding:20px;width:100%;max-width:520px;max-height:88vh;overflow:auto}
+.spin{width:18px;height:18px;border:2.5px solid var(--line);border-top-color:var(--gold);border-radius:50%;display:inline-block;animation:sp .7s linear infinite;vertical-align:middle}
+@keyframes sp{to{transform:rotate(360deg)}}
+.skel{height:52px;border-radius:10px;margin-bottom:8px;background:linear-gradient(90deg,var(--panel) 25%,var(--panel2) 50%,var(--panel) 75%);background-size:200% 100%;animation:sh 1.2s linear infinite}
+@keyframes sh{to{background-position:-200% 0}}
+</style>
+</head>
+<body>
+
+<!-- ===================== LOGIN ===================== -->
+<section id="login">
+  <div class="login-card">
+    <h1>⚡ پنل مدیریت</h1>
+    <p>PrizzeQuizz — کنترل کامل سیستم</p>
+    <div class="field"><label>آدرس API</label><input id="inApi" placeholder="https://دامنه/v1" dir="ltr"></div>
+    <div class="field"><label>کلید مدیریت (Admin Key)</label><input id="inKey" type="password" placeholder="ADMIN_KEY" dir="ltr"></div>
+    <button class="btn pri" style="width:100%;margin-top:6px" onclick="doLogin()">ورود به پنل</button>
+    <p id="loginErr" style="color:var(--bad);margin:12px 0 0;font-size:12px"></p>
+  </div>
+</section>
+
+<!-- ===================== SHELL ===================== -->
+<section id="shell" class="hidden">
+  <aside>
+    <div class="brand">⚡ Prizze<small id="cfgVer"></small></div>
+    <nav class="nav" id="nav"></nav>
+    <button class="btn logout" style="width:100%" onclick="logout()">خروج از پنل</button>
+  </aside>
+  <main id="main"><div class="skel"></div><div class="skel"></div><div class="skel"></div></main>
+</section>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ---------------- core ---------------- */
+let API=localStorage.getItem('pz_admin_api')||(location.origin+'/v1');
+let KEY=localStorage.getItem('pz_admin_key')||'';
+const $=(s,r=document)=>r.querySelector(s);
+function fa(n){return (Number(n)||0).toLocaleString('fa-IR');}
+function toast(msg,type){const t=$('#toast');t.textContent=msg;t.className='toast show '+(type||'');clearTimeout(toast._t);toast._t=setTimeout(()=>t.className='toast',2600);}
+async function api(method,path,body){
+  const r=await fetch(API+path,{method,headers:{'Content-Type':'application/json','x-admin-key':KEY},body:body?JSON.stringify(body):undefined});
+  let data=null; try{data=await r.json();}catch(e){}
+  if(r.status===403){throw {code:'FORBIDDEN',message:'کلید مدیریت نامعتبر است'};}
+  if(!r.ok){throw (data&&data.error)||{message:'خطای '+r.status};}
+  return data&&data.data!==undefined?data.data:data;
+}
+async function doLogin(){
+  API=($('#inApi').value||'').trim().replace(/\/$/,'')||API;
+  KEY=($('#inKey').value||'').trim();
+  if(!KEY){$('#loginErr').textContent='کلید مدیریت را وارد کن';return;}
+  try{
+    await api('GET','/admin/wallet/consistency');   /* probe an admin route */
+    localStorage.setItem('pz_admin_api',API);localStorage.setItem('pz_admin_key',KEY);
+    $('#login').classList.add('hidden');$('#shell').classList.remove('hidden');
+    buildNav();go('dashboard');
+  }catch(e){$('#loginErr').textContent=e.message||'ورود ناموفق بود';}
+}
+function logout(){localStorage.removeItem('pz_admin_key');location.reload();}
+
+const PAGES=[
+  ['dashboard','📊','داشبورد'],
+  ['withdrawals','💸','برداشت‌ها'],
+  ['accounts','👛','کیف پول کاربران'],
+  ['config','⚙️','تنظیمات (همه متغیرها)'],
+  ['reports','📈','گزارش‌ها'],
+  ['holds','🛡️','جوایز در انتظار'],
+  ['audit','📝','لاگ‌ها'],
+];
+function buildNav(){
+  $('#nav').innerHTML=PAGES.map(p=>'<button data-p="'+p[0]+'" onclick="go(\''+p[0]+'\')"><span class="ico">'+p[1]+'</span>'+p[2]+'</button>').join('');
+}
+let CUR='dashboard';
+function go(p){CUR=p;document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('active',b.dataset.p===p));render();}
+function loading(){$('#main').innerHTML='<div class="skel"></div><div class="skel"></div><div class="skel"></div>';}
+function head(title,sub,right){return '<div class="head"><div><h2>'+title+'</h2>'+(sub?'<div class="sub">'+sub+'</div>':'')+'</div><div>'+(right||'')+'</div></div>';}
+
+async function render(){
+  loading();
+  try{
+    if(CUR==='dashboard')return renderDashboard();
+    if(CUR==='withdrawals')return renderWithdrawals();
+    if(CUR==='accounts')return renderAccounts();
+    if(CUR==='config')return renderConfig();
+    if(CUR==='reports')return renderReports();
+    if(CUR==='holds')return renderHolds();
+    if(CUR==='audit')return renderAudit();
+  }catch(e){$('#main').innerHTML=head('خطا')+'<div class="card empty">'+(e.message||'خطا در دریافت داده')+'</div>';}
+}
+
+/* ---------------- dashboard ---------------- */
+async function renderDashboard(){
+  const [rep,wds,susp]=await Promise.all([
+    api('GET','/admin/wallet/reports?granularity=daily').catch(()=>({rows:[]})),
+    api('GET','/admin/wallet/withdrawals?status=pending&pageSize=100').catch(()=>({rows:[],total:0})),
+    api('GET','/admin/wallet/reports/suspicious').catch(()=>[])
+  ]);
+  const rows=rep.rows||[];
+  const sum=k=>rows.reduce((s,r)=>s+(Number(r[k])||0),0);
+  const today=rows[0]||{};
+  $('#main').innerHTML=head('داشبورد','نمای کلیِ مالی و عملیاتی')+
+    '<div class="grid g4" style="margin-bottom:16px">'+
+      stat('درآمد امروز (سود سیستم)','gold',fa(today.systemProfit||0)+' ت')+
+      stat('واریز امروز (شارژ)','ok',fa(today.deposits||0)+' ت')+
+      stat('برداشت‌های در انتظار','bad',fa(wds.total||0)+' مورد')+
+      stat('کاربران مشکوک','info',fa((susp||[]).length))+
+    '</div>'+
+    '<div class="grid g4" style="margin-bottom:16px">'+
+      stat('کل شارژ (بازهٔ اخیر)','',fa(sum('deposits'))+' ت')+
+      stat('کل جوایز پرداختی','',fa(sum('rewards'))+' ت')+
+      stat('کل ورودی/بلیت','',fa(sum('stakes'))+' ت')+
+      stat('کل برداشت','',fa(sum('withdrawals'))+' ت')+
+    '</div>'+
+    '<div class="card"><h3>روند روزانه</h3>'+tableHTML(
+      ['روز','شارژ','جوایز','ورودی','برداشت','سود سیستم'],
+      rows.slice(0,14).map(r=>[r.period,fa(r.deposits),fa(r.rewards),fa(r.stakes),fa(r.withdrawals),'<b style="color:var(--gold)">'+fa(r.systemProfit)+'</b>']))+
+    '</div>';
+}
+function stat(k,cls,v){return '<div class="stat"><div class="k">'+k+'</div><div class="v '+(cls||'')+'">'+v+'</div></div>';}
+function tableHTML(cols,rows){
+  if(!rows.length)return '<div class="empty">داده‌ای نیست</div>';
+  return '<div class="tbl-wrap"><table><thead><tr>'+cols.map(c=>'<th>'+c+'</th>').join('')+'</tr></thead><tbody>'+
+    rows.map(r=>'<tr>'+r.map(c=>'<td>'+c+'</td>').join('')+'</tr>').join('')+'</tbody></table></div>';
+}
+
+/* ---------------- withdrawals ---------------- */
+let WD_STATUS='pending';
+async function renderWithdrawals(){
+  const d=await api('GET','/admin/wallet/withdrawals?status='+WD_STATUS+'&pageSize=100');
+  const st={pending:'در انتظار',approved:'تأییدشده',paid:'پرداخت‌شده',rejected:'ردشده',failed:'ناموفق'};
+  const tabs=['pending','approved','paid','rejected','failed'].map(s=>'<button class="btn sm '+(WD_STATUS===s?'pri':'')+'" onclick="WD_STATUS=\''+s+'\';render()">'+st[s]+'</button>').join(' ');
+  const rows=(d.rows||[]).map(w=>{
+    let actions='';
+    if(w.status==='pending')actions='<button class="btn sm ok" onclick="wdAct(\''+w.id+'\',\'approve\')">تأیید</button> <button class="btn sm bad" onclick="wdReject(\''+w.id+'\')">رد</button>';
+    else if(w.status==='approved')actions='<button class="btn sm info" onclick="wdPaid(\''+w.id+'\')">ثبت پرداخت</button> <button class="btn sm bad" onclick="wdReject(\''+w.id+'\')">رد</button>';
+    return [w.id.slice(0,8),'<span class="mono">'+(w.destination||'')+'</span>','<b>'+fa(w.amount)+'</b>','<span class="pill '+pillOf(w.status)+'">'+(st[w.status]||w.status)+'</span>',fmtDate(w.createdAt),(w.rejectReason||w.paymentReference||'—'),actions];
+  });
+  $('#main').innerHTML=head('برداشت‌ها','صف تأیید و پرداخت','')+'<div class="toolbar">'+tabs+'</div>'+
+    tableHTML(['شناسه','مقصد','مبلغ','وضعیت','زمان','توضیح','عملیات'],rows);
+}
+function pillOf(s){return s==='paid'||s==='approved'?'ok':(s==='rejected'||s==='failed'?'bad':'pend');}
+async function wdAct(id,action){try{await api('POST','/admin/wallet/withdrawals/'+id+'/'+action);toast('انجام شد','ok');render();}catch(e){toast(e.message,'bad');}}
+async function wdPaid(id){const ref=prompt('کد پیگیریِ واریز بانکی:');if(ref===null)return;try{await api('POST','/admin/wallet/withdrawals/'+id+'/paid',{paymentReference:ref});toast('پرداخت ثبت شد','ok');render();}catch(e){toast(e.message,'bad');}}
+async function wdReject(id){const reason=prompt('علت رد شدن:');if(reason===null)return;try{await api('POST','/admin/wallet/withdrawals/'+id+'/reject',{reason});toast('رد شد و مبلغ آزاد شد','ok');render();}catch(e){toast(e.message,'bad');}}
+
+/* ---------------- accounts ---------------- */
+let ACC_Q='';
+async function renderAccounts(){
+  const d=await api('GET','/admin/wallet/accounts?q='+encodeURIComponent(ACC_Q));
+  const rows=(d.rows||[]).map(u=>[
+    (u.username||'')+' <span class="mono" style="color:var(--muted)">'+u.userId.slice(0,8)+'</span>',
+    '<b style="color:var(--ok)">'+fa(u.account.available)+'</b>',
+    fa(u.account.locked),
+    '<span class="pill '+(u.status==='active'?'ok':'bad')+'">'+(u.status||'active')+'</span>',
+    '<button class="btn sm" onclick="viewLedger(\''+u.userId+'\',\''+(u.username||'')+'\')">دفترکل</button> <button class="btn sm info" onclick="adjust(\''+u.userId+'\')">اصلاح</button>'
+  ]);
+  $('#main').innerHTML=head('کیف پول کاربران','موجودی، دفترکل و اصلاح دستی')+
+    '<div class="toolbar"><input id="accSearch" placeholder="جستجوی نام/شناسه..." value="'+ACC_Q+'" onkeydown="if(event.key===\'Enter\'){ACC_Q=this.value.trim();render();}"><button class="btn" onclick="ACC_Q=$(\'#accSearch\').value.trim();render()">جستجو</button></div>'+
+    tableHTML(['کاربر','قابل‌برداشت','بلوکه','وضعیت','عملیات'],rows);
+}
+async function viewLedger(uid,uname){
+  try{
+    const d=await api('GET','/admin/wallet/users/'+uid+'/ledger?pageSize=60');
+    const rows=(d.rows||[]).map(e=>[LT(e.entryType),(e.kind==='credit'||e.kind==='release'?'<b style="color:var(--ok)">+':'<b style="color:var(--bad)">−')+fa(e.amount)+'</b>',fa(e.availableAfter),fmtDate(e.createdAt),(e.description||'')]);
+    modal('دفترکل: '+uname, tableHTML(['نوع','مبلغ','مانده بعد','زمان','توضیح'],rows));
+  }catch(e){toast(e.message,'bad');}
+}
+async function adjust(uid){
+  const amount=prompt('مبلغ اصلاح (مثبت=واریز، منفی=کسر):');if(amount===null)return;
+  const reason=prompt('علت اصلاح:');if(reason===null)return;
+  try{await api('POST','/admin/wallet/adjust',{userId:uid,amount:Number(amount),reason});toast('حساب اصلاح شد','ok');render();}catch(e){toast(e.message,'bad');}
+}
+function LT(t){const m={deposit:'شارژ',ticket_purchase:'خرید بلیت',match_stake:'ورودی مسابقه',stake_refund:'برگشت ورودی',refund:'بازگشت وجه',match_reward:'جایزه مسابقه',league_reward:'جایزه لیگ',referral_reward:'جایزه دعوت',bonus:'بونوس',withdraw_lock:'بلوکهٔ برداشت',withdraw_release:'آزادسازی',withdraw_paid:'برداشت پرداختی',fee:'کارمزد',penalty:'جریمه',adjustment:'اصلاح حساب',transfer_in:'انتقال ورودی',transfer_out:'انتقال خروجی'};return m[t]||t;}
+
+/* ---------------- config (ALL variables) ---------------- */
+let CFG=null;
+async function renderConfig(){
+  CFG=await api('GET','/admin/config');
+  $('#cfgVer').textContent=' '+(CFG.version||'');
+  const e=CFG.economy||{},w=e.wallet||{},paid=e.paid||{},free=e.free||{},sc=CFG.scoring||{};
+  const num=(id,label,val)=>'<div class="cfg-row"><label>'+label+'</label><input id="'+id+'" type="number" value="'+(val==null?'':val)+'"></div>';
+  const modeRows=Object.keys(CFG.modes||{}).map(mid=>{
+    const m=CFG.modes[mid];const paidCash=(m.entry&&m.entry.paid&&m.entry.paid.cash)!=null?m.entry.paid.cash:'';
+    return '<div class="cfg-row"><label>'+mid+' — ورودی نقدی (تومان)</label><input id="mode_'+mid+'_cash" type="number" value="'+paidCash+'"></div>'+
+      '<div class="cfg-row"><label>'+mid+' — تعداد سوال</label><input id="mode_'+mid+'_qc" type="number" value="'+(m.questionCount!=null?m.questionCount:'')+'"></div>'+
+      '<div class="cfg-row"><label>'+mid+' — ثانیهٔ هر سوال</label><input id="mode_'+mid+'_timer" type="number" value="'+(m.timerSeconds!=null?m.timerSeconds:'')+'"></div>';
+  }).join('');
+  $('#main').innerHTML=head('تنظیمات — همهٔ متغیرها','هر تغییر بلافاصله اعمال و در دیتابیس ذخیره می‌شود (بعد از ری‌استارت هم می‌ماند)',
+    '<button class="btn pri" onclick="saveCfgForm()">💾 ذخیرهٔ فرم</button>')+
+    '<div class="grid g2">'+
+      '<div class="card"><h3>💰 اقتصاد و کیف پول</h3>'+
+        '<div class="cfg-section"><h4>کارمزد و جوایز</h4>'+
+          num('cfg_rake','کارمزد پلتفرم روی برد (٪)',paid.rakePercent)+
+          num('cfg_wdfee_pct','کارمزد برداشت (٪) — نمایشی',paid.withdrawFeePercent)+
+        '</div>'+
+        '<div class="cfg-section"><h4>محدودیت‌های کیف پول (تومان)</h4>'+
+          num('cfg_minDep','حداقل شارژ',w.minDeposit)+num('cfg_maxDep','حداکثر شارژ',w.maxDeposit)+
+          num('cfg_minWd','حداقل برداشت',w.minWithdraw)+num('cfg_maxWd','حداکثر برداشت',w.maxWithdraw)+
+          num('cfg_dailyCap','سقف برداشت روزانه',w.dailyWithdrawCap)+num('cfg_wdfee','کارمزد ثابت برداشت',w.withdrawFee)+
+        '</div>'+
+        '<div class="cfg-section"><h4>قیمت بلیت لیگ (تومان)</h4>'+
+          num('cfg_tk_b','برنزی',(w.ticketPrices||{}).bronze)+num('cfg_tk_s','نقره‌ای',(w.ticketPrices||{}).silver)+num('cfg_tk_g','طلایی',(w.ticketPrices||{}).gold)+
+        '</div>'+
+      '</div>'+
+      '<div class="card"><h3>🎮 بازی و امتیاز</h3>'+
+        '<div class="cfg-section"><h4>حالت‌های بازی</h4>'+modeRows+'</div>'+
+        '<div class="cfg-section"><h4>رایگان (تمرینی)</h4>'+
+          num('cfg_heartMin','دقیقهٔ شارژ هر قلب',free.heartRechargeMinutes)+num('cfg_maxHearts','حداکثر قلب',free.maxFreeHearts)+num('cfg_defCoins','سکهٔ اولیه',free.defaultCoins)+
+        '</div>'+
+        '<div class="cfg-section"><h4>امتیاز (XP/کاپ)</h4>'+
+          num('cfg_sc_wxp','XP برد',sc.winBonusXp)+num('cfg_sc_wcup','کاپ برد',sc.winBonusCup)+
+          num('cfg_sc_dxp','XP مساوی',sc.drawBonusXp)+num('cfg_sc_lxp','XP باخت',sc.lossBonusXp)+
+        '</div>'+
+      '</div>'+
+    '</div>'+
+    '<div class="card" style="margin-top:14px"><h3>🧩 ویرایش خام JSON (کاملِ تنظیمات)</h3><p style="color:var(--muted);font-size:12px;margin:0 0 10px">برای هر متغیری که در فرم بالا نیست، مستقیم اینجا ویرایش کن.</p>'+
+      '<textarea class="json" id="cfgJson">'+JSON.stringify(CFG,null,2)+'</textarea>'+
+      '<div style="margin-top:10px;display:flex;gap:8px"><button class="btn pri" onclick="saveCfgJson()">💾 ذخیرهٔ JSON کامل</button><button class="btn" onclick="renderConfig()">بازنشانی</button></div></div>';
+}
+function gv(id){const el=$('#'+id);if(!el||el.value==='')return undefined;return Number(el.value);}
+async function saveCfgForm(){
+  const patch={economy:{paid:{},wallet:{ticketPrices:{}},free:{}},modes:{},scoring:{}};
+  const set=(o,k,v)=>{if(v!==undefined)o[k]=v;};
+  set(patch.economy.paid,'rakePercent',gv('cfg_rake'));set(patch.economy.paid,'withdrawFeePercent',gv('cfg_wdfee_pct'));
+  set(patch.economy.wallet,'minDeposit',gv('cfg_minDep'));set(patch.economy.wallet,'maxDeposit',gv('cfg_maxDep'));
+  set(patch.economy.wallet,'minWithdraw',gv('cfg_minWd'));set(patch.economy.wallet,'maxWithdraw',gv('cfg_maxWd'));
+  set(patch.economy.wallet,'dailyWithdrawCap',gv('cfg_dailyCap'));set(patch.economy.wallet,'withdrawFee',gv('cfg_wdfee'));
+  set(patch.economy.wallet.ticketPrices,'bronze',gv('cfg_tk_b'));set(patch.economy.wallet.ticketPrices,'silver',gv('cfg_tk_s'));set(patch.economy.wallet.ticketPrices,'gold',gv('cfg_tk_g'));
+  set(patch.economy.free,'heartRechargeMinutes',gv('cfg_heartMin'));set(patch.economy.free,'maxFreeHearts',gv('cfg_maxHearts'));set(patch.economy.free,'defaultCoins',gv('cfg_defCoins'));
+  set(patch.scoring,'winBonusXp',gv('cfg_sc_wxp'));set(patch.scoring,'winBonusCup',gv('cfg_sc_wcup'));set(patch.scoring,'drawBonusXp',gv('cfg_sc_dxp'));set(patch.scoring,'lossBonusXp',gv('cfg_sc_lxp'));
+  Object.keys(CFG.modes||{}).forEach(mid=>{
+    const cash=gv('mode_'+mid+'_cash'),qc=gv('mode_'+mid+'_qc'),tm=gv('mode_'+mid+'_timer');
+    const m={};if(cash!==undefined)m.entry={paid:{cash}};if(qc!==undefined)m.questionCount=qc;if(tm!==undefined)m.timerSeconds=tm;
+    if(Object.keys(m).length)patch.modes[mid]=m;
+  });
+  try{await api('PATCH','/admin/config',patch);toast('تنظیمات ذخیره و اعمال شد ✅','ok');renderConfig();}catch(e){toast(e.message,'bad');}
+}
+async function saveCfgJson(){
+  let obj;try{obj=JSON.parse($('#cfgJson').value);}catch(e){return toast('JSON نامعتبر: '+e.message,'bad');}
+  try{await api('PUT','/admin/config',obj);toast('کل تنظیمات ذخیره شد ✅','ok');renderConfig();}catch(e){toast(e.message||'ذخیره ناموفق','bad');}
+}
+
+/* ---------------- reports ---------------- */
+let REP_G='daily';
+async function renderReports(){
+  const [rep,top,failed]=await Promise.all([
+    api('GET','/admin/wallet/reports?granularity='+REP_G),
+    api('GET','/admin/wallet/reports/top-users?limit=15').catch(()=>[]),
+    api('GET','/admin/wallet/reports/failed').catch(()=>({failedTransactions:[],failedPayments:[]}))
+  ]);
+  $('#main').innerHTML=head('گزارش‌ها','مالی، کاربران پرگردش و ناموفق‌ها',
+    '<button class="btn sm '+(REP_G==='daily'?'pri':'')+'" onclick="REP_G=\'daily\';render()">روزانه</button> <button class="btn sm '+(REP_G==='monthly'?'pri':'')+'" onclick="REP_G=\'monthly\';render()">ماهانه</button>')+
+    '<div class="card" style="margin-bottom:14px"><h3>گزارش '+(REP_G==='daily'?'روزانه':'ماهانه')+'</h3>'+
+      tableHTML(['دوره','شارژ','جوایز','ورودی','برداشت','سود سیستم'],(rep.rows||[]).map(r=>[r.period,fa(r.deposits),fa(r.rewards),fa(r.stakes),fa(r.withdrawals),'<b style="color:var(--gold)">'+fa(r.systemProfit)+'</b>']))+'</div>'+
+    '<div class="grid g2">'+
+      '<div class="card"><h3>کاربران پرگردش</h3>'+tableHTML(['کاربر','گردش','تعداد'],(top||[]).map(u=>[(u.username||u.userId.slice(0,8)),fa(u.volume),fa(u.entries||0)]))+'</div>'+
+      '<div class="card"><h3>تراکنش‌های ناموفق</h3>'+tableHTML(['نوع','مبلغ','زمان'],((failed.failedTransactions)||[]).slice(0,20).map(t=>[t.type,fa(t.amount),fmtDate(t.createdAt)]))+'</div>'+
+    '</div>';
+}
+
+/* ---------------- reward holds ---------------- */
+async function renderHolds(){
+  let holds=[];try{holds=await api('GET','/admin/rewards/holds?status=pending&limit=50');}catch(e){}
+  const rows=(holds||[]).map(h=>[h.id.slice(0,8),h.userId.slice(0,8),fa(h.amount)+' '+(h.rewardType==='cash'?'ت':''),(h.riskLevel||'—'),'<button class="btn sm ok" onclick="releaseHold(\''+h.id+'\')">آزادسازی</button>']);
+  $('#main').innerHTML=head('جوایز در انتظار بررسی','جوایزی که به‌خاطر ریسک نگه داشته شده‌اند')+
+    tableHTML(['شناسه','کاربر','مبلغ','ریسک','عملیات'],rows);
+}
+async function releaseHold(id){try{await api('PATCH','/admin/rewards/holds/'+id+'/status',{status:'approved'});toast('جایزه آزاد شد','ok');render();}catch(e){toast(e.message,'bad');}}
+
+/* ---------------- audit ---------------- */
+async function renderAudit(){
+  const logs=await api('GET','/admin/wallet/audit?limit=100');
+  const rows=(logs||[]).map(l=>[l.action,(l.user_id||l.userId||'').slice?.(0,8)||'—',(l.ip||'—'),(l.api||'—'),(l.error?'<span style="color:var(--bad)">'+l.error+'</span>':'—'),fmtDate(l.created_at||l.createdAt)]);
+  $('#main').innerHTML=head('لاگ عملیات مالی (Audit)','هر عملیات با IP و دستگاه ثبت می‌شود')+
+    tableHTML(['عملیات','کاربر','IP','API','خطا','زمان'],rows);
+}
+
+/* ---------------- helpers ---------------- */
+function fmtDate(d){if(!d)return '—';try{return new Date(d).toLocaleString('fa-IR',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});}catch(e){return d;}}
+function modal(title,html){
+  const bg=document.createElement('div');bg.className='modal-bg';bg.onclick=e=>{if(e.target===bg)bg.remove();};
+  bg.innerHTML='<div class="modal"><div class="head"><h2 style="font-size:16px">'+title+'</h2><button class="btn sm" onclick="this.closest(\'.modal-bg\').remove()">✕</button></div>'+html+'</div>';
+  document.body.appendChild(bg);
+}
+
+/* ---------------- boot ---------------- */
+$('#inApi').value=API;$('#inKey').value=KEY;
+if(KEY){doLogin();}
+</script>
+</body>
+</html>
