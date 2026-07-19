@@ -1,6 +1,7 @@
 import type { Router } from '../../http/router.js';
 import { error, json } from '../../http/response.js';
-import { createMatch, createMatchForPlayers, getMatch, startMatch, submitAnswer } from '../../services/matchEngine.js';
+import { claimTimeout, createMatch, createMatchForPlayers, forfeitMatch, getMatch, startMatch, submitAnswer } from '../../services/matchEngine.js';
+import { realtimeRooms } from '../../realtime/roomRegistry.js';
 import { validateAnswer } from '../../services/questionEngine.js';
 import { repositories } from '../../repositories/index.js';
 import { activeMatchState } from '../../services/matchStateStore.js';
@@ -119,17 +120,21 @@ export function registerMatchRoutes(router: Router, base: string): void {
   // Permanently finish a match (e.g. a forfeit when the opponent disconnected).
   // Once finished the phase is locked so a reconnecting client cannot resume a
   // match the other player has already won and left.
+  // SECURITY: the old implementation accepted winnerUserId FROM THE CLIENT and
+  // marked the match settled without running any settlement — any player could
+  // claim victory. It now runs the server-authoritative inactivity claim (the
+  // caller wins only if the server's own answer log proves the opponent idle),
+  // which also keeps older deployed clients calling /finish working honestly.
   router.add('POST', `${base}/matches/:id/finish`, async (ctx) => {
-    const match = await getMatch(ctx.params.id!);
-    if (match.phase !== 'finished') {
-      const w = (ctx.body as any)?.winnerUserId;
-      if (w) match.winnerUserId = String(w);
-      match.phase = 'finished';
-      match.duelSettled = true;
-      match.updatedAt = new Date().toISOString();
-      await persist(match);
+    if (!ctx.userId) return error(ctx.res, 401, 'UNAUTHORIZED', 'Login required.');
+    try {
+      const { match, granted } = await claimTimeout(ctx.params.id!, ctx.userId);
+      if (granted) realtimeRooms.broadcast(match.id, { type: 'server:match_finished', matchId: match.id, payload: toSnapshot(match) });
+      json(ctx.res, 200, toSnapshot(match));
+    } catch (e) {
+      if (e instanceof Error && e.message === 'NOT_A_PLAYER') return error(ctx.res, 403, 'NOT_A_PLAYER', 'Not a player of this match.');
+      throw e;
     }
-    json(ctx.res, 200, toSnapshot(match));
   });
 
   // The toss winner stores the chosen topic on the match; the server is the
@@ -183,7 +188,39 @@ export function registerMatchRoutes(router: Router, base: string): void {
   router.add('GET', `${base}/matches/:id`, async (ctx) => json(ctx.res, 200, toSnapshot(await getMatch(ctx.params.id!))));
   router.add('POST', `${base}/matches/:id/start`, async (ctx) => json(ctx.res, 200, toSnapshot(await startMatch(ctx.params.id!))));
   router.add('POST', `${base}/matches/:id/continue`, async (ctx) => json(ctx.res, 200, toSnapshot(await startMatch(ctx.params.id!))));
-  router.add('POST', `${base}/matches/:id/exit`, async (ctx) => { const m = await getMatch(ctx.params.id!); m.phase = 'finished'; json(ctx.res, 200, toSnapshot(m)); });
+  // Leaving mid-duel (X button / app exit) = FORFEIT: the leaver loses, the
+  // opponent wins — settled exactly once server-side and pushed to the room so
+  // the remaining player is declared winner instantly. Exiting an already-
+  // finished match changes nothing (idempotent) — the second player to close
+  // the result screen can never be flipped into a loser.
+  const leaveHandler = async (ctx: any) => {
+    if (!ctx.userId) return error(ctx.res, 401, 'UNAUTHORIZED', 'Login required.');
+    try {
+      const match = await forfeitMatch(ctx.params.id!, ctx.userId);
+      if (match.phase === 'result') realtimeRooms.broadcast(match.id, { type: 'server:match_finished', matchId: match.id, payload: toSnapshot(match) });
+      json(ctx.res, 200, toSnapshot(match));
+    } catch (e) {
+      if (e instanceof Error && e.message === 'NOT_A_PLAYER') return error(ctx.res, 403, 'NOT_A_PLAYER', 'Not a player of this match.');
+      throw e;
+    }
+  };
+  router.add('POST', `${base}/matches/:id/leave`, leaveHandler);
+  router.add('POST', `${base}/matches/:id/exit`, leaveHandler);
+
+  // Opponent-inactivity claim: the server checks ITS OWN answer log — the
+  // claimant must be strictly ahead and the opponent idle for 45s+. The client
+  // can only ask; it can never assert the opponent is gone.
+  router.add('POST', `${base}/matches/:id/claim-timeout`, async (ctx) => {
+    if (!ctx.userId) return error(ctx.res, 401, 'UNAUTHORIZED', 'Login required.');
+    try {
+      const { match, granted, waitMs } = await claimTimeout(ctx.params.id!, ctx.userId);
+      if (granted) realtimeRooms.broadcast(match.id, { type: 'server:match_finished', matchId: match.id, payload: toSnapshot(match) });
+      json(ctx.res, 200, { granted, waitMs: waitMs ?? 0, ...toSnapshot(match) });
+    } catch (e) {
+      if (e instanceof Error && e.message === 'NOT_A_PLAYER') return error(ctx.res, 403, 'NOT_A_PLAYER', 'Not a player of this match.');
+      throw e;
+    }
+  });
 
   router.add('POST', `${base}/matches/:id/answer`, async (ctx) => {
     const body = ctx.body as any;

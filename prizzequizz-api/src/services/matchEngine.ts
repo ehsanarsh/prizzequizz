@@ -1,8 +1,7 @@
 import { gameConfig } from '../core/config.js';
 import { repositories } from '../repositories/index.js';
 import { chargeEntry } from './economyEngine.js';
-import { applyReward, calculateDuelReward, duelStake } from './rewardEngine.js';
-import { postEntry } from './walletLedgerService.js';
+import { applyReward, calculateDuelReward } from './rewardEngine.js';
 import { activeMatchState } from './matchStateStore.js';
 import { updateSkillAfterMatch } from './skillRating.js';
 import { notifications } from './notificationService.js';
@@ -201,58 +200,101 @@ async function submitAnswerLocked(input: SubmitAnswerInput): Promise<{ match: Ma
   match.updatedAt = new Date().toISOString();
 
   if (finished && !match.duelSettled) {
-    match.duelSettled = true;
-    match.winnerUserId = decisiveLeader ? sorted[0]!.userId : undefined; // undefined => draw (only at hard cap)
-    // Pay the WINNER (looked up directly — not only when the finishing submit
-    // happens to be the winner's own), exactly once via the reward idempotency.
-    if (match.winnerUserId && !match.winnerUserId.startsWith('bot_')) {
-      const winner = await repositories.users.findById(match.winnerUserId);
-      if (winner) {
-        try { await applyReward(winner, calculateDuelReward(match, winner), match.id); }
-        catch { /* reward failure must never break match end; ledger stays consistent */ }
-      }
-    }
-    // Paid draw → both stakes go back (idempotent per player per match).
-    if (!match.winnerUserId && /^v\d+$/.test(String(match.economyType))) {
-      const stake = duelStake(match);
-      for (const p of match.players) {
-        if (p.userId.startsWith('bot_')) continue;
-        try {
-          await postEntry({ userId: p.userId, entryType: 'stake_refund', kind: 'credit', amount: stake, idempotencyKey: `stake_refund_draw:${match.id}:${p.userId}`, refType: 'match', refId: match.id, description: 'برگشت ورودی: نتیجه مساوی' });
-        } catch { /* refund failure is auditable via ledger absence; never break match end */ }
-      }
-    }
-
-    // Award XP + weekly 🏆cup to BOTH players (server-authoritative → real, cheat-proof
-    // leaderboard). Add the win/draw/loss bonus on top of the per-question total, apply
-    // atomically (with weekly reset), sync the leaderboard, and expose the breakdown.
-    match.duelPointsFinal = {};
-    const outcomeMult = match.economyType === 'paid' ? PZ_SCORING.paidMultiplier : 1;
-    for (const p of match.players) {
-      if (p.userId.startsWith('bot_')) continue;
-      const base = match.duelPoints?.[p.userId] ?? { xp: 0, cup: 0 };
-      const outcome = !match.winnerUserId ? 'draw' : (match.winnerUserId === p.userId ? 'win' : 'loss');
-      const rb = PZ_SCORING.result[outcome]!;
-      const gainXp = base.xp + rb.xp * outcomeMult;
-      const gainCup = base.cup + rb.cup * outcomeMult;
-      try {
-        const applied = await awardScoring(p.userId, gainXp, gainCup);
-        match.duelPointsFinal[p.userId] = { xp: gainXp, cup: gainCup, result: outcome, totalXp: applied.xp, totalCup: applied.cup, level: applied.level };
-        const u = await repositories.users.findById(p.userId);
-        if (u) await leaderboards.updateUser(u);
-      } catch { /* never let scoring break the match end */ }
-    }
-
-    await integrity.inspectMatchFinished(match);
-    await updateSkillAfterMatch(match);
-    await Promise.all(match.players.filter((p) => !p.userId.startsWith('bot_')).map((p) => notifications.create({ userId: p.userId, type: 'match_update', title: p.userId === match.winnerUserId ? 'بردی! 🎉' : 'نتیجه دوئل آماده است', body: p.userId === match.winnerUserId ? 'نتیجه عالی بود؛ جایزه و امتیاز تو ثبت شد.' : 'دوئل تمام شد؛ نتیجه و امتیاز تو ثبت شد.', data: { matchId: match.id, winnerUserId: match.winnerUserId, url: '/result' }, push: true })));
-    await appendMatchEvent(match.id, 'MATCH_FINISHED', { winnerUserId: match.winnerUserId });
+    await settleDuel(match, decisiveLeader ? sorted[0]!.userId : undefined, 'lockstep_complete');
   }
 
   await repositories.matches.save(match);
   await activeMatchState.set(match, 60 * 60);
   await appendMatchEvent(match.id, 'ANSWER_SUBMITTED', { userId: input.userId, questionId: input.questionId, round, correct: input.correct, duplicate: false, integritySignals: integritySignals.length });
   return { match, duplicate: false };
+}
+
+/* Settle a duel EXACTLY ONCE (duelSettled guard): set the winner, pay the
+ * winner's reward, apply XP/cup for both players, notify, and log. Reused by
+ * lockstep completion, explicit leave (X button), and inactivity forfeit —
+ * every ending path goes through the same authoritative settlement. */
+async function settleDuel(match: Match, winnerUserId: string | undefined, reason: string): Promise<void> {
+  if (match.duelSettled) return;
+  match.duelSettled = true;
+  match.winnerUserId = winnerUserId;
+  match.phase = 'result';
+  match.updatedAt = new Date().toISOString();
+
+  // Pay the WINNER (looked up directly), exactly once via reward idempotency.
+  if (match.winnerUserId && !match.winnerUserId.startsWith('bot_')) {
+    const winner = await repositories.users.findById(match.winnerUserId);
+    if (winner) {
+      try { await applyReward(winner, calculateDuelReward(match, winner), match.id); }
+      catch { /* reward failure must never break match end; ledger stays consistent */ }
+    }
+  }
+
+  // Award XP + weekly 🏆cup to BOTH players (server-authoritative → real,
+  // cheat-proof leaderboard), atomically with the weekly reset.
+  match.duelPointsFinal = {};
+  const outcomeMult = match.economyType === 'paid' ? PZ_SCORING.paidMultiplier : 1;
+  for (const p of match.players) {
+    if (p.userId.startsWith('bot_')) continue;
+    const base = match.duelPoints?.[p.userId] ?? { xp: 0, cup: 0 };
+    const outcome = !match.winnerUserId ? 'draw' : (match.winnerUserId === p.userId ? 'win' : 'loss');
+    const rb = PZ_SCORING.result[outcome]!;
+    const gainXp = base.xp + rb.xp * outcomeMult;
+    const gainCup = base.cup + rb.cup * outcomeMult;
+    try {
+      const applied = await awardScoring(p.userId, gainXp, gainCup);
+      match.duelPointsFinal[p.userId] = { xp: gainXp, cup: gainCup, result: outcome, totalXp: applied.xp, totalCup: applied.cup, level: applied.level };
+      const u = await repositories.users.findById(p.userId);
+      if (u) await leaderboards.updateUser(u);
+    } catch { /* never let scoring break the match end */ }
+  }
+
+  await integrity.inspectMatchFinished(match);
+  await updateSkillAfterMatch(match);
+  await Promise.all(match.players.filter((p) => !p.userId.startsWith('bot_')).map((p) => notifications.create({ userId: p.userId, type: 'match_update', title: p.userId === match.winnerUserId ? 'بردی! 🎉' : 'نتیجه دوئل آماده است', body: p.userId === match.winnerUserId ? 'نتیجه عالی بود؛ جایزه و امتیاز تو ثبت شد.' : 'دوئل تمام شد؛ نتیجه و امتیاز تو ثبت شد.', data: { matchId: match.id, winnerUserId: match.winnerUserId, url: '/result' }, push: true })));
+  await appendMatchEvent(match.id, 'MATCH_FINISHED', { winnerUserId: match.winnerUserId, reason });
+}
+
+/* X-button / app exit during a live duel: the LEAVER loses, the opponent wins.
+ * Idempotent — if the match is already settled it just returns the final state,
+ * so the second player exiting after the end can never be turned into a loser. */
+export async function forfeitMatch(matchId: string, leaverUserId: string): Promise<Match> {
+  const match = await getMatch(matchId);
+  if (!match.players.some((p) => p.userId === leaverUserId)) throw new Error('NOT_A_PLAYER');
+  if (match.duelSettled || match.phase === 'result' || match.phase === 'finished') return match;
+  const opponent = match.players.find((p) => p.userId !== leaverUserId);
+  await settleDuel(match, opponent?.userId, 'forfeit_leave');
+  await repositories.matches.save(match);
+  await activeMatchState.set(match, 60 * 60);
+  return match;
+}
+
+/* Opponent-inactivity claim: the SERVER decides from its own answer log — the
+ * claimant must not be behind, must have answered at least the base rounds'
+ * worth of progress beyond the opponent OR simply be ahead, and the opponent's
+ * last answer must be older than CLAIM_TIMEOUT_MS. The client can only ASK;
+ * it can never assert the opponent is gone. */
+const CLAIM_TIMEOUT_MS = 45_000;
+export async function claimTimeout(matchId: string, claimantUserId: string): Promise<{ match: Match; granted: boolean; waitMs?: number }> {
+  const match = await getMatch(matchId);
+  if (!match.players.some((p) => p.userId === claimantUserId)) throw new Error('NOT_A_PLAYER');
+  if (match.duelSettled || match.phase === 'result' || match.phase === 'finished') return { match, granted: false };
+  const opponent = match.players.find((p) => p.userId !== claimantUserId);
+  if (!opponent) return { match, granted: false };
+  const answers = await repositories.answers.listByMatch(match.id);
+  const mine = answers.filter((a) => a.userId === claimantUserId);
+  const theirs = answers.filter((a) => a.userId === opponent.userId);
+  // A player who is BEHIND can never claim; equal counts are allowed (the
+  // opponent may have vanished between rounds of a tied match — without this
+  // the match would stay stuck forever). duelSettled keeps the settle unique
+  // even if both sides of a mutually-dead connection race to claim.
+  if (mine.length < theirs.length) return { match, granted: false };
+  const lastTheirs = theirs.length ? Math.max(...theirs.map((a) => new Date(a.createdAt).getTime())) : new Date(match.updatedAt ?? match.createdAt).getTime();
+  const idleMs = Date.now() - lastTheirs;
+  if (idleMs < CLAIM_TIMEOUT_MS) return { match, granted: false, waitMs: CLAIM_TIMEOUT_MS - idleMs };
+  await settleDuel(match, claimantUserId, 'forfeit_timeout');
+  await repositories.matches.save(match);
+  await activeMatchState.set(match, 60 * 60);
+  return { match, granted: true };
 }
 
 export async function appendMatchEvent(matchId: string, type: string, payload: Record<string, unknown>): Promise<MatchEvent> {
