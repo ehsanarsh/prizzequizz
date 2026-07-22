@@ -120,7 +120,7 @@ async function loadCfg(){ try{ CFG=await api('GET','/admin/config'); $('#cfgVer'
 /* ---- nav: 25 sections grouped ---- */
 const NAV=[
   ['اصلی',[['dashboard','📊','داشبورد'],['users','👤','کاربران'],['matches','🎮','مسابقات'],['support','🎧','پشتیبانی']]],
-  ['محتوا',[['questions','❓','سوالات'],['categories','🏷️','موضوعات']]],
+  ['محتوا',[['questions','❓','سوالات'],['aistudio','🤖','استودیوی سوال (AI)'],['pipeline','🔬','خط‌لولهٔ کیفیت'],['categories','🏷️','موضوعات']]],
   ['اقتصاد',[['wallet','👛','کیف پول'],['withdrawals','💸','برداشت‌ها'],['tickets','🎫','بلیط‌ها'],['shop','🛒','فروشگاه'],['giftcodes','🎁','کدهای هدیه']]],
   ['بالانس بازی (Data-Driven)',[['cfg_xp','✨','XP'],['cfg_level','🏅','Level'],['cfg_cup','🏆','Cup'],['cfg_gameplay','🕹️','گیم‌پلی مودها'],['leagues','🛡️','لیگ‌ها'],['missions','🎯','مأموریت‌ها'],['rewards','🎉','جوایز/چرخونه/استریک']]],
   ['رشد و تعامل',[['leaderboard','📈','لیدربرد'],['events','📅','رویدادها'],['banners','🖼️','بنرها'],['notifications','🔔','اعلان‌ها']]],
@@ -142,7 +142,7 @@ async function render(){
   loading();
   try{
     if(CONFIG_PAGES[CUR])return renderConfigSection(CONFIG_PAGES[CUR][0],CONFIG_PAGES[CUR][1]);
-    const fn={dashboard:renderDashboard,users:renderUsers,matches:renderMatches,support:renderSupport,questions:renderQuestions,categories:renderCategories,wallet:renderWallet,withdrawals:renderWithdrawals,tickets:renderTickets,giftcodes:renderGiftCodes,leaderboard:renderLeaderboard,notifications:renderNotifications,anticheat:renderAntiCheat,reports:renderReports,logs:renderLogs,roles:renderRoles,rawcfg:renderRawCfg}[CUR];
+    const fn={dashboard:renderDashboard,users:renderUsers,matches:renderMatches,support:renderSupport,questions:renderQuestions,aistudio:renderAiStudio,pipeline:renderPipeline,categories:renderCategories,wallet:renderWallet,withdrawals:renderWithdrawals,tickets:renderTickets,giftcodes:renderGiftCodes,leaderboard:renderLeaderboard,notifications:renderNotifications,anticheat:renderAntiCheat,reports:renderReports,logs:renderLogs,roles:renderRoles,rawcfg:renderRawCfg}[CUR];
     if(fn)return fn();
   }catch(e){$('#main').innerHTML=head('خطا')+'<div class="card empty">'+(e.message||'خطا')+'</div>';}
 }
@@ -319,6 +319,85 @@ async function qDoImport(){
 }
 function qExport(){window.open(API+'/admin/questions/export','_blank');toast('اگر دانلود نشد، هدر x-admin-key لازم است — از CSV داخل شبکه استفاده کن');}
 async function qStatus(id,status){try{await api('PATCH','/admin/questions/'+id+'/status',{status});toast('وضعیت تغییر کرد','ok');render();}catch(e){toast(e.message,'bad');}}
+
+/* ================= AI QUESTION STUDIO ================= */
+let AI_DRAFTS=[];
+async function renderAiStudio(){
+  const qp=(CFG.questionPipeline)||{};
+  const aiOn=qp.aiEnabled;
+  $('#main').innerHTML=head('استودیوی سوال (AI)','تولید ← بازبینی ← راستی‌آزمایی ← تشخیص تکرار ← امتیاز کیفیت',
+    '<button class="btn" onclick="go(\'pipeline\')">صف کیفیت</button>')+
+    '<div class="note">معماری: <b>Generator → Reviewer → Fact-Checker → Duplicate → Quality → Database</b>. مدل‌ها و آستانه‌ها از «ویرایش خام Config» کلید <span class="mono">questionPipeline</span> تنظیم می‌شوند. AI فقط وقتی متغیرِ محیطیِ <span class="mono">ANTHROPIC_API_KEY</span> روی سرور تنظیم باشد فعال می‌شود؛ در غیر این صورت مراحلِ AI رد می‌شوند و سوال را دستی می‌سازی — ولی تشخیصِ تکرار و امتیازِ کیفیت همیشه کار می‌کنند.</div>'+
+    '<div class="card" style="margin-bottom:13px"><h3>۱) تولید سوال '+(aiOn?'<span class="pill ok">AI فعال</span>':'<span class="pill pend">AI غیرفعال — دستی</span>')+'</h3>'+
+      '<div class="grid g3"><div class="field"><label>موضوع</label><input id="ai_topic" placeholder="مثلاً فوتبال"></div>'+
+      '<div class="field"><label>سختی</label><select id="ai_diff"><option value="easy">آسان</option><option value="medium" selected>متوسط</option><option value="hard">سخت</option></select></div>'+
+      '<div class="field"><label>تعداد</label><input id="ai_count" type="number" value="3"></div></div>'+
+      '<button class="btn pri" onclick="aiGen()">🤖 تولید با AI</button> <button class="btn" onclick="aiManual()">✍️ ساخت دستی</button></div>'+
+    '<div id="ai_out"></div>';
+}
+async function aiGen(){
+  const out=$('#ai_out'); out.innerHTML='<div class="skel"></div>';
+  try{
+    const r=await api('POST','/admin/questions/ai/generate',{topic:$('#ai_topic').value.trim(),difficulty:$('#ai_diff').value,count:Number($('#ai_count').value||1)});
+    if(!r.configured){ out.innerHTML='<div class="note">🔌 AI پیکربندی نشده (ANTHROPIC_API_KEY تنظیم نیست). فعلاً «ساخت دستی» را بزن یا کلید را روی سرور ست کن.</div>'; return; }
+    AI_DRAFTS=r.drafts||[];
+    if(!AI_DRAFTS.length){ out.innerHTML='<div class="empty">مدل چیزی تولید نکرد'+(r.error?': '+esc(r.error):'')+'</div>'; return; }
+    out.innerHTML=AI_DRAFTS.map((d,i)=>draftCard(d,i)).join('');
+  }catch(e){ out.innerHTML='<div class="empty">'+esc(e.message)+'</div>'; }
+}
+function aiManual(){ AI_DRAFTS=[{topic:$('#ai_topic').value.trim(),difficulty:$('#ai_diff').value,question:'',options:['','','',''],correctAnswer:0,explanation:''}]; $('#ai_out').innerHTML=draftCard(AI_DRAFTS[0],0,true); }
+function draftCard(d,i,edit){
+  return '<div class="card" style="margin-bottom:11px"><h3>سوال '+fa(i+1)+' <span class="pill info">'+esc(d.difficulty||'')+'</span></h3>'+
+    '<div class="field"><label>متن سوال</label><input id="d_q_'+i+'" value="'+esc(d.question)+'"></div>'+
+    '<div class="grid g2">'+d.options.map((o,j)=>'<div class="field"><label>گزینه '+fa(j+1)+(j===d.correctAnswer?' ✅':'')+'</label><input id="d_o_'+i+'_'+j+'" value="'+esc(o)+'"></div>').join('')+'</div>'+
+    '<div class="grid g3"><div class="field"><label>ایندکس پاسخ درست</label><input id="d_ci_'+i+'" type="number" value="'+(d.correctAnswer||0)+'"></div>'+
+    '<div class="field"><label>موضوع</label><input id="d_cat_'+i+'" value="'+esc(d.topic||'')+'"></div>'+
+    '<div class="field"><label>سختی</label><input id="d_diff_'+i+'" value="'+esc(d.difficulty||'medium')+'"></div></div>'+
+    '<div class="field"><label>توضیح جواب</label><input id="d_exp_'+i+'" value="'+esc(d.explanation||'')+'"></div>'+
+    '<button class="btn pri" onclick="saveDraft('+i+')">💾 ذخیره + اجرای خط‌لوله</button></div>';
+}
+async function saveDraft(i){
+  const opts=[0,1,2,3].map(j=>($('#d_o_'+i+'_'+j)||{}).value||'').filter(x=>x!=='');
+  const q={text:$('#d_q_'+i).value.trim(),options:[0,1,2,3].map(j=>$('#d_o_'+i+'_'+j).value.trim()),correctIndex:Number($('#d_ci_'+i).value||0),category:$('#d_cat_'+i).value.trim(),difficulty:$('#d_diff_'+i).value.trim(),explanation:$('#d_exp_'+i).value.trim(),source:AI_DRAFTS[i]&&AI_DRAFTS[i].question?'ai':'manual'};
+  if(!q.text||q.options.filter(Boolean).length<2)return toast('متن و حداقل ۲ گزینه لازم است','bad');
+  try{
+    const saved=await api('POST','/admin/questions/draft',q);
+    const m=await api('POST','/admin/questions/'+saved.id+'/pipeline',{autoApprove:false});
+    modal('نتیجهٔ خط‌لولهٔ کیفیت',pipelineResultHtml(saved.id,m));
+    toast('ذخیره و ارزیابی شد','ok');
+  }catch(e){toast(e.message,'bad');}
+}
+function pipelineResultHtml(qid,m){
+  const q=m.quality||{}; const fc=m.factCheck||{}; const dup=m.duplicate||{};
+  const bar=(l,v)=>'<div class="cfg-row"><label>'+l+'</label><b style="color:'+(v>=80?'var(--ok)':v>=50?'var(--gold)':'var(--bad)')+'">'+fa(v||0)+'</b></div>';
+  return '<div class="card">'+
+    bar('امتیاز کیفیت کل',q.total)+bar('دقت (Accuracy)',q.accuracy)+bar('وضوح (Clarity)',q.clarity)+bar('نگارش (Grammar)',q.grammar)+bar('اصالت (Originality)',q.originality)+
+    '<div class="cfg-row"><label>تکراری؟</label><b style="color:'+(dup.isDuplicate?'var(--bad)':'var(--ok)')+'">'+(dup.isDuplicate?'بله ('+fa(dup.maxSimilarity)+'٪ شباهت)':'نه ('+fa(dup.maxSimilarity||0)+'٪)')+'</b></div>'+
+    '<div class="cfg-row"><label>راستی‌آزمایی</label><b>'+(fc.configured===false?'AI غیرفعال':(fc.verified===false?'❌ مشکوک':fc.verified===true?'✅ تأیید ('+fa(fc.confidence||0)+'٪)':'—'))+'</b></div>'+
+    '</div><div style="display:flex;gap:6px;margin-top:10px"><button class="btn ok" onclick="pipeApprove(\''+qid+'\')">✅ تأیید و ورود به بازی</button><button class="btn bad" onclick="pipeReject(\''+qid+'\')">رد</button></div>';
+}
+async function pipeApprove(qid){try{await api('POST','/admin/questions/'+qid+'/approve');toast('سوال تأیید و فعال شد','ok');document.querySelector('.modal-bg').remove();}catch(e){toast(e.message,'bad');}}
+async function pipeReject(qid){try{await api('POST','/admin/questions/'+qid+'/reject');toast('رد شد','ok');document.querySelector('.modal-bg').remove();}catch(e){toast(e.message,'bad');}}
+
+/* ================= PIPELINE QUEUE ================= */
+let PL_ST='';
+async function renderPipeline(){
+  const d=await api('GET','/admin/questions/pipeline'+(PL_ST?'?stage='+PL_ST:'')).catch(()=>({rows:[]}));
+  const stages={'':'همه',draft:'پیش‌نویس',reviewed:'بازبینی‌شده',fact_checked:'راستی‌آزمایی',dedup_checked:'ضدتکرار',scored:'امتیازخورده',approved:'تأییدشده',rejected:'ردشده',retired:'خارج‌شده'};
+  $('#main').innerHTML=head('خط‌لولهٔ کیفیت سوالات','وضعیت، امتیاز، بازخورد کاربران و خروجِ خودکار')+
+    '<div class="subtabs">'+Object.keys(stages).map(s=>'<button class="'+(PL_ST===s?'active':'')+'" onclick="PL_ST=\''+s+'\';render()">'+stages[s]+'</button>').join('')+'</div>'+
+    tbl(['سوال','منبع','مرحله','کیفیت','گزارش','بازخورد','عملیات'],(d.rows||[]).map(m=>[
+      esc(String((m.question&&m.question.text)||'—').slice(0,45)),
+      '<span class="pill '+(m.source==='ai'?'info':'')+'">'+(m.source==='ai'?'AI':'دستی')+'</span>',
+      '<span class="pill '+(m.stage==='approved'?'ok':m.stage==='retired'||m.stage==='rejected'?'bad':'pend')+'">'+(stages[m.stage]||m.stage)+'</span>',
+      '<b style="color:'+(m.qualityScore>=80?'var(--ok)':'var(--gold)')+'">'+fa(m.qualityScore)+'</b>',
+      fa(m.reportCount||0),
+      fbSummary(m.feedback),
+      '<button class="btn sm" onclick="rerunPipe(\''+m.questionId+'\')">اجرا مجدد</button> <button class="btn sm ok" onclick="pipeApprove(\''+m.questionId+'\')">تأیید</button>'
+    ]));
+}
+function fbSummary(f){if(!f)return '—';const p=[];if(f.tooHard)p.push('سخت'+fa(f.tooHard));if(f.tooEasy)p.push('آسان'+fa(f.tooEasy));if(f.wrongAnswer)p.push('غلط'+fa(f.wrongAnswer));if(f.report)p.push('گزارش'+fa(f.report));return p.join(' · ')||'—';}
+async function rerunPipe(qid){try{const m=await api('POST','/admin/questions/'+qid+'/pipeline',{});toast('خط‌لوله اجرا شد — کیفیت '+fa(m.qualityScore),'ok');render();}catch(e){toast(e.message,'bad');}}
 
 /* ================= CATEGORIES ================= */
 async function renderCategories(){

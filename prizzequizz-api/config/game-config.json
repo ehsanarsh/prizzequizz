@@ -89,5 +89,16 @@
   "leagues": [],
   "shop": { "products": [], "banners": [], "specialOffers": [] },
   "events": [],
-  "banners": { "home": [], "shop": [], "events": [] }
+  "banners": { "home": [], "shop": [], "events": [] },
+  "questionPipeline": {
+    "aiEnabled": false,
+    "model": "claude-sonnet-5",
+    "generatorModel": "",
+    "reviewerModel": "",
+    "factCheckerModel": "",
+    "minQualityScore": 95,
+    "duplicateThreshold": 90,
+    "autoRetireReports": 10,
+    "autoApprove": false
+  }
 }

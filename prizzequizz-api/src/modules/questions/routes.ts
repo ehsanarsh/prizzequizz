@@ -1,6 +1,7 @@
 import type { Router } from '../../http/router.js';
-import { json } from '../../http/response.js';
+import { error, json } from '../../http/response.js';
 import { nextQuestion } from '../../services/questionEngine.js';
+import { recordFeedback } from '../../services/questionPipelineService.js';
 import { repositories } from '../../repositories/index.js';
 
 export function registerQuestionRoutes(router: Router, base: string): void {
@@ -27,5 +28,19 @@ export function registerQuestionRoutes(router: Router, base: string): void {
   });
   router.add('POST', `${base}/questions/submit`, (ctx) => {
     json(ctx.res, 201, { status: 'pending', received: true });
+  });
+
+  // Player feedback on a question (too hard/easy, wrong answer, duplicate,
+  // report). Feeds the pipeline; a question crossing the report threshold is
+  // auto-retired from the live bank for review.
+  router.add('POST', `${base}/questions/:id/feedback`, async (ctx) => {
+    if (!ctx.userId) return error(ctx.res, 401, 'UNAUTHORIZED', 'Login required.');
+    const type = String((ctx.body as any)?.type ?? '');
+    try {
+      const r = await recordFeedback(ctx.params.id!, type as any);
+      json(ctx.res, 200, r);
+    } catch (e) {
+      return error(ctx.res, 400, 'FEEDBACK_INVALID', e instanceof Error ? e.message : 'invalid');
+    }
   });
 }

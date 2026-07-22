@@ -11,6 +11,7 @@ import { getAdminUserOverview, resetUserStats, searchAdminUsers, setUserTickets,
 import { getMatch, claimTimeout, forfeitMatch } from '../../services/matchEngine.js';
 import { activeMatchState } from '../../services/matchStateStore.js';
 import { createGiftCode, listGiftCodes, redeemGiftCode } from '../../services/giftCodeService.js';
+import { aiGenerate, approve as approvePipeline, createDraft, getMeta as getPipelineMeta, listPipeline, reject as rejectPipeline, runPipeline } from '../../services/questionPipelineService.js';
 import { matchmakingQueue } from '../../services/matchmakingQueue.js';
 import { leaderboards } from '../../services/leaderboardService.js';
 import { notifications } from '../../services/notificationService.js';
@@ -230,6 +231,42 @@ export function registerAdminRoutes(router: Router, base: string): void {
       audit(ctx.userId, 'GIFT_CODE_CREATED', 'gift_code', code.code, b);
       json(ctx.res, 201, code);
     } catch (e) { error(ctx.res, 400, 'GIFT_CODE_INVALID', e instanceof Error ? e.message : 'failed'); }
+  });
+
+  // ================= AI question pipeline =================
+  router.add('POST', `${base}/admin/questions/ai/generate`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    const b = (ctx.body ?? {}) as any;
+    const r = await aiGenerate({ topic: String(b.topic ?? ''), difficulty: b.difficulty, count: Number(b.count ?? 1), category: b.category });
+    json(ctx.res, 200, r);
+  });
+  // Save an AI draft (or a manual one) into the bank as a pending draft.
+  router.add('POST', `${base}/admin/questions/draft`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    const b = (ctx.body ?? {}) as any;
+    if (!b.text || !Array.isArray(b.options) || b.options.length < 2) return error(ctx.res, 422, 'QUESTION_INVALID', 'text + options required.');
+    const q = await createDraft({ text: String(b.text), options: b.options.map(String), correctIndex: Number(b.correctIndex ?? 0), category: b.category, difficulty: b.difficulty, source: b.source === 'ai' ? 'ai' : 'manual', explanation: b.explanation, sourceRef: b.source_ref });
+    audit(ctx.userId, 'QUESTION_DRAFTED', 'question', q.id, { source: b.source });
+    json(ctx.res, 201, q);
+  });
+  // Run reviewer + fact-check + dedup + quality (+ optional auto-approve).
+  router.add('POST', `${base}/admin/questions/:id/pipeline`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    try {
+      const m = await runPipeline(ctx.params.id!, { autoApprove: (ctx.body as any)?.autoApprove === true });
+      json(ctx.res, 200, m);
+    } catch (e) { error(ctx.res, 400, 'PIPELINE_FAILED', e instanceof Error ? e.message : 'failed'); }
+  });
+  router.add('POST', `${base}/admin/questions/:id/approve`, async (ctx) => { if (!requireAdmin(ctx)) return; await approvePipeline(ctx.params.id!); audit(ctx.userId, 'QUESTION_APPROVED', 'question', ctx.params.id, {}); json(ctx.res, 200, { approved: true }); });
+  router.add('POST', `${base}/admin/questions/:id/reject`, async (ctx) => { if (!requireAdmin(ctx)) return; await rejectPipeline(ctx.params.id!); audit(ctx.userId, 'QUESTION_REJECTED', 'question', ctx.params.id, {}); json(ctx.res, 200, { rejected: true }); });
+  router.add('GET', `${base}/admin/questions/pipeline`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    json(ctx.res, 200, { rows: await listPipeline(ctx.query.get('stage') || undefined, Number(ctx.query.get('limit') ?? 100)) });
+  });
+  router.add('GET', `${base}/admin/questions/:id/feedback`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    const m = await getPipelineMeta(ctx.params.id!);
+    json(ctx.res, 200, m ?? { feedback: {}, reportCount: 0 });
   });
 
   router.add('GET', `${base}/admin/analytics`, async (ctx) => {
