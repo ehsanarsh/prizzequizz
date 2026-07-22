@@ -1,13 +1,14 @@
 FROM node:20-alpine AS build
 WORKDIR /app
 COPY . .
-# The build context may carry a host-built node_modules (linux/glibc, or
-# production-only) that confuses npm inside alpine and leaves tsc's bin symlink
-# uncreated. Wipe it, install fresh with devDependencies forced, and invoke the
-# compiler via npx so it runs even if the .bin symlink is still missing.
+# Wipe any host-built node_modules the context may carry, then install fresh.
 RUN rm -rf node_modules
 RUN npm install --include=dev --production=false
-RUN npx --yes tsc -p tsconfig.json
+# Invoke TypeScript's real entry file with node — needs NO .bin symlink (an
+# alpine quirk) and NO network (npx would try to download a bogus "tsc" package).
+# Force-install typescript only in the rare case its files are missing.
+RUN test -f node_modules/typescript/bin/tsc || npm install --no-save typescript
+RUN node node_modules/typescript/bin/tsc -p tsconfig.json
 
 FROM node:20-alpine AS runtime
 WORKDIR /app
