@@ -121,7 +121,7 @@ async function loadCfg(){ try{ CFG=await api('GET','/admin/config'); $('#cfgVer'
 const NAV=[
   ['اصلی',[['dashboard','📊','داشبورد'],['finance','💰','داشبورد مالی'],['users','👤','کاربران'],['matches','🎮','مسابقات'],['support','🎧','پشتیبانی']]],
   ['محتوا',[['questions','❓','سوالات'],['aistudio','🤖','استودیوی سوال (AI)'],['pipeline','🔬','خط‌لولهٔ کیفیت'],['categories','🏷️','موضوعات']]],
-  ['اقتصاد',[['wallet','👛','کیف پول'],['withdrawals','💸','برداشت‌ها'],['tickets','🎫','بلیط‌ها'],['shop','🛒','فروشگاه'],['giftcodes','🎁','کدهای هدیه']]],
+  ['اقتصاد',[['wallet','👛','کیف پول'],['withdrawals','💸','برداشت‌ها'],['rewardholds','⏳','جوایز در انتظار'],['tickets','🎫','بلیط‌ها'],['shop','🛒','فروشگاه'],['giftcodes','🎁','کدهای هدیه']]],
   ['بالانس بازی (Data-Driven)',[['cfg_xp','✨','XP'],['cfg_level','🏅','Level'],['cfg_cup','🏆','Cup'],['cfg_gameplay','🕹️','گیم‌پلی مودها'],['leagues','🛡️','لیگ‌ها'],['missions','🎯','مأموریت‌ها'],['rewards','🎉','جوایز/چرخونه/استریک']]],
   ['رشد و تعامل',[['leaderboard','📈','لیدربرد'],['events','📅','رویدادها'],['banners','🖼️','بنرها'],['notifications','🔔','اعلان‌ها']]],
   ['سیستم',[['anticheat','🛡️','ضدتقلب'],['suspicious','🚨','کاربران مشکوک'],['reports','📑','گزارش‌ها'],['logs','📝','لاگ و Audit'],['reset','♻️','ابزار ریست'],['roles','🔑','نقش‌های ادمین'],['general','⚙️','تنظیمات عمومی'],['rawcfg','🧩','ویرایش خام Config']]]
@@ -142,7 +142,7 @@ async function render(){
   loading();
   try{
     if(CONFIG_PAGES[CUR])return renderConfigSection(CONFIG_PAGES[CUR][0],CONFIG_PAGES[CUR][1]);
-    const fn={dashboard:renderDashboard,finance:renderFinance,users:renderUsers,matches:renderMatches,support:renderSupport,questions:renderQuestions,aistudio:renderAiStudio,pipeline:renderPipeline,categories:renderCategories,wallet:renderWallet,withdrawals:renderWithdrawals,tickets:renderTickets,giftcodes:renderGiftCodes,leaderboard:renderLeaderboard,notifications:renderNotifications,anticheat:renderAntiCheat,suspicious:renderSuspicious,reports:renderReports,logs:renderLogs,reset:renderReset,roles:renderRoles,rawcfg:renderRawCfg}[CUR];
+    const fn={dashboard:renderDashboard,finance:renderFinance,users:renderUsers,matches:renderMatches,support:renderSupport,questions:renderQuestions,aistudio:renderAiStudio,pipeline:renderPipeline,categories:renderCategories,wallet:renderWallet,withdrawals:renderWithdrawals,rewardholds:renderRewardHolds,tickets:renderTickets,giftcodes:renderGiftCodes,leaderboard:renderLeaderboard,notifications:renderNotifications,anticheat:renderAntiCheat,suspicious:renderSuspicious,reports:renderReports,logs:renderLogs,reset:renderReset,roles:renderRoles,rawcfg:renderRawCfg}[CUR];
     if(fn)return fn();
   }catch(e){$('#main').innerHTML=head('خطا')+'<div class="card empty">'+(e.message||'خطا')+'</div>';}
 }
@@ -500,6 +500,50 @@ async function renderWithdrawals(){
 async function wdAct(id,a){try{await api('POST','/admin/wallet/withdrawals/'+id+'/'+a);toast('انجام شد','ok');render();}catch(e){toast(e.message,'bad');}}
 async function wdPaid(id){const ref=prompt('کد پیگیری واریز:');if(ref===null)return;try{await api('POST','/admin/wallet/withdrawals/'+id+'/paid',{paymentReference:ref});toast('پرداخت ثبت شد','ok');render();}catch(e){toast(e.message,'bad');}}
 async function wdReject(id){const reason=prompt('علت رد:');if(reason===null)return;try{await api('POST','/admin/wallet/withdrawals/'+id+'/reject',{reason});toast('رد شد','ok');render();}catch(e){toast(e.message,'bad');}}
+
+/* ================= REWARD HOLDS (جوایز پارک‌شده — آزادسازی/رد) ================= */
+let RH_ST='pending';
+async function renderRewardHolds(){
+  const [diag,holds]=await Promise.all([
+    api('GET','/admin/rewards/holds/diagnostics').catch(()=>({})),
+    api('GET','/admin/rewards/holds?status='+RH_ST+'&limit=200').catch(()=>[])
+  ]);
+  const list=Array.isArray(holds)?holds:(holds.rows||[]);
+  const st={pending:'در انتظار',approved:'تأییدشده',released:'آزادشده',rejected:'ردشده'};
+  const money=v=>fa(v)+' ت';
+  $('#main').innerHTML=head('جوایز در انتظار','جوایزی که برای بررسی امنیتی پارک شده‌اند — تأیید (واریز) یا رد',
+    '<button class="btn sm" onclick="render()">↻ بروزرسانی</button>')+
+    '<div class="note">جوایزی که پیش از رفعِ باگ (یا هنگام روشن‌بودنِ بررسیِ امنیتی) پارک شده‌اند اینجا هستند. با «تأیید و واریز»، جایزه از طریقِ ledger به کیف پولِ کاربر واریز و در تراکنش/لیدربورد ثبت می‌شود. بردهای جدید (با تنظیمِ پیش‌فرض) دیگر پارک نمی‌شوند.</div>'+
+    '<div class="grid g4" style="margin-bottom:13px">'+
+      stat('در انتظار','gold',fa(diag.pending||0))+
+      stat('مبلغ در انتظار','gold',money(diag.pendingAmount||0))+
+      stat('آزادشده','ok',fa(diag.released||0))+
+      stat('ردشده','bad',fa(diag.rejected||0))+
+    '</div>'+
+    (RH_ST==='pending'&&list.length?'<button class="btn ok" style="margin-bottom:12px" onclick="releaseAllHolds()">✅ تأیید و واریزِ همهٔ '+fa(list.length)+' جایزه</button>':'')+
+    '<div class="subtabs">'+Object.keys(st).map(s=>'<button class="'+(RH_ST===s?'active':'')+'" onclick="RH_ST=\''+s+'\';render()">'+st[s]+'</button>').join('')+'</div>'+
+    tbl(['کاربر','مسابقه','نوع','مبلغ','ریسک','دلیل','زمان','عملیات'],list.map(h=>[
+      '<span class="mono">'+String(h.userId||'').slice(0,8)+'</span>',
+      '<span class="mono">'+String(h.matchId||'').slice(0,8)+'</span>',
+      esc(h.rewardType||'cash'),'<b style="color:var(--gold)">'+money(h.amount)+'</b>',
+      '<b style="color:'+((h.riskScore||0)>=70?'var(--bad)':'var(--gold)')+'">'+fa(h.riskScore||0)+'</b>',
+      esc(h.reason||'—'),fmtDate(h.createdAt),
+      (h.status==='pending'||h.status==='approved')?'<button class="btn sm ok" onclick="rhAct(\''+h.id+'\',\'approved\')">تأیید و واریز</button> <button class="btn sm bad" onclick="rhAct(\''+h.id+'\',\'rejected\')">رد</button>':'<span class="pill '+(h.status==='released'?'ok':'bad')+'">'+(st[h.status]||h.status)+'</span>'
+    ]));
+}
+async function rhAct(id,status){
+  if(status==='rejected'&&!confirm('این جایزه رد شود؟ (به کاربر واریز نمی‌شود)'))return;
+  try{await api('PATCH','/admin/rewards/holds/'+id+'/status',{status});toast(status==='approved'?'جایزه واریز شد ✅':'جایزه رد شد','ok');render();}catch(e){toast(e.message,'bad');}
+}
+async function releaseAllHolds(){
+  const holds=await api('GET','/admin/rewards/holds?status=pending&limit=500').catch(()=>[]);
+  const list=Array.isArray(holds)?holds:(holds.rows||[]);
+  if(!list.length)return toast('موردی برای واریز نیست');
+  if(!confirm('همهٔ '+list.length+' جایزهٔ در انتظار تأیید و به کیف پولِ کاربران واریز شود؟'))return;
+  let ok=0,bad=0;
+  for(const h of list){try{await api('PATCH','/admin/rewards/holds/'+h.id+'/status',{status:'approved'});ok++;}catch(e){bad++;}}
+  toast('واریز شد: '+fa(ok)+(bad?' · ناموفق: '+fa(bad):''),bad?'bad':'ok');render();
+}
 
 /* ================= TICKETS ================= */
 async function renderTickets(){
