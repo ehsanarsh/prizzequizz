@@ -1,11 +1,9 @@
-FROM node:20-alpine AS deps
-WORKDIR /app
-COPY package*.json ./
-RUN npm install
-
 FROM node:20-alpine AS build
 WORKDIR /app
-COPY --from=deps /app/node_modules ./node_modules
+COPY package*.json ./
+# Force devDependencies (typescript/tsc) even if NODE_ENV=production leaks into
+# the build environment — the build stage needs the compiler.
+RUN npm install --include=dev
 COPY . .
 RUN npm run build
 
