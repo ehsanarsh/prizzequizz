@@ -1,12 +1,13 @@
 FROM node:20-alpine AS build
 WORKDIR /app
-# Copy source FIRST, then install — so nothing in the build context can clobber
-# node_modules after install. --production=false + --include=dev force the
-# devDependencies (typescript) even if NODE_ENV=production or an .npmrc says otherwise.
 COPY . .
+# The build context may carry a host-built node_modules (linux/glibc, or
+# production-only) that confuses npm inside alpine and leaves tsc's bin symlink
+# uncreated. Wipe it, install fresh with devDependencies forced, and invoke the
+# compiler via npx so it runs even if the .bin symlink is still missing.
+RUN rm -rf node_modules
 RUN npm install --include=dev --production=false
-RUN ls -la node_modules/.bin/tsc || (echo "!!! tsc NOT installed — check .npmrc/registry" && exit 1)
-RUN npm run build
+RUN npx --yes tsc -p tsconfig.json
 
 FROM node:20-alpine AS runtime
 WORKDIR /app
