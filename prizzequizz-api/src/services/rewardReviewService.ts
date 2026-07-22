@@ -5,7 +5,7 @@ import { calculateUserRisk } from './deviceRiskService.js';
 import { leaderboards } from './leaderboardService.js';
 import { logger } from './logger.js';
 import { notifications } from './notificationService.js';
-import { getRakePercent } from './economyConfig.js';
+import { getRakePercent, getRewardHoldConfig } from './economyConfig.js';
 import { getAccount, postEntry } from './walletLedgerService.js';
 
 export interface RewardHoldDiagnostics {
@@ -20,9 +20,12 @@ export interface RewardHoldDiagnostics {
 export async function shouldHoldReward(user: User, reward: Reward, matchId: string): Promise<{ hold: boolean; riskScore: number; riskLevel: RewardHold['riskLevel']; reason: string; evidence: Record<string, unknown> }> {
   const profile = await calculateUserRisk(user.id);
   const paidCashReward = reward.type === 'cash';
-  const highRisk = profile.riskLevel === 'high' || profile.riskLevel === 'critical' || profile.riskScore >= 55;
-  const holdEnabled = process.env.REWARD_HOLD_ENABLED !== 'false';
-  const hold = holdEnabled && paidCashReward && highRisk;
+  const cfg = getRewardHoldConfig();
+  // Only hold when explicitly enabled AND the score crosses the configured
+  // (high) threshold, or the user is outright critical. Default config keeps
+  // this disabled, so legitimate wins are never parked.
+  const highRisk = profile.riskScore >= cfg.riskThreshold || profile.riskLevel === 'critical';
+  const hold = cfg.enabled && paidCashReward && highRisk;
   return {
     hold,
     riskScore: profile.riskScore,

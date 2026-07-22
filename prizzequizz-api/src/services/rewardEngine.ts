@@ -4,7 +4,7 @@ import { id } from '../utils/id.js';
 import { leaderboards } from './leaderboardService.js';
 import { notifications } from './notificationService.js';
 import { createRewardHold, shouldHoldReward } from './rewardReviewService.js';
-import { getRakePercent } from './economyConfig.js';
+import { getRakePercent, getRewardHoldConfig } from './economyConfig.js';
 import { getAccount, postEntry } from './walletLedgerService.js';
 
 /* Stake of a paid duel: the value tier is encoded in economyType ('v25000' →
@@ -26,10 +26,15 @@ export async function applyReward(user: User, reward: Reward, matchId: string): 
   const existing = await repositories.rewards.findByIdempotencyKey(idempotencyKey);
   if (existing) return;
 
-  const risk = await shouldHoldReward(user, reward, matchId);
-  if (risk.hold) {
-    await createRewardHold(user, reward, matchId, idempotencyKey, risk);
-    return;
+  // Fraud-review holding is OPT-IN and default OFF: a won prize pays out
+  // immediately. Only when an admin enables it do we compute risk and possibly
+  // park the reward — so a risk-calc hiccup can never silently swallow a payout.
+  if (getRewardHoldConfig().enabled) {
+    const risk = await shouldHoldReward(user, reward, matchId);
+    if (risk.hold) {
+      await createRewardHold(user, reward, matchId, idempotencyKey, risk);
+      return;
+    }
   }
 
   if (reward.type === 'cash') {

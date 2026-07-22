@@ -82,6 +82,7 @@
   },
   "missions": { "daily": [], "weekly": [], "monthly": [], "hidden": [] },
   "rewards": {
+    "hold": { "enabled": false, "riskThreshold": 90 },
     "dailyStreak": [],
     "wheel": [],
     "referral": { "inviter": 0, "invitee": 0 }

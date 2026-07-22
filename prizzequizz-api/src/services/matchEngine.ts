@@ -9,6 +9,7 @@ import { integrity } from './integrityService.js';
 import { leaderboards } from './leaderboardService.js';
 import { PZ_SCORING, getResultBonus, isoWeekId, levelForXp } from './scoringConfig.js';
 import { getPgPool } from '../database/postgres.js';
+import { logger } from './logger.js';
 import type { GameModeId, Match, MatchEvent, MatchPlayer, PlanType } from '../types/domain.js';
 import { id } from '../utils/id.js';
 
@@ -231,8 +232,10 @@ async function settleDuel(match: Match, winnerUserId: string | undefined, reason
   if (match.winnerUserId && !match.winnerUserId.startsWith('bot_')) {
     const winner = await repositories.users.findById(match.winnerUserId);
     if (winner) {
+      // Reward failure must never break match end, but it must be LOUD — a
+      // swallowed error here means a winner silently goes unpaid.
       try { await applyReward(winner, calculateDuelReward(match, winner), match.id); }
-      catch { /* reward failure must never break match end; ledger stays consistent */ }
+      catch (e) { logger.error('reward_apply_failed', { matchId: match.id, winnerUserId: winner.id, message: e instanceof Error ? e.message : 'unknown' }); }
     }
   }
 

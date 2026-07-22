@@ -55,3 +55,18 @@ export function getRakePercent(): number {
   if (!Number.isFinite(n) || n < 0) return 5;
   return Math.min(90, n);
 }
+
+/* Reward-hold (fraud review) gating — DEFAULT OFF. A won cash prize must be
+ * credited IMMEDIATELY to wallet + transactions + leaderboard + financial
+ * report; holding is opt-in and only kicks in when an admin explicitly enables
+ * it AND the risk score crosses a high threshold. The risk scoring is still
+ * maturing (VPN/multi-account detection not fully implemented), so holding
+ * legitimate winnings by default was wrong — wins must pay out. Admin can turn
+ * this on later from config once the scoring is trustworthy. Env
+ * REWARD_HOLD_ENABLED=true is an additional opt-in override. */
+export function getRewardHoldConfig(): { enabled: boolean; riskThreshold: number } {
+  const r = (gameConfig as any)?.rewards?.hold ?? {};
+  const enabled = r.enabled === true || process.env.REWARD_HOLD_ENABLED === 'true';
+  const riskThreshold = Math.min(100, Math.max(1, num(r.riskThreshold, 90)));
+  return { enabled, riskThreshold };
+}
