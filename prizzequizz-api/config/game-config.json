@@ -1,5 +1,13 @@
 {
   "version": "2026.07.07-api-001",
+  "general": {
+    "gameName": "PrizzeQuizz",
+    "appVersion": "1.0.0",
+    "supportEmail": "",
+    "termsUrl": "",
+    "privacyUrl": "",
+    "socials": { "instagram": "", "telegram": "", "twitter": "" }
+  },
   "economy": {
     "free": { "heartCostPerMatch": 1, "heartRechargeMinutes": 60, "maxFreeHearts": 5, "defaultCoins": 350 },
     "paid": { "walletCurrency": "IRR", "withdrawFeePercent": 5, "rakePercent": 5 },
@@ -19,6 +27,40 @@
     "allOrNothing": { "timerSeconds": 15, "chatSeconds": 60, "entry": { "free": { "hearts": 1, "coins": 30 }, "paid": { "cash": 60000 } }, "reward": { "free": { "type": "coins", "base": 50, "perQuestion": 30 }, "paid": { "type": "cash", "pool": true } } },
     "weeklyLeague": { "entry": { "ticket": 1 }, "reward": { "free": { "type": "league" }, "paid": { "type": "league" } } }
   },
+  "gameplay": {
+    "duel": { "questionCount": 5, "optionsCount": 4, "timerSeconds": 10, "topicPickSeconds": 8, "goldenSeconds": 12, "firstHalfSeconds": 0, "secondHalfSeconds": 0, "minPlayers": 2, "maxPlayers": 2, "baseRounds": 10, "maxRounds": 24 },
+    "lastSurvivor": { "questionCount": 12, "optionsCount": 4, "timerSeconds": 15, "topicPickSeconds": 0, "goldenSeconds": 0, "minPlayers": 3, "maxPlayers": 15 },
+    "allOrNothing": { "questionCount": 0, "optionsCount": 4, "timerSeconds": 15, "chatSeconds": 60, "minPlayers": 3, "maxPlayers": 15 }
+  },
+  "xp": {
+    "perCorrect": 15,
+    "perWin": 40,
+    "perLoss": 8,
+    "perDraw": 15,
+    "perMission": 0,
+    "dailyLogin": 0,
+    "combo": 0,
+    "continue": 0,
+    "golden": 0,
+    "perLevel": 0,
+    "multiplier": 1
+  },
+  "level": {
+    "xpPerLevelBase": 100,
+    "curve": "sqrt",
+    "rewardCoinsPerLevel": 0,
+    "rewardTicketPerLevel": 0,
+    "unlocks": {}
+  },
+  "cup": {
+    "win": 30,
+    "loss": 0,
+    "draw": 10,
+    "continue": 0,
+    "perLeague": 0,
+    "weeklyReset": true,
+    "minEntry": 0
+  },
   "scoring": {
     "paidMultiplier": 2,
     "winBonusXp": 40,
@@ -27,5 +69,25 @@
     "drawBonusCup": 10,
     "lossBonusXp": 8,
     "lossBonusCup": 0
-  }
+  },
+  "antiCheat": {
+    "vpnDetection": false,
+    "botDetection": false,
+    "multiAccountDetection": false,
+    "ipLimitEnabled": false,
+    "maxAccountsPerIp": 0,
+    "deviceLimitEnabled": false,
+    "maxAccountsPerDevice": 0,
+    "impossibleAnswerMs": 300
+  },
+  "missions": { "daily": [], "weekly": [], "monthly": [], "hidden": [] },
+  "rewards": {
+    "dailyStreak": [],
+    "wheel": [],
+    "referral": { "inviter": 0, "invitee": 0 }
+  },
+  "leagues": [],
+  "shop": { "products": [], "banners": [], "specialOffers": [] },
+  "events": [],
+  "banners": { "home": [], "shop": [], "events": [] }
 }

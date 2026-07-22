@@ -110,10 +110,16 @@ export interface SubmitAnswerInput {
   round?: number;
 }
 
-const DUEL_BASE_ROUNDS = 10;     // two halves × 5 questions — the match must NOT
-                                 // finish (and reject answers) after the first half
-const DUEL_MAX_ROUNDS = 24;      // hard cap so a tie can never loop forever (base
-                                 // 10 + up to 14 sudden-death/golden rounds)
+// Round bounds are admin-editable (gameplay.duel.baseRounds / maxRounds) so the
+// match length can be tuned without a redeploy; safe constants as fallback.
+function duelRounds(): { base: number; max: number } {
+  const g: any = (gameConfig as any)?.gameplay?.duel ?? {};
+  const base = Number(g.baseRounds); const max = Number(g.maxRounds);
+  return {
+    base: Number.isFinite(base) && base > 0 ? base : 10,
+    max: Number.isFinite(max) && max >= (Number.isFinite(base) ? base : 10) ? max : 24
+  };
+}
 
 // Serialize answer processing per match so two players submitting at nearly the
 // same instant can't lose-update each other's scores (read-modify-write race).
@@ -194,7 +200,8 @@ async function submitAnswerLocked(input: SubmitAnswerInput): Promise<{ match: Ma
 
   const sorted = [...match.players].sort((a, b) => b.score - a.score);
   const decisiveLeader = sorted.length >= 2 && sorted[0]!.score !== sorted[1]!.score;
-  const finished = allEqual && minCount >= DUEL_BASE_ROUNDS && (decisiveLeader || minCount >= DUEL_MAX_ROUNDS);
+  const _dr = duelRounds();
+  const finished = allEqual && minCount >= _dr.base && (decisiveLeader || minCount >= _dr.max);
 
   match.phase = finished ? 'result' : 'question';
   match.updatedAt = new Date().toISOString();

@@ -7,7 +7,10 @@ import { db } from '../../repositories/memory.js';
 import { id } from '../../utils/id.js';
 import { featureFlags, patchFeatureFlag, themes, upsertTheme } from '../../services/adminStores.js';
 import { getAdminAnalytics } from '../../services/analyticsService.js';
-import { getAdminUserOverview, searchAdminUsers, updateUserRole, updateUserStatus } from '../../services/adminUserService.js';
+import { getAdminUserOverview, resetUserStats, searchAdminUsers, setUserTickets, updateUserFields, updateUserRole, updateUserStatus } from '../../services/adminUserService.js';
+import { getMatch, claimTimeout, forfeitMatch } from '../../services/matchEngine.js';
+import { activeMatchState } from '../../services/matchStateStore.js';
+import { createGiftCode, listGiftCodes, redeemGiftCode } from '../../services/giftCodeService.js';
 import { matchmakingQueue } from '../../services/matchmakingQueue.js';
 import { leaderboards } from '../../services/leaderboardService.js';
 import { notifications } from '../../services/notificationService.js';
@@ -153,6 +156,80 @@ export function registerAdminRoutes(router: Router, base: string): void {
     if (!updated) return error(ctx.res, 404, 'USER_NOT_FOUND', 'User not found.');
     audit(ctx.userId, 'USER_ROLE_UPDATED', 'user', updated.id, { role });
     json(ctx.res, 200, updated);
+  });
+
+  // Edit core user fields (name / xp / level / weekly cup / coins / hearts).
+  router.add('PATCH', `${base}/admin/users/:id`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    const b = (ctx.body ?? {}) as any;
+    const updated = await updateUserFields(ctx.params.id!, { displayName: b.displayName, username: b.username, xp: b.xp, level: b.level, weeklyScore: b.weeklyScore, coins: b.coins, hearts: b.hearts });
+    if (!updated) return error(ctx.res, 404, 'USER_NOT_FOUND', 'User not found.');
+    audit(ctx.userId, 'USER_FIELDS_UPDATED', 'user', updated.id, b);
+    if (updated) { const u = await repositories.users.findById(updated.id); if (u) await leaderboards.updateUser(u); }
+    json(ctx.res, 200, updated);
+  });
+
+  // Grant / set a user's tickets (a granted asset — not a wallet movement).
+  router.add('POST', `${base}/admin/users/:id/tickets`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    const b = (ctx.body ?? {}) as any;
+    const tickets = await setUserTickets(ctx.params.id!, String(b.tier ?? ''), Number(b.count ?? 0), b.mode === 'set' ? 'set' : 'add');
+    if (!tickets) return error(ctx.res, 404, 'USER_NOT_FOUND', 'User not found.');
+    audit(ctx.userId, 'USER_TICKETS_UPDATED', 'user', ctx.params.id, b);
+    json(ctx.res, 200, { tickets });
+  });
+
+  // Send a direct in-app + push notification to one user.
+  router.add('POST', `${base}/admin/users/:id/message`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    const b = (ctx.body ?? {}) as any;
+    await notifications.create({ userId: ctx.params.id!, type: 'system' as NotificationType, title: String(b.title ?? 'پیام از پشتیبانی'), body: String(b.body ?? ''), data: { fromAdmin: true }, push: true });
+    audit(ctx.userId, 'USER_MESSAGED', 'user', ctx.params.id, { title: b.title });
+    json(ctx.res, 200, { sent: true });
+  });
+
+  // Reset a user's progression (xp / level / weekly cup) — wallet untouched.
+  router.add('POST', `${base}/admin/users/:id/reset`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    const updated = await resetUserStats(ctx.params.id!);
+    if (!updated) return error(ctx.res, 404, 'USER_NOT_FOUND', 'User not found.');
+    const u = await repositories.users.findById(updated.id); if (u) await leaderboards.updateUser(u);
+    audit(ctx.userId, 'USER_STATS_RESET', 'user', updated.id, {});
+    json(ctx.res, 200, updated);
+  });
+
+  // ---- Matches (rooms) admin: live list + force settle ----
+  router.add('GET', `${base}/admin/matches`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    const active = await activeMatchState.list().catch(() => []);
+    const rows = active.map((m: any) => ({ id: m.id, modeId: m.modeId, phase: m.phase, round: m.round, economyType: m.economyType, winnerUserId: m.winnerUserId, players: (m.players ?? []).map((p: any) => ({ userId: p.userId, username: p.username, score: p.score })), updatedAt: m.updatedAt }));
+    json(ctx.res, 200, { rows });
+  });
+  router.add('POST', `${base}/admin/matches/:id/force-end`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    const b = (ctx.body ?? {}) as any;
+    try {
+      const match = await getMatch(ctx.params.id!);
+      if (b.winnerUserId) { await forfeitMatch(match.id, match.players.find((p) => p.userId !== b.winnerUserId)?.userId ?? match.players[0]!.userId); }
+      else { await claimTimeout(match.id, match.players[0]!.userId); }
+      audit(ctx.userId, 'MATCH_FORCE_ENDED', 'match', match.id, b);
+      json(ctx.res, 200, { ended: true });
+    } catch (e) { error(ctx.res, 400, 'MATCH_END_FAILED', e instanceof Error ? e.message : 'failed'); }
+  });
+
+  // ---- Gift codes ----
+  router.add('GET', `${base}/admin/gift-codes`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    json(ctx.res, 200, { rows: await listGiftCodes() });
+  });
+  router.add('POST', `${base}/admin/gift-codes`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    const b = (ctx.body ?? {}) as any;
+    try {
+      const code = await createGiftCode({ code: b.code, rewardType: b.rewardType, amount: Number(b.amount ?? 0), tier: b.tier, maxUses: Number(b.maxUses ?? 1), expiresAt: b.expiresAt || null });
+      audit(ctx.userId, 'GIFT_CODE_CREATED', 'gift_code', code.code, b);
+      json(ctx.res, 201, code);
+    } catch (e) { error(ctx.res, 400, 'GIFT_CODE_INVALID', e instanceof Error ? e.message : 'failed'); }
   });
 
   router.add('GET', `${base}/admin/analytics`, async (ctx) => {

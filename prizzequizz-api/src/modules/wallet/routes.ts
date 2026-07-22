@@ -10,6 +10,7 @@ import {
   requestWithdraw, transitionWithdraw, verifyConsistency
 } from '../../services/walletLedgerService.js';
 import { TicketError, consumeTicket, purchaseTicket, refundTicket } from '../../services/ticketService.js';
+import { GiftError, redeemGiftCode } from '../../services/giftCodeService.js';
 import { id } from '../../utils/id.js';
 import { bodyObject, optionalString, requiredNumber, requiredString } from '../../utils/validation.js';
 
@@ -145,6 +146,20 @@ export function registerWalletRoutes(router: Router, base: string): void {
       json(ctx.res, 200, { tier, tickets });
     } catch (e) {
       if (e instanceof TicketError) return error(ctx.res, e.code === 'NO_TICKET' ? 402 : 400, e.code, e.message);
+      throw e;
+    }
+  });
+
+  // ---------- Redeem a gift/promo code (once per user) ----------
+  router.add('POST', `${base}/gift-codes/redeem`, async (ctx) => {
+    const uid = requireUser(ctx); if (!uid) return;
+    if (!userRateLimit(ctx, uid, 'gift', 15, 3_600_000)) return;
+    try {
+      const r = await redeemGiftCode(uid, requiredString(bodyObject(ctx.body), 'code'));
+      await notifications.create({ userId: uid, type: 'wallet_update', title: 'کد هدیه اعمال شد 🎁', body: 'جایزهٔ کد هدیه به حسابت اضافه شد.', data: { url: '/wallet' }, push: true });
+      json(ctx.res, 200, r);
+    } catch (e) {
+      if (e instanceof GiftError) return error(ctx.res, 400, e.code, e.message);
       throw e;
     }
   });

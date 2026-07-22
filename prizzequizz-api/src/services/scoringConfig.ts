@@ -15,12 +15,21 @@ export interface Points { xp: number; cup: number; }
  * (winBonusXp/winBonusCup/…) and falls back to the constants below. So the
  * panel's XP/cup edits take effect immediately without a redeploy. */
 export function getResultBonus(outcome: 'win' | 'draw' | 'loss'): Points {
+  const xpc: any = (gameConfig as any)?.xp ?? {};
+  const cupc: any = (gameConfig as any)?.cup ?? {};
   const s: any = (gameConfig as any)?.scoring ?? {};
-  const map = { win: ['winBonusXp', 'winBonusCup'], draw: ['drawBonusXp', 'drawBonusCup'], loss: ['lossBonusXp', 'lossBonusCup'] } as const;
   const base = PZ_SCORING.result[outcome] ?? { xp: 0, cup: 0 };
-  const [xk, ck] = map[outcome];
-  const xp = Number(s[xk]); const cup = Number(s[ck]);
-  return { xp: Number.isFinite(xp) ? xp : base.xp, cup: Number.isFinite(cup) ? cup : base.cup };
+  // Priority: the panel-facing xp/cup blocks → legacy scoring block → constants.
+  const xpKey = { win: 'perWin', draw: 'perDraw', loss: 'perLoss' }[outcome];
+  const cupKey = { win: 'win', draw: 'draw', loss: 'loss' }[outcome];
+  const scXp = { win: 'winBonusXp', draw: 'drawBonusXp', loss: 'lossBonusXp' }[outcome];
+  const scCup = { win: 'winBonusCup', draw: 'drawBonusCup', loss: 'lossBonusCup' }[outcome];
+  const pick = (...vals: unknown[]) => { for (const v of vals) { const n = Number(v); if (Number.isFinite(n)) return n; } return 0; };
+  const mult = Number((xpc as any).multiplier); const m = Number.isFinite(mult) && mult > 0 ? mult : 1;
+  return {
+    xp: Math.round(pick(xpc[xpKey], s[scXp], base.xp) * m),
+    cup: pick(cupc[cupKey], s[scCup], base.cup)
+  };
 }
 
 export const PZ_SCORING = {

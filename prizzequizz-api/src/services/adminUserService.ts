@@ -68,6 +68,46 @@ export async function updateUserStatus(userId: string, status: UserStatus, reaso
   return toListItem(user, risk ?? undefined);
 }
 
+/* Edit core profile/progression fields directly (admin override). Wallet is NOT
+ * edited here — money only moves through the ledger (/admin/wallet/adjust). */
+export async function updateUserFields(userId: string, fields: Partial<{ displayName: string; username: string; xp: number; level: number; weeklyScore: number; coins: number; hearts: number }>): Promise<AdminUserListItem | null> {
+  const user = await repositories.users.findById(userId);
+  if (!user) return null;
+  if (typeof fields.displayName === 'string' && fields.displayName.trim()) user.displayName = fields.displayName.trim();
+  if (typeof fields.username === 'string' && fields.username.trim()) user.username = fields.username.trim();
+  if (Number.isFinite(fields.xp as number)) user.xp = Math.max(0, Math.round(fields.xp as number));
+  if (Number.isFinite(fields.level as number)) user.level = Math.max(1, Math.round(fields.level as number));
+  if (Number.isFinite(fields.weeklyScore as number)) user.weeklyScore = Math.max(0, Math.round(fields.weeklyScore as number));
+  if (Number.isFinite(fields.coins as number)) user.coins = Math.max(0, Math.round(fields.coins as number));
+  if (Number.isFinite(fields.hearts as number)) user.hearts = Math.max(0, Math.round(fields.hearts as number));
+  await repositories.users.save(user);
+  const risk = await repositories.devices.getRiskProfile(userId).catch(() => null);
+  return toListItem(user, risk ?? undefined);
+}
+
+/* Set (or add to) a user's ticket count for a tier — a granted asset, not a
+ * wallet movement. mode 'set' overwrites, 'add' increments. */
+export async function setUserTickets(userId: string, tier: string, count: number, mode: 'set' | 'add'): Promise<Record<string, number> | null> {
+  const user = await repositories.users.findById(userId);
+  if (!user) return null;
+  const tickets: Record<string, number> = { ...(user.tickets as any ?? {}) };
+  const cur = Number(tickets[tier] ?? 0) || 0;
+  tickets[tier] = Math.max(0, mode === 'add' ? cur + Math.round(count) : Math.round(count));
+  user.tickets = tickets as any;
+  await repositories.users.save(user);
+  return tickets;
+}
+
+/* Reset progression stats (xp/level/weekly cup) — does NOT touch the wallet. */
+export async function resetUserStats(userId: string): Promise<AdminUserListItem | null> {
+  const user = await repositories.users.findById(userId);
+  if (!user) return null;
+  user.xp = 0; user.level = 1; user.weeklyScore = 0;
+  await repositories.users.save(user);
+  const risk = await repositories.devices.getRiskProfile(userId).catch(() => null);
+  return toListItem(user, risk ?? undefined);
+}
+
 export async function updateUserRole(userId: string, role: 'user' | 'admin'): Promise<AdminUserListItem | null> {
   const user = await repositories.users.findById(userId);
   if (!user) return null;

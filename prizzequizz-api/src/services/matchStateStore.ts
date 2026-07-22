@@ -4,6 +4,7 @@ export interface MatchStateStore {
   get(matchId: string): Promise<Match | null>;
   set(match: Match, ttlSeconds?: number): Promise<void>;
   delete(matchId: string): Promise<void>;
+  list(): Promise<Match[]>;
 }
 
 export class MemoryMatchStateStore implements MatchStateStore {
@@ -25,6 +26,16 @@ export class MemoryMatchStateStore implements MatchStateStore {
 
   async delete(matchId: string): Promise<void> {
     this.store.delete(matchId);
+  }
+
+  async list(): Promise<Match[]> {
+    const now = Date.now();
+    const out: Match[] = [];
+    for (const [id, row] of this.store) {
+      if (row.expiresAt && row.expiresAt < now) { this.store.delete(id); continue; }
+      out.push(row.match);
+    }
+    return out.sort((a, b) => String(b.updatedAt ?? '').localeCompare(String(a.updatedAt ?? '')));
   }
 }
 
