@@ -1,10 +1,11 @@
 FROM node:20-alpine AS build
 WORKDIR /app
-COPY package*.json ./
-# Force devDependencies (typescript/tsc) even if NODE_ENV=production leaks into
-# the build environment — the build stage needs the compiler.
-RUN npm install --include=dev
+# Copy source FIRST, then install — so nothing in the build context can clobber
+# node_modules after install. --production=false + --include=dev force the
+# devDependencies (typescript) even if NODE_ENV=production or an .npmrc says otherwise.
 COPY . .
+RUN npm install --include=dev --production=false
+RUN ls -la node_modules/.bin/tsc || (echo "!!! tsc NOT installed — check .npmrc/registry" && exit 1)
 RUN npm run build
 
 FROM node:20-alpine AS runtime
