@@ -34,11 +34,16 @@ export function getWalletLimits(): WalletLimits {
 
 export function getTicketPrices(): Record<string, number> {
   const p = wallet().ticketPrices ?? {};
-  return {
-    bronze: num(p.bronze, envInt('WALLET_TICKET_PRICE_BRONZE', 50_000)),
-    silver: num(p.silver, envInt('WALLET_TICKET_PRICE_SILVER', 150_000)),
-    gold: num(p.gold, envInt('WALLET_TICKET_PRICE_GOLD', 400_000))
+  // Defaults for the well-known tiers, then EVERY tier present in the config —
+  // so match tickets (green/blue/red) and any future tier are all purchasable.
+  const out: Record<string, number> = {
+    green: 12_500, blue: 25_000, red: 50_000,
+    bronze: envInt('WALLET_TICKET_PRICE_BRONZE', 50_000),
+    silver: envInt('WALLET_TICKET_PRICE_SILVER', 150_000),
+    gold: envInt('WALLET_TICKET_PRICE_GOLD', 400_000)
   };
+  if (p && typeof p === 'object') for (const k of Object.keys(p)) { const v = Number(p[k]); if (Number.isFinite(v) && v > 0) out[k] = v; }
+  return out;
 }
 
 /* Platform commission (rake) taken from a paid-match cash win, as a percent.

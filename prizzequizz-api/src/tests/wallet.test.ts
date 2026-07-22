@@ -156,6 +156,45 @@ async function main(): Promise<void> {
   assert.equal((await getAccount(u6)).available, 45_000, 'rake change applies live');
   console.log('✔ match reward rake: net credit + fee entry + idempotent + live-configurable');
 
+  // ---------- 10) Tickets: DB-backed asset, separate from the wallet ----------
+  const { gameConfig: gc2 } = await import('../core/config.js');
+  (gc2 as any).economy = { ...(gc2 as any).economy, wallet: { ...(gc2 as any).economy?.wallet, ticketPrices: { green: 12500, blue: 25000, red: 50000 } } };
+  const { purchaseTicket, consumeTicket, refundTicket, getTickets, TicketError } = await import('../services/ticketService.js');
+  const u7 = await makeUser('7');
+  await postEntry({ userId: u7, entryType: 'deposit', kind: 'credit', amount: 100_000, idempotencyKey: 't7:seed' });
+  // buy blue (25,000) → wallet debited, ticket granted
+  const buy = await purchaseTicket({ userId: u7, tier: 'blue', idempotencyKey: 't7:buyblue' });
+  assert.equal(buy.balance, 75_000, 'ticket purchase debits wallet');
+  assert.equal((await getTickets(u7)).blue, 1, 'ticket granted in DB');
+  // replay purchase = idempotent (no second debit, no second ticket)
+  const buyDup = await purchaseTicket({ userId: u7, tier: 'blue', idempotencyKey: 't7:buyblue' });
+  assert.equal(buyDup.duplicate, true);
+  assert.equal((await getAccount(u7)).available, 75_000, 'idempotent purchase does not double-debit');
+  // buy red (50,000) → 25,000 left; a SECOND red (50,000) can't be afforded
+  await purchaseTicket({ userId: u7, tier: 'red', idempotencyKey: 't7:buyred1' });
+  assert.equal((await getAccount(u7)).available, 25_000);
+  await assert.rejects(() => purchaseTicket({ userId: u7, tier: 'red', idempotencyKey: 't7:buyred2' }),
+    (e: unknown) => e instanceof WalletError && e.code === 'INSUFFICIENT_FUNDS');
+  assert.equal((await getTickets(u7)).red, 1, 'failed purchase grants no extra ticket');
+  // consume the blue ticket for a match — wallet UNCHANGED (stays 25,000)
+  const balBefore = (await getAccount(u7)).available;
+  await consumeTicket(u7, 'blue');
+  assert.equal((await getTickets(u7)).blue, 0, 'consume removes the ticket');
+  assert.equal((await getAccount(u7)).available, balBefore, 'consuming a ticket never touches the wallet');
+  // consuming with none left is rejected
+  await assert.rejects(() => consumeTicket(u7, 'blue'), (e: unknown) => e instanceof TicketError && e.code === 'NO_TICKET');
+  // refund gives it back
+  await refundTicket(u7, 'blue');
+  assert.equal((await getTickets(u7)).blue, 1, 'refund restores the ticket');
+  // concurrency: buy 3, fire 10 parallel consumes → exactly 3 succeed
+  const u8 = await makeUser('8');
+  await postEntry({ userId: u8, entryType: 'deposit', kind: 'credit', amount: 1_000_000, idempotencyKey: 't8:seed' });
+  for (let i = 0; i < 3; i++) await purchaseTicket({ userId: u8, tier: 'green', idempotencyKey: `t8:g${i}` });
+  const consumes = await Promise.allSettled(Array.from({ length: 10 }, () => consumeTicket(u8, 'green')));
+  assert.equal(consumes.filter((r) => r.status === 'fulfilled').length, 3, 'exactly 3 of 10 parallel consumes succeed');
+  assert.equal((await getTickets(u8)).green, 0, 'no negative tickets under concurrency');
+  console.log('✔ tickets: DB-backed, wallet-separate, atomic purchase/consume/refund, no double-consume');
+
   console.log('\nALL WALLET TESTS PASSED');
 }
 

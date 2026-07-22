@@ -9,7 +9,7 @@ import {
   listAudit, listEntries, listWithdraws, postEntry, reportSummary, reportSuspicious, reportTopUsers,
   requestWithdraw, transitionWithdraw, verifyConsistency
 } from '../../services/walletLedgerService.js';
-import { getTicketPrices } from '../../services/economyConfig.js';
+import { TicketError, consumeTicket, purchaseTicket, refundTicket } from '../../services/ticketService.js';
 import { id } from '../../utils/id.js';
 import { bodyObject, optionalString, requiredNumber, requiredString } from '../../utils/validation.js';
 
@@ -115,40 +115,47 @@ export function registerWalletRoutes(router: Router, base: string): void {
     json(ctx.res, 200, await listWithdraws({ userId: uid, status: ctx.query.get('status') || undefined, page: Number(ctx.query.get('page') ?? 1), pageSize: Number(ctx.query.get('pageSize') ?? 20) }));
   });
 
-  // ---------- League ticket purchase (server-side prices, refund on failure) ----------
+  // ---------- Ticket purchase: atomic wallet debit + DB ticket grant ----------
   router.add('POST', `${base}/wallet/tickets/purchase`, async (ctx) => {
     const uid = requireUser(ctx); if (!uid) return;
     if (!userRateLimit(ctx, uid, 'ticket', 30, 3_600_000)) return;
     const body = bodyObject(ctx.body);
     const tier = requiredString(body, 'tier');
     const meta = reqMeta(ctx);
-    const prices = getTicketPrices();
-    if (!prices[tier]) return error(ctx.res, 400, 'TICKET_TIER_INVALID', 'Tier must be bronze|silver|gold.');
-    const price = prices[tier]!;
     const idem = `ticket:${uid}:${optionalString(body, 'idempotencyKey') ?? id()}`;
     try {
-      const posted = await postEntry({ userId: uid, entryType: 'ticket_purchase', kind: 'debit', amount: price, idempotencyKey: idem, refType: 'ticket', refId: tier, description: `خرید بلیت لیگ ${tier}`, ...meta });
-      if (!posted.duplicate) {
-        try {
-          const u = await repositories.users.findById(uid);
-          if (!u) throw new Error('USER_NOT_FOUND');
-          u.tickets = { ...(u.tickets ?? { bronze: 0, silver: 0, gold: 0 }) };
-          (u.tickets as any)[tier] = Number((u.tickets as any)[tier] ?? 0) + 1;
-          await repositories.users.save(u);
-        } catch (grantErr) {
-          // Ticket grant failed → compensating refund so money is never lost.
-          await postEntry({ userId: uid, entryType: 'refund', kind: 'credit', amount: price, idempotencyKey: `ticket_refund:${posted.entry.id}`, refType: 'ticket', refId: tier, description: 'برگشت وجه: صدور بلیت ناموفق بود' });
-          throw grantErr;
-        }
-        await notifications.create({ userId: uid, type: 'wallet_update', title: 'بلیت خریداری شد', body: `بلیت ${tier} با ${price.toLocaleString('fa-IR')} تومان فعال شد.`, data: { tier, url: '/wallet' }, push: true });
-      }
-      await auditLog({ userId: uid, action: 'ticket_purchased', api: 'POST /wallet/tickets/purchase', ...meta, request: { tier }, response: { price, duplicate: posted.duplicate } });
-      const u = await repositories.users.findById(uid);
-      json(ctx.res, 200, { tier, price, duplicate: posted.duplicate, balance: posted.account.available, tickets: u?.tickets ?? {} });
+      const r = await purchaseTicket({ userId: uid, tier, idempotencyKey: idem, ...meta });
+      if (!r.duplicate) await notifications.create({ userId: uid, type: 'wallet_update', title: 'بلیت خریداری شد', body: `بلیت ${tier} با ${r.price.toLocaleString('fa-IR')} تومان فعال شد.`, data: { tier, url: '/wallet' }, push: true });
+      await auditLog({ userId: uid, action: 'ticket_purchased', api: 'POST /wallet/tickets/purchase', ...meta, request: { tier }, response: { price: r.price, duplicate: r.duplicate } });
+      json(ctx.res, 200, { tier: r.tier, price: r.price, duplicate: r.duplicate, balance: r.balance, tickets: r.tickets });
     } catch (e) {
       await auditLog({ userId: uid, action: 'ticket_purchase_failed', api: 'POST /wallet/tickets/purchase', ...meta, request: { tier }, error: e instanceof Error ? e.message : 'unknown' });
+      if (e instanceof TicketError) return error(ctx.res, 400, e.code, e.message);
       walletError(ctx, e);
     }
+  });
+
+  // ---------- Consume a ticket (paid-match entry) — NEVER touches the wallet ----------
+  router.add('POST', `${base}/wallet/tickets/consume`, async (ctx) => {
+    const uid = requireUser(ctx); if (!uid) return;
+    const tier = requiredString(bodyObject(ctx.body), 'tier');
+    try {
+      const tickets = await consumeTicket(uid, tier);
+      await auditLog({ userId: uid, action: 'ticket_consumed', api: 'POST /wallet/tickets/consume', ...reqMeta(ctx), request: { tier } });
+      json(ctx.res, 200, { tier, tickets });
+    } catch (e) {
+      if (e instanceof TicketError) return error(ctx.res, e.code === 'NO_TICKET' ? 402 : 400, e.code, e.message);
+      throw e;
+    }
+  });
+
+  // ---------- Refund a ticket (e.g. no opponent was found) ----------
+  router.add('POST', `${base}/wallet/tickets/refund`, async (ctx) => {
+    const uid = requireUser(ctx); if (!uid) return;
+    const tier = requiredString(bodyObject(ctx.body), 'tier');
+    const tickets = await refundTicket(uid, tier);
+    await auditLog({ userId: uid, action: 'ticket_refunded', api: 'POST /wallet/tickets/refund', ...reqMeta(ctx), request: { tier } });
+    json(ctx.res, 200, { tier, tickets });
   });
 
   // =====================================================================

@@ -10,7 +10,7 @@
       "maxWithdraw": 50000000,
       "dailyWithdrawCap": 10000000,
       "withdrawFee": 0,
-      "ticketPrices": { "bronze": 50000, "silver": 150000, "gold": 400000 }
+      "ticketPrices": { "green": 12500, "blue": 25000, "red": 50000, "bronze": 50000, "silver": 150000, "gold": 400000 }
     }
   },
   "modes": {
