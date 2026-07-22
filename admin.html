@@ -119,12 +119,12 @@ async function loadCfg(){ try{ CFG=await api('GET','/admin/config'); $('#cfgVer'
 
 /* ---- nav: 25 sections grouped ---- */
 const NAV=[
-  ['اصلی',[['dashboard','📊','داشبورد'],['users','👤','کاربران'],['matches','🎮','مسابقات'],['support','🎧','پشتیبانی']]],
+  ['اصلی',[['dashboard','📊','داشبورد'],['finance','💰','داشبورد مالی'],['users','👤','کاربران'],['matches','🎮','مسابقات'],['support','🎧','پشتیبانی']]],
   ['محتوا',[['questions','❓','سوالات'],['aistudio','🤖','استودیوی سوال (AI)'],['pipeline','🔬','خط‌لولهٔ کیفیت'],['categories','🏷️','موضوعات']]],
   ['اقتصاد',[['wallet','👛','کیف پول'],['withdrawals','💸','برداشت‌ها'],['tickets','🎫','بلیط‌ها'],['shop','🛒','فروشگاه'],['giftcodes','🎁','کدهای هدیه']]],
   ['بالانس بازی (Data-Driven)',[['cfg_xp','✨','XP'],['cfg_level','🏅','Level'],['cfg_cup','🏆','Cup'],['cfg_gameplay','🕹️','گیم‌پلی مودها'],['leagues','🛡️','لیگ‌ها'],['missions','🎯','مأموریت‌ها'],['rewards','🎉','جوایز/چرخونه/استریک']]],
   ['رشد و تعامل',[['leaderboard','📈','لیدربرد'],['events','📅','رویدادها'],['banners','🖼️','بنرها'],['notifications','🔔','اعلان‌ها']]],
-  ['سیستم',[['anticheat','🛡️','ضدتقلب'],['reports','📑','گزارش‌ها'],['logs','📝','لاگ سیستم'],['roles','🔑','نقش‌های ادمین'],['general','⚙️','تنظیمات عمومی'],['rawcfg','🧩','ویرایش خام Config']]]
+  ['سیستم',[['anticheat','🛡️','ضدتقلب'],['suspicious','🚨','کاربران مشکوک'],['reports','📑','گزارش‌ها'],['logs','📝','لاگ و Audit'],['reset','♻️','ابزار ریست'],['roles','🔑','نقش‌های ادمین'],['general','⚙️','تنظیمات عمومی'],['rawcfg','🧩','ویرایش خام Config']]]
 ];
 function buildNav(){
   $('#nav').innerHTML=NAV.map(g=>'<div class="navgroup">'+g[0]+'</div>'+g[1].map(p=>'<button data-p="'+p[0]+'" onclick="go(\''+p[0]+'\')"><span class="ico">'+p[1]+'</span>'+p[2]+'</button>').join('')).join('');
@@ -142,7 +142,7 @@ async function render(){
   loading();
   try{
     if(CONFIG_PAGES[CUR])return renderConfigSection(CONFIG_PAGES[CUR][0],CONFIG_PAGES[CUR][1]);
-    const fn={dashboard:renderDashboard,users:renderUsers,matches:renderMatches,support:renderSupport,questions:renderQuestions,aistudio:renderAiStudio,pipeline:renderPipeline,categories:renderCategories,wallet:renderWallet,withdrawals:renderWithdrawals,tickets:renderTickets,giftcodes:renderGiftCodes,leaderboard:renderLeaderboard,notifications:renderNotifications,anticheat:renderAntiCheat,reports:renderReports,logs:renderLogs,roles:renderRoles,rawcfg:renderRawCfg}[CUR];
+    const fn={dashboard:renderDashboard,finance:renderFinance,users:renderUsers,matches:renderMatches,support:renderSupport,questions:renderQuestions,aistudio:renderAiStudio,pipeline:renderPipeline,categories:renderCategories,wallet:renderWallet,withdrawals:renderWithdrawals,tickets:renderTickets,giftcodes:renderGiftCodes,leaderboard:renderLeaderboard,notifications:renderNotifications,anticheat:renderAntiCheat,suspicious:renderSuspicious,reports:renderReports,logs:renderLogs,reset:renderReset,roles:renderRoles,rawcfg:renderRawCfg}[CUR];
     if(fn)return fn();
   }catch(e){$('#main').innerHTML=head('خطا')+'<div class="card empty">'+(e.message||'خطا')+'</div>';}
 }
@@ -153,10 +153,11 @@ async function renderDashboard(){
     api('GET','/admin/analytics').catch(()=>({})),
     api('GET','/admin/wallet/reports?granularity=daily').catch(()=>({rows:[]})),
     api('GET','/admin/wallet/withdrawals?status=pending&pageSize=100').catch(()=>({total:0})),
-    api('GET','/admin/wallet/reports/suspicious').catch(()=>[]),
+    api('GET','/admin/suspicious').catch(()=>({rows:[]})),
     api('GET','/admin/matches').catch(()=>({rows:[]})),
     api('GET','/admin/monitoring/diagnostics').catch(()=>({}))
   ]);
+  const suspCount=(susp.rows||susp||[]).length;
   const today=(rep.rows||[])[0]||{};
   const wk=(rep.rows||[]).slice(0,7).reduce((s,r)=>s+(Number(r.systemProfit)||0),0);
   const mo=(rep.rows||[]).slice(0,30).reduce((s,r)=>s+(Number(r.systemProfit)||0),0);
@@ -171,13 +172,59 @@ async function renderDashboard(){
       stat('سود امروز','gold',fa(today.systemProfit||0)+' ت')+
       stat('سود ۷ روز','gold',fa(wk)+' ت')+
       stat('سود ۳۰ روز','gold',fa(mo)+' ت')+
-      stat('کاربران مشکوک','bad',fa((susp||[]).length))+
+      stat('کاربران مشکوک','bad',fa(suspCount))+
     '</div>'+
     '<div class="grid g2">'+
       '<div class="card"><h3>روند مالی روزانه</h3>'+tbl(['روز','شارژ','جوایز','ورودی','سود'],(rep.rows||[]).slice(0,10).map(r=>[r.period,fa(r.deposits),fa(r.rewards),fa(r.stakes),'<b style="color:var(--gold)">'+fa(r.systemProfit)+'</b>']))+'</div>'+
       '<div class="card"><h3>بازی‌های در حال اجرا</h3>'+tbl(['مود','فاز','راند','بازیکنان'],(matches.rows||[]).slice(0,10).map(m=>[m.modeId,m.phase,fa(m.round),(m.players||[]).map(p=>esc(p.username||'')+' ('+fa(p.score)+')').join(' vs ')]))+'</div>'+
     '</div>'+
     '<div class="card" style="margin-top:13px"><h3>خطاها و کرش‌ها (Monitoring)</h3><div class="sub" style="color:var(--muted);font-size:12px">مجموع گزارش خطا: '+fa(mon.total||mon.open||0)+' · باز: '+fa(mon.open||0)+'</div></div>';
+}
+
+/* ================= FINANCE DASHBOARD (transparent, formula-visible) ================= */
+async function renderFinance(){
+  const f=await api('GET','/admin/wallet/finance');
+  const money=v=>fa(v)+' ت';
+  const row=(k,v,cls)=>'<div class="cfg-row"><label>'+k+'</label><b style="color:'+(cls||'var(--ink)')+'">'+money(v)+'</b></div>';
+  const income=(Number(f.totalTicketSpend)||0)+(Number(f.totalStake)||0)+(Number(f.feeIncome)||0)+(Number(f.penalties)||0);
+  const payout=(Number(f.grossRewardsPaid)||0)+(Number(f.bonuses)||0)+(Number(f.refunds)||0);
+  $('#main').innerHTML=head('داشبورد مالی','هر عدد مستقیم از دفترکلِ تغییرناپذیر (Ledger) محاسبه می‌شود — کاملاً شفاف',
+    '<button class="btn sm" onclick="render()">↻ بروزرسانی</button>')+
+    (f.note?'<div class="note">⚠️ '+esc(f.note)+'</div>':'')+
+    '<div class="grid g4" style="margin-bottom:13px">'+
+      stat('کل واریزها (شارژ)','ok',money(f.totalDeposits))+
+      stat('کل برداشتِ پرداخت‌شده','bad',money(f.totalWithdrawnPaid))+
+      stat('موجودی کلِ کاربران','info',money(f.usersWalletBalance))+
+      stat('موجودی سیستم (خزانه)','gold',money(f.systemBalance))+
+    '</div>'+
+    '<div class="grid g4" style="margin-bottom:13px">'+
+      stat('برداشتِ در انتظار','gold',money(f.pendingWithdraw))+
+      stat('برداشتِ تأییدشده','info',money(f.approvedWithdraw))+
+      stat('برداشتِ ردشده/ناموفق','',money(f.rejectedWithdraw))+
+      stat('سود خالص','gold',money(f.netProfit))+
+    '</div>'+
+    '<div class="grid g2">'+
+      '<div class="card"><h3>💵 درآمدِ خانه (ورودی پول)</h3>'+
+        row('خرید بلیت',f.totalTicketSpend,'var(--ok)')+
+        row('ورودی مسابقات (Stake)',f.totalStake,'var(--ok)')+
+        row('کارمزد (Fee/Rake)',f.feeIncome,'var(--ok)')+
+        row('جریمه‌ها (Penalty)',f.penalties,'var(--ok)')+
+        '<div class="cfg-row" style="border-top:2px solid var(--line);margin-top:6px;padding-top:8px"><label><b>جمع درآمد</b></label><b style="color:var(--ok);font-size:16px">'+money(income)+'</b></div>'+
+      '</div>'+
+      '<div class="card"><h3>💸 پرداختی به بازیکنان (خروجی پول)</h3>'+
+        row('جوایز مسابقات (ناخالص)',f.grossRewardsPaid,'var(--bad)')+
+        row('بونوس‌ها',f.bonuses,'var(--bad)')+
+        row('بازگشت وجه (Refund)',f.refunds,'var(--bad)')+
+        '<div class="cfg-row" style="border-top:2px solid var(--line);margin-top:6px;padding-top:8px"><label><b>جمع پرداختی</b></label><b style="color:var(--bad);font-size:16px">'+money(payout)+'</b></div>'+
+      '</div>'+
+    '</div>'+
+    '<div class="card" style="margin-top:13px;background:linear-gradient(160deg,#1a1e2b,#161a22)"><h3>🧮 فرمول شفافِ محاسبه</h3>'+
+      '<div class="mono" style="direction:rtl;font-size:12.5px;line-height:2.2;color:#cdd6ff">'+esc(f.formula||'')+'</div>'+
+      '<div style="margin-top:12px;padding:12px;background:#0c0f16;border-radius:9px;border:1.5px solid var(--line)">'+
+        '<div style="font-size:13px;line-height:2.1">سود خالص = <span style="color:var(--ok)">'+money(income)+'</span> − <span style="color:var(--bad)">'+money(payout)+'</span> = <b style="color:var(--gold);font-size:16px">'+money(f.netProfit)+'</b></div>'+
+        '<div style="font-size:13px;line-height:2.1;margin-top:6px">موجودی سیستم = واریزها('+money(f.totalDeposits)+') − برداشت('+money(f.totalWithdrawnPaid)+') − موجودی کاربران('+money(f.usersWalletBalance)+') = <b style="color:var(--gold);font-size:16px">'+money(f.systemBalance)+'</b></div>'+
+      '</div>'+
+    '</div>';
 }
 
 /* ================= USERS ================= */
@@ -237,14 +284,28 @@ async function setRole(uid,role){try{await api('PATCH','/admin/users/'+uid+'/rol
 async function resetUser(uid){if(!confirm('آمار (XP/Level/Cup) این کاربر صفر شود؟'))return;try{await api('POST','/admin/users/'+uid+'/reset');toast('ریست شد','ok');userDetailReopen(uid);}catch(e){toast(e.message,'bad');}}
 function userDetailReopen(uid){document.querySelectorAll('.modal-bg').forEach(m=>m.remove());userDetail(uid);}
 
-/* ================= MATCHES ================= */
+/* ================= MATCHES (running vs finished — always DB-true) ================= */
+let M_TAB='live';
 async function renderMatches(){
-  const d=await api('GET','/admin/matches');
-  $('#main').innerHTML=head('مدیریت مسابقات','اتاق‌های زنده — مشاهده و پایان اجباری')+
+  const tabs='<div class="subtabs"><button class="'+(M_TAB==='live'?'active':'')+'" onclick="M_TAB=\'live\';render()">🟢 در حال اجرا</button><button class="'+(M_TAB==='done'?'active':'')+'" onclick="M_TAB=\'done\';render()">🏁 پایان‌یافته (تاریخچه)</button></div>';
+  if(M_TAB==='done'){
+    const d=await api('GET','/admin/matches/history?limit=80').catch(()=>({rows:[]}));
+    $('#main').innerHTML=head('مدیریت مسابقات','مسابقاتِ پایان‌یافته — از دیتابیس (منبع حقیقت)')+tabs+
+      '<div class="note">به‌محضِ پایان، مسابقه از فهرستِ «در حال اجرا» خارج و اینجا ثبت می‌شود؛ وضعیت همیشه برابرِ وضعیتِ واقعیِ دیتابیس است. جایزهٔ برنده هم‌زمان در کیف پول، تراکنش، لیدربرد و گزارشِ مالی ثبت شده است.</div>'+
+      tbl(['شناسه','مود','وضعیت','اقتصاد','برنده','نتیجه','زمان'],(d.rows||[]).map(m=>{
+        const win=(m.players||[]).find(p=>p.userId===m.winnerUserId);
+        return ['<span class="mono">'+String(m.id).slice(0,8)+'</span>',m.modeId||'—','<span class="pill ok">'+esc(m.phase||'finished')+'</span>',m.economyType||'free',
+          win?('🏆 '+esc(win.username||String(win.userId).slice(0,8))):'—',
+          (m.players||[]).map(p=>esc(p.username||'')+' '+fa(p.score)).join(' — '),fmtDate(m.updatedAt)];
+      }));
+    return;
+  }
+  const d=await api('GET','/admin/matches').catch(()=>({rows:[]}));
+  $('#main').innerHTML=head('مدیریت مسابقات','اتاق‌های زنده — فقط مسابقاتِ در حالِ اجرا')+tabs+
     tbl(['شناسه','مود','فاز','راند','اقتصاد','بازیکنان','عملیات'],(d.rows||[]).map(m=>[
-      '<span class="mono">'+String(m.id).slice(0,8)+'</span>',m.modeId,'<span class="pill '+(m.phase==='result'?'ok':'info')+'">'+m.phase+'</span>',fa(m.round),m.economyType||'free',
+      '<span class="mono">'+String(m.id).slice(0,8)+'</span>',m.modeId,'<span class="pill info">'+m.phase+'</span>',fa(m.round),m.economyType||'free',
       (m.players||[]).map(p=>esc(p.username||'')+' '+fa(p.score)).join(' vs '),
-      m.phase!=='result'&&m.phase!=='finished'?'<button class="btn sm bad" onclick="forceEnd(\''+m.id+'\','+JSON.stringify(JSON.stringify((m.players||[]).map(p=>({id:p.userId,n:p.username})))).replace(/"/g,'&quot;')+')">پایان اجباری</button>':'—'
+      '<button class="btn sm bad" onclick="forceEnd(\''+m.id+'\','+JSON.stringify(JSON.stringify((m.players||[]).map(p=>({id:p.userId,n:p.username})))).replace(/"/g,'&quot;')+')">پایان اجباری</button>'
     ]));
 }
 function forceEnd(mid,playersJson){
@@ -522,6 +583,84 @@ async function saveAntiCheat(){
   try{await api('PATCH','/admin/config',{antiCheat:p});toast('تنظیمات ضدتقلب ذخیره شد','ok');await loadCfg();render();}catch(e){toast(e.message,'bad');}
 }
 
+/* ================= SUSPICIOUS USERS (full list + resolve) ================= */
+async function renderSuspicious(){
+  const d=await api('GET','/admin/suspicious').catch(()=>({rows:[]}));
+  const rows=d.rows||[];
+  window._SUSP=rows;
+  $('#main').innerHTML=head('کاربران مشکوک','فهرست کاملِ هشدارها — شناسه، دلیل، امتیاز ریسک، زمان و جزئیات؛ با امکانِ رسیدگی',
+    '<button class="btn sm" onclick="render()">↻ بروزرسانی</button>')+
+    '<div class="note">این فهرست از سیگنال‌های تقلبِ باز، سرعتِ غیرعادیِ تراکنش و برداشت‌های ناموفق ساخته می‌شود و بر اساسِ امتیازِ ریسک مرتب شده است. با «رسیدگی» هر هشدار را تأیید (تقلب) یا رد (بی‌خطر) کن؛ پس از رسیدگی، کاربر از فهرست خارج می‌شود.</div>'+
+    tbl(['کاربر','دلیل','امتیاز ریسک','آخرین رویداد','تعداد سیگنال','عملیات'],rows.map((u,i)=>[
+      esc(u.username||'')+' <span class="mono" style="color:var(--muted)">'+String(u.userId).slice(0,8)+'</span>',
+      (u.reasons||[]).map(r=>'<span class="pill '+(String(r).match(/BURST|CRITICAL|multi/i)?'bad':'pend')+'">'+esc(reasonFa(r))+'</span>').join(' '),
+      '<b style="color:'+(u.riskScore>=70?'var(--bad)':u.riskScore>=40?'var(--gold)':'var(--muted)')+';font-size:15px">'+fa(u.riskScore||0)+'</b>',
+      fmtDate(u.lastAt),fa((u.signals||[]).length),
+      '<button class="btn sm info" onclick="suspDetail('+i+')">جزئیات و رسیدگی</button>'
+    ]));
+}
+function reasonFa(r){return ({high_velocity:'سرعتِ بالای تراکنش',failed_withdrawals:'برداشت‌های ناموفق',REPEATED_QUESTION_ANSWER:'پاسخِ تکراری',ANSWER_BURST:'پاسخِ رگباری',IMPOSSIBLE_ANSWER_TIME:'زمانِ غیرممکن',MULTI_ACCOUNT:'چندحسابی',DEVICE_SHARED_BY_MULTIPLE_USERS:'اشتراکِ دستگاه'}[r])||r;}
+function suspDetail(i){
+  const u=(window._SUSP||[])[i]; if(!u)return;
+  const sig=(u.signals||[]).map(s=>'<div class="card" style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><div><b>'+esc(reasonFa(s.type))+'</b> <span class="pill '+(s.severity==='critical'?'bad':'pend')+'">'+esc(s.severity||'')+'</span> <span class="pill '+(s.status==='open'?'pend':'ok')+'">'+esc(s.status||'')+'</span></div><div class="mono" style="color:var(--muted);font-size:10px">'+fmtDate(s.createdAt)+'</div></div>'+
+    (s.metadata?'<div class="mono" style="direction:ltr;text-align:left;font-size:10px;color:var(--muted);margin-top:6px;white-space:pre-wrap;word-break:break-all">'+esc(JSON.stringify(s.metadata))+'</div>':'')+
+    (s.status==='open'?'<div style="display:flex;gap:6px;margin-top:8px"><button class="btn sm bad" onclick="suspResolve(\''+s.id+'\',\'confirmed\','+i+')">✔ تأیید تقلب</button><button class="btn sm ok" onclick="suspResolve(\''+s.id+'\',\'dismissed\','+i+')">✖ بی‌خطر (رد)</button></div>':'<div style="margin-top:8px;color:var(--muted);font-size:11px">رسیدگی‌شده</div>')+
+    '</div>').join('')||'<div class="empty">این کاربر سیگنالِ تقلبِ ثبت‌شده‌ای ندارد؛ هشدار از سرعتِ تراکنش یا برداشتِ ناموفق است.</div>';
+  modal('رسیدگی به کاربر: '+esc(u.username||String(u.userId).slice(0,8)),
+    '<div class="grid g2" style="margin-bottom:12px"><div class="stat"><div class="k">امتیاز ریسک</div><div class="v '+(u.riskScore>=70?'bad':'gold')+'">'+fa(u.riskScore||0)+'</div></div>'+
+    '<div class="stat"><div class="k">شناسهٔ کاربر</div><div class="v" style="font-size:13px" dir="ltr">'+esc(u.userId)+'</div></div></div>'+
+    '<div style="display:flex;gap:6px;margin-bottom:12px"><button class="btn sm bad" onclick="suspBan(\''+u.userId+'\')">🚫 بن کاربر</button><button class="btn sm info" onclick="document.querySelectorAll(\'.modal-bg\').forEach(m=>m.remove());userDetail(\''+u.userId+'\')">مدیریت کامل</button></div>'+
+    '<h3 style="font-size:14px;margin:6px 0">سیگنال‌ها و رویدادها</h3>'+sig);
+}
+async function suspResolve(sid,status,i){try{await api('PATCH','/admin/integrity/signals/'+sid+'/status',{status});toast(status==='confirmed'?'به‌عنوان تقلب تأیید شد':'بی‌خطر علامت خورد','ok');document.querySelectorAll('.modal-bg').forEach(m=>m.remove());await renderSuspicious();}catch(e){toast(e.message,'bad');}}
+async function suspBan(uid){if(!confirm('این کاربر بن شود؟'))return;const reason=prompt('علت بن:')||'فعالیت مشکوک';try{await api('PATCH','/admin/users/'+uid+'/status',{status:'banned',reason});toast('کاربر بن شد','ok');document.querySelectorAll('.modal-bg').forEach(m=>m.remove());render();}catch(e){toast(e.message,'bad');}}
+
+/* ================= RESET TOOLS (per-area, confirmation-gated) ================= */
+const RESET_AREAS=[
+  ['wallet','کیف پول','دفترکل + موجودی + برداشت‌ها را پاک می‌کند',1],
+  ['tickets','بلیط‌ها','همهٔ بلیط‌های کاربران صفر می‌شود',0],
+  ['xp','XP کاربران','XP همه صفر می‌شود',0],
+  ['cup','کاپ هفتگی','امتیازِ کاپِ هفتگی صفر می‌شود',0],
+  ['level','سطح کاربران','سطحِ همه به ۱ برمی‌گردد',0],
+  ['league','لیگ‌ها','دادهٔ لیگ (config-محور) ریست می‌شود',0],
+  ['missions','مأموریت‌ها','پیشرفتِ مأموریت‌ها پاک می‌شود',0],
+  ['stats','آمار بازی','پاسخ‌ها و آمارِ بازی پاک می‌شود',0],
+  ['matchHistory','تاریخچهٔ مسابقات','همهٔ مسابقات و بازیکنانِ آن‌ها پاک می‌شود',1],
+  ['transactions','تراکنش‌ها','تاریخچهٔ تراکنش‌ها پاک می‌شود',1],
+  ['leaderboard','لیدربرد','رتبه‌بندی‌ها بازسازی/پاک می‌شود',0],
+  ['notifications','اعلان‌ها','همهٔ اعلان‌ها پاک می‌شود',0],
+  ['full','ریست کاملِ سیستم','همهٔ موارد بالا با هم — فقط برای شروعِ تازه',2]
+];
+async function renderReset(){
+  $('#main').innerHTML=head('ابزار ریست','ریستِ هر بخش به‌صورت جداگانه — عملیاتِ حساس نیازمندِ تأییدِ نهایی است')+
+    '<div class="note">⚠️ این عملیات‌ها <b>برگشت‌ناپذیر</b>اند و مستقیم روی دیتابیس اثر می‌گذارند. هر ریست در <b>Audit Log</b> ثبت می‌شود (چه کسی، چه بخشی، چند رکورد). مواردِ حساس (کیف پول، تراکنش، تاریخچه، ریستِ کامل) قبلِ اجرا نیازمندِ تایپِ کلمهٔ <span class="mono">RESET</span> هستند.</div>'+
+    '<div class="grid g3">'+RESET_AREAS.map(a=>{
+      const danger=a[3]; const bcls=danger>=2?'bad':danger>=1?'bad':'';
+      const border=danger>=2?'border-color:var(--bad);box-shadow:0 0 0 1.5px var(--bad) inset':danger>=1?'border-color:#5a2020':'';
+      return '<div class="card" style="'+border+'"><h3>'+(danger>=2?'☢️ ':danger>=1?'⚠️ ':'♻️ ')+esc(a[1])+'</h3><div style="color:var(--muted);font-size:12px;min-height:34px;line-height:1.6">'+esc(a[2])+'</div><button class="btn '+(bcls||'')+' sm" style="width:100%;margin-top:8px" onclick="doReset(\''+a[0]+'\','+danger+',\''+esc(a[1])+'\')">ریست '+esc(a[1])+'</button></div>';
+    }).join('')+'</div>';
+}
+function doReset(area,danger,label){
+  if(danger>=1){
+    modal('تأییدِ ریست: '+esc(label),
+      '<div class="note" style="background:rgba(255,90,72,.12);border-color:rgba(255,90,72,.4);color:#ffb3aa">این عملیات برگشت‌ناپذیر است و «'+esc(label)+'» را برای <b>همهٔ کاربران</b> پاک می‌کند. برای ادامه، کلمهٔ <b>RESET</b> را تایپ کن.</div>'+
+      '<div class="field"><label>تأیید نهایی</label><input id="rs_confirm" placeholder="RESET" dir="ltr" autocomplete="off"></div>'+
+      '<div class="field"><label>علت (اختیاری)</label><input id="rs_reason" placeholder="مثلاً پاک‌سازی محیطِ تست"></div>'+
+      '<button class="btn bad" onclick="doResetConfirmed(\''+area+'\')">اجرای ریست</button>');
+  } else {
+    if(!confirm('«'+label+'» برای همهٔ کاربران ریست شود؟'))return;
+    runReset(area,'RESET','');
+  }
+}
+async function doResetConfirmed(area){
+  const c=($('#rs_confirm').value||'').trim();
+  if(c!=='RESET')return toast('برای تأیید باید دقیقاً RESET تایپ شود','bad');
+  runReset(area,'RESET',($('#rs_reason').value||'').trim());
+}
+async function runReset(area,confirm,reason){
+  try{const r=await api('POST','/admin/reset',{area,confirm,reason});toast('ریست انجام شد — '+fa(r.affected||0)+' رکورد ('+esc(area)+')','ok');document.querySelectorAll('.modal-bg').forEach(m=>m.remove());}catch(e){toast(e.message,'bad');}
+}
+
 /* ================= REPORTS ================= */
 let REP_G='daily';
 async function renderReports(){
@@ -532,12 +671,24 @@ async function renderReports(){
       '<div class="card"><h3>تراکنش‌های ناموفق</h3>'+tbl(['نوع','مبلغ','زمان'],((failed.failedTransactions)||[]).slice(0,15).map(t=>[esc(t.type),fa(t.amount),fmtDate(t.createdAt)]))+'</div></div>';
 }
 
-/* ================= LOGS ================= */
+/* ================= LOGS & DURABLE AUDIT ================= */
 async function renderLogs(){
-  const [audit,wau]=await Promise.all([api('GET','/admin/audit-logs?limit=100').catch(()=>[]),api('GET','/admin/wallet/audit?limit=80').catch(()=>[])]);
-  $('#main').innerHTML=head('لاگ سیستم','تغییرات ادمین + عملیات مالی')+
-    '<div class="grid g2"><div class="card"><h3>لاگ ادمین</h3>'+tbl(['عملیات','هدف','زمان'],(Array.isArray(audit)?audit:audit.rows||[]).slice(0,40).map(l=>[esc(l.action),esc((l.targetType||l.entity||'')+' '+String(l.targetId||l.entityId||'').slice(0,8)),fmtDate(l.createdAt||l.at)]))+'</div>'+
-      '<div class="card"><h3>لاگ مالی (Audit)</h3>'+tbl(['عملیات','IP','خطا','زمان'],(Array.isArray(wau)?wau:wau.rows||[]).slice(0,40).map(l=>[esc(l.action),esc(l.ip||'—'),l.error?'<span style="color:var(--bad)">'+esc(l.error)+'</span>':'—',fmtDate(l.created_at||l.createdAt)]))+'</div></div>';
+  const [durable,wau]=await Promise.all([
+    api('GET','/admin/audit?limit=150').catch(()=>({rows:[]})),
+    api('GET','/admin/wallet/audit?limit=80').catch(()=>[])
+  ]);
+  const D=durable.rows||[];
+  const money=v=>v==null?'—':fa(v);
+  const delta=d=>d==null?'—':(d>=0?'<span style="color:var(--ok)">+'+fa(d)+'</span>':'<span style="color:var(--bad)">'+fa(d)+'</span>');
+  $('#main').innerHTML=head('لاگ و Audit','ثبتِ دائمیِ همهٔ تغییراتِ پنل — چه کسی، چه چیزی، قبل/بعد/مقدارِ تغییر')+
+    '<div class="note">هر عملیاتِ مالی/مدیریتی به‌صورت <b>دائمی</b> اینجا ثبت می‌شود و بعد از ری‌استارتِ سرور هم می‌ماند. ستون‌های «قبل/بعد/تغییر» برای اصلاحِ موجودی و مقادیرِ عددی مقدار می‌گیرند؛ ریست‌ها با شمارِ رکوردِ متأثر ثبت می‌شوند.</div>'+
+    '<div class="card" style="margin-bottom:13px"><h3>🔐 Audit Log دائمی ('+fa(D.length)+' رکورد)</h3>'+
+      tbl(['زمان','ادمین','عملیات','کاربر هدف','قبل','بعد','تغییر','علت','شناسهٔ عملیات'],D.map(l=>[
+        fmtDate(l.createdAt),'<span class="mono">'+String(l.adminId||'').slice(0,8)+'</span>','<span class="pill info">'+esc(l.action)+'</span>',
+        l.targetUserId?'<span class="mono">'+String(l.targetUserId).slice(0,8)+'</span>':'—',
+        money(l.before),money(l.after),delta(l.delta),esc(l.reason||'—'),'<span class="mono" style="color:var(--muted)">'+String(l.id||'').slice(0,8)+'</span>'
+      ]))+'</div>'+
+    '<div class="card"><h3>لاگ عملیاتِ مالی (Wallet Audit)</h3>'+tbl(['عملیات','IP','خطا','زمان'],(Array.isArray(wau)?wau:wau.rows||[]).slice(0,40).map(l=>[esc(l.action),esc(l.ip||'—'),l.error?'<span style="color:var(--bad)">'+esc(l.error)+'</span>':'—',fmtDate(l.created_at||l.createdAt)]))+'</div>';
 }
 
 /* ================= ROLES ================= */

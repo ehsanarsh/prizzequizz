@@ -12,6 +12,9 @@ import { getMatch, claimTimeout, forfeitMatch } from '../../services/matchEngine
 import { activeMatchState } from '../../services/matchStateStore.js';
 import { createGiftCode, listGiftCodes, redeemGiftCode } from '../../services/giftCodeService.js';
 import { aiGenerate, approve as approvePipeline, createDraft, getMeta as getPipelineMeta, listPipeline, reject as rejectPipeline, runPipeline } from '../../services/questionPipelineService.js';
+import { listAdminAudit, recordAdmin } from '../../services/adminAuditService.js';
+import { RESET_AREAS, type ResetArea, financeSummary, finishedMatches, resetArea, runningMatches, suspiciousUsers } from '../../services/adminOpsService.js';
+import { getAccount } from '../../services/walletLedgerService.js';
 import { matchmakingQueue } from '../../services/matchmakingQueue.js';
 import { leaderboards } from '../../services/leaderboardService.js';
 import { notifications } from '../../services/notificationService.js';
@@ -199,12 +202,14 @@ export function registerAdminRoutes(router: Router, base: string): void {
     json(ctx.res, 200, updated);
   });
 
-  // ---- Matches (rooms) admin: live list + force settle ----
+  // ---- Matches (rooms) admin: RUNNING only (finished ones move to /history) ----
   router.add('GET', `${base}/admin/matches`, async (ctx) => {
     if (!requireAdmin(ctx)) return;
-    const active = await activeMatchState.list().catch(() => []);
-    const rows = active.map((m: any) => ({ id: m.id, modeId: m.modeId, phase: m.phase, round: m.round, economyType: m.economyType, winnerUserId: m.winnerUserId, players: (m.players ?? []).map((p: any) => ({ userId: p.userId, username: p.username, score: p.score })), updatedAt: m.updatedAt }));
-    json(ctx.res, 200, { rows });
+    json(ctx.res, 200, { rows: await runningMatches() });
+  });
+  router.add('GET', `${base}/admin/matches/history`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    json(ctx.res, 200, { rows: await finishedMatches(Number(ctx.query.get('limit') ?? 50)) });
   });
   router.add('POST', `${base}/admin/matches/:id/force-end`, async (ctx) => {
     if (!requireAdmin(ctx)) return;
@@ -461,9 +466,46 @@ export function registerAdminRoutes(router: Router, base: string): void {
     if (!requireAdmin(ctx)) return;
     json(ctx.res, 200, [...db.adminLogs.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 100));
   });
+
+  // Durable admin audit trail (who/target/before/after/delta/reason/time/id).
+  router.add('GET', `${base}/admin/audit`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    json(ctx.res, 200, { rows: await listAdminAudit({ limit: Number(ctx.query.get('limit') ?? 150), action: ctx.query.get('action') || undefined, targetUserId: ctx.query.get('userId') || undefined }) });
+  });
+
+  // Transparent finance summary (every number from the immutable ledger).
+  router.add('GET', `${base}/admin/wallet/finance`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    json(ctx.res, 200, await financeSummary());
+  });
+
+  // Full suspicious-users list with detail + resolve is wired to integrity.
+  router.add('GET', `${base}/admin/suspicious`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    json(ctx.res, 200, { rows: await suspiciousUsers() });
+  });
+
+  // Per-area RESET — destructive, requires an explicit confirm token, audited.
+  router.add('POST', `${base}/admin/reset`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    const b = (ctx.body ?? {}) as any;
+    const area = String(b.area ?? '');
+    if (!RESET_AREAS.includes(area as ResetArea)) return error(ctx.res, 422, 'RESET_AREA_INVALID', 'Unknown reset area.');
+    if (b.confirm !== 'RESET') return error(ctx.res, 428, 'CONFIRM_REQUIRED', 'برای ریست باید confirm=RESET ارسال شود.');
+    try {
+      const r = await resetArea(area as ResetArea);
+      await recordAdmin({ adminId: ctx.userId, action: 'RESET_' + area.toUpperCase(), reason: String(b.reason ?? ''), meta: { area, affected: r.affected } });
+      json(ctx.res, 200, { ok: true, ...r });
+    } catch (e) { error(ctx.res, 400, 'RESET_FAILED', e instanceof Error ? e.message : 'failed'); }
+  });
 }
 
 function audit(adminId: string | undefined, action: string, targetType: string, targetId: string | undefined, diff: Record<string, unknown>): void {
   const log = { id: id(), adminId: adminId ?? 'system', action, targetType, targetId, diff, createdAt: new Date().toISOString() };
   db.adminLogs.set(log.id, log);
+  // ALSO persist to the durable admin audit trail (survives restart, with
+  // before/after/delta when the diff carries them).
+  const before = typeof diff.before === 'number' ? diff.before : undefined;
+  const after = typeof diff.after === 'number' ? diff.after : undefined;
+  void recordAdmin({ adminId, targetUserId: targetType === 'user' ? targetId : undefined, action, before, after, reason: typeof diff.reason === 'string' ? diff.reason : undefined, meta: { targetType, targetId, ...diff } });
 }

@@ -11,6 +11,7 @@ import {
 } from '../../services/walletLedgerService.js';
 import { TicketError, consumeTicket, purchaseTicket, refundTicket } from '../../services/ticketService.js';
 import { GiftError, redeemGiftCode } from '../../services/giftCodeService.js';
+import { recordAdmin } from '../../services/adminAuditService.js';
 import { id } from '../../utils/id.js';
 import { bodyObject, optionalString, requiredNumber, requiredString } from '../../utils/validation.js';
 
@@ -223,8 +224,12 @@ export function registerWalletRoutes(router: Router, base: string): void {
     const body = bodyObject(ctx.body);
     const meta = reqMeta(ctx);
     try {
-      const result = await adminAdjust({ userId: requiredString(body, 'userId'), amount: requiredNumber(body, 'amount'), reason: requiredString(body, 'reason'), operatorId: ctx.userId! });
+      const targetId = requiredString(body, 'userId');
+      const before = (await getAccount(targetId)).available;
+      const result = await adminAdjust({ userId: targetId, amount: requiredNumber(body, 'amount'), reason: requiredString(body, 'reason'), operatorId: ctx.userId! });
       await auditLog({ userId: result.entry.userId, actorId: ctx.userId, action: 'admin_adjust', api: 'POST /admin/wallet/adjust', ...meta, request: body, response: { entryId: result.entry.id, balance: result.account.available } });
+      // Durable admin audit with before/after/delta of the wallet balance.
+      await recordAdmin({ adminId: ctx.userId, targetUserId: targetId, action: 'wallet_adjust', before, after: result.account.available, reason: String(body.reason ?? ''), meta: { entryId: result.entry.id, amount: result.entry.amount } });
       await notifications.create({ userId: result.entry.userId, type: 'wallet_update', title: 'اصلاح حساب انجام شد', body: `حساب شما توسط پشتیبانی اصلاح شد (${result.entry.kind === 'credit' ? '+' : '-'}${result.entry.amount.toLocaleString('fa-IR')} تومان).`, data: { url: '/wallet' }, push: true });
       json(ctx.res, 200, result);
     } catch (e) { walletError(ctx, e); }
