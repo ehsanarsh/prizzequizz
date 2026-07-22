@@ -100,7 +100,7 @@ export async function suspiciousUsers(): Promise<any[]> {
     const sigs = await repositories.integrity.list({ status: 'open', limit: 200 } as any).catch(() => repositories.integrity.list({ limit: 200 } as any));
     for (const s of (sigs as any[])) {
       const e = ensure(String(s.userId));
-      e.reasons.push(s.type); e.signals.push({ id: s.id, type: s.type, severity: s.severity, status: s.status, metadata: s.metadata, createdAt: s.createdAt });
+      e.reasons.push(s.type); e.signals.push({ id: s.id, type: s.type, severity: s.severity, status: s.status, metadata: (s as any).evidence ?? (s as any).metadata ?? {}, createdAt: s.createdAt });
       if (!e.lastAt || String(s.createdAt) > e.lastAt) e.lastAt = s.createdAt;
     }
   } catch { /* ignore */ }
