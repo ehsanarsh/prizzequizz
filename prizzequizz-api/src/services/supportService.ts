@@ -63,6 +63,17 @@ export async function replyToSupportTicket(ticketId: string, adminId: string, bo
   return updated;
 }
 
+/* A user replies on their OWN ticket → appends a user message and reopens it so
+ * the admin sees it needs attention. Ownership is enforced. */
+export async function userReplyToSupportTicket(ticketId: string, userId: string, body: string): Promise<{ ticket: SupportTicket; messages: SupportMessage[] } | null> {
+  const ticket = await repositories.support.findTicketById(ticketId);
+  if (!ticket || ticket.userId !== userId) return null;
+  const now = new Date().toISOString();
+  await repositories.support.appendMessage({ id: id(), ticketId, senderId: userId, senderRole: 'user', body: body.slice(0, 4000), createdAt: now });
+  await repositories.support.updateTicket(ticketId, { status: ticket.status === 'closed' ? 'closed' : 'open', updatedAt: now });
+  return getSupportTicket(ticketId);
+}
+
 export async function updateSupportTicketStatus(ticketId: string, status: SupportTicketStatus, adminId: string): Promise<SupportTicket | null> {
   const patch: Partial<SupportTicket> = { status, assignedAdminId: adminId };
   if (status === 'closed') patch.closedAt = new Date().toISOString();

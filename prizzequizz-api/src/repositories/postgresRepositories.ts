@@ -4,6 +4,14 @@ import type { AnswerSubmission, BetaAccess, BetaInvite, BetaInviteStatus, Charac
 
 const pool = () => getPgPool();
 
+/* Postgres UUID columns reject '' and non-UUID strings (e.g. 'system', 'u1').
+ * Coerce anything that isn't a valid UUID to NULL so optional/service ids never
+ * blow up an insert. */
+function uuidOrNull(v: unknown): string | null {
+  const s = String(v ?? '');
+  return /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(s) ? s : null;
+}
+
 function userFromRow(r: any): User {
   return { id: r.id, phone: r.phone, username: r.username, displayName: r.display_name, plan: r.plan, role: r.role ?? 'user', status: r.status ?? 'active', banReason: r.ban_reason ?? undefined, bannedAt: r.banned_at?.toISOString?.() ?? r.banned_at ?? undefined, level: r.level, xp: Number(r.xp), weeklyScore: Number(r.weekly_score ?? 0), wallet: Number(r.wallet_balance), coins: Number(r.coins), hearts: Number(r.hearts), tickets: r.tickets ?? { bronze: 0, silver: 0, gold: 0 }, lifelines: r.lifelines ?? { p5050: 2, psecond: 1, pstats: 5 } };
 }
@@ -85,7 +93,7 @@ export const postgresRepositories: RepositoryBundle = {
     async updateStatus(id: string, status: RewardHoldStatus, reviewedBy: string, extra: Partial<RewardHold> = {}): Promise<RewardHold | null> { const { rows } = await pool().query('update reward_holds set status=$2, reviewed_by=$3, reviewed_at=now(), released_at=coalesce($4,released_at) where id=$1 returning *', [id,status,reviewedBy,extra.releasedAt??null]); return rows[0] ? rewardHoldFromRow(rows[0]) : null; }
   },
   support: {
-    async saveTicket(t: SupportTicket): Promise<void> { await pool().query(`insert into support_tickets(id,user_id,title,category,body,status,priority,reply,linked_match_id,linked_transaction_id,linked_reward_hold_id,assigned_admin_id,created_at,updated_at,closed_at) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) on conflict(id) do update set title=$3,category=$4,body=$5,status=$6,priority=$7,reply=$8,linked_match_id=$9,linked_transaction_id=$10,linked_reward_hold_id=$11,assigned_admin_id=$12,updated_at=$14,closed_at=$15`, [t.id,t.userId,t.title,t.category,t.body,t.status,t.priority,t.reply??null,t.linkedMatchId??null,t.linkedTransactionId??null,t.linkedRewardHoldId??null,t.assignedAdminId??null,t.createdAt,t.updatedAt,t.closedAt??null]); },
+    async saveTicket(t: SupportTicket): Promise<void> { await pool().query(`insert into support_tickets(id,user_id,title,category,body,status,priority,reply,linked_match_id,linked_transaction_id,linked_reward_hold_id,assigned_admin_id,created_at,updated_at,closed_at) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) on conflict(id) do update set title=$3,category=$4,body=$5,status=$6,priority=$7,reply=$8,linked_match_id=$9,linked_transaction_id=$10,linked_reward_hold_id=$11,assigned_admin_id=$12,updated_at=$14,closed_at=$15`, [t.id,t.userId,t.title,t.category,t.body,t.status,t.priority,t.reply??null,t.linkedMatchId||null,t.linkedTransactionId||null,t.linkedRewardHoldId||null,uuidOrNull(t.assignedAdminId),t.createdAt,t.updatedAt,t.closedAt??null]); },
     async findTicketById(id: string): Promise<SupportTicket | null> { const { rows } = await pool().query('select * from support_tickets where id=$1', [id]); return rows[0] ? supportTicketFromRow(rows[0]) : null; },
     async listTickets(filter = {}): Promise<SupportTicket[]> { const f=filter as any; const clauses:string[]=[]; const values:any[]=[]; const add=(sql:string,value:any)=>{values.push(value);clauses.push(sql.replace('?', '$'+values.length));}; if(f.userId)add('user_id=?',f.userId); if(f.status)add('status=?',f.status); if(f.category)add('category=?',f.category); if(f.priority)add('priority=?',f.priority); if(f.assignedAdminId)add('assigned_admin_id=?',f.assignedAdminId); values.push(Math.min(500,Math.max(1,Number(f.limit??100)))); const where=clauses.length?'where '+clauses.join(' and '):''; const { rows }=await pool().query(`select * from support_tickets ${where} order by updated_at desc limit $${values.length}`,values); return rows.map(supportTicketFromRow); },
     async updateTicket(id: string, patch: Partial<SupportTicket>): Promise<SupportTicket | null> { const current = await this.findTicketById(id); if (!current) return null; const next = { ...current, ...patch, updatedAt: new Date().toISOString() } as SupportTicket; await this.saveTicket(next); return next; },

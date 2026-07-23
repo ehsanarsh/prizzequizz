@@ -330,7 +330,7 @@ let SUP_ST='open';
 async function renderSupport(){
   const d=await api('GET','/admin/support/tickets?status='+SUP_ST+'&limit=100').catch(()=>({}));
   const list=d.rows||d||[];
-  const tabs=['open','pending','resolved','closed'].map(s=>'<button class="'+(SUP_ST===s?'active':'')+'" onclick="SUP_ST=\''+s+'\';render()">'+({open:'باز',pending:'در انتظار',resolved:'حل‌شده',closed:'بسته'}[s])+'</button>').join('');
+  const tabs=['open','answered','escalated','closed'].map(s=>'<button class="'+(SUP_ST===s?'active':'')+'" onclick="SUP_ST=\''+s+'\';render()">'+({open:'باز',answered:'پاسخ‌داده',escalated:'ارجاع‌شده',closed:'بسته'}[s])+'</button>').join('');
   $('#main').innerHTML=head('پشتیبانی','تیکت‌های کاربران — پاسخ و مدیریت')+'<div class="subtabs">'+tabs+'</div>'+
     tbl(['شناسه','کاربر','عنوان','دسته','وضعیت','زمان','عملیات'],(Array.isArray(list)?list:[]).map(t=>[
       '<span class="mono">'+String(t.id).slice(0,8)+'</span>',String(t.userId||'').slice(0,8),esc(t.title||t.subject||''),esc(t.category||'—'),
@@ -346,7 +346,8 @@ async function supDetail(id){
     (msgs?'<div class="card" style="margin-bottom:10px">'+msgs+'</div>':'')+
     '<div class="field"><label>پاسخ</label><textarea id="sup_reply" rows="3"></textarea></div>'+
     '<div style="display:flex;gap:6px"><button class="btn pri" onclick="supReply(\''+id+'\')">ارسال پاسخ</button>'+
-    '<button class="btn ok sm" onclick="supStatus(\''+id+'\',\'resolved\')">حل شد</button>'+
+    '<button class="btn ok sm" onclick="supStatus(\''+id+'\',\'answered\')">پاسخ‌داده‌شد</button>'+
+    '<button class="btn info sm" onclick="supStatus(\''+id+'\',\'escalated\')">ارجاع</button>'+
     '<button class="btn sm" onclick="supStatus(\''+id+'\',\'closed\')">بستن</button></div>');
 }
 async function supReply(id){const body=$('#sup_reply').value.trim();if(!body)return;try{await api('POST','/admin/support/tickets/'+id+'/reply',{body,message:body});toast('پاسخ ارسال شد','ok');document.querySelector('.modal-bg').remove();render();}catch(e){toast(e.message,'bad');}}

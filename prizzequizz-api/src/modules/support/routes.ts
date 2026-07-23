@@ -1,7 +1,7 @@
 import type { Router } from '../../http/router.js';
 import { error, json } from '../../http/response.js';
 import { requireAdmin } from '../../services/adminGuard.js';
-import { assignSupportTicket, createSupportTicket, getSupportTicket, listSupportTickets, replyToSupportTicket, supportDiagnostics, updateSupportTicketStatus } from '../../services/supportService.js';
+import { assignSupportTicket, createSupportTicket, getSupportTicket, listSupportTickets, replyToSupportTicket, supportDiagnostics, updateSupportTicketStatus, userReplyToSupportTicket } from '../../services/supportService.js';
 import type { SupportTicketPriority, SupportTicketStatus } from '../../types/domain.js';
 import { bodyObject, optionalString, requiredString } from '../../utils/validation.js';
 
@@ -29,6 +29,14 @@ export function registerSupportRoutes(router: Router, base: string): void {
     const result = await getSupportTicket(ctx.params.id!);
     if (!result || result.ticket.userId !== (ctx.userId ?? 'u1')) return error(ctx.res, 404, 'TICKET_NOT_FOUND', 'Support ticket not found.');
     json(ctx.res, 200, result);
+  });
+
+  // A user sends a follow-up message (chat) on their own ticket.
+  router.add('POST', `${base}/support/tickets/:id/reply`, async (ctx) => {
+    const body = bodyObject(ctx.body);
+    const r = await userReplyToSupportTicket(ctx.params.id!, ctx.userId ?? 'u1', requiredString(body, 'body'));
+    if (!r) return error(ctx.res, 404, 'TICKET_NOT_FOUND', 'Support ticket not found.');
+    json(ctx.res, 200, r);
   });
 
   router.add('GET', `${base}/admin/support/diagnostics`, async (ctx) => {
