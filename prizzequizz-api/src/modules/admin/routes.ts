@@ -70,6 +70,27 @@ export function registerAdminRoutes(router: Router, base: string): void {
     json(ctx.res, 200, all);
   });
 
+  // Diagnostic: difficulty distribution of the APPROVED bank, overall and per
+  // category. If almost everything is «easy», adaptive difficulty has nothing
+  // harder to serve — the fix is data (import questions carrying real levels).
+  router.add('GET', `${base}/admin/questions/difficulty-stats`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    const all = await repositories.questions.listAll('approved');
+    const levels = ['easy', 'medium', 'hard', 'veryhard'];
+    const blank = () => Object.fromEntries(levels.map((l) => [l, 0])) as Record<string, number>;
+    const overall = blank();
+    const byCategory: Record<string, Record<string, number>> = {};
+    let other = 0;
+    for (const q of all) {
+      const d = String(q.difficulty || '');
+      if (levels.includes(d)) { overall[d]! += 1; } else { other += 1; }
+      const cat = q.category || 'بدون‌دسته';
+      (byCategory[cat] ??= blank());
+      if (levels.includes(d)) byCategory[cat]![d]! += 1;
+    }
+    json(ctx.res, 200, { totalApproved: all.length, overall, other, byCategory });
+  });
+
   router.add('GET', `${base}/admin/questions/export`, async (ctx) => {
     if (!requireAdmin(ctx)) return;
     const status = ctx.query.get('status') || undefined;
