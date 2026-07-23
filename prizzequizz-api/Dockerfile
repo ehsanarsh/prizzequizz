@@ -1,11 +1,11 @@
-# No-compile image: the TypeScript is pre-built into ./dist on the host and
-# shipped in the build context, so the image never needs the compiler or a
-# network fetch for it. Only the small production runtime deps are installed.
+# Fully pre-built, network-free image: dist AND node_modules are prepared on the
+# host and shipped in the build context. The image runs zero npm install, so the
+# server's flaky npm registry access can never break or half-install a package.
 FROM node:20-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 COPY package*.json ./
-RUN npm install --omit=dev
+COPY node_modules ./node_modules
 COPY dist ./dist
 COPY config ./config
 COPY database ./database
