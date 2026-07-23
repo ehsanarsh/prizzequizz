@@ -85,15 +85,39 @@ export function registerAdminRoutes(router: Router, base: string): void {
   router.add('POST', `${base}/admin/questions/import`, async (ctx) => {
     if (!requireAdmin(ctx)) return;
     const body = ctx.body as any;
-    const items = Array.isArray(body?.questions) ? body.questions : [];
-    let imported = 0;
-    for (const raw of items) {
-      if (!raw?.text || !Array.isArray(raw.options) || raw.options.length !== 4) continue;
-      const q: Question = { id: raw.id ?? id(), text: String(raw.text), options: raw.options.map(String), correctIndex: Number(raw.correctIndex ?? 0), category: String(raw.category ?? 'عمومی'), difficulty: raw.difficulty ?? 'easy', tags: Array.isArray(raw.tags)?raw.tags.map(String):[], status: raw.status ?? 'pending', version: Number(raw.version ?? 1) };
-      await repositories.questions.save(q); imported++;
+    const items = Array.isArray(body?.questions) ? body.questions
+      : (Array.isArray(body) ? body : []);  // accept a bare array too
+    // Existing texts (normalized) for in-DB duplicate detection.
+    const existing = new Set((await repositories.questions.listAll().catch(() => [])).map((x) => normText(x.text)));
+    const seen = new Set<string>();  // duplicates within THIS file
+    let imported = 0, duplicates = 0, skipped = 0;
+    const errors: { index: number; reason: string }[] = [];
+    for (let i = 0; i < items.length; i++) {
+      const raw = items[i] as any;
+      const opts = pickOptions(raw);       // supports options[] OR option1..4 OR a/b/c/d
+      const text = String(raw?.text ?? raw?.question ?? '').trim();
+      if (!text) { skipped++; errors.push({ index: i + 1, reason: 'متن سوال خالی است' }); continue; }
+      if (opts.length < 2 || opts.length > 4) { skipped++; errors.push({ index: i + 1, reason: `تعداد گزینه‌ها باید ۲ تا ۴ باشد (الان ${opts.length})` }); continue; }
+      const ci = Number(raw?.correctIndex ?? raw?.correctAnswer ?? raw?.answer ?? 0);
+      if (!Number.isInteger(ci) || ci < 0 || ci >= opts.length) { skipped++; errors.push({ index: i + 1, reason: `ایندکس پاسخ درست نامعتبر است (${raw?.correctIndex})` }); continue; }
+      const nt = normText(text);
+      if (seen.has(nt) || existing.has(nt)) { duplicates++; errors.push({ index: i + 1, reason: 'تکراری' }); continue; }
+      seen.add(nt);
+      // id is ALWAYS a server-generated UUID — a non-UUID id in the file used to
+      // crash the whole import on Postgres. raw.id is intentionally ignored.
+      const q: Question = {
+        id: id(), text, options: opts, correctIndex: ci,
+        category: String(raw?.category ?? 'عمومی').trim() || 'عمومی',
+        difficulty: normDifficulty(raw?.difficulty), tags: Array.isArray(raw?.tags) ? raw.tags.map(String) : [],
+        status: (raw?.status === 'pending' || raw?.status === 'archived') ? raw.status : 'approved',
+        version: 1
+      };
+      try { await repositories.questions.save(q); imported++; }
+      catch (e) { skipped++; errors.push({ index: i + 1, reason: e instanceof Error ? e.message : 'ذخیره ناموفق' }); }
     }
-    audit(ctx.userId, 'QUESTIONS_IMPORTED', 'question', undefined, { imported });
-    json(ctx.res, 201, { imported });
+    audit(ctx.userId, 'QUESTIONS_IMPORTED', 'question', undefined, { imported, duplicates, skipped });
+    // Honest result: the count is what ACTUALLY persisted, with per-item errors.
+    json(ctx.res, 201, { imported, duplicates, skipped, total: items.length, errors: errors.slice(0, 50) });
   });
 
   router.add('POST', `${base}/admin/questions`, async (ctx) => {
@@ -128,6 +152,15 @@ export function registerAdminRoutes(router: Router, base: string): void {
     await repositories.questions.save(question);
     audit(ctx.userId, 'QUESTION_STATUS_UPDATED', 'question', question.id, { status });
     json(ctx.res, 200, question);
+  });
+
+  router.add('DELETE', `${base}/admin/questions/:id`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    const q = await repositories.questions.findById(ctx.params.id!);
+    if (!q) return error(ctx.res, 404, 'QUESTION_NOT_FOUND', 'Question not found.');
+    await repositories.questions.remove(ctx.params.id!);
+    audit(ctx.userId, 'QUESTION_DELETED', 'question', ctx.params.id, { text: q.text });
+    json(ctx.res, 200, { deleted: true });
   });
 
   router.add('GET', `${base}/admin/users`, async (ctx) => {
@@ -504,6 +537,36 @@ export function registerAdminRoutes(router: Router, base: string): void {
       json(ctx.res, 200, { ok: true, ...r });
     } catch (e) { error(ctx.res, 400, 'RESET_FAILED', e instanceof Error ? e.message : 'failed'); }
   });
+}
+
+/* Normalize Persian/Arabic text for duplicate detection (unify ي/ك, drop
+ * diacritics + punctuation, collapse whitespace). */
+function normText(s: string): string {
+  return String(s ?? '')
+    .replace(/[يى]/g, 'ی').replace(/ك/g, 'ک')
+    .replace(/[ً-ْ‌‏]/g, '')
+    .replace(/[.,،؛:!؟?()«»"'\-–]/g, ' ')
+    .replace(/\s+/g, ' ').trim().toLowerCase();
+}
+/* Accept several common option shapes so imports from different generators work:
+ * options:[...] | [a,b,c,d] | {option1..4} | {optionA..D} | {a,b,c,d}. */
+function pickOptions(raw: any): string[] {
+  if (Array.isArray(raw?.options)) return raw.options.map((o: any) => String(o).trim()).filter(Boolean);
+  const keysets = [['option1', 'option2', 'option3', 'option4'], ['optionA', 'optionB', 'optionC', 'optionD'], ['a', 'b', 'c', 'd'], ['1', '2', '3', '4']];
+  for (const ks of keysets) {
+    const vals = ks.map((k) => raw?.[k]).filter((v) => v != null && String(v).trim() !== '');
+    if (vals.length >= 2) return vals.map((v) => String(v).trim());
+  }
+  return [];
+}
+/* Map difficulty to the game's easy|medium|hard, accepting numbers 1..5 or text. */
+function normDifficulty(d: any): 'easy' | 'medium' | 'hard' {
+  const n = Number(d);
+  if (Number.isFinite(n)) return n <= 1 ? 'easy' : n >= 4 ? 'hard' : 'medium';
+  const s = String(d ?? '').toLowerCase();
+  if (/(hard|سخت|difficult|4|5)/.test(s)) return 'hard';
+  if (/(medium|متوسط|normal|3)/.test(s)) return 'medium';
+  return 'easy';
 }
 
 function audit(adminId: string | undefined, action: string, targetType: string, targetId: string | undefined, diff: Record<string, unknown>): void {

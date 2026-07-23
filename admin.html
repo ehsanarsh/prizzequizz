@@ -352,16 +352,59 @@ async function supStatus(id,status){try{await api('PATCH','/admin/support/ticket
 
 /* ================= QUESTIONS ================= */
 let Q_ST='';
+let Q_CAT='', Q_SEARCH='';
 async function renderQuestions(){
-  const d=await api('GET','/admin/questions'+(Q_ST?'?status='+Q_ST:'')).catch(()=>({}));
-  const list=d.rows||d||[];
-  $('#main').innerHTML=head('مدیریت سوالات',fa((Array.isArray(list)?list:[]).length)+' سوال','<button class="btn pri" onclick="qAdd()">افزودن سوال</button> <button class="btn info" onclick="qImport()">ورود انبوه JSON</button> <button class="btn" onclick="qExport()">خروجی CSV</button>')+
-    '<div class="subtabs">'+['','pending','active','archived'].map(s=>'<button class="'+(Q_ST===s?'active':'')+'" onclick="Q_ST=\''+s+'\';render()">'+(s===''?'همه':{pending:'در انتظار',active:'فعال',archived:'بایگانی'}[s])+'</button>').join('')+'</div>'+
-    tbl(['متن','دسته','سختی','پاسخ','وضعیت','عملیات'],(Array.isArray(list)?list:[]).slice(0,200).map(q=>[
-      esc(String(q.text||'').slice(0,60)),esc(q.category||'—'),esc(q.difficulty||'—'),fa((q.correctIndex||0)+1),
-      '<span class="pill '+(q.status==='active'?'ok':q.status==='archived'?'bad':'pend')+'">'+esc(q.status)+'</span>',
-      '<button class="btn sm ok" onclick="qStatus(\''+q.id+'\',\'active\')">فعال</button> <button class="btn sm" onclick="qStatus(\''+q.id+'\',\'archived\')">بایگانی</button>'
+  const all=await api('GET','/admin/questions').catch(()=>[]);
+  const list=(Array.isArray(all)?all:(all.rows||[]));
+  // category tabs derived from the real question bank
+  const catCount={}; list.forEach(q=>{const c=q.category||'عمومی';catCount[c]=(catCount[c]||0)+1;});
+  const cats=Object.keys(catCount).sort((a,b)=>catCount[b]-catCount[a]);
+  const s=(Q_SEARCH||'').trim().toLowerCase();
+  let filtered=list.filter(q=>(!Q_CAT||q.category===Q_CAT)&&(!Q_ST||q.status===Q_ST)&&(!s||String(q.text||'').toLowerCase().includes(s)));
+  const catTabs='<div class="subtabs"><button class="'+(Q_CAT===''?'active':'')+'" onclick="Q_CAT=\'\';render()">همه ('+fa(list.length)+')</button>'+
+    cats.map(c=>'<button class="'+(Q_CAT===c?'active':'')+'" onclick="Q_CAT='+JSON.stringify(c).replace(/"/g,'&quot;')+';render()">'+esc(c)+' ('+fa(catCount[c])+')</button>').join('')+'</div>';
+  $('#main').innerHTML=head('مدیریت سوالات',fa(filtered.length)+' سوال'+(Q_CAT?' در «'+esc(Q_CAT)+'»':''),
+    '<button class="btn pri" onclick="qAdd()">➕ افزودن</button> <button class="btn info" onclick="qImport()">📥 ورود انبوه</button> <button class="btn" onclick="qSampleJson()">📄 نمونه JSON</button> <button class="btn" onclick="qExport()">CSV</button>')+
+    catTabs+
+    '<div class="toolbar"><input id="qsearch" placeholder="جستجوی متن سوال..." value="'+esc(Q_SEARCH)+'" onkeydown="if(event.key===\'Enter\'){Q_SEARCH=this.value;render();}"><button class="btn" onclick="Q_SEARCH=$(\'#qsearch\').value;render()">جستجو</button>'+
+    '<div class="subtabs" style="margin:0">'+['','approved','pending','archived'].map(st=>'<button class="'+(Q_ST===st?'active':'')+'" onclick="Q_ST=\''+st+'\';render()">'+(st===''?'همه وضعیت‌ها':{approved:'تأییدشده',pending:'در انتظار',archived:'بایگانی'}[st])+'</button>').join('')+'</div></div>'+
+    tbl(['متن','دسته','سختی','پاسخ درست','استفاده','٪ صحیح','وضعیت','عملیات'],filtered.slice(0,300).map(q=>[
+      esc(String(q.text||'').slice(0,55)),esc(q.category||'—'),esc(({easy:'آسان',medium:'متوسط',hard:'سخت'})[q.difficulty]||q.difficulty||'—'),
+      esc(String((q.options||[])[q.correctIndex]||('#'+((q.correctIndex||0)+1))).slice(0,22)),
+      fa(q.usageCount||q.timesUsed||0),(q.correctRate!=null?fa(Math.round(q.correctRate))+'٪':'—'),
+      '<span class="pill '+(q.status==='approved'?'ok':q.status==='archived'||q.status==='rejected'?'bad':'pend')+'">'+esc(q.status)+'</span>',
+      (q.status!=='approved'?'<button class="btn sm ok" onclick="qStatus(\''+q.id+'\',\'approved\')">تأیید</button> ':'')+
+      '<button class="btn sm" onclick="qEdit(\''+q.id+'\')">ویرایش</button> <button class="btn sm bad" onclick="qDelete(\''+q.id+'\')">حذف</button>'
     ]));
+  const qi=$('#qsearch'); if(qi&&Q_SEARCH){qi.focus();qi.setSelectionRange(qi.value.length,qi.value.length);}
+  window._QALL=list;
+}
+async function qDelete(id){
+  if(!confirm('این سوال برای همیشه حذف شود؟'))return;
+  try{await api('DELETE','/admin/questions/'+id);toast('سوال حذف شد','ok');render();}catch(e){toast(e.message,'bad');}
+}
+function qEdit(id){
+  const q=(window._QALL||[]).find(x=>x.id===id); if(!q)return;
+  const opts=(q.options||['','','','']);
+  modal('ویرایش سوال','<div class="field"><label>متن سوال</label><input id="qe_text" value="'+esc(q.text)+'"></div>'+
+    '<div class="grid g2">'+opts.map((o,j)=>'<div class="field"><label>گزینه '+fa(j+1)+(j===q.correctIndex?' ✅':'')+'</label><input id="qe_o'+j+'" value="'+esc(o)+'"></div>').join('')+'</div>'+
+    '<div class="grid g3"><div class="field"><label>ایندکس پاسخ درست</label><input id="qe_ci" type="number" value="'+(q.correctIndex||0)+'"></div>'+
+    '<div class="field"><label>دسته</label><input id="qe_cat" value="'+esc(q.category||'')+'"></div>'+
+    '<div class="field"><label>سختی</label><select id="qe_diff"><option value="easy"'+(q.difficulty==='easy'?' selected':'')+'>آسان</option><option value="medium"'+(q.difficulty==='medium'?' selected':'')+'>متوسط</option><option value="hard"'+(q.difficulty==='hard'?' selected':'')+'>سخت</option></select></div></div>'+
+    '<button class="btn pri" onclick="qSaveEdit(\''+id+'\')">💾 ذخیره</button>');
+}
+async function qSaveEdit(id){
+  const opts=[0,1,2,3].map(j=>($('#qe_o'+j)||{}).value).filter(v=>v!=null&&v.trim()!=='');
+  try{await api('POST','/admin/questions',{id,text:$('#qe_text').value.trim(),options:opts,correctIndex:Number($('#qe_ci').value||0),category:$('#qe_cat').value.trim(),difficulty:$('#qe_diff').value,status:'approved'});toast('ذخیره شد','ok');document.querySelector('.modal-bg').remove();render();}catch(e){toast(e.message,'bad');}
+}
+function qSampleJson(){
+  const sample=[
+    {text:"پایتخت ایران کدام شهر است؟",options:["تهران","اصفهان","شیراز","مشهد"],correctIndex:0,category:Q_CAT||"جغرافیا",difficulty:"easy"},
+    {text:"بزرگ‌ترین سیارهٔ منظومهٔ شمسی؟",options:["زمین","مشتری","زحل","مریخ"],correctIndex:1,category:Q_CAT||"علوم",difficulty:"medium"}
+  ];
+  const blob=new Blob([JSON.stringify(sample,null,2)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='prizze-questions-sample.json';a.click();
+  toast('نمونه دانلود شد — با همین ساختار سوال بساز','ok');
 }
 function qAdd(){
   modal('افزودن سوال','<div class="field"><label>متن سوال</label><input id="q_text"></div>'+
@@ -378,13 +421,23 @@ async function qSave(){
   try{await api('POST','/admin/questions',{text:$('#q_text').value.trim(),options:opts,correctIndex:Number($('#q_ci').value||0),category:$('#q_cat').value.trim(),difficulty:$('#q_diff').value,explanation:$('#q_exp').value.trim(),status:'active'});toast('سوال اضافه شد','ok');document.querySelector('.modal-bg').remove();render();}catch(e){toast(e.message,'bad');}
 }
 function qImport(){
-  modal('ورود انبوه سوال (JSON)','<div class="note">آرایه‌ای از سوالات با فرمت زیر بگذار — با یک کلیک تعداد نامحدود اضافه می‌شود.<br><span class="mono" style="direction:ltr;display:block;margin-top:6px">[{"text":"...","options":["a","b","c","d"],"correctIndex":0,"category":"عمومی","difficulty":"easy","status":"active"}]</span></div>'+
-    '<textarea class="json" id="q_json" placeholder="[ ... ]"></textarea><button class="btn pri" style="margin-top:10px" onclick="qDoImport()">وارد کردن</button>');
+  modal('ورود انبوه سوال (JSON)','<div class="note">آرایه‌ای از سوالات بگذار — تعداد نامحدود با یک کلیک. سوالات <b>واقعاً</b> در دیتابیس ذخیره می‌شوند و نتیجهٔ دقیق (ذخیره‌شده / تکراری / ردشده + دلیلِ هر خطا) نمایش داده می‌شود. تکراری‌ها و ناقص‌ها خودکار رد می‌شوند؛ فیلد id لازم نیست.<br><span class="mono" style="direction:ltr;display:block;margin-top:6px;font-size:11px">[{"text":"...","options":["الف","ب","پ","ت"],"correctIndex":0,"category":"'+esc(Q_CAT||'عمومی')+'","difficulty":"easy"}]</span><button class="btn sm" style="margin-top:8px" onclick="qSampleJson()">📄 دانلود نمونه</button></div>'+
+    '<textarea class="json" id="q_json" placeholder="[ ... ]"></textarea><button class="btn pri" id="q_import_btn" style="margin-top:10px" onclick="qDoImport()">وارد کردن</button>');
 }
 async function qDoImport(){
   let arr;try{arr=JSON.parse($('#q_json').value);}catch(e){return toast('JSON نامعتبر: '+e.message,'bad');}
   if(!Array.isArray(arr))return toast('باید یک آرایه باشد','bad');
-  try{const r=await api('POST','/admin/questions/import',{questions:arr});toast('وارد شد: '+fa((r&&(r.imported||r.count))||arr.length)+' سوال','ok');document.querySelector('.modal-bg').remove();render();}catch(e){toast(e.message,'bad');}
+  const btn=$('#q_import_btn'); if(btn){btn.disabled=true;btn.textContent='در حال ذخیره...';}
+  try{
+    const r=await api('POST','/admin/questions/import',{questions:arr});
+    // HONEST result — only what actually persisted in the DB.
+    const errHtml=(r.errors&&r.errors.length)?'<div class="card" style="margin-top:10px;max-height:180px;overflow:auto"><h3>خطاها</h3>'+r.errors.map(e=>'<div style="font-size:12px;color:var(--bad)">سوال #'+fa(e.index)+': '+esc(e.reason)+'</div>').join('')+'</div>':'';
+    modal('نتیجهٔ ورود',
+      '<div class="grid g3">'+stat('ذخیره شد','ok',fa(r.imported||0))+stat('تکراری','pend',fa(r.duplicates||0))+stat('ردشده','bad',fa(r.skipped||0))+'</div>'+
+      '<div class="note" style="margin-top:10px">از مجموع '+fa(r.total||arr.length)+' سوال، <b>'+fa(r.imported||0)+'</b> واقعاً در دیتابیس ذخیره شد.</div>'+errHtml+
+      '<button class="btn pri" style="margin-top:10px" onclick="this.closest(\'.modal-bg\').remove();document.querySelectorAll(\'.modal-bg\').forEach(m=>m.remove());render()">باشه</button>');
+    toast((r.imported||0)+' سوال ذخیره شد',(r.imported>0?'ok':'bad'));
+  }catch(e){toast('خطا: '+e.message,'bad'); if(btn){btn.disabled=false;btn.textContent='وارد کردن';}}
 }
 function qExport(){window.open(API+'/admin/questions/export','_blank');toast('اگر دانلود نشد، هدر x-admin-key لازم است — از CSV داخل شبکه استفاده کن');}
 async function qStatus(id,status){try{await api('PATCH','/admin/questions/'+id+'/status',{status});toast('وضعیت تغییر کرد','ok');render();}catch(e){toast(e.message,'bad');}}

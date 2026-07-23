@@ -33,7 +33,8 @@ export const memoryRepositories: RepositoryBundle = {
     async findById(id: string): Promise<Question | null> { return db.questions.get(id) ?? null; },
     async listApproved(): Promise<Question[]> { return [...db.questions.values()].filter((q) => q.status === 'approved'); },
     async listAll(status?: string): Promise<Question[]> { return [...db.questions.values()].filter((q) => !status || q.status === status); },
-    async save(question: Question): Promise<void> { db.questions.set(question.id, question); }
+    async save(question: Question): Promise<void> { db.questions.set(question.id, question); },
+    async remove(id: string): Promise<void> { db.questions.delete(id); }
   },
   matches: {
     async findById(id: string): Promise<Match | null> { return db.matches.get(id) ?? null; },

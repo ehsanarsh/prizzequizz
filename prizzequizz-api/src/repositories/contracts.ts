@@ -38,6 +38,7 @@ export interface QuestionRepository {
   listApproved(): Promise<Question[]>;
   listAll(status?: string): Promise<Question[]>;
   save(question: Question): Promise<void>;
+  remove(id: string): Promise<void>;
 }
 
 export interface MatchRepository {
