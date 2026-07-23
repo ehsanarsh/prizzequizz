@@ -7,3 +7,4 @@ dist/
 # backend src delivery tarballs (build artifacts, regenerated per deploy)
 prizzequizz-api-src.tgz
 prizzequizz-wallet-src.tgz
+prizzequizz-api-*.tar.gz
