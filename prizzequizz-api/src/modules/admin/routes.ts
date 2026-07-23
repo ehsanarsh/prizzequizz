@@ -559,13 +559,15 @@ function pickOptions(raw: any): string[] {
   }
   return [];
 }
-/* Map difficulty to the game's easy|medium|hard, accepting numbers 1..5 or text. */
-function normDifficulty(d: any): 'easy' | 'medium' | 'hard' {
+/* Map difficulty to the game's easy|medium|hard|veryhard, accepting numbers 1..5
+   or text (fa/en). 5 (or «بسیار سخت»/very hard/expert) = veryhard. */
+function normDifficulty(d: any): 'easy' | 'medium' | 'hard' | 'veryhard' {
   const n = Number(d);
-  if (Number.isFinite(n)) return n <= 1 ? 'easy' : n >= 4 ? 'hard' : 'medium';
-  const s = String(d ?? '').toLowerCase();
-  if (/(hard|سخت|difficult|4|5)/.test(s)) return 'hard';
-  if (/(medium|متوسط|normal|3)/.test(s)) return 'medium';
+  if (Number.isFinite(n)) return n <= 1 ? 'easy' : n >= 5 ? 'veryhard' : n === 4 ? 'hard' : n === 3 ? 'medium' : n === 2 ? 'medium' : 'easy';
+  const s = String(d ?? '').toLowerCase().trim();
+  if (/(veryhard|very[\s_-]?hard|very[\s_-]?difficult|expert|بسیار\s*سخت|خیلی\s*سخت|۵|5)/.test(s)) return 'veryhard';
+  if (/(hard|سخت|difficult|۴|4)/.test(s)) return 'hard';
+  if (/(medium|متوسط|normal|۳|3|۲|2)/.test(s)) return 'medium';
   return 'easy';
 }
 

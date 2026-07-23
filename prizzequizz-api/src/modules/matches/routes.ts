@@ -5,6 +5,7 @@ import { realtimeRooms } from '../../realtime/roomRegistry.js';
 import { validateAnswer } from '../../services/questionEngine.js';
 import { repositories } from '../../repositories/index.js';
 import { activeMatchState } from '../../services/matchStateStore.js';
+import { selectQuestionForRound, pickDeterministic, DIFF_LEVELS, TOPIC_SELECT_CATEGORY } from '../../services/adaptiveDifficultyService.js';
 import type { GameModeId, Match, PlanType } from '../../types/domain.js';
 
 // Persist a mutated match to BOTH the repository AND the in-memory active-match
@@ -26,11 +27,6 @@ function hashString(input: string): number {
   }
   return h >>> 0;
 }
-// Seeded RNG (mulberry32) → identical sequence for both players from the same
-// seed, used for per-match question order (8) and per-question option order (9).
-function mulberry32(a: number): () => number { return function () { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
-function seededShuffle<T>(arr: T[], rnd: () => number): T[] { const a = arr.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [a[i], a[j]] = [a[j]!, a[i]!]; } return a; }
-function diffRank(d: string): number { return d === 'easy' ? 1 : d === 'hard' ? 3 : 2; }
 
 export function registerMatchRoutes(router: Router, base: string): void {
   router.add('POST', `${base}/matches`, async (ctx) => {
@@ -175,32 +171,45 @@ export function registerMatchRoutes(router: Router, base: string): void {
   //    players get the identical set — a question shown to one is shown to both.
   router.add('GET', `${base}/matches/:id/question`, async (ctx) => {
     const round = Math.max(0, Math.floor(Number(ctx.query.get('round') ?? 0)) || 0);
-    let topic = (ctx.query.get('topic') ?? '').trim();
-    if (!topic) { try { topic = (await getMatch(ctx.params.id!)).duelTopic ?? ''; } catch { /* no stored topic yet */ } }
+    let match: Match | null = null;
+    try { match = await getMatch(ctx.params.id!); } catch { /* match not resolvable yet */ }
     const all = await repositories.questions.listApproved();
     if (!all.length) return error(ctx.res, 404, 'NO_QUESTIONS', 'No approved questions available');
-    let pool = all;
-    if (topic && topic !== '__popular__') {
-      const filtered = all.filter((q) => q.category === topic);
-      if (filtered.length) pool = filtered; // fall back to the whole bank if the topic is empty
+    // ADAPTIVE (item 10 done right): the level of every round is derived from the
+    // match's real answer history so both players stay in lockstep on difficulty;
+    // round 0 is always easy and it climbs/drops with the pair's results. Without
+    // a resolvable match (edge cases) fall back to a stable easy-first pick so the
+    // endpoint never 500s. The «انتخاب موضوع» bank is never served here.
+    let q: any = null;
+    if (match) {
+      q = selectQuestionForRound(match, all, round).q;
     }
-    // (8) RANDOM but seeded by matchId+topic → different questions each match yet
-    // identical for BOTH players. (10) ADAPTIVE ORDER: shuffle within each
-    // difficulty then concat easy→medium→hard, so round 0,1,2… escalates.
-    const seed = hashString(`${ctx.params.id!}|${topic}`);
-    const groups: Record<string, typeof pool> = { easy: [], medium: [], hard: [] };
-    for (const q of pool) (groups[q.difficulty] ?? groups.medium!).push(q);
-    const ordered = [
-      ...seededShuffle(groups.easy!, mulberry32(seed ^ 0x1)),
-      ...seededShuffle(groups.medium!, mulberry32(seed ^ 0x2)),
-      ...seededShuffle(groups.hard!, mulberry32(seed ^ 0x3))
-    ];
-    const q = ordered[round % ordered.length]!;
-    // NOTE: option order is intentionally NOT shuffled here. In this P2P
-    // lockstep duel the client scores locally against the served correctIndex,
-    // so reordering options here desynced the two players' results. Items 8
-    // (random-per-match) and 10 (easy→hard) stay; option-shuffle (9) would need
-    // fully server-authoritative scoring to be safe.
+    if (!q) {
+      // Fallback: deterministic easy-first pick over the whole (non-toss) bank.
+      const topicQ = (ctx.query.get('topic') ?? '').trim();
+      const seed = hashString(`${ctx.params.id!}|${round}|${topicQ}`);
+      q = pickDeterministic(all, topicQ, DIFF_LEVELS[0]!, new Set<string>(), seed);
+    }
+    if (!q) return error(ctx.res, 404, 'NO_QUESTIONS', 'No approved questions available');
+    // Option order is intentionally NOT shuffled server-side: option-shuffle (9)
+    // is done per-player on the CLIENT with display→original index translation,
+    // which is safe now that scoring is server-authoritative.
+    json(ctx.res, 200, { id: q.id, text: q.text, options: q.options, correctIndex: q.correctIndex, category: q.category, difficulty: q.difficulty });
+  });
+
+  // Toss / topic-selection question: a simple, fast question drawn ONLY from the
+  // separate «انتخاب موضوع» bank (never mixed with real game questions). Same
+  // question for the same (matchId, round) so BOTH players race the identical
+  // one; `round` grows on a both-wrong retry. If the admin hasn't added any
+  // toss questions yet, 404 → the client keeps its local toss fallback.
+  router.add('GET', `${base}/matches/:id/toss-question`, async (ctx) => {
+    const round = Math.max(0, Math.floor(Number(ctx.query.get('round') ?? 0)) || 0);
+    const all = await repositories.questions.listApproved();
+    const pool = all.filter((q) => q.category === TOPIC_SELECT_CATEGORY);
+    if (!pool.length) return error(ctx.res, 404, 'NO_TOSS_QUESTIONS', 'No topic-selection questions configured');
+    const seed = hashString(`${ctx.params.id!}|toss|${round}`);
+    const stable = pool.slice().sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+    const q = stable[seed % stable.length]!;
     json(ctx.res, 200, { id: q.id, text: q.text, options: q.options, correctIndex: q.correctIndex, category: q.category, difficulty: q.difficulty });
   });
 

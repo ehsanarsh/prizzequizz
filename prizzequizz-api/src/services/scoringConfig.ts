@@ -40,6 +40,7 @@ export const PZ_SCORING = {
     easy: { xp: 10, cup: 1 },
     medium: { xp: 15, cup: 2 },
     hard: { xp: 20, cup: 3 },
+    veryhard: { xp: 28, cup: 5 },
     wrong: { xp: 2, cup: 0 }
   } as Record<string, Points>,
 

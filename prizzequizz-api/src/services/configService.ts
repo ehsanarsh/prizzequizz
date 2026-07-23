@@ -17,10 +17,25 @@ async function ensureConfigSchema(pool: ReturnType<typeof getPgPool>): Promise<v
   _cfgSchemaReady = true;
 }
 
+/* System categories that must ALWAYS exist regardless of admin edits. The
+ * «انتخاب موضوع» bank feeds the toss/topic-selection step and is kept separate
+ * from the real game questions. Because the admin panel persists the whole
+ * `categories` array to the DB (arrays replace wholesale on merge), a saved
+ * array could otherwise drop this system category — so we re-add it after every
+ * load/edit. It is enabled:false so it never shows in the in-game topic picker,
+ * but the admin can still manage its questions. */
+export function ensureSystemCategories(): void {
+  const cats = Array.isArray((gameConfig as any).categories) ? (gameConfig as any).categories : ((gameConfig as any).categories = []);
+  if (!cats.some((c: any) => c && String(c.name).trim() === 'انتخاب موضوع')) {
+    cats.push({ name: 'انتخاب موضوع', icon: '⚡', enabled: false, order: 99, role: 'toss', note: 'بانک جدا و فقط برای مرحلهٔ انتخاب موضوع (سؤالات ساده و سریع). در لیست موضوعات بازی نمایش داده نمی‌شود.' });
+  }
+}
+
 /* Load the saved game_config override at boot and merge it over the on-disk
  * defaults (so a config written by an older version still gets any new default
  * keys). No DB / no saved row → keep the on-disk config. */
 export async function loadPersistedConfig(): Promise<void> {
+  ensureSystemCategories();
   if (!process.env.DATABASE_URL) return;
   try {
     const pool = getPgPool();
@@ -32,6 +47,7 @@ export async function loadPersistedConfig(): Promise<void> {
       const merged = deepMerge(structuredClone(gameConfig), saved);
       for (const key of Object.keys(gameConfig)) delete (gameConfig as any)[key];
       Object.assign(gameConfig, merged);
+      ensureSystemCategories();   // re-add system categories a saved array may have dropped
       logger.info('game_config_loaded_from_db', { version: gameConfig.version });
     }
   } catch (e) {
@@ -89,6 +105,7 @@ export function updateGameConfig(next: any, updatedBy?: string): any {
   // Mutate the loaded config object so existing imports keep the same reference.
   for (const key of Object.keys(gameConfig)) delete (gameConfig as any)[key];
   Object.assign(gameConfig, structuredClone(next));
+  ensureSystemCategories();   // admin edits must never drop the toss category
   void persistConfig(updatedBy);
   return getEditableGameConfig();
 }

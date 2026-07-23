@@ -30,7 +30,7 @@ export interface User {
 export interface Question {
   id: UUID;
   category: string;
-  difficulty: 'easy' | 'medium' | 'hard';
+  difficulty: 'easy' | 'medium' | 'hard' | 'veryhard';
   text: string;
   options: string[];
   correctIndex: number;

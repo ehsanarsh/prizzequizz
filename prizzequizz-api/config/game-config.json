@@ -93,7 +93,8 @@
     { "name": "هوش و معما", "icon": "🧩", "enabled": true, "order": 9 },
     { "name": "تکنولوژی", "icon": "💻", "enabled": true, "order": 10 },
     { "name": "تاریخ جهان", "icon": "📜", "enabled": true, "order": 11 },
-    { "name": "مذهبی", "icon": "🕌", "enabled": true, "order": 12 }
+    { "name": "مذهبی", "icon": "🕌", "enabled": true, "order": 12 },
+    { "name": "انتخاب موضوع", "icon": "⚡", "enabled": false, "order": 99, "role": "toss", "note": "بانک جدا و فقط برای مرحلهٔ انتخاب موضوع (سؤالات ساده و سریع). در لیست موضوعات بازی نمایش داده نمی‌شود." }
   ],
   "campaign": {
     "enabled": false,
