@@ -123,7 +123,7 @@ const NAV=[
   ['محتوا',[['questions','❓','سوالات'],['aistudio','🤖','استودیوی سوال (AI)'],['pipeline','🔬','خط‌لولهٔ کیفیت'],['categories','🏷️','موضوعات']]],
   ['اقتصاد',[['wallet','👛','کیف پول'],['withdrawals','💸','برداشت‌ها'],['rewardholds','⏳','جوایز در انتظار'],['tickets','🎫','بلیط‌ها'],['shop','🛒','فروشگاه'],['giftcodes','🎁','کدهای هدیه']]],
   ['بالانس بازی (Data-Driven)',[['cfg_xp','✨','XP'],['cfg_level','🏅','Level'],['cfg_cup','🏆','Cup'],['cfg_gameplay','🕹️','گیم‌پلی مودها'],['leagues','🛡️','لیگ‌ها'],['missions','🎯','مأموریت‌ها'],['rewards','🎉','جوایز/چرخونه/استریک']]],
-  ['رشد و تعامل',[['leaderboard','📈','لیدربرد'],['events','📅','رویدادها'],['banners','🖼️','بنرها'],['notifications','🔔','اعلان‌ها']]],
+  ['رشد و تعامل',[['leaderboard','📈','لیدربرد'],['campaign','🎁','کمپین کاربر جدید'],['events','📅','رویدادها'],['banners','🖼️','بنرها'],['notifications','🔔','اعلان‌ها']]],
   ['سیستم',[['anticheat','🛡️','ضدتقلب'],['suspicious','🚨','کاربران مشکوک'],['reports','📑','گزارش‌ها'],['logs','📝','لاگ و Audit'],['reset','♻️','ابزار ریست'],['roles','🔑','نقش‌های ادمین'],['general','⚙️','تنظیمات عمومی'],['rawcfg','🧩','ویرایش خام Config']]]
 ];
 function buildNav(){
@@ -136,7 +136,7 @@ function head(t,s,r){return '<div class="head"><div><h2>'+t+'</h2>'+(s?'<div cla
 function stat(k,cls,v){return '<div class="stat"><div class="k">'+k+'</div><div class="v '+(cls||'')+'">'+v+'</div></div>';}
 function tbl(cols,rows){if(!rows||!rows.length)return '<div class="empty">داده‌ای نیست</div>';return '<div class="tbl-wrap"><table><thead><tr>'+cols.map(c=>'<th>'+c+'</th>').join('')+'</tr></thead><tbody>'+rows.map(r=>'<tr>'+r.map(c=>'<td>'+c+'</td>').join('')+'</tr>').join('')+'</tbody></table></div>';}
 function modal(title,html){const bg=document.createElement('div');bg.className='modal-bg';bg.onclick=e=>{if(e.target===bg)bg.remove();};bg.innerHTML='<div class="modal"><div class="head"><h2 style="font-size:16px">'+title+'</h2><button class="btn sm" onclick="this.closest(\'.modal-bg\').remove()">✕</button></div>'+html+'</div>';document.body.appendChild(bg);return bg;}
-const CONFIG_PAGES={cfg_xp:['xp','تنظیمات XP'],cfg_level:['level','تنظیمات Level'],cfg_cup:['cup','تنظیمات Cup'],cfg_gameplay:['gameplay','گیم‌پلی هر مود'],leagues:['leagues','مدیریت لیگ‌ها'],missions:['missions','مأموریت‌ها'],rewards:['rewards','جوایز/چرخونه/استریک'],events:['events','رویدادها'],banners:['banners','بنرها'],shop:['shop','فروشگاه'],general:['general','تنظیمات عمومی'],anticheat:['antiCheat','ضدتقلب']};
+const CONFIG_PAGES={cfg_xp:['xp','تنظیمات XP'],cfg_level:['level','تنظیمات Level'],cfg_cup:['cup','تنظیمات Cup'],cfg_gameplay:['gameplay','گیم‌پلی هر مود'],leagues:['leagues','مدیریت لیگ‌ها'],missions:['missions','مأموریت‌ها'],rewards:['rewards','جوایز/چرخونه/استریک'],events:['events','رویدادها'],banners:['banners','بنرها'],shop:['shop','فروشگاه'],general:['general','تنظیمات عمومی'],anticheat:['antiCheat','ضدتقلب'],campaign:['campaign','کمپین کاربر جدید']};
 
 async function render(){
   loading();
@@ -239,18 +239,62 @@ async function renderFinance(){
 
 /* ================= USERS ================= */
 let U_Q='';
+let _USEL=new Set();
 async function renderUsers(){
-  const rows=await api('GET','/admin/users?q='+encodeURIComponent(U_Q)+'&limit=100');
+  const rows=await api('GET','/admin/users?q='+encodeURIComponent(U_Q)+'&limit=200');
   const list=(rows.rows||rows||[]);
-  $('#main').innerHTML=head('مدیریت کاربران','جستجو، ویرایش کامل، بن، بلیط، پیام، ریست')+
+  window._UALL=list;
+  $('#main').innerHTML=head('مدیریت کاربران','جستجو، ویرایش، بن، بلیط، پیام، ریست + عملیاتِ گروهی')+
     '<div class="toolbar"><input id="uq" placeholder="جستجوی نام/یوزرنیم/شناسه/شماره..." value="'+esc(U_Q)+'" onkeydown="if(event.key===\'Enter\'){U_Q=this.value.trim();render();}"><button class="btn" onclick="U_Q=$(\'#uq\').value.trim();render()">جستجو</button></div>'+
-    tbl(['کاربر','لول/XP','کاپ','کیف پول','وضعیت','عملیات'],list.map(u=>[
-      esc(u.username||'')+' <span class="mono" style="color:var(--muted)">'+String(u.id).slice(0,8)+'</span>',
-      fa(u.level)+' / '+fa(u.xp),fa(u.weeklyScore),'<b style="color:var(--ok)">'+fa(u.wallet)+'</b>',
-      '<span class="pill '+(u.status==='banned'?'bad':u.status==='limited'?'pend':'ok')+'">'+(u.status||'active')+'</span>',
-      '<button class="btn sm info" onclick="userDetail(\''+u.id+'\')">مدیریت</button>'
-    ]));
-  const i=$('#uq'); if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length);}
+    '<div id="ubulk"></div>'+
+    '<div class="tbl-wrap"><table><thead><tr><th style="width:34px"><input type="checkbox" id="uselall" onclick="uSelAll(this.checked)"></th>'+
+      ['کاربر','لول/XP','کاپ','کیف پول','وضعیت','عملیات'].map(c=>'<th>'+c+'</th>').join('')+'</tr></thead><tbody>'+
+      (list.length?list.map(u=>'<tr>'+
+        '<td><input type="checkbox" class="usel" value="'+u.id+'" '+(_USEL.has(u.id)?'checked':'')+' onclick="uSelOne(\''+u.id+'\',this.checked)"></td>'+
+        '<td>'+esc(u.username||'')+' <span class="mono" style="color:var(--muted)">'+String(u.id).slice(0,8)+'</span></td>'+
+        '<td>'+fa(u.level)+' / '+fa(u.xp)+'</td><td>'+fa(u.weeklyScore)+'</td>'+
+        '<td><b style="color:var(--ok)">'+fa(u.wallet)+'</b></td>'+
+        '<td><span class="pill '+(u.status==='banned'?'bad':u.status==='limited'?'pend':'ok')+'">'+(u.status||'active')+'</span></td>'+
+        '<td><button class="btn sm info" onclick="userDetail(\''+u.id+'\')">مدیریت</button></td></tr>').join(''):'<tr><td colspan="7" class="empty">کاربری نیست</td></tr>')+
+    '</tbody></table></div>';
+  uBulkBar();
+  const i=$('#uq'); if(i&&U_Q){i.focus();i.setSelectionRange(i.value.length,i.value.length);}
+}
+function uSelOne(id,on){ if(on)_USEL.add(id); else _USEL.delete(id); uBulkBar(); }
+function uSelAll(on){ (window._UALL||[]).forEach(u=>on?_USEL.add(u.id):_USEL.delete(u.id)); document.querySelectorAll('.usel').forEach(c=>c.checked=on); uBulkBar(); }
+function uBulkBar(){
+  const el=$('#ubulk'); if(!el)return; const n=_USEL.size;
+  el.innerHTML=n?'<div class="card" style="border-color:var(--gold);margin-bottom:12px"><b>'+fa(n)+' کاربر انتخاب شد</b>'+
+    '<div class="toolbar" style="margin-top:8px">'+
+    '<button class="btn sm ok" onclick="uBulk(\'wallet_add\')">➕ موجودی</button><button class="btn sm bad" onclick="uBulk(\'wallet_sub\')">➖ موجودی</button>'+
+    '<button class="btn sm ok" onclick="uBulk(\'ticket_add\')">➕ بلیط</button><button class="btn sm bad" onclick="uBulk(\'ticket_sub\')">➖ بلیط</button>'+
+    '<button class="btn sm ok" onclick="uBulk(\'xp_add\')">➕ XP</button><button class="btn sm bad" onclick="uBulk(\'xp_sub\')">➖ XP</button>'+
+    '<button class="btn sm info" onclick="uBulk(\'notify\')">🔔 اعلان</button>'+
+    '<button class="btn sm bad" onclick="uBulk(\'ban\')">🚫 بن</button><button class="btn sm" onclick="uBulk(\'unban\')">✅ آن‌بن</button>'+
+    '<button class="btn sm" onclick="_USEL.clear();render()">لغو</button>'+
+    '</div></div>':'';
+}
+async function uBulk(action){
+  const ids=[..._USEL]; if(!ids.length)return;
+  const users=(window._UALL||[]);
+  let amount=0,tier='green',msg='';
+  if(action.startsWith('wallet')){amount=Number(prompt('مبلغِ '+(action==='wallet_add'?'افزودن':'کسر')+' به تومان:','50000'));if(!amount)return;if(action==='wallet_sub')amount=-Math.abs(amount);else amount=Math.abs(amount);}
+  if(action.startsWith('ticket')){tier=prompt('نوع بلیط (green/blue/red/bronze/silver/gold):','green')||'green';const cnt=Number(prompt('تعداد:','1'));if(!cnt)return;amount=action==='ticket_sub'?-Math.abs(cnt):Math.abs(cnt);}
+  if(action.startsWith('xp')){const x=Number(prompt('مقدارِ XP:','100'));if(!x)return;amount=action==='xp_sub'?-Math.abs(x):Math.abs(x);}
+  if(action==='notify'){msg=prompt('متنِ اعلان به کاربران:');if(!msg)return;}
+  if((action==='ban'||action==='unban')&&!confirm((action==='ban'?'بن':'آن‌بن')+' '+ids.length+' کاربر؟'))return;
+  const reason=action.startsWith('wallet')?(prompt('علتِ اصلاحِ موجودی:')||'عملیات گروهی'):'';
+  let ok=0,bad=0;
+  for(const uid of ids){try{
+    if(action.startsWith('wallet'))await api('POST','/admin/wallet/adjust',{userId:uid,amount,reason});
+    else if(action.startsWith('ticket'))await api('POST','/admin/users/'+uid+'/tickets',{tier,count:amount,mode:'add'});
+    else if(action.startsWith('xp')){const u=users.find(x=>x.id===uid)||{};await api('PATCH','/admin/users/'+uid,{xp:Math.max(0,(Number(u.xp)||0)+amount)});}
+    else if(action==='notify')await api('POST','/admin/users/'+uid+'/message',{title:'پیام از پشتیبانی',body:msg});
+    else if(action==='ban')await api('PATCH','/admin/users/'+uid+'/status',{status:'banned',reason:'عملیات گروهی'});
+    else if(action==='unban')await api('PATCH','/admin/users/'+uid+'/status',{status:'active',reason:''});
+    ok++;
+  }catch(e){bad++;}}
+  _USEL.clear();toast('انجام شد: '+fa(ok)+(bad?' · ناموفق '+fa(bad):''),bad?'bad':'ok');render();
 }
 async function userDetail(uid){
   let ov; try{ov=await api('GET','/admin/users/'+uid+'/overview');}catch(e){return toast(e.message,'bad');}

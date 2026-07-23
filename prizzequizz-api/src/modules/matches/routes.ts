@@ -26,6 +26,11 @@ function hashString(input: string): number {
   }
   return h >>> 0;
 }
+// Seeded RNG (mulberry32) → identical sequence for both players from the same
+// seed, used for per-match question order (8) and per-question option order (9).
+function mulberry32(a: number): () => number { return function () { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+function seededShuffle<T>(arr: T[], rnd: () => number): T[] { const a = arr.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [a[i], a[j]] = [a[j]!, a[i]!]; } return a; }
+function diffRank(d: string): number { return d === 'easy' ? 1 : d === 'hard' ? 3 : 2; }
 
 export function registerMatchRoutes(router: Router, base: string): void {
   router.add('POST', `${base}/matches`, async (ctx) => {
@@ -179,10 +184,25 @@ export function registerMatchRoutes(router: Router, base: string): void {
       const filtered = all.filter((q) => q.category === topic);
       if (filtered.length) pool = filtered; // fall back to the whole bank if the topic is empty
     }
-    const ordered = [...pool].sort((a, b) => a.id.localeCompare(b.id));
-    const start = hashString(`${ctx.params.id!}|${topic}`) % ordered.length;
-    const q = ordered[(start + round) % ordered.length]!;
-    json(ctx.res, 200, { id: q.id, text: q.text, options: q.options, correctIndex: q.correctIndex, category: q.category });
+    // (8) RANDOM but seeded by matchId+topic → different questions each match yet
+    // identical for BOTH players. (10) ADAPTIVE ORDER: shuffle within each
+    // difficulty then concat easy→medium→hard, so round 0,1,2… escalates.
+    const seed = hashString(`${ctx.params.id!}|${topic}`);
+    const groups: Record<string, typeof pool> = { easy: [], medium: [], hard: [] };
+    for (const q of pool) (groups[q.difficulty] ?? groups.medium!).push(q);
+    const ordered = [
+      ...seededShuffle(groups.easy!, mulberry32(seed ^ 0x1)),
+      ...seededShuffle(groups.medium!, mulberry32(seed ^ 0x2)),
+      ...seededShuffle(groups.hard!, mulberry32(seed ^ 0x3))
+    ];
+    const q = ordered[round % ordered.length]!;
+    // (9) OPTION SHUFFLE: reorder answers (seeded by matchId+questionId so both
+    // players match), and remap correctIndex so the right answer moves with it.
+    const idx = q.options.map((_, j) => j);
+    const order = seededShuffle(idx, mulberry32(hashString(`${ctx.params.id!}:${q.id}`)));
+    const options = order.map((j) => q.options[j]!);
+    const correctIndex = order.indexOf(q.correctIndex);
+    json(ctx.res, 200, { id: q.id, text: q.text, options, correctIndex, category: q.category, difficulty: q.difficulty });
   });
 
   router.add('GET', `${base}/matches/:id`, async (ctx) => json(ctx.res, 200, toSnapshot(await getMatch(ctx.params.id!))));

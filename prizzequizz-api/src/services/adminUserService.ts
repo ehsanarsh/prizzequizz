@@ -90,12 +90,10 @@ export async function updateUserFields(userId: string, fields: Partial<{ display
 export async function setUserTickets(userId: string, tier: string, count: number, mode: 'set' | 'add'): Promise<Record<string, number> | null> {
   const user = await repositories.users.findById(userId);
   if (!user) return null;
-  const tickets: Record<string, number> = { ...(user.tickets as any ?? {}) };
-  const cur = Number(tickets[tier] ?? 0) || 0;
-  tickets[tier] = Math.max(0, mode === 'add' ? cur + Math.round(count) : Math.round(count));
-  user.tickets = tickets as any;
-  await repositories.users.save(user);
-  return tickets;
+  // Go through the atomic ticket update — users.save does NOT persist the
+  // tickets JSONB column, so writing it there silently loses the grant.
+  const { grantTickets, setTickets } = await import('./ticketService.js');
+  return mode === 'add' ? grantTickets(userId, tier, count) : setTickets(userId, tier, count);
 }
 
 /* Reset progression stats (xp/level/weekly cup) — does NOT touch the wallet. */

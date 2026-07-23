@@ -95,6 +95,15 @@
     { "name": "تاریخ جهان", "icon": "📜", "enabled": true, "order": 11 },
     { "name": "مذهبی", "icon": "🕌", "enabled": true, "order": 12 }
   ],
+  "campaign": {
+    "enabled": false,
+    "startDate": "",
+    "endDate": "",
+    "walletBonus": 0,
+    "ticketTier": "green",
+    "ticketCount": 0,
+    "xp": 0
+  },
   "rewards": {
     "hold": { "enabled": false, "riskThreshold": 90 },
     "dailyStreak": [],

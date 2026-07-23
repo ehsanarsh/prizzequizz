@@ -44,6 +44,24 @@ function normalizeTickets(t: any): Record<string, number> {
   return out;
 }
 
+/* Admin/campaign grant helpers — go through the SAME atomic ticket update as
+ * purchase/consume, so tickets actually persist (users.save does NOT write the
+ * tickets column). `grantTickets` adds (negative = subtract, floored at 0);
+ * `setTickets` sets an absolute count. */
+export async function grantTickets(userId: string, tier: string, count: number): Promise<Record<string, number> | null> {
+  const delta = Math.round(Number(count) || 0);
+  if (delta === 0) return getTickets(userId);
+  if (delta < 0) { // subtract but never below zero: clamp to current
+    const cur = (await getTickets(userId))[tier] ?? 0;
+    return adjustTicket(userId, tier, -Math.min(cur, -delta));
+  }
+  return adjustTicket(userId, tier, delta);
+}
+export async function setTickets(userId: string, tier: string, target: number): Promise<Record<string, number> | null> {
+  const cur = (await getTickets(userId))[tier] ?? 0;
+  return adjustTicket(userId, tier, Math.round(Number(target) || 0) - cur);
+}
+
 /* Atomically add `delta` (+1 grant / −1 consume) to one tier. With a guard when
  * decrementing so the count can never go negative. Returns the new tickets map,
  * or null if the guard failed (nothing to consume). */

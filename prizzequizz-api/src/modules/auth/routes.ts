@@ -1,6 +1,7 @@
 import type { Router } from '../../http/router.js';
 import { error, json } from '../../http/response.js';
 import { repositories } from '../../repositories/index.js';
+import { grantNewUserCampaign } from '../../services/campaignService.js';
 import { otpProvider } from '../../services/otpProvider.js';
 import { createSession, refreshSession, revokeRefreshToken } from '../../services/sessionService.js';
 import { recordSecurityEvent } from '../../services/securityEvents.js';
@@ -31,6 +32,9 @@ export function registerAuthRoutes(router: Router, base: string): void {
     if (!user) {
       user = { id: id(), phone: verified.phone, username: `user_${Date.now()}`, displayName: 'بازیکن جدید', plan: 'free', level: 1, xp: 0, weeklyScore: 0, wallet: 0, coins: 350, hearts: 5, tickets: { bronze: 0, silver: 0, gold: 0 } };
       await repositories.users.save(user);
+      // Auto new-user reward campaign (no-op unless enabled + in date window).
+      await grantNewUserCampaign(user.id);
+      user = (await repositories.users.findByPhone(verified.phone)) ?? user; // reflect XP grant
     }
     const allowed = await ensureBetaAccess(user.id, inviteCode);
     if (!allowed) return error(ctx.res, 403, 'BETA_INVITE_REQUIRED', 'Closed beta invite code is required.');
