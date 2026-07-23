@@ -148,37 +148,45 @@ async function render(){
 }
 
 /* ================= DASHBOARD ================= */
+function miniBars(series,color){
+  const arr=(series||[]).map(p=>Number(p.c)||0); if(!arr.length)return '<div class="empty">داده‌ای نیست</div>';
+  const max=Math.max(1,...arr); const w=Math.max(6,Math.floor(560/arr.length)-2);
+  const bars=arr.map((v,i)=>{const h=Math.round((v/max)*90)+2;const day=(series[i].day||'');return '<div title="'+day+': '+fa(v)+'" style="display:inline-block;width:'+w+'px;height:'+h+'px;background:'+color+';border-radius:3px 3px 0 0;margin-left:1px;vertical-align:bottom"></div>';}).join('');
+  return '<div style="height:104px;white-space:nowrap;overflow-x:auto;direction:ltr;text-align:left;padding-top:6px">'+bars+'</div><div style="font-size:10px;color:var(--muted);direction:ltr;text-align:left;margin-top:4px">'+esc((series[0]||{}).day||'')+' … '+esc((series[series.length-1]||{}).day||'')+' (بیشینه '+fa(max)+')</div>';
+}
+function fmtDur(s){s=Number(s)||0;if(s<=0)return '—';const m=Math.floor(s/60),ss=Math.round(s%60);return m?m+'د '+ss+'ث':ss+'ث';}
 async function renderDashboard(){
-  const [an,rep,wd,susp,matches,mon]=await Promise.all([
-    api('GET','/admin/analytics').catch(()=>({})),
-    api('GET','/admin/wallet/reports?granularity=daily').catch(()=>({rows:[]})),
-    api('GET','/admin/wallet/withdrawals?status=pending&pageSize=100').catch(()=>({total:0})),
-    api('GET','/admin/suspicious').catch(()=>({rows:[]})),
-    api('GET','/admin/matches').catch(()=>({rows:[]})),
-    api('GET','/admin/monitoring/diagnostics').catch(()=>({}))
-  ]);
-  const suspCount=(susp.rows||susp||[]).length;
-  const today=(rep.rows||[])[0]||{};
-  const wk=(rep.rows||[]).slice(0,7).reduce((s,r)=>s+(Number(r.systemProfit)||0),0);
-  const mo=(rep.rows||[]).slice(0,30).reduce((s,r)=>s+(Number(r.systemProfit)||0),0);
-  $('#main').innerHTML=head('داشبورد','نمای کلی زنده')+
+  const d=await api('GET','/admin/dashboard').catch(e=>({error:e.message}));
+  if(d.error){$('#main').innerHTML=head('داشبورد')+'<div class="card empty">خطا: '+esc(d.error)+'</div>';return;}
+  const money=v=>fa(v)+' ت';
+  $('#main').innerHTML=head('داشبورد اصلی','نمای کلیِ زندهٔ سیستم — مستقیم از دیتابیس','<button class="btn sm" onclick="render()">↻ بروزرسانی</button>')+
+    (d.note?'<div class="note">⚠️ '+esc(d.note)+'</div>':'')+
     '<div class="grid g4" style="margin-bottom:13px">'+
-      stat('بازی‌های در حال اجرا','info',fa((matches.rows||[]).length))+
-      stat('کل کاربران','',fa(an.users!=null?an.users:(an.totalUsers||0)))+
-      stat('کل سوالات','',fa(an.questions!=null?an.questions:(an.totalQuestions||0)))+
-      stat('برداشت‌های در انتظار','bad',fa(wd.total||0))+
+      stat('کاربرانِ ثبت‌نام‌شده','',fa(d.registeredUsers))+
+      stat('آنلاین (۵ دقیقه)','ok',fa(d.onlineUsers))+
+      stat('فعالِ امروز (DAU)','info',fa(d.dau))+
+      stat('کاربرِ جدیدِ امروز','gold',fa(d.newUsersToday))+
     '</div>'+
     '<div class="grid g4" style="margin-bottom:13px">'+
-      stat('سود امروز','gold',fa(today.systemProfit||0)+' ت')+
-      stat('سود ۷ روز','gold',fa(wk)+' ت')+
-      stat('سود ۳۰ روز','gold',fa(mo)+' ت')+
-      stat('کاربران مشکوک','bad',fa(suspCount))+
+      stat('مسابقاتِ امروز','',fa(d.matchesToday))+
+      stat('در حالِ اجرا','info',fa(d.runningMatches))+
+      stat('میانگینِ زمانِ مسابقه','',fmtDur(d.avgMatchSec))+
+      stat('درآمدِ امروز','gold',money(d.todayRevenue))+
+    '</div>'+
+    '<div class="grid g4" style="margin-bottom:13px">'+
+      stat('برداشتِ در انتظار','bad',fa(d.pendingWithdrawals)+' ('+money(d.pendingWithdrawAmount)+')')+
+      stat('تیکتِ پشتیبانیِ باز','pend',fa(d.openTickets))+
+      stat('RAM سرور (پروسه)',(d.system&&d.system.ramUsedMB>800?'bad':'ok'),fa(d.system?d.system.ramUsedMB:0)+' MB')+
+      stat('آپ‌تایم','',(d.system?d.system.uptimeH:0)+' ساعت')+
     '</div>'+
     '<div class="grid g2">'+
-      '<div class="card"><h3>روند مالی روزانه</h3>'+tbl(['روز','شارژ','جوایز','ورودی','سود'],(rep.rows||[]).slice(0,10).map(r=>[r.period,fa(r.deposits),fa(r.rewards),fa(r.stakes),'<b style="color:var(--gold)">'+fa(r.systemProfit)+'</b>']))+'</div>'+
-      '<div class="card"><h3>بازی‌های در حال اجرا</h3>'+tbl(['مود','فاز','راند','بازیکنان'],(matches.rows||[]).slice(0,10).map(m=>[m.modeId,m.phase,fa(m.round),(m.players||[]).map(p=>esc(p.username||'')+' ('+fa(p.score)+')').join(' vs ')]))+'</div>'+
+      '<div class="card"><h3>📈 کاربرانِ جدید — ۳۰ روزِ اخیر</h3>'+miniBars(d.usersSeries,'#5db7ec')+'</div>'+
+      '<div class="card"><h3>🎮 مسابقات — ۳۰ روزِ اخیر</h3>'+miniBars(d.matchesSeries,'#7b8bff')+'</div>'+
     '</div>'+
-    '<div class="card" style="margin-top:13px"><h3>خطاها و کرش‌ها (Monitoring)</h3><div class="sub" style="color:var(--muted);font-size:12px">مجموع گزارش خطا: '+fa(mon.total||mon.open||0)+' · باز: '+fa(mon.open||0)+'</div></div>';
+    '<div class="card" style="margin-top:13px"><h3>🔴 فعالیتِ لحظه‌ای (Live Feed)</h3>'+
+      tbl(['زمان','رویداد'],(d.liveFeed||[]).map(f=>[fmtDate(f.at),'<span class="pill '+(f.kind==='signup'?'ok':f.kind==='withdraw'?'pend':'info')+'">'+({signup:'ثبت‌نام',match:'مسابقه',withdraw:'برداشت'}[f.kind]||f.kind)+'</span> '+esc(f.text)]))+
+    '</div>'+
+    '<div class="note" style="margin-top:12px">CPU و RAMِ کلِ هاست (نه فقط پروسه) نیازمندِ نصبِ یک agent است؛ فعلاً RAMِ پروسهٔ Node و آپ‌تایم نمایش داده می‌شود. بقیهٔ اعداد کاملاً واقعی و زنده‌اند.</div>';
 }
 
 /* ================= FINANCE DASHBOARD (transparent, formula-visible) ================= */

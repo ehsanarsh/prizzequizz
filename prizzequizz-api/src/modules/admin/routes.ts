@@ -13,7 +13,7 @@ import { activeMatchState } from '../../services/matchStateStore.js';
 import { createGiftCode, listGiftCodes, redeemGiftCode } from '../../services/giftCodeService.js';
 import { aiGenerate, approve as approvePipeline, createDraft, getMeta as getPipelineMeta, listPipeline, reject as rejectPipeline, runPipeline } from '../../services/questionPipelineService.js';
 import { listAdminAudit, recordAdmin } from '../../services/adminAuditService.js';
-import { RESET_AREAS, type ResetArea, financeSummary, finishedMatches, resetArea, runningMatches, suspiciousUsers } from '../../services/adminOpsService.js';
+import { RESET_AREAS, type ResetArea, dashboardMetrics, financeSummary, finishedMatches, resetArea, runningMatches, suspiciousUsers } from '../../services/adminOpsService.js';
 import { getAccount } from '../../services/walletLedgerService.js';
 import { matchmakingQueue } from '../../services/matchmakingQueue.js';
 import { leaderboards } from '../../services/leaderboardService.js';
@@ -471,6 +471,12 @@ export function registerAdminRoutes(router: Router, base: string): void {
   router.add('GET', `${base}/admin/audit`, async (ctx) => {
     if (!requireAdmin(ctx)) return;
     json(ctx.res, 200, { rows: await listAdminAudit({ limit: Number(ctx.query.get('limit') ?? 150), action: ctx.query.get('action') || undefined, targetUserId: ctx.query.get('userId') || undefined }) });
+  });
+
+  // Main dashboard — live system snapshot (users, DAU, matches, revenue, feed).
+  router.add('GET', `${base}/admin/dashboard`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    json(ctx.res, 200, await dashboardMetrics());
   });
 
   // Transparent finance summary (every number from the immutable ledger).

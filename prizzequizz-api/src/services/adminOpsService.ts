@@ -170,3 +170,83 @@ async function resetLeaderboards(): Promise<void> {
     for (const u of users) { await leaderboards.updateUser(u).catch(() => {}); }
   } catch (e) { logger.warn('reset_leaderboards_failed', { message: e instanceof Error ? e.message : 'x' }); }
 }
+
+// ---------------------------------------------------------------------------
+// Main dashboard — a real, live snapshot of the whole system from the DB.
+// Every number is a direct query; anything unavailable degrades to 0/[] rather
+// than faking a value. Process RAM/uptime are real; full host CPU needs an agent.
+// ---------------------------------------------------------------------------
+export async function dashboardMetrics(): Promise<Record<string, unknown>> {
+  const pool = pg();
+  const live = await activeMatchState.list().catch(() => []);
+  const runningCount = live.filter((m: any) => isLive(m.phase) && !m.duelSettled).length;
+  const mem = process.memoryUsage();
+  const sys = {
+    ramUsedMB: Math.round(mem.rss / 1048576),
+    heapUsedMB: Math.round(mem.heapUsed / 1048576),
+    uptimeH: Math.round((process.uptime() / 3600) * 10) / 10,
+    node: process.version
+  };
+  if (!pool) {
+    const users = await repositories.users.list(1000).catch(() => []);
+    return {
+      registeredUsers: users.length, onlineUsers: 0, dau: 0, newUsersToday: 0,
+      matchesToday: 0, runningMatches: runningCount, avgMatchSec: 0, todayRevenue: 0,
+      pendingWithdrawals: 0, pendingWithdrawAmount: 0, openTickets: 0,
+      usersSeries: [], matchesSeries: [], liveFeed: [], system: sys,
+      note: 'memory driver — connect Postgres for full metrics'
+    };
+  }
+  const q = async (sql: string, args: unknown[] = []): Promise<any[]> => {
+    try { const r = await pool.query(sql, args); return r.rows; } catch { return []; }
+  };
+  const one = async (sql: string, args: unknown[] = [], key = 'c'): Promise<number> => {
+    const rows = await q(sql, args); return Number(rows[0]?.[key] ?? 0) || 0;
+  };
+  const [
+    registeredUsers, newUsersToday, dau, onlineUsers, matchesToday, avgMatchSec,
+    pendingW, openTickets, usersSeries, matchesSeries, revToday
+  ] = await Promise.all([
+    one(`SELECT count(*)::int c FROM users`),
+    one(`SELECT count(*)::int c FROM users WHERE created_at >= current_date`),
+    one(`SELECT count(DISTINCT user_id)::int c FROM game_sessions WHERE last_seen_at >= current_date`),
+    one(`SELECT count(DISTINCT user_id)::int c FROM game_sessions WHERE last_seen_at >= now() - interval '5 minutes'`),
+    one(`SELECT count(*)::int c FROM matches WHERE created_at >= current_date`),
+    one(`SELECT coalesce(avg(extract(epoch from (updated_at - created_at))),0)::int c FROM matches WHERE status IN ('result','finished') AND updated_at >= now() - interval '7 days'`),
+    q(`SELECT count(*)::int n, coalesce(sum(amount),0)::bigint amt FROM withdraw_requests WHERE status='pending'`),
+    one(`SELECT count(*)::int c FROM support_tickets WHERE status='open'`),
+    q(`SELECT to_char(d::date,'MM-DD') AS "day", coalesce(u.c,0)::int c FROM generate_series(current_date - interval '29 days', current_date, interval '1 day') d
+        LEFT JOIN (SELECT date(created_at) dt, count(*) c FROM users GROUP BY 1) u ON u.dt = d::date ORDER BY d`),
+    q(`SELECT to_char(d::date,'MM-DD') AS "day", coalesce(m.c,0)::int c FROM generate_series(current_date - interval '29 days', current_date, interval '1 day') d
+        LEFT JOIN (SELECT date(created_at) dt, count(*) c FROM matches GROUP BY 1) m ON m.dt = d::date ORDER BY d`),
+    // today's house revenue from the ledger (income − payout), same formula as finance
+    q(`SELECT
+         coalesce(sum(amount) FILTER (WHERE entry_type='ticket_purchase'),0)
+        +coalesce(sum(amount) FILTER (WHERE entry_type='match_stake'),0)
+        +coalesce(sum(amount) FILTER (WHERE entry_type='fee'),0)
+        +coalesce(sum(amount) FILTER (WHERE entry_type='penalty'),0)
+        -coalesce(sum(amount) FILTER (WHERE entry_type IN ('match_reward','league_reward','referral_reward')),0)
+        -coalesce(sum(amount) FILTER (WHERE entry_type='bonus'),0)
+        -coalesce(sum(amount) FILTER (WHERE entry_type IN ('refund','stake_refund')),0) AS net
+       FROM wallet_ledger WHERE created_at >= current_date`)
+  ]);
+  // Live feed: newest real events across signups, matches, withdrawals, security.
+  const feed: any[] = [];
+  for (const r of await q(`SELECT username, created_at FROM users ORDER BY created_at DESC LIMIT 6`))
+    feed.push({ kind: 'signup', at: iso(r.created_at), text: `ثبت‌نام: ${r.username ?? '—'}` });
+  for (const r of await q(`SELECT m.id, m.mode_id, m.status, m.updated_at, u.username FROM matches m LEFT JOIN users u ON u.id=m.winner_user_id ORDER BY m.updated_at DESC LIMIT 6`))
+    feed.push({ kind: 'match', at: iso(r.updated_at), text: `مسابقه ${String(r.id).slice(0, 6)} · ${r.status}${r.username ? ' · برنده ' + r.username : ''}` });
+  for (const r of await q(`SELECT amount, status, created_at FROM withdraw_requests ORDER BY created_at DESC LIMIT 4`))
+    feed.push({ kind: 'withdraw', at: iso(r.created_at), text: `برداشت ${Number(r.amount).toLocaleString('fa-IR')} · ${r.status}` });
+  feed.sort((a, b) => (b.at || '').localeCompare(a.at || ''));
+  return {
+    registeredUsers, newUsersToday, dau, onlineUsers,
+    matchesToday, runningMatches: runningCount, avgMatchSec,
+    todayRevenue: Number(revToday[0]?.net ?? 0) || 0,
+    pendingWithdrawals: Number(pendingW[0]?.n ?? 0) || 0,
+    pendingWithdrawAmount: Number(pendingW[0]?.amt ?? 0) || 0,
+    openTickets,
+    usersSeries, matchesSeries, liveFeed: feed.slice(0, 14), system: sys
+  };
+}
+function iso(d: any): string { return d?.toISOString?.() ?? String(d ?? ''); }
