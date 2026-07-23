@@ -785,19 +785,62 @@ async function renderLeaderboard(){
 }
 
 /* ================= NOTIFICATIONS ================= */
+const NT_STFA={pending:'در انتظار',sending:'در حال ارسال',sent:'ارسال شد',canceled:'لغو شد',failed:'ناموفق'};
+function ntTypeOptions(sel){const t={system:'عمومی/مهم (همه دریافت می‌کنند)',promo:'تبلیغی (طبق تنظیمات کاربر)',match_update:'مسابقه',wallet_update:'کیف پول',leaderboard_update:'لیدربرد'};return Object.keys(t).map(k=>'<option value="'+k+'"'+(sel===k?' selected':'')+'>'+t[k]+'</option>').join('');}
+function ntLocalDefault(){const d=new Date(Date.now()+3600000);d.setSeconds(0,0);const p=n=>String(n).padStart(2,'0');return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+'T'+p(d.getHours())+':'+p(d.getMinutes());}
 async function renderNotifications(){
-  $('#main').innerHTML=head('اعلان‌ها','ارسال پوش/اعلان گروهی به همهٔ کاربران')+
-    '<div class="card" style="max-width:560px"><h3>ارسال همگانی</h3>'+
-    '<div class="field"><label>عنوان</label><input id="nt_title"></div>'+
-    '<div class="field"><label>متن</label><textarea id="nt_body" rows="3"></textarea></div>'+
-    '<div class="field"><label>لینک مقصد (اختیاری)</label><input id="nt_url" dir="ltr" placeholder="/wallet"></div>'+
-    '<button class="btn pri" onclick="sendBroadcast()">📣 ارسال به همه</button></div>';
+  let sched=[];try{sched=await api('GET','/admin/notifications/scheduled?limit=200');}catch(e){}
+  $('#main').innerHTML=head('پیام‌ها و اعلان‌ها','ارسال فوری یا زمان‌بندی‌شده — به همهٔ کاربران یا افراد مشخص')+
+    '<div class="card" style="max-width:600px"><h3>ساخت پیام</h3>'+
+    '<div class="field"><label>عنوان</label><input id="nt_title" maxlength="120" placeholder="مثلاً: جایزهٔ ویژهٔ امشب 🎁"></div>'+
+    '<div class="field"><label>متن پیام</label><textarea id="nt_body" rows="3" maxlength="700" placeholder="متن نوتیفیکیشن که به دست کاربر می‌رسد..."></textarea></div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'+
+      '<div class="field"><label>نوع</label><select id="nt_type">'+ntTypeOptions('system')+'</select></div>'+
+      '<div class="field"><label>لینک مقصد (اختیاری)</label><input id="nt_url" dir="ltr" placeholder="/wallet"></div>'+
+    '</div>'+
+    '<div class="field"><label>گیرندگان</label><select id="nt_aud" onchange="ntAudChange()"><option value="all">همهٔ کاربران</option><option value="specific">کاربران مشخص</option></select></div>'+
+    '<div class="field" id="nt_uids_wrap" style="display:none"><label>شناسه/آی‌دی کاربران (با ویرگول جدا کن)</label><textarea id="nt_uids" rows="2" dir="ltr" placeholder="uuid1, uuid2, ..."></textarea></div>'+
+    '<div class="field"><label>زمان ارسال</label>'+
+      '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">'+
+        '<label style="display:flex;gap:6px;align-items:center"><input type="radio" name="nt_when" value="now" checked onchange="ntWhenChange()"> فوری</label>'+
+        '<label style="display:flex;gap:6px;align-items:center"><input type="radio" name="nt_when" value="sched" onchange="ntWhenChange()"> زمان‌بندی</label>'+
+        '<input type="datetime-local" id="nt_at" style="display:none" value="'+ntLocalDefault()+'">'+
+      '</div></div>'+
+    '<button class="btn pri" id="nt_go" onclick="ntSubmit()">📣 ارسال</button>'+
+    '<div class="note" style="margin-top:8px">می‌توانی چند پیام با زمان‌های مختلف بسازی؛ هر کدام یک ردیف جدا در فهرست پایین می‌شود و سرور دقیقاً در همان زمان می‌فرستد.</div></div>'+
+    '<div class="card" style="max-width:760px"><h3>پیام‌های زمان‌بندی‌شده</h3>'+
+      tbl(['عنوان','گیرنده','زمان ارسال','وضعیت','تحویل','عملیات'],(sched||[]).map(s=>{
+        const act=s.status==='pending'?'<button class="btn sm bad" onclick="ntCancel(\''+s.id+'\')">لغو</button>':'—';
+        const aud=s.audience==='specific'?((s.userIds||[]).length+' کاربر'):'همه';
+        return [esc(s.title),aud,fmtDate(s.scheduledAt),'<span class="pill '+(s.status==='sent'?'ok':s.status==='failed'||s.status==='canceled'?'bad':'pend')+'">'+(NT_STFA[s.status]||s.status)+'</span>',s.status==='sent'?fa(s.deliveredCount||0)+' نفر':'—',act];
+      }))+
+      ((sched||[]).length?'':'<div class="empty">هنوز پیام زمان‌بندی‌شده‌ای نداری.</div>')+'</div>';
 }
-async function sendBroadcast(){
+function ntAudChange(){$('#nt_uids_wrap').style.display=$('#nt_aud').value==='specific'?'block':'none';}
+function ntWhenChange(){const s=document.querySelector('input[name=nt_when]:checked').value;$('#nt_at').style.display=s==='sched'?'inline-block':'none';$('#nt_go').textContent=s==='sched'?'🕒 زمان‌بندی و افزودن':'📣 ارسال فوری';}
+async function ntSubmit(){
   const title=$('#nt_title').value.trim(),body=$('#nt_body').value.trim();
   if(!title||!body)return toast('عنوان و متن لازم است','bad');
-  try{await api('POST','/admin/notifications/broadcast',{title,body,type:'promo',data:{url:$('#nt_url').value.trim()||'/'}});toast('اعلان همگانی ارسال شد','ok');}catch(e){toast(e.message,'bad');}
+  const type=$('#nt_type').value,url=$('#nt_url').value.trim();
+  const aud=$('#nt_aud').value;
+  const userIds=aud==='specific'?$('#nt_uids').value.split(',').map(s=>s.trim()).filter(Boolean):[];
+  if(aud==='specific'&&!userIds.length)return toast('حداقل یک آی‌دی کاربر وارد کن','bad');
+  const when=document.querySelector('input[name=nt_when]:checked').value;
+  const data=url?{url}:{};
+  try{
+    if(when==='now'){
+      await api('POST','/admin/notifications/broadcast',{title,body,type,data,userIds:aud==='specific'?userIds:undefined});
+      toast('پیام فوری ارسال شد ✅','ok');
+    }else{
+      const at=$('#nt_at').value;if(!at)return toast('زمان ارسال را انتخاب کن','bad');
+      const scheduledAt=new Date(at).toISOString();
+      await api('POST','/admin/notifications/schedule',{title,body,type,data,audience:aud,userIds,scheduledAt});
+      toast('پیام زمان‌بندی شد 🕒','ok');
+    }
+    $('#nt_title').value='';$('#nt_body').value='';render();
+  }catch(e){toast(e.message,'bad');}
 }
+async function ntCancel(id){if(!confirm('این پیام زمان‌بندی‌شده لغو شود؟'))return;try{await api('POST','/admin/notifications/scheduled/'+id+'/cancel',{});toast('لغو شد','ok');render();}catch(e){toast(e.message,'bad');}}
 
 /* ================= ANTI-CHEAT ================= */
 async function renderAntiCheat(){

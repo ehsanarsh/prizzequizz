@@ -1,0 +1,24 @@
+import { createScheduled, listScheduled, dispatchDue, cancelScheduled } from '../services/scheduledNotificationService.js';
+import { notifications } from '../services/notificationService.js';
+import { repositories } from '../repositories/index.js';
+(async()=>{
+  let pass=0,fail=0; const ok=(n:boolean,m:string)=>{n?pass++:(fail++,console.log('  x',m));};
+  const uid='00000000-0000-4000-8000-0000000000a1'; await repositories.users.save({id:uid,phone:'+989120000091',username:'sn_test',displayName:'تست',plan:'premium',level:1,xp:0,weeklyScore:0,wallet:0,coins:0,hearts:5,tickets:{bronze:0,silver:0,gold:0}} as any);
+  const before=(await notifications.list(uid,100)).length;
+  const s=await createScheduled({title:'تست زمان‌بندی',body:'سلام',type:'system',audience:'all',scheduledAt:new Date(Date.now()-1000).toISOString()});
+  ok(s.status==='pending','created pending');
+  const fired=await dispatchDue();
+  ok(fired>=1,'dispatch fired at/after scheduled time');
+  const mine=(await listScheduled()).find(x=>x.id===s.id)!;
+  ok(mine.status==='sent','marked sent'); ok((mine.deliveredCount||0)>=1,'delivered to >=1 user');
+  ok((await notifications.list(uid,100)).length>before,'a real notification landed in the user list');
+  const f=await createScheduled({title:'آینده',body:'ب',type:'system',audience:'all',scheduledAt:new Date(Date.now()+3600000).toISOString()});
+  await dispatchDue();
+  ok((await listScheduled()).find(x=>x.id===f.id)!.status==='pending','future stays pending (not sent early)');
+  ok(await cancelScheduled(f.id),'cancel pending works');
+  ok((await listScheduled()).find(x=>x.id===f.id)!.status==='canceled','marked canceled');
+  const sp=await createScheduled({title:'خاص',body:'ج',type:'system',audience:'specific',userIds:[uid],scheduledAt:new Date(Date.now()-1000).toISOString()});
+  await dispatchDue();
+  ok((await listScheduled()).find(x=>x.id===sp.id)!.status==='sent','specific-audience sent');
+  console.log(`\nscheduledNotifications: ${pass} passed, ${fail} failed`); process.exit(fail?1:0);
+})();

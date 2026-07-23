@@ -18,6 +18,7 @@ import { getAccount } from '../../services/walletLedgerService.js';
 import { matchmakingQueue } from '../../services/matchmakingQueue.js';
 import { leaderboards } from '../../services/leaderboardService.js';
 import { notifications } from '../../services/notificationService.js';
+import { createScheduled, listScheduled, cancelScheduled } from '../../services/scheduledNotificationService.js';
 import { financeDiagnostics, listWithdrawals, reviewWithdrawal, transactionsToCsv } from '../../services/financeService.js';
 import { listRewardHolds, rewardHoldDiagnostics, reviewRewardHold } from '../../services/rewardReviewService.js';
 import { integrity } from '../../services/integrityService.js';
@@ -447,6 +448,37 @@ export function registerAdminRoutes(router: Router, base: string): void {
     });
     audit(ctx.userId, 'NOTIFICATION_BROADCAST', 'notification', undefined, { ...result, type: body?.type ?? 'system' });
     json(ctx.res, 202, result);
+  });
+
+  // Schedule a notification for a future date+time (fires automatically at that
+  // moment via the server scheduler). Many can be queued — each is one entry.
+  router.add('POST', `${base}/admin/notifications/schedule`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    const b = (ctx.body ?? {}) as any;
+    try {
+      const sched = await createScheduled({
+        title: String(b.title ?? ''), body: String(b.body ?? ''), type: b.type,
+        audience: b.audience === 'specific' ? 'specific' : 'all',
+        userIds: Array.isArray(b.userIds) ? b.userIds.map(String) : [],
+        scheduledAt: String(b.scheduledAt ?? ''), push: b.push !== false, createdBy: ctx.userId
+      });
+      audit(ctx.userId, 'NOTIFICATION_SCHEDULED', 'notification', sched.id, { scheduledAt: sched.scheduledAt, audience: sched.audience, type: sched.type });
+      json(ctx.res, 201, sched);
+    } catch (e) {
+      const code = e instanceof Error ? e.message : 'SCHEDULE_INVALID';
+      return error(ctx.res, 422, code, code === 'SCHEDULE_TIME_INVALID' ? 'زمان زمان‌بندی نامعتبر است.' : code === 'NO_RECIPIENTS' ? 'گیرنده‌ای انتخاب نشده است.' : 'عنوان و متن پیام الزامی است.');
+    }
+  });
+  router.add('GET', `${base}/admin/notifications/scheduled`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    json(ctx.res, 200, await listScheduled(Number(ctx.query.get('limit') ?? 200)));
+  });
+  router.add('POST', `${base}/admin/notifications/scheduled/:id/cancel`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    const ok = await cancelScheduled(ctx.params.id!);
+    if (!ok) return error(ctx.res, 404, 'NOT_CANCELABLE', 'این نوتیف قابل لغو نیست (ارسال شده یا وجود ندارد).');
+    audit(ctx.userId, 'NOTIFICATION_CANCELED', 'notification', ctx.params.id, {});
+    json(ctx.res, 200, { canceled: true });
   });
 
   router.add('GET', `${base}/admin/rewards/holds/diagnostics`, async (ctx) => {

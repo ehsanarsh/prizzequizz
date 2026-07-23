@@ -8,6 +8,13 @@ export function registerNotificationRoutes(router: Router, base: string): void {
     json(ctx.res, 200, await notifications.list(ctx.userId ?? 'u1', Number(ctx.query.get('limit') ?? 50)));
   });
 
+  // Send a REAL test notification to the current user (appears in their list +
+  // push), so the settings screen's "test" button is not a fake toast.
+  router.add('POST', `${base}/notifications/test`, async (ctx) => {
+    const n = await notifications.create({ userId: ctx.userId ?? 'u1', type: 'system', title: 'اعلان آزمایشی 🔔', body: 'اگر این پیام را می‌بینی، اعلان‌های تو درست کار می‌کند.', data: { url: '/notifications', test: true }, push: true });
+    json(ctx.res, 201, n);
+  });
+
   router.add('GET', `${base}/notifications/preferences`, async (ctx) => {
     json(ctx.res, 200, await notifications.preferences(ctx.userId ?? 'u1'));
   });
