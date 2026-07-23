@@ -108,7 +108,7 @@ async function main(): Promise<void> {
     assert.ok(paymentDiag.paid >= 1);
     assert.ok(paymentDiag.totalPaidAmount >= 500000);
     // Withdraw lifecycle through the ledger: request locks funds → admin pays.
-    const wd = await post<{ id: string; status: string }>(`${base}/wallet/withdrawals`, { amount: 300000, destination: 'IR012345678901234567890123' }, auth);
+    const wd = await post<{ id: string; status: string }>(`${base}/wallet/withdrawals`, { amount: 300000, destination: 'IR012345678901234567890123', otp: '1234' }, auth);
     assert.equal(wd.status, 'pending');
     const afterLock = await get<{ available: number; locked: number }>(`${base}/wallet`, auth);
     assert.ok(afterLock.locked >= 300000);

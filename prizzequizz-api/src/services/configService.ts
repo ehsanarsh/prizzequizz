@@ -26,9 +26,23 @@ async function ensureConfigSchema(pool: ReturnType<typeof getPgPool>): Promise<v
  * but the admin can still manage its questions. */
 export function ensureSystemCategories(): void {
   const cats = Array.isArray((gameConfig as any).categories) ? (gameConfig as any).categories : ((gameConfig as any).categories = []);
-  if (!cats.some((c: any) => c && String(c.name).trim() === 'انتخاب موضوع')) {
-    cats.push({ name: 'انتخاب موضوع', icon: '⚡', enabled: false, order: 99, role: 'toss', note: 'بانک جدا و فقط برای مرحلهٔ انتخاب موضوع (سؤالات ساده و سریع). در لیست موضوعات بازی نمایش داده نمی‌شود.' });
-  }
+  const has = (name: string) => cats.some((c: any) => c && String(c.name).trim() === name);
+  // Canonical topics that must exist even if a saved DB array (which replaces the
+  // file's array wholesale on merge) omits them. Only ADDED when missing — an
+  // admin's edits to an existing category (rename/disable/reorder) are preserved.
+  const ensure: { name: string; icon: string; enabled?: boolean; order: number; role?: string; note?: string }[] = [
+    { name: 'ادبیات', icon: '📚', order: 13 },
+    { name: 'زبان انگلیسی', icon: '🔤', order: 14 },
+    { name: 'جغرافیا', icon: '🗺️', order: 15 },
+    { name: 'بازی‌های کامپیوتری', icon: '🎮', order: 16 },
+    { name: 'فرهنگ و هنر', icon: '🎨', order: 17 },
+    { name: 'طبیعت و جانداران', icon: '🌿', order: 18 },
+    { name: 'لوگو و سرگرمی', icon: '🧠', order: 19 },
+    { name: 'ریاضی و هوش', icon: '➗', order: 20 },
+    { name: 'غذا و نوشیدنی', icon: '🍔', order: 21 },
+    { name: 'انتخاب موضوع', icon: '⚡', enabled: false, order: 99, role: 'toss', note: 'بانک جدا و فقط برای مرحلهٔ انتخاب موضوع (سؤالات ساده و سریع). در لیست موضوعات بازی نمایش داده نمی‌شود.' }
+  ];
+  for (const c of ensure) if (!has(c.name)) cats.push({ enabled: true, ...c });
 }
 
 /* Load the saved game_config override at boot and merge it over the on-disk

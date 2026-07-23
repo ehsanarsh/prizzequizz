@@ -65,14 +65,21 @@ async function main(): Promise<void> {
   // ---------- 4) Withdraw lifecycle ----------
   const u2 = await makeUser('2');
   await postEntry({ userId: u2, entryType: 'deposit', kind: 'credit', amount: 1_000_000, idempotencyKey: 't2:seed' });
+  // no / wrong mobile code rejected — nothing is locked or recorded
+  await assert.rejects(() => requestWithdraw({ userId: u2, amount: 300_000, destination: 'IR012345678901234567890123' }),
+    (e: unknown) => e instanceof WalletError && e.code === 'WITHDRAW_OTP_INVALID');
+  await assert.rejects(() => requestWithdraw({ userId: u2, amount: 300_000, destination: 'IR012345678901234567890123', otp: '0000' }),
+    (e: unknown) => e instanceof WalletError && e.code === 'WITHDRAW_OTP_INVALID');
   // below-min rejected
-  await assert.rejects(() => requestWithdraw({ userId: u2, amount: 1000, destination: 'IR012345678901234567890123' }),
+  await assert.rejects(() => requestWithdraw({ userId: u2, amount: 1000, destination: 'IR012345678901234567890123', otp: '1234' }),
     (e: unknown) => e instanceof WalletError && e.code === 'WITHDRAW_BELOW_MIN');
   // bad destination rejected
-  await assert.rejects(() => requestWithdraw({ userId: u2, amount: 300_000, destination: 'nonsense' }),
+  await assert.rejects(() => requestWithdraw({ userId: u2, amount: 300_000, destination: 'nonsense', otp: '1234' }),
     (e: unknown) => e instanceof WalletError && e.code === 'DESTINATION_INVALID');
-  // request → funds locked
-  const wd = await requestWithdraw({ userId: u2, amount: 300_000, destination: 'IR012345678901234567890123' });
+  // request (with valid code) → funds locked; KYC fields captured
+  const wd = await requestWithdraw({ userId: u2, amount: 300_000, destination: 'IR012345678901234567890123', otp: '1234', nationalId: '0012345678', holderName: 'کاربر تست' });
+  assert.equal(wd.nationalId, '0012345678', 'national id stored on request');
+  assert.equal(wd.holderName, 'کاربر تست', 'holder name stored on request');
   let a2 = await getAccount(u2);
   assert.deepEqual([a2.available, a2.locked], [700_000, 300_000], 'withdraw locks funds');
   // reject → funds released with reason recorded
@@ -82,7 +89,7 @@ async function main(): Promise<void> {
   a2 = await getAccount(u2);
   assert.deepEqual([a2.available, a2.locked], [1_000_000, 0], 'reject releases funds');
   // request again → approve → paid (settle) with operator + reference
-  const wd2 = await requestWithdraw({ userId: u2, amount: 400_000, destination: 'IR012345678901234567890123' });
+  const wd2 = await requestWithdraw({ userId: u2, amount: 400_000, destination: 'IR012345678901234567890123', otp: '1234' });
   await transitionWithdraw(wd2.id, 'approve', { id: u1 });
   const paid = await transitionWithdraw(wd2.id, 'paid', { id: u1, paymentReference: 'BANK-REF-1234' });
   assert.equal(paid.status, 'paid');

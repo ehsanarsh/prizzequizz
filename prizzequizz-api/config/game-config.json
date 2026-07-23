@@ -94,6 +94,15 @@
     { "name": "تکنولوژی", "icon": "💻", "enabled": true, "order": 10 },
     { "name": "تاریخ جهان", "icon": "📜", "enabled": true, "order": 11 },
     { "name": "مذهبی", "icon": "🕌", "enabled": true, "order": 12 },
+    { "name": "ادبیات", "icon": "📚", "enabled": true, "order": 13 },
+    { "name": "زبان انگلیسی", "icon": "🔤", "enabled": true, "order": 14 },
+    { "name": "جغرافیا", "icon": "🗺️", "enabled": true, "order": 15 },
+    { "name": "بازی‌های کامپیوتری", "icon": "🎮", "enabled": true, "order": 16 },
+    { "name": "فرهنگ و هنر", "icon": "🎨", "enabled": true, "order": 17 },
+    { "name": "طبیعت و جانداران", "icon": "🌿", "enabled": true, "order": 18 },
+    { "name": "لوگو و سرگرمی", "icon": "🧠", "enabled": true, "order": 19 },
+    { "name": "ریاضی و هوش", "icon": "➗", "enabled": true, "order": 20 },
+    { "name": "غذا و نوشیدنی", "icon": "🍔", "enabled": true, "order": 21 },
     { "name": "انتخاب موضوع", "icon": "⚡", "enabled": false, "order": 99, "role": "toss", "note": "بانک جدا و فقط برای مرحلهٔ انتخاب موضوع (سؤالات ساده و سریع). در لیست موضوعات بازی نمایش داده نمی‌شود." }
   ],
   "campaign": {

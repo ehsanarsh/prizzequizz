@@ -7,7 +7,7 @@ import { createPaymentIntent, listPaymentIntents } from '../../services/paymentS
 import {
   WALLET_LIMITS, WalletError, adminAdjust, auditLog, getAccount, getDashboard, internalTransfer,
   listAudit, listEntries, listWithdraws, postEntry, reportSummary, reportSuspicious, reportTopUsers,
-  requestWithdraw, transitionWithdraw, verifyConsistency
+  requestWithdraw, transitionWithdraw, verifyConsistency, withdrawOtpCode
 } from '../../services/walletLedgerService.js';
 import { TicketError, consumeTicket, purchaseTicket, refundTicket } from '../../services/ticketService.js';
 import { GiftError, redeemGiftCode } from '../../services/giftCodeService.js';
@@ -102,7 +102,7 @@ export function registerWalletRoutes(router: Router, base: string): void {
     const meta = reqMeta(ctx);
     const amount = Math.round(requiredNumber(body, 'amount'));
     try {
-      const req = await requestWithdraw({ userId: uid, amount, destination: requiredString(body, 'destination'), idempotencyKey: optionalString(body, 'idempotencyKey'), ...meta });
+      const req = await requestWithdraw({ userId: uid, amount, destination: requiredString(body, 'destination'), nationalId: optionalString(body, 'nationalId'), holderName: optionalString(body, 'holderName'), otp: optionalString(body, 'otp'), idempotencyKey: optionalString(body, 'idempotencyKey'), ...meta });
       await auditLog({ userId: uid, action: 'withdraw_requested', api: 'POST /wallet/withdrawals', ...meta, request: { amount }, response: { requestId: req.id } });
       await notifications.create({ userId: uid, type: 'wallet_update', title: 'درخواست برداشت ثبت شد', body: `${amount.toLocaleString('fa-IR')} تومان بلوکه شد و در صف بررسی است.`, data: { requestId: req.id, url: '/wallet' }, push: true });
       json(ctx.res, 201, req);
@@ -110,6 +110,21 @@ export function registerWalletRoutes(router: Router, base: string): void {
       await auditLog({ userId: uid, action: 'withdraw_request_failed', api: 'POST /wallet/withdrawals', ...meta, request: { amount }, error: e instanceof Error ? e.message : 'unknown' });
       walletError(ctx, e);
     }
+  });
+
+  // Step 1 of a withdrawal: "send" the one-time confirmation code to the user's
+  // REGISTERED mobile. For now the code is fixed (1234) and delivered as an
+  // in-app notification simulating the SMS; the confirm step still verifies it
+  // server-side, so a withdrawal can't be recorded without it.
+  router.add('POST', `${base}/wallet/withdrawals/send-otp`, async (ctx) => {
+    const uid = requireUser(ctx); if (!uid) return;
+    if (!userRateLimit(ctx, uid, 'withdraw_otp', 6, 3_600_000)) return;
+    const user = await repositories.users.findById(uid).catch(() => null);
+    const phone = user?.phone ? String(user.phone) : '';
+    const code = withdrawOtpCode();
+    await notifications.create({ userId: uid, type: 'wallet_update', title: 'کد تأیید برداشت', body: `کد تأیید برداشت شما: ${code}`, data: { url: '/wallet' }, push: true }).catch(() => undefined);
+    const masked = phone ? phone.replace(/^(\d{4})\d+(\d{2})$/, '$1****$2') : '';
+    json(ctx.res, 200, { sent: true, phone: masked });
   });
 
   router.add('GET', `${base}/wallet/withdrawals`, async (ctx) => {
@@ -196,7 +211,15 @@ export function registerWalletRoutes(router: Router, base: string): void {
 
   router.add('GET', `${base}/admin/wallet/withdrawals`, async (ctx) => {
     if (!requireAdmin(ctx)) return;
-    json(ctx.res, 200, await listWithdraws({ status: ctx.query.get('status') || undefined, userId: ctx.query.get('userId') || undefined, page: Number(ctx.query.get('page') ?? 1), pageSize: Number(ctx.query.get('pageSize') ?? 50) }));
+    const res = await listWithdraws({ status: ctx.query.get('status') || undefined, userId: ctx.query.get('userId') || undefined, page: Number(ctx.query.get('page') ?? 1), pageSize: Number(ctx.query.get('pageSize') ?? 50) });
+    // Enrich each request with the requesting user's identity so the admin can
+    // see, per request: which user, their phone, username and wallet — alongside
+    // the national id / account-holder name / SHEBA captured at request time.
+    const rows = await Promise.all(res.rows.map(async (w) => {
+      const u = await repositories.users.findById(w.userId).catch(() => null);
+      return { ...w, phone: u?.phone ?? null, username: u?.username ?? null, displayName: u?.displayName ?? null, walletBalance: u?.wallet ?? null };
+    }));
+    json(ctx.res, 200, { ...res, rows });
   });
 
   for (const action of ['approve', 'reject', 'paid', 'failed'] as const) {

@@ -651,17 +651,46 @@ async function viewLedger(uid){const d=await api('GET','/admin/wallet/users/'+ui
 async function checkConsistency(){try{const r=await api('GET','/admin/wallet/consistency');toast('بررسی شد: '+fa(r.checked)+' حساب، '+fa((r.mismatches||[]).length)+' مغایرت',(r.mismatches||[]).length?'bad':'ok');}catch(e){toast(e.message,'bad');}}
 
 /* ================= WITHDRAWALS ================= */
-let WD_ST='pending';
+let WD_ST='pending', _WD_ROWS={};
+const WD_STFA={pending:'در انتظار',approved:'تأییدشده',paid:'پرداخت‌شده',rejected:'ردشده',failed:'ناموفق'};
 async function renderWithdrawals(){
   const d=await api('GET','/admin/wallet/withdrawals?status='+WD_ST+'&pageSize=100');
-  const st={pending:'در انتظار',approved:'تأییدشده',paid:'پرداخت‌شده',rejected:'ردشده',failed:'ناموفق'};
-  $('#main').innerHTML=head('مدیریت برداشت‌ها','تأیید، رد و ثبت پرداخت')+
+  _WD_ROWS={}; (d.rows||[]).forEach(w=>{_WD_ROWS[w.id]=w;});
+  const st=WD_STFA;
+  $('#main').innerHTML=head('مدیریت برداشت‌ها','روی هر ردیف بزن تا جزئیات کامل (کاربر، کد ملی، موبایل، شبا) را ببینی')+
     '<div class="subtabs">'+Object.keys(st).map(s=>'<button class="'+(WD_ST===s?'active':'')+'" onclick="WD_ST=\''+s+'\';render()">'+st[s]+'</button>').join('')+'</div>'+
-    tbl(['شناسه','مقصد','مبلغ','وضعیت','زمان','توضیح','عملیات'],(d.rows||[]).map(w=>{
-      let a='';if(w.status==='pending')a='<button class="btn sm ok" onclick="wdAct(\''+w.id+'\',\'approve\')">تأیید</button> <button class="btn sm bad" onclick="wdReject(\''+w.id+'\')">رد</button>';
-      else if(w.status==='approved')a='<button class="btn sm info" onclick="wdPaid(\''+w.id+'\')">ثبت پرداخت</button> <button class="btn sm bad" onclick="wdReject(\''+w.id+'\')">رد</button>';
-      return [String(w.id).slice(0,8),'<span class="mono">'+esc(w.destination||'')+'</span>','<b>'+fa(w.amount)+'</b>','<span class="pill '+(w.status==='paid'||w.status==='approved'?'ok':w.status==='rejected'||w.status==='failed'?'bad':'pend')+'">'+(st[w.status]||w.status)+'</span>',fmtDate(w.createdAt),esc(w.rejectReason||w.paymentReference||'—'),a];
+    tbl(['کاربر','کد ملی','مبلغ','وضعیت','زمان','عملیات'],(d.rows||[]).map(w=>{
+      let a='<button class="btn sm" onclick="wdDetail(\''+w.id+'\')">جزئیات</button>';
+      if(w.status==='pending')a+=' <button class="btn sm ok" onclick="wdAct(\''+w.id+'\',\'approve\')">تأیید</button> <button class="btn sm bad" onclick="wdReject(\''+w.id+'\')">رد</button>';
+      else if(w.status==='approved')a+=' <button class="btn sm info" onclick="wdPaid(\''+w.id+'\')">ثبت پرداخت</button> <button class="btn sm bad" onclick="wdReject(\''+w.id+'\')">رد</button>';
+      const user='<a onclick="wdDetail(\''+w.id+'\')" style="cursor:pointer;text-decoration:none"><b>'+esc(w.displayName||w.username||'کاربر')+'</b><br><span class="mono" style="font-size:11px;color:var(--muted)">'+esc(w.phone||String(w.userId).slice(0,8))+'</span></a>';
+      return [user,'<span class="mono">'+esc(w.nationalId||'—')+'</span>','<b>'+fa(w.amount)+'</b>','<span class="pill '+(w.status==='paid'||w.status==='approved'?'ok':w.status==='rejected'||w.status==='failed'?'bad':'pend')+'">'+(st[w.status]||w.status)+'</span>',fmtDate(w.createdAt),a];
     }));
+}
+function wdDetail(id){
+  const w=_WD_ROWS[id]; if(!w){toast('یافت نشد','bad');return;}
+  const r=(k,v)=>'<div style="display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--line)"><span style="color:var(--muted)">'+k+'</span><b style="text-align:left;word-break:break-all">'+v+'</b></div>';
+  let acts='';
+  if(w.status==='pending')acts='<button class="btn ok" onclick="this.closest(\'.modal-bg\').remove();wdAct(\''+w.id+'\',\'approve\')">تأیید</button><button class="btn bad" onclick="this.closest(\'.modal-bg\').remove();wdReject(\''+w.id+'\')">رد</button>';
+  else if(w.status==='approved')acts='<button class="btn info" onclick="this.closest(\'.modal-bg\').remove();wdPaid(\''+w.id+'\')">ثبت پرداخت</button><button class="btn bad" onclick="this.closest(\'.modal-bg\').remove();wdReject(\''+w.id+'\')">رد</button>';
+  modal('جزئیات درخواست برداشت',
+    r('نام کاربر', esc(w.displayName||'—')+(w.username?' <span class="mono" style="color:var(--muted)">@'+esc(w.username)+'</span>':''))+
+    r('شماره موبایل','<span class="mono">'+esc(w.phone||'—')+'</span>')+
+    r('کد ملی','<span class="mono">'+esc(w.nationalId||'—')+'</span>')+
+    r('نام صاحب حساب (بانکی)', esc(w.holderName||'—'))+
+    r('شماره شبا','<span class="mono">'+esc(w.destination||'—')+'</span>')+
+    r('مبلغ درخواستی','<span style="color:var(--gold)">'+fa(w.amount)+' تومان</span>')+
+    r('کارمزد', fa(w.fee||0)+' تومان')+
+    r('موجودی فعلی کیف پول', w.walletBalance!=null?fa(w.walletBalance)+' تومان':'—')+
+    r('وضعیت','<span class="pill '+(w.status==='paid'||w.status==='approved'?'ok':w.status==='rejected'||w.status==='failed'?'bad':'pend')+'">'+(WD_STFA[w.status]||w.status)+'</span>')+
+    r('زمان ثبت', fmtDate(w.createdAt))+
+    (w.reviewedAt?r('زمان بررسی',fmtDate(w.reviewedAt)):'')+
+    (w.paidAt?r('زمان پرداخت',fmtDate(w.paidAt)):'')+
+    (w.paymentReference?r('کد پیگیری واریز','<span class="mono">'+esc(w.paymentReference)+'</span>'):'')+
+    (w.rejectReason?r('علت رد', esc(w.rejectReason)):'')+
+    r('شناسهٔ کاربر','<span class="mono" style="font-size:11px">'+esc(w.userId)+'</span>')+
+    r('شناسهٔ درخواست','<span class="mono" style="font-size:11px">'+esc(w.id)+'</span>')+
+    (acts?'<div style="display:flex;gap:9px;margin-top:16px;flex-wrap:wrap">'+acts+'</div>':''));
 }
 async function wdAct(id,a){try{await api('POST','/admin/wallet/withdrawals/'+id+'/'+a);toast('انجام شد','ok');render();}catch(e){toast(e.message,'bad');}}
 async function wdPaid(id){const ref=prompt('کد پیگیری واریز:');if(ref===null)return;try{await api('POST','/admin/wallet/withdrawals/'+id+'/paid',{paymentReference:ref});toast('پرداخت ثبت شد','ok');render();}catch(e){toast(e.message,'bad');}}

@@ -113,6 +113,9 @@ async function ensureSchema(pool: ReturnType<typeof getPgPool>): Promise<void> {
       created_at TIMESTAMP NOT NULL DEFAULT now());
     CREATE INDEX IF NOT EXISTS idx_wallet_audit_user_time ON wallet_audit_logs(user_id, created_at DESC);
   `);
+  // Withdrawal KYC fields for admin review (added for existing deployments too).
+  await pool.query(`ALTER TABLE withdraw_requests ADD COLUMN IF NOT EXISTS national_id VARCHAR(20)`);
+  await pool.query(`ALTER TABLE withdraw_requests ADD COLUMN IF NOT EXISTS holder_name VARCHAR(120)`);
   // Immutability trigger (separate statement: CREATE FUNCTION can't be batched blindly).
   await pool.query(`CREATE OR REPLACE FUNCTION wallet_ledger_immutable() RETURNS trigger AS $f$ BEGIN RAISE EXCEPTION 'wallet_ledger rows are immutable'; END; $f$ LANGUAGE plpgsql`);
   await pool.query(`DROP TRIGGER IF EXISTS trg_wallet_ledger_immutable ON wallet_ledger`);
@@ -388,16 +391,27 @@ async function lastEntryAt(userId: string): Promise<string | null> {
 export interface WithdrawRequest {
   id: string; userId: string; amount: number; fee: number; destination: string;
   status: 'pending' | 'approved' | 'rejected' | 'paid' | 'failed';
+  nationalId?: string; holderName?: string;
   rejectReason?: string; reviewedBy?: string; reviewedAt?: string;
   paidBy?: string; paidAt?: string; paymentReference?: string; createdAt: string;
 }
 
-export async function requestWithdraw(input: { userId: string; amount: number; destination: string; ip?: string; device?: string; platform?: string; idempotencyKey?: string }): Promise<WithdrawRequest> {
+// The one-time code the user must enter to confirm a withdrawal. It is "sent" to
+// the user's registered mobile. For now it is a FIXED code (1234) — overridable
+// via WITHDRAW_OTP_CODE — so switching to a real per-phone SMS OTP later is a
+// localized change. A withdrawal is NEVER recorded without the correct code.
+export function withdrawOtpCode(): string { return String(process.env.WITHDRAW_OTP_CODE || '1234'); }
+
+export async function requestWithdraw(input: { userId: string; amount: number; destination: string; nationalId?: string; holderName?: string; otp?: string; ip?: string; device?: string; platform?: string; idempotencyKey?: string }): Promise<WithdrawRequest> {
+  // Mobile-code gate FIRST: no valid code ⇒ nothing is locked or recorded.
+  if (String(input.otp ?? '').trim() !== withdrawOtpCode()) throw new WalletError('WITHDRAW_OTP_INVALID', 'کد تأیید پیامک‌شده نادرست است.');
   const amount = Math.round(Number(input.amount));
   if (!Number.isFinite(amount) || amount <= 0) throw new WalletError('AMOUNT_INVALID', 'مبلغ نامعتبر است.');
   if (amount < WALLET_LIMITS.minWithdraw) throw new WalletError('WITHDRAW_BELOW_MIN', `حداقل برداشت ${WALLET_LIMITS.minWithdraw.toLocaleString('fa-IR')} تومان است.`);
   if (amount > WALLET_LIMITS.maxWithdraw) throw new WalletError('WITHDRAW_ABOVE_MAX', `حداکثر برداشت ${WALLET_LIMITS.maxWithdraw.toLocaleString('fa-IR')} تومان است.`);
   const dest = String(input.destination ?? '').trim();
+  const nationalId = String(input.nationalId ?? '').replace(/[^\d]/g, '').slice(0, 20) || undefined;
+  const holderName = String(input.holderName ?? '').trim().slice(0, 120) || undefined;
   if (!/^(IR[0-9]{24}|[0-9]{16}|[0-9]{24})$/.test(dest.replace(/[\s-]/g, ''))) throw new WalletError('DESTINATION_INVALID', 'شماره شبا (IR + ۲۴ رقم) یا کارت ۱۶ رقمی معتبر وارد کن.');
   const user = await repositories.users.findById(input.userId);
   if (!user) throw new WalletError('USER_NOT_FOUND', 'کاربر یافت نشد.');
@@ -412,10 +426,10 @@ export async function requestWithdraw(input: { userId: string; amount: number; d
     const existing = await findWithdrawByLedgerRef(posted.entry.refId!);
     if (existing) return existing;
   }
-  const row: WithdrawRequest = { id: reqId, userId: input.userId, amount, fee: WALLET_LIMITS.withdrawFee, destination: dest, status: 'pending', createdAt: new Date().toISOString() };
+  const row: WithdrawRequest = { id: reqId, userId: input.userId, amount, fee: WALLET_LIMITS.withdrawFee, destination: dest, status: 'pending', nationalId, holderName, createdAt: new Date().toISOString() };
   const pool = pgAvailable();
   if (pool) {
-    await pool.query(`INSERT INTO withdraw_requests(id,user_id,amount,fee,destination,status,idempotency_key) VALUES ($1,$2,$3,$4,$5,'pending',$6)`, [reqId, input.userId, amount, WALLET_LIMITS.withdrawFee, dest, idem]);
+    await pool.query(`INSERT INTO withdraw_requests(id,user_id,amount,fee,destination,status,national_id,holder_name,idempotency_key) VALUES ($1,$2,$3,$4,$5,'pending',$6,$7,$8)`, [reqId, input.userId, amount, WALLET_LIMITS.withdrawFee, dest, nationalId ?? null, holderName ?? null, idem]);
   } else {
     memWithdraws.push({ ...row, idempotencyKey: idem });
   }
@@ -489,6 +503,7 @@ export async function transitionWithdraw(reqId: string, action: 'approve' | 'rej
 function withdrawFromRow(r: any): WithdrawRequest {
   return {
     id: r.id, userId: r.user_id, amount: Number(r.amount), fee: Number(r.fee), destination: r.destination,
+    nationalId: r.national_id ?? undefined, holderName: r.holder_name ?? undefined,
     status: r.status, rejectReason: r.reject_reason ?? undefined, reviewedBy: r.reviewed_by ?? undefined,
     reviewedAt: r.reviewed_at?.toISOString?.() ?? r.reviewed_at ?? undefined,
     paidBy: r.paid_by ?? undefined, paidAt: r.paid_at?.toISOString?.() ?? r.paid_at ?? undefined,
