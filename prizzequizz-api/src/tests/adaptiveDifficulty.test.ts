@@ -3,7 +3,7 @@
  * widening prefers the NEAREST level (veryhard→hard, never drops to easy); half 2
  * restarts at easy; golden rounds resume each half's ladder; no repeats within a
  * match; both players derive the identical question; toss bank excluded. */
-import { selectQuestionForRound, topicForRound, ladderForRound, TOPIC_SELECT_CATEGORY, type AdaptiveMatch } from '../services/adaptiveDifficultyService.js';
+import { selectQuestionForRound, topicForRound, TOPIC_SELECT_CATEGORY, type AdaptiveMatch } from '../services/adaptiveDifficultyService.js';
 
 let passed = 0, failed = 0;
 function ok(name: string, cond: boolean) { if (cond) { passed++; } else { failed++; console.log('  ✗ FAIL:', name); } }
@@ -84,17 +84,24 @@ const bank = makeBank();
   ok('no-veryhard bank stays at hard, never drops to easy', JSON.stringify(seq) === JSON.stringify(['easy', 'medium', 'hard', 'hard', 'hard']));
 }
 
-// 7) Golden (sudden death) resumes each half's ladder by topic.
+// 7) Golden continues from the LAST question: both-correct on the previous round
+//    → one step harder, and keeps adapting. Topic still alternates halves.
 {
   const m = match();
-  // Half 1 both-correct → ladder A ends high; half 2 both-wrong → ladder B ends low.
-  for (let r = 0; r < 5; r++) ans(m, r, true, true);    // A climbs to veryhard
-  for (let r = 5; r < 10; r++) ans(m, r, false, false); // B drops to easy
-  const g10 = selectQuestionForRound(m, bank, 10);      // golden, topic A → resumes A (veryhard)
-  const g11 = selectQuestionForRound(m, bank, 11);      // golden, topic B → resumes B (easy)
-  ok('golden r10 resumes half-1 ladder (hard/veryhard)', ['hard', 'veryhard'].includes(g10.level) && g10.q!.category === 'ورزش');
-  ok('golden r11 resumes half-2 ladder (easy)', g11.level === 'easy' && g11.q!.category === 'سینما و سریال');
-  ok('ladderForRound alternates in sudden death', ladderForRound(10) === 'A' && ladderForRound(11) === 'B' && ladderForRound(12) === 'A');
+  for (let r = 0; r < 5; r++) ans(m, r, true, false);   // half 1 splits (irrelevant to golden)
+  ans(m, 5, true, true);                                  // r5 easy → medium
+  ans(m, 6, true, false); ans(m, 7, true, false); ans(m, 8, true, false); // stay medium
+  ok('round 9 sits at medium (half-2 ladder)', selectQuestionForRound(m, bank, 9).level === 'medium');
+  ans(m, 9, true, true);                                  // both correct on the LAST round
+  const g10 = selectQuestionForRound(m, bank, 10);
+  ok('golden r10 = one step harder than round 9 (hard), topic A', g10.level === 'hard' && g10.q!.category === 'ورزش');
+  ans(m, 10, true, true);                                 // both correct again
+  const g11 = selectQuestionForRound(m, bank, 11);
+  ok('golden r11 climbs again (veryhard), topic B', g11.level === 'veryhard' && g11.q!.category === 'سینما و سریال');
+  ans(m, 11, false, false);                               // both wrong
+  const g12 = selectQuestionForRound(m, bank, 12);
+  ok('golden r12 drops one step (hard), topic A', g12.level === 'hard' && g12.q!.category === 'ورزش');
+  ok('golden topic alternates', topicForRound(m, 10) === 'ورزش' && topicForRound(m, 11) === 'سینما و سریال' && topicForRound(m, 12) === 'ورزش');
 }
 
 // 8) No repeats across a whole match (mixed outcomes), both players identical.

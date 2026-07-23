@@ -99,31 +99,38 @@ export function ladderForRound(round: number): 'A' | 'B' {
   return ((round - 10) % 2 === 0) ? 'A' : 'B';
 }
 
-// Walks rounds 0..round advancing TWO independent per-half ladders from each
-// round's real outcome, with a single match-wide used-set (no repeats anywhere),
-// then returns the question chosen for `round` and its actual difficulty.
-// Deterministic ⇒ identical for both players. Half 2 restarts at «easy»; golden
-// rounds resume the ladder of the half whose topic they use.
+// Walks rounds 0..round, tracking difficulty ladders and a single match-wide
+// used-set (no repeats anywhere), then returns the question chosen for `round`
+// and its actual difficulty. Deterministic ⇒ identical for both players.
+//   • Half 1 (rounds 0-4): ladder A, starts «easy».
+//   • Half 2 (rounds 5-9): ladder B, starts «easy» — EXACTLY like half 1.
+//   • Sudden death / golden (10+): ONE CONTINUOUS ladder that starts from the
+//     level the last regular round (9) ended on and keeps adapting from the
+//     PREVIOUS question — both answered the previous correctly ⇒ one step harder,
+//     and so on. The golden TOPIC still alternates between the two halves.
 export function selectQuestionForRound<T extends AdaptiveQuestion>(match: AdaptiveMatch, all: T[], round: number): { q: T | null; level: string } {
   const used = new Set<string>();
-  let idxA = 0, idxB = 0;                       // per-half ladders, each starts easy
+  let idxA = 0, idxB = 0;          // per-half ladders, each starts easy
+  let idxG: number | null = null;  // golden ladder, seeded from round 9's end
   let chosen: T | null = null;
   let chosenLevel: string = DIFF_LEVELS[0];
   for (let r = 0; r <= round; r++) {
-    const ladder = ladderForRound(r);
-    const idx = ladder === 'A' ? idxA : idxB;
+    let idx: number;
+    if (r < 5) idx = idxA;
+    else if (r < 10) idx = idxB;
+    else { if (idxG === null) idxG = idxB; idx = idxG; }   // golden continues from the last question
     const level = DIFF_LEVELS[idx]!;
     const topic = topicForRound(match, r);
     const seed = hashString(`${match.id}|${r}|${topic}|${level}`);
     const q = pickDeterministic(all, topic, level, used, seed);
     if (q) used.add(q.id);
     if (r === round) { chosen = q; chosenLevel = q ? q.difficulty : level; }
-    // Advance THIS half's ladder from the round's outcome (both-correct harder,
-    // both-wrong easier, split unchanged; clamped easy..veryhard).
+    // Advance from THIS round's outcome (both-correct harder, both-wrong easier,
+    // split unchanged; clamped easy..veryhard).
     const o = roundOutcome(match, r);
     let ni = idx;
     if (o.both) { if (o.bothCorrect) ni = Math.min(DIFF_LEVELS.length - 1, idx + 1); else if (o.bothWrong) ni = Math.max(0, idx - 1); }
-    if (ladder === 'A') idxA = ni; else idxB = ni;
+    if (r < 5) idxA = ni; else if (r < 10) idxB = ni; else idxG = ni;
   }
   return { q: chosen, level: chosenLevel };
 }
