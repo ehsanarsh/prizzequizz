@@ -31,15 +31,6 @@ function hashString(input: string): number {
 function mulberry32(a: number): () => number { return function () { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 function seededShuffle<T>(arr: T[], rnd: () => number): T[] { const a = arr.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [a[i], a[j]] = [a[j]!, a[i]!]; } return a; }
 function diffRank(d: string): number { return d === 'easy' ? 1 : d === 'hard' ? 3 : 2; }
-// The correct index AFTER the per-match option shuffle — MUST use the identical
-// seed as the GET /matches/:id/question endpoint's option shuffle.
-async function validateShuffledAnswer(matchId: string, questionId: string, selectedIndex: number): Promise<{ correct: boolean; correctIndex: number }> {
-  const q = await repositories.questions.findById(questionId).catch(() => null);
-  if (!q) { const v = await validateAnswer(questionId, selectedIndex).catch(() => ({ correct: false, correctIndex: -1 })); return v; }
-  const order = seededShuffle(q.options.map((_, j) => j), mulberry32(hashString(`${matchId}:${q.id}`)));
-  const shuffledCorrect = order.indexOf(q.correctIndex);
-  return { correct: selectedIndex === shuffledCorrect, correctIndex: shuffledCorrect };
-}
 
 export function registerMatchRoutes(router: Router, base: string): void {
   router.add('POST', `${base}/matches`, async (ctx) => {
@@ -205,13 +196,12 @@ export function registerMatchRoutes(router: Router, base: string): void {
       ...seededShuffle(groups.hard!, mulberry32(seed ^ 0x3))
     ];
     const q = ordered[round % ordered.length]!;
-    // (9) OPTION SHUFFLE: reorder answers (seeded by matchId+questionId so both
-    // players match), and remap correctIndex so the right answer moves with it.
-    const idx = q.options.map((_, j) => j);
-    const order = seededShuffle(idx, mulberry32(hashString(`${ctx.params.id!}:${q.id}`)));
-    const options = order.map((j) => q.options[j]!);
-    const correctIndex = order.indexOf(q.correctIndex);
-    json(ctx.res, 200, { id: q.id, text: q.text, options, correctIndex, category: q.category, difficulty: q.difficulty });
+    // NOTE: option order is intentionally NOT shuffled here. In this P2P
+    // lockstep duel the client scores locally against the served correctIndex,
+    // so reordering options here desynced the two players' results. Items 8
+    // (random-per-match) and 10 (easy→hard) stay; option-shuffle (9) would need
+    // fully server-authoritative scoring to be safe.
+    json(ctx.res, 200, { id: q.id, text: q.text, options: q.options, correctIndex: q.correctIndex, category: q.category, difficulty: q.difficulty });
   });
 
   router.add('GET', `${base}/matches/:id`, async (ctx) => json(ctx.res, 200, toSnapshot(await getMatch(ctx.params.id!))));
@@ -253,11 +243,9 @@ export function registerMatchRoutes(router: Router, base: string): void {
 
   router.add('POST', `${base}/matches/:id/answer`, async (ctx) => {
     const body = ctx.body as any;
-    // Validate in the SAME shuffled option space the player saw: the question
-    // endpoint shuffles options seeded by (matchId:questionId), so the correct
-    // answer's index moved. Re-derive that shuffled index and compare — otherwise
-    // a right answer (shuffled) is judged against the original index and desyncs.
-    const validation = await validateShuffledAnswer(ctx.params.id!, body.questionId, Number(body.selectedIndex));
+    // Options are served in their original order (see the question endpoint note),
+    // so the original correctIndex is the source of truth here.
+    const validation = await validateAnswer(body.questionId, body.selectedIndex);
     const { match, duplicate } = await submitAnswer({
       matchId: ctx.params.id!,
       userId: ctx.userId ?? 'u1',
