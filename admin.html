@@ -148,11 +148,13 @@ async function render(){
 }
 
 /* ================= DASHBOARD ================= */
-function miniBars(series,color){
+function miniBars(series,color,label){
   const arr=(series||[]).map(p=>Number(p.c)||0); if(!arr.length)return '<div class="empty">داده‌ای نیست</div>';
   const max=Math.max(1,...arr); const w=Math.max(6,Math.floor(560/arr.length)-2);
-  const bars=arr.map((v,i)=>{const h=Math.round((v/max)*90)+2;const day=(series[i].day||'');return '<div title="'+day+': '+fa(v)+'" style="display:inline-block;width:'+w+'px;height:'+h+'px;background:'+color+';border-radius:3px 3px 0 0;margin-left:1px;vertical-align:bottom"></div>';}).join('');
-  return '<div style="height:104px;white-space:nowrap;overflow-x:auto;direction:ltr;text-align:left;padding-top:6px">'+bars+'</div><div style="font-size:10px;color:var(--muted);direction:ltr;text-align:left;margin-top:4px">'+esc((series[0]||{}).day||'')+' … '+esc((series[series.length-1]||{}).day||'')+' (بیشینه '+fa(max)+')</div>';
+  const total=arr.reduce((a,b)=>a+b,0);
+  const bars=arr.map((v,i)=>{const h=Math.round((v/max)*90)+2;const day=(series[i].day||'');
+    return '<div onclick="toast(\''+esc(day)+' — '+fa(v)+' '+esc(label||'')+'\',\'ok\')" title="'+esc(day)+': '+fa(v)+'" style="display:inline-block;width:'+w+'px;height:'+h+'px;background:'+color+';border-radius:3px 3px 0 0;margin-left:1px;vertical-align:bottom;cursor:pointer" onmouseover="this.style.filter=\'brightness(1.3)\'" onmouseout="this.style.filter=\'\'"></div>';}).join('');
+  return '<div style="height:104px;white-space:nowrap;overflow-x:auto;direction:ltr;text-align:left;padding-top:6px">'+bars+'</div><div style="font-size:10px;color:var(--muted);direction:ltr;text-align:left;margin-top:4px">'+esc((series[0]||{}).day||'')+' … '+esc((series[series.length-1]||{}).day||'')+' · مجموع '+fa(total)+' · بیشینه '+fa(max)+' — (روی هر ستون بزن)</div>';
 }
 function fmtDur(s){s=Number(s)||0;if(s<=0)return '—';const m=Math.floor(s/60),ss=Math.round(s%60);return m?m+'د '+ss+'ث':ss+'ث';}
 async function renderDashboard(){
@@ -180,8 +182,8 @@ async function renderDashboard(){
       stat('آپ‌تایم','',(d.system?d.system.uptimeH:0)+' ساعت')+
     '</div>'+
     '<div class="grid g2">'+
-      '<div class="card"><h3>📈 کاربرانِ جدید — ۳۰ روزِ اخیر</h3>'+miniBars(d.usersSeries,'#5db7ec')+'</div>'+
-      '<div class="card"><h3>🎮 مسابقات — ۳۰ روزِ اخیر</h3>'+miniBars(d.matchesSeries,'#7b8bff')+'</div>'+
+      '<div class="card"><h3>📈 کاربرانِ جدید — ۳۰ روزِ اخیر</h3>'+miniBars(d.usersSeries,'#5db7ec','کاربر جدید')+'</div>'+
+      '<div class="card"><h3>🎮 مسابقات — ۳۰ روزِ اخیر</h3>'+miniBars(d.matchesSeries,'#7b8bff','مسابقه')+'</div>'+
     '</div>'+
     '<div class="card" style="margin-top:13px"><h3>🔴 فعالیتِ لحظه‌ای (Live Feed)</h3>'+
       tbl(['زمان','رویداد'],(d.liveFeed||[]).map(f=>[fmtDate(f.at),'<span class="pill '+(f.kind==='signup'?'ok':f.kind==='withdraw'?'pend':'info')+'">'+({signup:'ثبت‌نام',match:'مسابقه',withdraw:'برداشت'}[f.kind]||f.kind)+'</span> '+esc(f.text)]))+
@@ -368,16 +370,48 @@ async function renderQuestions(){
     catTabs+
     '<div class="toolbar"><input id="qsearch" placeholder="جستجوی متن سوال..." value="'+esc(Q_SEARCH)+'" onkeydown="if(event.key===\'Enter\'){Q_SEARCH=this.value;render();}"><button class="btn" onclick="Q_SEARCH=$(\'#qsearch\').value;render()">جستجو</button>'+
     '<div class="subtabs" style="margin:0">'+['','approved','pending','archived'].map(st=>'<button class="'+(Q_ST===st?'active':'')+'" onclick="Q_ST=\''+st+'\';render()">'+(st===''?'همه وضعیت‌ها':{approved:'تأییدشده',pending:'در انتظار',archived:'بایگانی'}[st])+'</button>').join('')+'</div></div>'+
-    tbl(['متن','دسته','سختی','پاسخ درست','استفاده','٪ صحیح','وضعیت','عملیات'],filtered.slice(0,300).map(q=>[
-      esc(String(q.text||'').slice(0,55)),esc(q.category||'—'),esc(({easy:'آسان',medium:'متوسط',hard:'سخت'})[q.difficulty]||q.difficulty||'—'),
-      esc(String((q.options||[])[q.correctIndex]||('#'+((q.correctIndex||0)+1))).slice(0,22)),
-      fa(q.usageCount||q.timesUsed||0),(q.correctRate!=null?fa(Math.round(q.correctRate))+'٪':'—'),
-      '<span class="pill '+(q.status==='approved'?'ok':q.status==='archived'||q.status==='rejected'?'bad':'pend')+'">'+esc(q.status)+'</span>',
-      (q.status!=='approved'?'<button class="btn sm ok" onclick="qStatus(\''+q.id+'\',\'approved\')">تأیید</button> ':'')+
-      '<button class="btn sm" onclick="qEdit(\''+q.id+'\')">ویرایش</button> <button class="btn sm bad" onclick="qDelete(\''+q.id+'\')">حذف</button>'
-    ]));
+    '<div id="qbulk"></div>'+
+    '<div class="tbl-wrap"><table><thead><tr>'+
+      '<th style="width:34px"><input type="checkbox" id="qselall" onclick="qSelAll(this.checked)"></th>'+
+      ['متن','دسته','سختی','پاسخ درست','استفاده','٪ صحیح','وضعیت','عملیات'].map(c=>'<th>'+c+'</th>').join('')+'</tr></thead><tbody>'+
+      (filtered.length?filtered.slice(0,300).map(q=>'<tr>'+
+        '<td><input type="checkbox" class="qsel" value="'+q.id+'" '+(_QSEL.has(q.id)?'checked':'')+' onclick="qSelOne(\''+q.id+'\',this.checked)"></td>'+
+        '<td>'+esc(String(q.text||'').slice(0,55))+'</td><td>'+esc(q.category||'—')+'</td>'+
+        '<td>'+esc(({easy:'آسان',medium:'متوسط',hard:'سخت'})[q.difficulty]||q.difficulty||'—')+'</td>'+
+        '<td>'+esc(String((q.options||[])[q.correctIndex]||('#'+((q.correctIndex||0)+1))).slice(0,22))+'</td>'+
+        '<td>'+fa(q.usageCount||q.timesUsed||0)+'</td><td>'+(q.correctRate!=null?fa(Math.round(q.correctRate))+'٪':'—')+'</td>'+
+        '<td><span class="pill '+(q.status==='approved'?'ok':q.status==='archived'||q.status==='rejected'?'bad':'pend')+'">'+esc(q.status)+'</span></td>'+
+        '<td>'+(q.status!=='approved'?'<button class="btn sm ok" onclick="qStatus(\''+q.id+'\',\'approved\')">تأیید</button> ':'')+'<button class="btn sm" onclick="qEdit(\''+q.id+'\')">ویرایش</button> <button class="btn sm bad" onclick="qDelete(\''+q.id+'\')">حذف</button></td>'+
+      '</tr>').join(''):'<tr><td colspan="9" class="empty">سوالی نیست</td></tr>')+
+    '</tbody></table></div>';
+  window._QALL=list; window._QFILT=filtered.slice(0,300).map(q=>q.id);
+  qBulkBar();
   const qi=$('#qsearch'); if(qi&&Q_SEARCH){qi.focus();qi.setSelectionRange(qi.value.length,qi.value.length);}
-  window._QALL=list;
+}
+let _QSEL=new Set();
+function qSelOne(id,on){ if(on)_QSEL.add(id); else _QSEL.delete(id); qBulkBar(); }
+function qSelAll(on){ (window._QFILT||[]).forEach(id=>on?_QSEL.add(id):_QSEL.delete(id)); document.querySelectorAll('.qsel').forEach(c=>c.checked=on); qBulkBar(); }
+function qBulkBar(){
+  const el=$('#qbulk'); if(!el)return; const n=_QSEL.size;
+  el.innerHTML=n?'<div class="toolbar" style="background:var(--panel2);padding:10px;border-radius:10px;border:1.5px solid var(--gold)"><b>'+fa(n)+' سوال انتخاب شد</b>'+
+    '<button class="btn sm ok" onclick="qBulk(\'approve\')">✅ تأیید همه</button>'+
+    '<button class="btn sm" onclick="qBulk(\'archive\')">📦 بایگانی همه</button>'+
+    '<button class="btn sm bad" onclick="qBulk(\'delete\')">🗑 حذف همه</button>'+
+    '<button class="btn sm" onclick="_QSEL.clear();render()">لغو انتخاب</button></div>':'';
+}
+async function qBulk(action){
+  const ids=[..._QSEL]; if(!ids.length)return;
+  const label={approve:'تأیید',archive:'بایگانی',delete:'حذف'}[action];
+  if(!confirm(label+' '+ids.length+' سوالِ انتخاب‌شده؟'+(action==='delete'?' (برگشت‌ناپذیر)':'')))return;
+  let ok=0,bad=0;
+  for(const id of ids){try{
+    if(action==='delete')await api('DELETE','/admin/questions/'+id);
+    else await api('PATCH','/admin/questions/'+id+'/status',{status:action==='approve'?'approved':'archived'});
+    ok++;
+  }catch(e){bad++;}}
+  _QSEL.clear();
+  toast(label+' شد: '+fa(ok)+(bad?' · ناموفق '+fa(bad):''),bad?'bad':'ok');
+  render();
 }
 async function qDelete(id){
   if(!confirm('این سوال برای همیشه حذف شود؟'))return;
@@ -522,12 +556,38 @@ function fbSummary(f){if(!f)return '—';const p=[];if(f.tooHard)p.push('سخت'
 async function rerunPipe(qid){try{const m=await api('POST','/admin/questions/'+qid+'/pipeline',{});toast('خط‌لوله اجرا شد — کیفیت '+fa(m.qualityScore),'ok');render();}catch(e){toast(e.message,'bad');}}
 
 /* ================= CATEGORIES ================= */
+let _CATS=null;
 async function renderCategories(){
-  const cats=await api('GET','/questions/categories').catch(()=>[]);
-  const list=Array.isArray(cats)?cats:(cats.categories||cats.rows||[]);
-  $('#main').innerHTML=head('دسته‌بندی موضوعات','موضوعات فعالِ سوالات')+
-    '<div class="note">ایجاد/ویرایش موضوع (رنگ، آیکون، ترتیب، فعال/غیرفعال) از طریق «ویرایش خام Config» → کلید <span class="mono">categories</span> قابل تنظیم است. این فهرست، موضوعاتِ واقعیِ موجود در بانک سوالات است.</div>'+
-    tbl(['موضوع','تعداد سوال'],list.map(c=>[esc(c.category||c.name||c),fa(c.count||0)]));
+  if(!CFG)await loadCfg();
+  _CATS=JSON.parse(JSON.stringify(Array.isArray(CFG.categories)?CFG.categories:[]));
+  const counts=await api('GET','/questions/categories').catch(()=>[]);
+  const cmap={}; (Array.isArray(counts)?counts:(counts.rows||[])).forEach(c=>{cmap[c.category||c.name]=c.count||0;});
+  _CATS.sort((a,b)=>(Number(a.order)||99)-(Number(b.order)||99));
+  const rows=_CATS.map((c,i)=>
+    '<div class="cfg-row" style="grid-template-columns:44px 1fr 90px 90px 120px;align-items:center">'+
+      '<input id="cat_ic_'+i+'" value="'+esc(c.icon||'')+'" style="text-align:center;font-size:18px" title="آیکون">'+
+      '<input id="cat_nm_'+i+'" value="'+esc(c.name||'')+'" title="نام موضوع">'+
+      '<input id="cat_or_'+i+'" type="number" value="'+(c.order||i+1)+'" title="ترتیب">'+
+      '<span style="font-size:12px;color:var(--muted)">'+fa(cmap[c.name]||0)+' سوال</span>'+
+      '<label style="font-size:12px;display:flex;gap:5px;align-items:center;justify-content:flex-end"><input id="cat_en_'+i+'" type="checkbox" '+(c.enabled!==false?'checked':'')+'> فعال '+
+        '<button class="btn sm bad" onclick="catDel('+i+')">حذف</button></label>'+
+    '</div>').join('');
+  $('#main').innerHTML=head('مدیریت موضوعات',fa(_CATS.length)+' موضوع — فعال/غیرفعال، ترتیب، آیکون','<button class="btn ok" onclick="catAdd()">➕ موضوع جدید</button> <button class="btn pri" onclick="catSave()">💾 ذخیره</button>')+
+    '<div class="note">این موضوعات مستقیم روی بازی اثر می‌گذارند: فقط موضوعاتِ <b>فعال</b> در انتخابِ موضوعِ بازی نمایش داده می‌شوند (بازی از config می‌خواند). بعد از ذخیره، در بازی Ctrl+Shift+R بزن.</div>'+
+    '<div class="card">'+
+      '<div class="cfg-row" style="grid-template-columns:44px 1fr 90px 90px 120px;color:var(--muted);font-size:11px;font-weight:800"><span>آیکون</span><span>نام موضوع</span><span>ترتیب</span><span>سوالات</span><span>وضعیت</span></div>'+
+      rows+
+      '<button class="btn pri" style="margin-top:12px" onclick="catSave()">💾 ذخیرهٔ همه</button>'+
+    '</div>';
+}
+function catAdd(){ catSyncFromDom(); _CATS.push({name:'موضوع جدید',icon:'❓',enabled:true,order:_CATS.length+1}); renderCatsFromMem(); }
+function catDel(i){ catSyncFromDom(); if(!confirm('این موضوع حذف شود؟ (سوالاتش پاک نمی‌شوند)'))return; _CATS.splice(i,1); renderCatsFromMem(); }
+function catSyncFromDom(){ _CATS.forEach((c,i)=>{const ic=$('#cat_ic_'+i),nm=$('#cat_nm_'+i),or=$('#cat_or_'+i),en=$('#cat_en_'+i); if(ic)c.icon=ic.value; if(nm)c.name=nm.value.trim(); if(or)c.order=Number(or.value)||i+1; if(en)c.enabled=en.checked;}); }
+function renderCatsFromMem(){ CFG.categories=_CATS; renderCategories(); }
+async function catSave(){
+  catSyncFromDom();
+  const clean=_CATS.filter(c=>c.name).map(c=>({name:c.name,icon:c.icon||'❓',enabled:c.enabled!==false,order:Number(c.order)||99}));
+  try{await api('PATCH','/admin/config',{categories:clean});toast('موضوعات ذخیره شد ✅','ok');await loadCfg();render();}catch(e){toast(e.message,'bad');}
 }
 
 /* ================= WALLET ================= */

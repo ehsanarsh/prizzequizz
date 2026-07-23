@@ -81,6 +81,20 @@
     "impossibleAnswerMs": 300
   },
   "missions": { "daily": [], "weekly": [], "monthly": [], "hidden": [] },
+  "categories": [
+    { "name": "اطلاعات عمومی", "icon": "🧠", "enabled": true, "order": 1 },
+    { "name": "فوتبال", "icon": "⚽", "enabled": true, "order": 2 },
+    { "name": "سینما و سریال", "icon": "🎬", "enabled": true, "order": 3 },
+    { "name": "علم و دانش", "icon": "🔬", "enabled": true, "order": 4 },
+    { "name": "تاریخ ایران", "icon": "🏛️", "enabled": true, "order": 5 },
+    { "name": "موسیقی", "icon": "🎵", "enabled": true, "order": 6 },
+    { "name": "ایران و جهان", "icon": "🌍", "enabled": true, "order": 7 },
+    { "name": "ورزش", "icon": "🏅", "enabled": true, "order": 8 },
+    { "name": "هوش و معما", "icon": "🧩", "enabled": true, "order": 9 },
+    { "name": "تکنولوژی", "icon": "💻", "enabled": true, "order": 10 },
+    { "name": "تاریخ جهان", "icon": "📜", "enabled": true, "order": 11 },
+    { "name": "مذهبی", "icon": "🕌", "enabled": true, "order": 12 }
+  ],
   "rewards": {
     "hold": { "enabled": false, "riskThreshold": 90 },
     "dailyStreak": [],

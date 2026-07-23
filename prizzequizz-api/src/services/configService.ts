@@ -114,12 +114,20 @@ export function patchGameConfig(patch: any, updatedBy?: string): any {
 export function getPublicConfig(): any {
   const e = (gameConfig as any).economy ?? {};
   const modes = (gameConfig as any).modes ?? {};
+  // Only ENABLED topics reach the game, sorted by admin order — so toggling a
+  // category in the panel adds/removes it from the in-game topic picker.
+  const cats = Array.isArray((gameConfig as any).categories) ? (gameConfig as any).categories : [];
+  const categories = cats
+    .filter((c: any) => c && c.enabled !== false && c.name)
+    .sort((a: any, b: any) => (Number(a.order) || 99) - (Number(b.order) || 99))
+    .map((c: any) => ({ name: String(c.name), icon: String(c.icon || '❓') }));
   return {
     version: (gameConfig as any).version,
     rakePercent: e.paid?.rakePercent ?? 5,
     withdrawFeePercent: e.paid?.withdrawFeePercent ?? 5,
     wallet: e.wallet ?? {},
     free: e.free ?? {},
+    categories,
     modes: Object.fromEntries(Object.entries(modes).map(([k, v]: any) => [k, { entry: v.entry, timerSeconds: v.timerSeconds, questionCount: v.questionCount, reward: v.reward }]))
   };
 }
