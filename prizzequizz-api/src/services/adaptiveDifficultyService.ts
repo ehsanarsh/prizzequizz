@@ -62,52 +62,68 @@ export function roundOutcome(match: AdaptiveMatch, round: number): { both: boole
   return { both, bothCorrect: both && results.every((c) => c === true), bothWrong: both && results.every((c) => c === false) };
 }
 
-// Deterministic pick from (topic, level) excluding already-used ids. Widens to
-// the nearest levels, then any topic, then any level — always avoiding repeats —
-// so a thin level never causes a repeat or an empty question.
+// Deterministic pick from (topic, level) excluding already-used ids. When the
+// exact level has nothing left, it widens to the NEAREST available level ONE
+// STEP AT A TIME (so a veryhard target with no veryhard questions falls to hard,
+// NOT to easy), preferring the same topic before crossing topics. Always avoids
+// repeats, so a thin level never causes a repeat or an empty question.
 export function pickDeterministic<T extends AdaptiveQuestion>(all: T[], topic: string, level: string, used: Set<string>, seed: number): T | null {
   const norm = (topic || '').trim();
   const topicOk = (q: T) => !norm || norm === '__popular__' || q.category === norm;
   const notUsed = (q: T) => !used.has(q.id);
   const notSelectCat = (q: T) => q.category !== TOPIC_SELECT_CATEGORY;
   const stable = (list: T[]) => list.slice().sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
-  const nearestLevels = (() => {
-    const i = Math.max(0, DIFF_LEVELS.indexOf(level as DiffLevel));
-    const order = [i];
-    for (let d = 1; d < DIFF_LEVELS.length; d++) { if (i - d >= 0) order.push(i - d); if (i + d < DIFF_LEVELS.length) order.push(i + d); }
-    return order.map((k) => DIFF_LEVELS[k] as string);
-  })();
-  const tiers: ((q: T) => boolean)[] = [
-    (q) => notSelectCat(q) && topicOk(q) && notUsed(q) && q.difficulty === level,
-    (q) => notSelectCat(q) && topicOk(q) && notUsed(q) && nearestLevels.includes(q.difficulty),
-    (q) => notSelectCat(q) && topicOk(q) && notUsed(q),
-    (q) => notSelectCat(q) && notUsed(q) && q.difficulty === level,
-    (q) => notSelectCat(q) && notUsed(q)
-  ];
-  for (const pass of tiers) {
-    const cands = stable(all.filter(pass));
-    if (cands.length) return cands[seed % cands.length]!;
-  }
+  // Levels ordered by closeness to the target (target first, then ±1, ±2 …).
+  const i0 = Math.max(0, DIFF_LEVELS.indexOf(level as DiffLevel));
+  const nearest: string[] = [DIFF_LEVELS[i0]!];
+  for (let d = 1; d < DIFF_LEVELS.length; d++) { if (i0 - d >= 0) nearest.push(DIFF_LEVELS[i0 - d]!); if (i0 + d < DIFF_LEVELS.length) nearest.push(DIFF_LEVELS[i0 + d]!); }
+  const pickAt = (inTopic: boolean, lvl: string): T | null => {
+    const cands = stable(all.filter((q) => notSelectCat(q) && notUsed(q) && q.difficulty === lvl && (!inTopic || topicOk(q))));
+    return cands.length ? cands[seed % cands.length]! : null;
+  };
+  // 1) same topic, nearest level (closest first, one level at a time)
+  for (const lvl of nearest) { const q = pickAt(true, lvl); if (q) return q; }
+  // 2) any topic, nearest level (closest first) — last resort, still no repeats
+  for (const lvl of nearest) { const q = pickAt(false, lvl); if (q) return q; }
   return null;
 }
 
-// Walks rounds 0..round advancing the level from each round's real outcome and
-// accumulating used-ids, then returns the question chosen for `round` and its
-// level. Deterministic ⇒ identical for both players.
+// Which difficulty LADDER a round belongs to. There is one ladder PER HALF /
+// topic so each half starts fresh at «easy» and sudden-death (golden) questions
+// continue the ladder of whichever half's topic they use:
+//   half 1 (topic A): rounds 0..4  and golden 10,12,14…
+//   half 2 (topic B): rounds 5..9  and golden 11,13,15…
+export function ladderForRound(round: number): 'A' | 'B' {
+  if (round < 5) return 'A';
+  if (round < 10) return 'B';
+  return ((round - 10) % 2 === 0) ? 'A' : 'B';
+}
+
+// Walks rounds 0..round advancing TWO independent per-half ladders from each
+// round's real outcome, with a single match-wide used-set (no repeats anywhere),
+// then returns the question chosen for `round` and its actual difficulty.
+// Deterministic ⇒ identical for both players. Half 2 restarts at «easy»; golden
+// rounds resume the ladder of the half whose topic they use.
 export function selectQuestionForRound<T extends AdaptiveQuestion>(match: AdaptiveMatch, all: T[], round: number): { q: T | null; level: string } {
   const used = new Set<string>();
-  let idx = 0;
+  let idxA = 0, idxB = 0;                       // per-half ladders, each starts easy
   let chosen: T | null = null;
   let chosenLevel: string = DIFF_LEVELS[0];
   for (let r = 0; r <= round; r++) {
+    const ladder = ladderForRound(r);
+    const idx = ladder === 'A' ? idxA : idxB;
     const level = DIFF_LEVELS[idx]!;
     const topic = topicForRound(match, r);
     const seed = hashString(`${match.id}|${r}|${topic}|${level}`);
     const q = pickDeterministic(all, topic, level, used, seed);
     if (q) used.add(q.id);
     if (r === round) { chosen = q; chosenLevel = q ? q.difficulty : level; }
+    // Advance THIS half's ladder from the round's outcome (both-correct harder,
+    // both-wrong easier, split unchanged; clamped easy..veryhard).
     const o = roundOutcome(match, r);
-    if (o.both) { if (o.bothCorrect) idx = Math.min(DIFF_LEVELS.length - 1, idx + 1); else if (o.bothWrong) idx = Math.max(0, idx - 1); }
+    let ni = idx;
+    if (o.both) { if (o.bothCorrect) ni = Math.min(DIFF_LEVELS.length - 1, idx + 1); else if (o.bothWrong) ni = Math.max(0, idx - 1); }
+    if (ladder === 'A') idxA = ni; else idxB = ni;
   }
   return { q: chosen, level: chosenLevel };
 }
