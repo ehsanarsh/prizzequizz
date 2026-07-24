@@ -7829,6 +7829,23 @@ async function pzLoadConfig(){
   } }catch(e){}
 }
 try{ pzLoadConfig(); }catch(e){}
+/* Real per-category question counts, so the topic picker only ever offers topics
+   that actually have enough questions (≥5 approved = one full half). Picking a
+   topic with too few questions is what forced the server to cross into another
+   topic mid-match ("موضوع قاطی میکنه"). */
+let PZ_TOPIC_POOL=null;
+async function pzLoadTopicPool(){
+  try{
+    const r=await pzApi('GET','/questions/categories',null,false);
+    const list=(r&&r.data)||r;
+    if(Array.isArray(list)&&list.length){
+      const pool=list.filter(c=>c&&c.category&&String(c.category).trim()&&c.category!=='انتخاب موضوع'&&(Number(c.count)||0)>=5)
+                     .map(c=>[pzTopicEmoji(c.category),String(c.category).trim()]);
+      if(pool.length>=2) PZ_TOPIC_POOL=pool;
+    }
+  }catch(e){}
+}
+try{ pzLoadTopicPool(); }catch(e){}
 /* Silent re-auth: exchange the stored 30-day refresh token for a fresh access
    token so the user never has to re-enter phone/OTP, and every device keeps its
    REAL userId (an expired token makes the server fall back to a shared id, which
@@ -8765,15 +8782,19 @@ function pzSeededShuffle(arr,seed){
 function pzMatchTopics(){
   if(pzRt._matchTopics) return pzRt._matchTopics;
   const seed=pzHash(String(pzRt.matchId||'x'));
-  // Sort each pool CANONICALLY (by name) before the seeded shuffle so BOTH
-  // players (and both halves) derive the identical 6 topics from the same
-  // matchId — independent of the order TOPICS happened to load in on each client.
+  // Draw ONLY from topics that actually have enough questions (PZ_TOPIC_POOL);
+  // fall back to the config TOPICS only if the pool hasn't loaded yet. Sort each
+  // pool CANONICALLY (by name) before the seeded shuffle so BOTH players and both
+  // halves derive the identical 6 topics from the same matchId.
   const byName=(a,b)=>a[1]<b[1]?-1:a[1]>b[1]?1:0;
-  const mains=TOPICS.filter(t=>PZ_MAIN.indexOf(t[1])>=0).slice().sort(byName);
-  const others=TOPICS.filter(t=>PZ_MAIN.indexOf(t[1])<0).slice().sort(byName);
+  const pool=(PZ_TOPIC_POOL&&PZ_TOPIC_POOL.length>=6)?PZ_TOPIC_POOL:TOPICS;
+  const mains=pool.filter(t=>PZ_MAIN.indexOf(t[1])>=0).slice().sort(byName);
+  const others=pool.filter(t=>PZ_MAIN.indexOf(t[1])<0).slice().sort(byName);
   const pick2=pzSeededShuffle(mains,seed).slice(0,2);
   const pick4=pzSeededShuffle(others,seed+7).slice(0,4);
-  const six=pzSeededShuffle(pick2.concat(pick4),seed+13);
+  let six=pzSeededShuffle(pick2.concat(pick4),seed+13);
+  // Thin pool: top up to 6 from the rest of the pool (still deterministic).
+  if(six.length<6){ const have=new Set(six.map(t=>t[1])); const extra=pzSeededShuffle(pool.filter(t=>!have.has(t[1])).slice().sort(byName),seed+21); six=six.concat(extra).slice(0,6); }
   pzRt._matchTopics=six; return six;
 }
 /* Show the 6 per-match topics. In half 2 the half-1 topic is disabled. */
