@@ -51,11 +51,14 @@ function pg(): ReturnType<typeof getPgPool> | null {
 let _schemaReady = false;
 async function ensureSchema(pool: ReturnType<typeof getPgPool>): Promise<void> {
   if (_schemaReady) return;
+  // IDs are stored as TEXT (not UUID) so a report can never fail to insert on a
+  // type mismatch — reports must be captured no matter what id shape the client
+  // sends.
   await pool.query(`CREATE TABLE IF NOT EXISTS question_reports (
-    id UUID PRIMARY KEY,
-    question_id UUID NOT NULL,
-    match_id UUID,
-    user_id UUID,
+    id TEXT PRIMARY KEY,
+    question_id TEXT NOT NULL,
+    match_id TEXT,
+    user_id TEXT,
     reason VARCHAR(32) NOT NULL,
     reason_label VARCHAR(120),
     note TEXT,
@@ -65,6 +68,11 @@ async function ensureSchema(pool: ReturnType<typeof getPgPool>): Promise<void> {
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     resolved_at TIMESTAMPTZ,
     resolved_by VARCHAR(64))`);
+  // If an earlier build created the table with UUID columns, widen them to TEXT
+  // so real inserts never break. Each ALTER is independent and safe to re-run.
+  for (const col of ['id', 'question_id', 'match_id', 'user_id']) {
+    try { await pool.query(`ALTER TABLE question_reports ALTER COLUMN ${col} TYPE TEXT USING ${col}::text`); } catch { /* already text / fine */ }
+  }
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_question_reports_status_time ON question_reports(status, created_at DESC)`);
   _schemaReady = true;
 }
@@ -99,11 +107,18 @@ export async function createReport(input: {
   };
   const pool = pg();
   if (pool) {
-    await ensureSchema(pool);
-    await pool.query(
-      `INSERT INTO question_reports(id,question_id,match_id,user_id,reason,reason_label,note,question_text,category,status)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'open')`,
-      [row.id, row.questionId, row.matchId ?? null, row.userId ?? null, row.reason, row.reasonLabel, row.note ?? null, row.questionText ?? null, row.category ?? null]);
+    try {
+      await ensureSchema(pool);
+      await pool.query(
+        `INSERT INTO question_reports(id,question_id,match_id,user_id,reason,reason_label,note,question_text,category,status)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'open')`,
+        [row.id, row.questionId, row.matchId ?? null, row.userId ?? null, row.reason, row.reasonLabel, row.note ?? null, row.questionText ?? null, row.category ?? null]);
+    } catch (e) {
+      // Never lose a report on a DB hiccup — log the real cause and keep it in
+      // memory so it still surfaces to the admin this process lifetime.
+      logger.warn('question_report_db_insert_failed', { questionId, message: e instanceof Error ? e.message : 'unknown' });
+      mem.unshift(row);
+    }
   } else {
     mem.unshift(row);
   }
@@ -115,16 +130,21 @@ export async function createReport(input: {
 
 export async function listReports(status = 'open', limit = 200): Promise<QuestionReport[]> {
   const lim = Math.min(500, Math.max(1, limit));
+  const memFiltered = status && status !== 'all' ? mem.filter((r) => r.status === status) : mem.slice();
   const pool = pg();
   if (pool) {
     await ensureSchema(pool);
     const { rows } = status && status !== 'all'
       ? await pool.query(`SELECT * FROM question_reports WHERE status=$1 ORDER BY created_at DESC LIMIT ${lim}`, [status])
       : await pool.query(`SELECT * FROM question_reports ORDER BY created_at DESC LIMIT ${lim}`);
-    return rows.map(rowToReport);
+    const dbRows = rows.map(rowToReport);
+    // Merge any memory-fallback reports (from a transient DB insert failure) that
+    // aren't already in the DB result, newest first.
+    const seen = new Set(dbRows.map((r) => r.id));
+    const extra = memFiltered.filter((r) => !seen.has(r.id));
+    return [...extra, ...dbRows].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)).slice(0, lim);
   }
-  const filtered = status && status !== 'all' ? mem.filter((r) => r.status === status) : mem.slice();
-  return filtered.slice(0, lim);
+  return memFiltered.slice(0, lim);
 }
 
 export async function reportCounts(): Promise<{ open: number; resolved: number; dismissed: number; total: number }> {
