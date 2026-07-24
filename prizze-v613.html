@@ -10082,7 +10082,7 @@ try{ setTimeout(()=>{ try{ if(_tok) pzInboxBadge(); }catch(e){} }, 2500); }catch
 /* ===== Photo wallpapers per screen + floating glow particles ===== */
 function pzApplyWall(id){
   try{
-    const which = id==='home' ? 'home' : (id==='character' ? 'char' : 'other');
+    const which = id==='home' ? 'home' : (id==='plans' ? 'char' : 'other');
     document.querySelectorAll('#pzWall .pzw').forEach(function(el){
       el.classList.toggle('on', el.classList.contains('pzw-'+which));
     });
