@@ -1,0 +1,1368 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>PrizzeQuizz — پنل مدیریت</title>
+<style>
+:root{--bg:#0d0f14;--panel:#161a22;--panel2:#1d2230;--line:#2a3040;--ink:#e7ecf3;--muted:#8b94a7;--gold:#ffd21f;--ok:#33d97c;--bad:#ff5a48;--info:#5db7ec;--accent:#7b8bff;--r:12px}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:'Segoe UI',Tahoma,system-ui,sans-serif;font-size:14px}
+button{font-family:inherit;cursor:pointer}
+input,select,textarea{font-family:inherit;background:#0c0f16;border:1.5px solid var(--line);border-radius:9px;color:var(--ink);padding:8px 10px;font-size:13px;width:100%}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent)}
+input[type=checkbox]{width:auto}
+.hidden{display:none!important}
+.btn{border:1.5px solid var(--line);border-radius:9px;background:var(--panel2);color:var(--ink);padding:8px 13px;font-weight:700;font-size:13px}
+.btn:hover{filter:brightness(1.15)}
+.btn.pri{background:linear-gradient(180deg,#ffe24a,#f5b90d);color:#1a1400;border-color:#000}
+.btn.ok{background:var(--ok);color:#062611;border-color:#000}.btn.bad{background:var(--bad);color:#2a0500;border-color:#000}.btn.info{background:var(--info);color:#03202f;border-color:#000}
+.btn.sm{padding:5px 8px;font-size:11.5px;border-radius:7px}
+.btn:disabled{opacity:.45}
+#login{min-height:100vh;display:grid;place-items:center;padding:20px}
+.login-card{background:var(--panel);border:1.5px solid var(--line);border-radius:20px;padding:30px;width:100%;max-width:400px}
+.login-card h1{margin:0 0 4px;font-size:22px}.login-card p{margin:0 0 22px;color:var(--muted);font-size:13px}
+.field{margin-bottom:13px}.field label{display:block;font-size:12px;color:var(--muted);font-weight:700;margin-bottom:5px}
+#shell{display:grid;grid-template-columns:236px 1fr;min-height:100vh}
+aside{background:var(--panel);border-left:1.5px solid var(--line);padding:14px 10px;position:sticky;top:0;height:100vh;overflow:auto}
+aside::-webkit-scrollbar{width:6px}aside::-webkit-scrollbar-thumb{background:var(--line);border-radius:3px}
+.brand{font-size:16px;font-weight:900;padding:6px 10px 12px}.brand small{color:var(--muted);font-weight:600;font-size:10px;display:block}
+.navgroup{font-size:10px;color:var(--muted);font-weight:800;padding:12px 10px 5px;letter-spacing:.5px}
+.nav button{display:flex;align-items:center;gap:9px;text-align:right;background:none;border:none;color:var(--muted);padding:8px 10px;border-radius:8px;font-size:13px;font-weight:700;width:100%}
+.nav button.active{background:var(--panel2);color:var(--ink)}
+.nav button:hover{color:var(--ink)}
+.nav .ico{width:18px;text-align:center}
+main{padding:22px 24px;overflow:auto;max-height:100vh}
+.head{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;gap:12px;flex-wrap:wrap}
+.head h2{margin:0;font-size:19px}.head .sub{color:var(--muted);font-size:12px;margin-top:2px}
+.grid{display:grid;gap:13px}.g4{grid-template-columns:repeat(4,1fr)}.g3{grid-template-columns:repeat(3,1fr)}.g2{grid-template-columns:repeat(2,1fr)}
+@media(max-width:1150px){.g4{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:760px){#shell{grid-template-columns:1fr}aside{position:static;height:auto}.g4,.g3,.g2{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1.5px solid var(--line);border-radius:var(--r);padding:15px}
+.card h3{margin:0 0 11px;font-size:14.5px}
+.stat{background:linear-gradient(160deg,var(--panel2),var(--panel));border:1.5px solid var(--line);border-radius:var(--r);padding:15px}
+.stat .k{color:var(--muted);font-size:11.5px;font-weight:700}.stat .v{font-size:23px;font-weight:900;margin-top:5px}
+.v.gold{color:var(--gold)}.v.ok{color:var(--ok)}.v.bad{color:var(--bad)}.v.info{color:var(--info)}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th,td{padding:8px 7px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+th{color:var(--muted);font-weight:700;font-size:11px;position:sticky;top:0;background:var(--panel)}
+tbody tr:hover{background:var(--panel2)}
+.tbl-wrap{overflow:auto;border-radius:10px;border:1.5px solid var(--line);max-height:62vh}
+.mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px}
+.pill{display:inline-block;padding:2px 8px;border-radius:100px;font-size:10px;font-weight:800;border:1.5px solid #000}
+.pill.pend{background:#3a3320;color:#ffd67a}.pill.ok{background:#0f3323;color:#5cffa8}.pill.bad{background:#3a1512;color:#ff8f82}.pill.info{background:#0e2c3d;color:#8fd6ff}
+.toolbar{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
+.toolbar input,.toolbar select{width:auto;min-width:140px}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--panel2);border:1.5px solid var(--line);border-radius:12px;padding:11px 16px;font-weight:700;z-index:99;opacity:0;transition:.3s;pointer-events:none;max-width:90vw}
+.toast.show{opacity:1;bottom:30px}.toast.ok{border-color:var(--ok)}.toast.bad{border-color:var(--bad)}
+.empty{padding:30px;text-align:center;color:var(--muted);font-weight:700}
+.note{background:rgba(123,139,255,.1);border:1.5px solid rgba(123,139,255,.3);border-radius:10px;padding:11px 13px;font-size:12px;color:#b9c2ff;margin-bottom:14px;line-height:1.7}
+.cfg-row{display:grid;grid-template-columns:1fr 180px;gap:10px;align-items:center;margin-bottom:7px;padding:5px 0;border-bottom:1px dashed var(--line)}
+.cfg-row label{font-size:12.5px;color:var(--ink)}.cfg-row .path{font-size:10px;color:var(--muted);direction:ltr;text-align:right;display:block}
+textarea.json{min-height:300px;font-family:ui-monospace,monospace;font-size:12px;line-height:1.6;white-space:pre;direction:ltr;text-align:left}
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.65);display:grid;place-items:center;z-index:50;padding:14px}
+.modal{background:var(--panel);border:1.5px solid var(--line);border-radius:16px;padding:20px;width:100%;max-width:640px;max-height:90vh;overflow:auto}
+.skel{height:48px;border-radius:9px;margin-bottom:8px;background:linear-gradient(90deg,var(--panel) 25%,var(--panel2) 50%,var(--panel) 75%);background-size:200% 100%;animation:sh 1.2s linear infinite}
+@keyframes sh{to{background-position:-200% 0}}
+.subtabs{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:14px}
+.subtabs button{border:1.5px solid var(--line);background:var(--panel2);color:var(--muted);border-radius:8px;padding:6px 11px;font-size:12px;font-weight:700}
+.subtabs button.active{background:var(--gold);color:#1a1400;border-color:#000}
+</style>
+</head>
+<body>
+
+<section id="login">
+  <div class="login-card">
+    <h1>⚡ پنل مدیریت</h1><p>PrizzeQuizz — کنترل کامل و Data-Driven</p>
+    <div class="field"><label>آدرس API</label><input id="inApi" placeholder="https://دامنه/v1" dir="ltr"></div>
+    <div class="field"><label>نام کاربری</label><input id="inUser" placeholder="owner" dir="ltr" autocomplete="username"></div>
+    <div class="field"><label>رمز عبور</label><input id="inPass" type="password" placeholder="••••••••" dir="ltr" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <button class="btn pri" style="width:100%;margin-top:6px" onclick="doLogin()">ورود</button>
+    <div style="text-align:center;margin-top:10px"><a onclick="document.getElementById('keyWrap').style.display='block';this.style.display='none'" style="color:var(--muted);font-size:12px;cursor:pointer">ورود با کلید اصلی (پیشرفته)</a></div>
+    <div class="field" id="keyWrap" style="display:none;margin-top:8px"><label>کلید اصلی (ADMIN_KEY)</label><input id="inKey" type="password" placeholder="ADMIN_KEY" dir="ltr"></div>
+    <p id="loginErr" style="color:var(--bad);margin:12px 0 0;font-size:12px"></p>
+    <p style="color:var(--muted);font-size:11px;margin-top:10px">اولین ورود: نام کاربری <b>owner</b> و رمز = همان کلید اصلیِ سرور. بعد از ورود می‌توانی رمز را عوض کنی و برای دیگران حساب بسازی.</p>
+  </div>
+</section>
+
+<section id="shell" class="hidden">
+  <aside>
+    <div class="brand">⚡ Prizze Admin<small id="cfgVer"></small></div>
+    <nav class="nav" id="nav"></nav>
+    <button class="btn" style="width:100%;margin-top:14px;color:var(--bad)" onclick="logout()">خروج</button>
+  </aside>
+  <main id="main"></main>
+</section>
+<div class="toast" id="toast"></div>
+
+<script>
+let API=localStorage.getItem('pz_admin_api')||(location.origin+'/v1');
+let KEY=localStorage.getItem('pz_admin_key')||'';
+let CFG=null;
+const $=(s,r=document)=>r.querySelector(s);
+function fa(n){return (Number(n)||0).toLocaleString('fa-IR');}
+function esc(s){return String(s==null?'':s).replace(/[<>&"]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));}
+function toast(m,t){const e=$('#toast');e.textContent=m;e.className='toast show '+(t||'');clearTimeout(toast._t);toast._t=setTimeout(()=>e.className='toast',2800);}
+function fmtDate(d){if(!d)return '—';try{return new Date(d).toLocaleString('fa-IR',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});}catch(e){return d;}}
+async function api(method,path,body){
+  const r=await fetch(API+path,{method,headers:{'Content-Type':'application/json','x-admin-key':KEY},body:body?JSON.stringify(body):undefined});
+  let d=null;try{d=await r.json();}catch(e){}
+  if(r.status===403)throw (d&&d.error)||{code:'FORBIDDEN',message:'دسترسی مجاز نیست'};
+  if(!r.ok)throw (d&&d.error)||{message:'خطای '+r.status};
+  return d&&d.data!==undefined?d.data:d;
+}
+let PERMS=['*'], IS_OWNER=true, ME_USER='';
+function canTab(k){ return PERMS.indexOf('*')>=0 || PERMS.indexOf(k)>=0; }
+async function doLogin(){
+  API=($('#inApi').value||'').trim().replace(/\/$/,'')||API;
+  const key=($('#inKey')&&$('#inKey').value||'').trim();
+  const user=($('#inUser').value||'').trim(), pass=($('#inPass').value||'');
+  $('#loginErr').textContent='';
+  try{
+    if(key){ KEY=key; }                         // advanced: direct master key
+    else {
+      if(!user||!pass){$('#loginErr').textContent='نام کاربری و رمز را وارد کن';return;}
+      const r=await fetch(API+'/admin/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:user,password:pass})});
+      const d=await r.json().catch(()=>null);
+      if(!r.ok){$('#loginErr').textContent=(d&&d.error&&d.error.message)||'ورود ناموفق';return;}
+      KEY=(d&&d.data&&d.data.token)||(d&&d.token);
+    }
+    localStorage.setItem('pz_admin_api',API);localStorage.setItem('pz_admin_key',KEY);
+    await enterPanel();
+  }catch(e){$('#loginErr').textContent=e.message||'ورود ناموفق';}
+}
+async function enterPanel(){
+  try{ await loadMe(); }catch(e){ showLogin((e&&e.message)||'نشست منقضی شده؛ دوباره وارد شو'); return false; }
+  $('#login').classList.add('hidden');$('#shell').classList.remove('hidden');
+  await loadCfg(); buildNav();
+  // land on the first tab this account may actually see
+  const first=(NAV.flatMap(g=>g[1]).map(p=>p[0]).filter(canTab))[0]||'dashboard';
+  go(canTab('dashboard')?'dashboard':first);
+  return true;
+}
+function showLogin(msg){ $('#shell').classList.add('hidden'); $('#login').classList.remove('hidden'); if(msg)$('#loginErr').textContent=msg; }
+async function loadMe(){ const me=await api('GET','/admin/auth/me'); PERMS=me.perms||['*']; IS_OWNER=!!me.isOwner; ME_USER=me.username||''; }
+function logout(){localStorage.removeItem('pz_admin_key');location.reload();}
+async function loadCfg(){ try{ CFG=await api('GET','/admin/config'); $('#cfgVer').textContent='config '+(CFG.version||''); }catch(e){ CFG={}; } }
+
+/* ---- nav: 25 sections grouped ---- */
+const NAV=[
+  ['اصلی',[['dashboard','📊','داشبورد'],['finance','💰','داشبورد مالی'],['users','👤','کاربران'],['matches','🎮','مسابقات'],['support','🎧','پشتیبانی']]],
+  ['محتوا',[['questions','❓','سوالات'],['qreports','🚩','گزارش سؤالات'],['aistudio','🤖','استودیوی سوال (AI)'],['pipeline','🔬','خط‌لولهٔ کیفیت'],['categories','🏷️','موضوعات']]],
+  ['اقتصاد',[['wallet','👛','کیف پول'],['withdrawals','💸','برداشت‌ها'],['rewardholds','⏳','جوایز در انتظار'],['tickets','🎫','بلیط‌ها'],['shop','🛒','فروشگاه'],['giftcodes','🎁','کدهای هدیه']]],
+  ['بالانس بازی (Data-Driven)',[['cfg_xp','✨','XP'],['cfg_level','🏅','Level'],['cfg_cup','🏆','Cup'],['cfg_gameplay','🕹️','گیم‌پلی مودها'],['leagues','🛡️','لیگ‌ها'],['missions','🎯','مأموریت‌ها'],['rewards','🎉','جوایز/چرخونه/استریک']]],
+  ['رشد و تعامل',[['leaderboard','📈','لیدربرد'],['campaign','🎁','کمپین کاربر جدید'],['events','📅','رویدادها'],['banners','🖼️','بنرها'],['notifications','🔔','اعلان‌ها']]],
+  ['سیستم',[['anticheat','🛡️','ضدتقلب'],['suspicious','🚨','کاربران مشکوک'],['reports','📑','گزارش‌ها'],['logs','📝','لاگ و Audit'],['reset','♻️','ابزار ریست'],['accounts','🔐','حساب‌ها و دسترسی'],['general','⚙️','تنظیمات عمومی'],['rawcfg','🧩','ویرایش خام Config']]]
+];
+function buildNav(){
+  $('#nav').innerHTML=NAV.map(g=>{
+    // Only show tabs this account may access; 'accounts' is owner-only.
+    const items=g[1].filter(p=>(p[0]==='accounts'?IS_OWNER:canTab(p[0])));
+    if(!items.length)return '';
+    return '<div class="navgroup">'+g[0]+'</div>'+items.map(p=>'<button data-p="'+p[0]+'" onclick="go(\''+p[0]+'\')"><span class="ico">'+p[1]+'</span>'+p[2]+'</button>').join('');
+  }).join('');
+}
+let CUR='dashboard';
+function go(p){CUR=p;document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('active',b.dataset.p===p));render();}
+function loading(){$('#main').innerHTML='<div class="skel"></div><div class="skel"></div><div class="skel"></div>';}
+function head(t,s,r){return '<div class="head"><div><h2>'+t+'</h2>'+(s?'<div class="sub">'+s+'</div>':'')+'</div><div>'+(r||'')+'</div></div>';}
+function stat(k,cls,v){return '<div class="stat"><div class="k">'+k+'</div><div class="v '+(cls||'')+'">'+v+'</div></div>';}
+function tbl(cols,rows){if(!rows||!rows.length)return '<div class="empty">داده‌ای نیست</div>';return '<div class="tbl-wrap"><table><thead><tr>'+cols.map(c=>'<th>'+c+'</th>').join('')+'</tr></thead><tbody>'+rows.map(r=>'<tr>'+r.map(c=>'<td>'+c+'</td>').join('')+'</tr>').join('')+'</tbody></table></div>';}
+function modal(title,html){const bg=document.createElement('div');bg.className='modal-bg';bg.onclick=e=>{if(e.target===bg)bg.remove();};bg.innerHTML='<div class="modal"><div class="head"><h2 style="font-size:16px">'+title+'</h2><button class="btn sm" onclick="this.closest(\'.modal-bg\').remove()">✕</button></div>'+html+'</div>';document.body.appendChild(bg);return bg;}
+const CONFIG_PAGES={cfg_xp:['xp','تنظیمات XP'],cfg_level:['level','تنظیمات Level'],cfg_cup:['cup','تنظیمات Cup'],cfg_gameplay:['gameplay','گیم‌پلی هر مود'],leagues:['leagues','مدیریت لیگ‌ها'],missions:['missions','مأموریت‌ها'],rewards:['rewards','جوایز/چرخونه/استریک'],events:['events','رویدادها'],banners:['banners','بنرها'],general:['general','تنظیمات عمومی'],anticheat:['antiCheat','ضدتقلب'],campaign:['campaign','کمپین کاربر جدید']};
+
+async function render(){
+  loading();
+  // Access guard: block sections this account isn't permitted to see.
+  if(CUR==='accounts'){ if(!IS_OWNER){$('#main').innerHTML=head('دسترسی محدود')+'<div class="card empty">فقط مدیر کل به این بخش دسترسی دارد.</div>';return;} }
+  else if(!canTab(CUR)){ $('#main').innerHTML=head('دسترسی محدود')+'<div class="card empty">به این بخش دسترسی نداری. از مدیر کل بخواه دسترسی این تب را فعال کند.</div>';return; }
+  try{
+    if(CUR==='accounts')return renderAccounts();
+    if(CONFIG_PAGES[CUR])return renderConfigSection(CONFIG_PAGES[CUR][0],CONFIG_PAGES[CUR][1]);
+    const fn={dashboard:renderDashboard,finance:renderFinance,users:renderUsers,matches:renderMatches,support:renderSupport,questions:renderQuestions,qreports:renderQReports,aistudio:renderAiStudio,pipeline:renderPipeline,categories:renderCategories,wallet:renderWallet,withdrawals:renderWithdrawals,rewardholds:renderRewardHolds,tickets:renderTickets,giftcodes:renderGiftCodes,shop:renderShopAdmin,leaderboard:renderLeaderboard,notifications:renderNotifications,anticheat:renderAntiCheat,suspicious:renderSuspicious,reports:renderReports,logs:renderLogs,reset:renderReset,roles:renderRoles,rawcfg:renderRawCfg}[CUR];
+    if(fn)return fn();
+  }catch(e){$('#main').innerHTML=head('خطا')+'<div class="card empty">'+(e.message||'خطا')+'</div>';}
+}
+
+/* ================= DASHBOARD ================= */
+function miniBars(series,color,label){
+  const arr=(series||[]).map(p=>Number(p.c)||0); if(!arr.length)return '<div class="empty">داده‌ای نیست</div>';
+  const max=Math.max(1,...arr); const w=Math.max(6,Math.floor(560/arr.length)-2);
+  const total=arr.reduce((a,b)=>a+b,0);
+  const bars=arr.map((v,i)=>{const h=Math.round((v/max)*90)+2;const day=(series[i].day||'');
+    return '<div onclick="toast(\''+esc(day)+' — '+fa(v)+' '+esc(label||'')+'\',\'ok\')" title="'+esc(day)+': '+fa(v)+'" style="display:inline-block;width:'+w+'px;height:'+h+'px;background:'+color+';border-radius:3px 3px 0 0;margin-left:1px;vertical-align:bottom;cursor:pointer" onmouseover="this.style.filter=\'brightness(1.3)\'" onmouseout="this.style.filter=\'\'"></div>';}).join('');
+  return '<div style="height:104px;white-space:nowrap;overflow-x:auto;direction:ltr;text-align:left;padding-top:6px">'+bars+'</div><div style="font-size:10px;color:var(--muted);direction:ltr;text-align:left;margin-top:4px">'+esc((series[0]||{}).day||'')+' … '+esc((series[series.length-1]||{}).day||'')+' · مجموع '+fa(total)+' · بیشینه '+fa(max)+' — (روی هر ستون بزن)</div>';
+}
+function fmtDur(s){s=Number(s)||0;if(s<=0)return '—';const m=Math.floor(s/60),ss=Math.round(s%60);return m?m+'د '+ss+'ث':ss+'ث';}
+async function renderDashboard(){
+  const d=await api('GET','/admin/dashboard').catch(e=>({error:e.message}));
+  if(d.error){$('#main').innerHTML=head('داشبورد')+'<div class="card empty">خطا: '+esc(d.error)+'</div>';return;}
+  const money=v=>fa(v)+' ت';
+  $('#main').innerHTML=head('داشبورد اصلی','نمای کلیِ زندهٔ سیستم — مستقیم از دیتابیس','<button class="btn sm" onclick="render()">↻ بروزرسانی</button>')+
+    (d.note?'<div class="note">⚠️ '+esc(d.note)+'</div>':'')+
+    '<div class="grid g4" style="margin-bottom:13px">'+
+      stat('کاربرانِ ثبت‌نام‌شده','',fa(d.registeredUsers))+
+      stat('آنلاین (۵ دقیقه)','ok',fa(d.onlineUsers))+
+      stat('فعالِ امروز (DAU)','info',fa(d.dau))+
+      stat('کاربرِ جدیدِ امروز','gold',fa(d.newUsersToday))+
+    '</div>'+
+    '<div class="grid g4" style="margin-bottom:13px">'+
+      stat('مسابقاتِ امروز','',fa(d.matchesToday))+
+      stat('در حالِ اجرا','info',fa(d.runningMatches))+
+      stat('میانگینِ زمانِ مسابقه','',fmtDur(d.avgMatchSec))+
+      stat('درآمدِ امروز','gold',money(d.todayRevenue))+
+    '</div>'+
+    '<div class="grid g4" style="margin-bottom:13px">'+
+      stat('برداشتِ در انتظار','bad',fa(d.pendingWithdrawals)+' ('+money(d.pendingWithdrawAmount)+')')+
+      stat('تیکتِ پشتیبانیِ باز','pend',fa(d.openTickets))+
+      stat('RAM سرور (پروسه)',(d.system&&d.system.ramUsedMB>800?'bad':'ok'),fa(d.system?d.system.ramUsedMB:0)+' MB')+
+      stat('آپ‌تایم','',(d.system?d.system.uptimeH:0)+' ساعت')+
+    '</div>'+
+    '<div class="grid g2">'+
+      '<div class="card"><h3>📈 کاربرانِ جدید — ۳۰ روزِ اخیر</h3>'+miniBars(d.usersSeries,'#5db7ec','کاربر جدید')+'</div>'+
+      '<div class="card"><h3>🎮 مسابقات — ۳۰ روزِ اخیر</h3>'+miniBars(d.matchesSeries,'#7b8bff','مسابقه')+'</div>'+
+    '</div>'+
+    '<div class="card" style="margin-top:13px"><h3>🔴 فعالیتِ لحظه‌ای (Live Feed)</h3>'+
+      tbl(['زمان','رویداد'],(d.liveFeed||[]).map(f=>[fmtDate(f.at),'<span class="pill '+(f.kind==='signup'?'ok':f.kind==='withdraw'?'pend':'info')+'">'+({signup:'ثبت‌نام',match:'مسابقه',withdraw:'برداشت'}[f.kind]||f.kind)+'</span> '+esc(f.text)]))+
+    '</div>'+
+    '<div class="note" style="margin-top:12px">CPU و RAMِ کلِ هاست (نه فقط پروسه) نیازمندِ نصبِ یک agent است؛ فعلاً RAMِ پروسهٔ Node و آپ‌تایم نمایش داده می‌شود. بقیهٔ اعداد کاملاً واقعی و زنده‌اند.</div>';
+}
+
+/* ================= FINANCE DASHBOARD (transparent, formula-visible) ================= */
+async function renderFinance(){
+  const f=await api('GET','/admin/wallet/finance');
+  const money=v=>fa(v)+' ت';
+  const row=(k,v,cls)=>'<div class="cfg-row"><label>'+k+'</label><b style="color:'+(cls||'var(--ink)')+'">'+money(v)+'</b></div>';
+  const income=(Number(f.totalTicketSpend)||0)+(Number(f.totalStake)||0)+(Number(f.feeIncome)||0)+(Number(f.penalties)||0);
+  const payout=(Number(f.grossRewardsPaid)||0)+(Number(f.bonuses)||0)+(Number(f.refunds)||0);
+  $('#main').innerHTML=head('داشبورد مالی','هر عدد مستقیم از دفترکلِ تغییرناپذیر (Ledger) محاسبه می‌شود — کاملاً شفاف',
+    '<button class="btn sm" onclick="render()">↻ بروزرسانی</button>')+
+    (f.note?'<div class="note">⚠️ '+esc(f.note)+'</div>':'')+
+    '<div class="grid g4" style="margin-bottom:13px">'+
+      stat('کل واریزها (شارژ)','ok',money(f.totalDeposits))+
+      stat('کل برداشتِ پرداخت‌شده','bad',money(f.totalWithdrawnPaid))+
+      stat('موجودی کلِ کاربران','info',money(f.usersWalletBalance))+
+      stat('موجودی سیستم (خزانه)','gold',money(f.systemBalance))+
+    '</div>'+
+    '<div class="grid g4" style="margin-bottom:13px">'+
+      stat('برداشتِ در انتظار','gold',money(f.pendingWithdraw))+
+      stat('برداشتِ تأییدشده','info',money(f.approvedWithdraw))+
+      stat('برداشتِ ردشده/ناموفق','',money(f.rejectedWithdraw))+
+      stat('سود خالص','gold',money(f.netProfit))+
+    '</div>'+
+    '<div class="grid g2">'+
+      '<div class="card"><h3>💵 درآمدِ خانه (ورودی پول)</h3>'+
+        row('خرید بلیت',f.totalTicketSpend,'var(--ok)')+
+        row('ورودی مسابقات (Stake)',f.totalStake,'var(--ok)')+
+        row('کارمزد (Fee/Rake)',f.feeIncome,'var(--ok)')+
+        row('جریمه‌ها (Penalty)',f.penalties,'var(--ok)')+
+        '<div class="cfg-row" style="border-top:2px solid var(--line);margin-top:6px;padding-top:8px"><label><b>جمع درآمد</b></label><b style="color:var(--ok);font-size:16px">'+money(income)+'</b></div>'+
+      '</div>'+
+      '<div class="card"><h3>💸 پرداختی به بازیکنان (خروجی پول)</h3>'+
+        row('جوایز مسابقات (ناخالص)',f.grossRewardsPaid,'var(--bad)')+
+        row('بونوس‌ها',f.bonuses,'var(--bad)')+
+        row('بازگشت وجه (Refund)',f.refunds,'var(--bad)')+
+        '<div class="cfg-row" style="border-top:2px solid var(--line);margin-top:6px;padding-top:8px"><label><b>جمع پرداختی</b></label><b style="color:var(--bad);font-size:16px">'+money(payout)+'</b></div>'+
+      '</div>'+
+    '</div>'+
+    '<div class="card" style="margin-top:13px;background:linear-gradient(160deg,#1a1e2b,#161a22)"><h3>🧮 فرمول شفافِ محاسبه</h3>'+
+      '<div class="mono" style="direction:rtl;font-size:12.5px;line-height:2.2;color:#cdd6ff">'+esc(f.formula||'')+'</div>'+
+      '<div style="margin-top:12px;padding:12px;background:#0c0f16;border-radius:9px;border:1.5px solid var(--line)">'+
+        '<div style="font-size:13px;line-height:2.1">سود خالص = <span style="color:var(--ok)">'+money(income)+'</span> − <span style="color:var(--bad)">'+money(payout)+'</span> = <b style="color:var(--gold);font-size:16px">'+money(f.netProfit)+'</b></div>'+
+        '<div style="font-size:13px;line-height:2.1;margin-top:6px">موجودی سیستم = واریزها('+money(f.totalDeposits)+') − برداشت('+money(f.totalWithdrawnPaid)+') − موجودی کاربران('+money(f.usersWalletBalance)+') = <b style="color:var(--gold);font-size:16px">'+money(f.systemBalance)+'</b></div>'+
+      '</div>'+
+    '</div>';
+}
+
+/* ================= USERS ================= */
+let U_Q='';
+let _USEL=new Set();
+async function renderUsers(){
+  const rows=await api('GET','/admin/users?q='+encodeURIComponent(U_Q)+'&limit=200');
+  const list=(rows.rows||rows||[]);
+  window._UALL=list;
+  $('#main').innerHTML=head('مدیریت کاربران','جستجو، ویرایش، بن، بلیط، پیام، ریست + عملیاتِ گروهی')+
+    '<div class="toolbar"><input id="uq" placeholder="جستجوی نام/یوزرنیم/شناسه/شماره..." value="'+esc(U_Q)+'" onkeydown="if(event.key===\'Enter\'){U_Q=this.value.trim();render();}"><button class="btn" onclick="U_Q=$(\'#uq\').value.trim();render()">جستجو</button></div>'+
+    '<div id="ubulk"></div>'+
+    '<div class="tbl-wrap"><table><thead><tr><th style="width:34px"><input type="checkbox" id="uselall" onclick="uSelAll(this.checked)"></th>'+
+      ['کاربر','لول/XP','کاپ','کیف پول','وضعیت','عملیات'].map(c=>'<th>'+c+'</th>').join('')+'</tr></thead><tbody>'+
+      (list.length?list.map(u=>'<tr>'+
+        '<td><input type="checkbox" class="usel" value="'+u.id+'" '+(_USEL.has(u.id)?'checked':'')+' onclick="uSelOne(\''+u.id+'\',this.checked)"></td>'+
+        '<td>'+esc(u.username||'')+' <span class="mono" style="color:var(--muted)">'+String(u.id).slice(0,8)+'</span></td>'+
+        '<td>'+fa(u.level)+' / '+fa(u.xp)+'</td><td>'+fa(u.weeklyScore)+'</td>'+
+        '<td><b style="color:var(--ok)">'+fa(u.wallet)+'</b></td>'+
+        '<td><span class="pill '+(u.status==='banned'?'bad':u.status==='limited'?'pend':'ok')+'">'+(u.status||'active')+'</span></td>'+
+        '<td><button class="btn sm info" onclick="userDetail(\''+u.id+'\')">مدیریت</button></td></tr>').join(''):'<tr><td colspan="7" class="empty">کاربری نیست</td></tr>')+
+    '</tbody></table></div>';
+  uBulkBar();
+  const i=$('#uq'); if(i&&U_Q){i.focus();i.setSelectionRange(i.value.length,i.value.length);}
+}
+function uSelOne(id,on){ if(on)_USEL.add(id); else _USEL.delete(id); uBulkBar(); }
+function uSelAll(on){ (window._UALL||[]).forEach(u=>on?_USEL.add(u.id):_USEL.delete(u.id)); document.querySelectorAll('.usel').forEach(c=>c.checked=on); uBulkBar(); }
+function uBulkBar(){
+  const el=$('#ubulk'); if(!el)return; const n=_USEL.size;
+  el.innerHTML=n?'<div class="card" style="border-color:var(--gold);margin-bottom:12px"><b>'+fa(n)+' کاربر انتخاب شد</b>'+
+    '<div class="toolbar" style="margin-top:8px">'+
+    '<button class="btn sm ok" onclick="uBulk(\'wallet_add\')">➕ موجودی</button><button class="btn sm bad" onclick="uBulk(\'wallet_sub\')">➖ موجودی</button>'+
+    '<button class="btn sm ok" onclick="uBulk(\'ticket_add\')">➕ بلیط</button><button class="btn sm bad" onclick="uBulk(\'ticket_sub\')">➖ بلیط</button>'+
+    '<button class="btn sm ok" onclick="uBulk(\'xp_add\')">➕ XP</button><button class="btn sm bad" onclick="uBulk(\'xp_sub\')">➖ XP</button>'+
+    '<button class="btn sm info" onclick="uBulk(\'notify\')">🔔 اعلان</button>'+
+    '<button class="btn sm bad" onclick="uBulk(\'ban\')">🚫 بن</button><button class="btn sm" onclick="uBulk(\'unban\')">✅ آن‌بن</button>'+
+    '<button class="btn sm" onclick="_USEL.clear();render()">لغو</button>'+
+    '</div></div>':'';
+}
+async function uBulk(action){
+  const ids=[..._USEL]; if(!ids.length)return;
+  const users=(window._UALL||[]);
+  let amount=0,tier='green',msg='';
+  if(action.startsWith('wallet')){amount=Number(prompt('مبلغِ '+(action==='wallet_add'?'افزودن':'کسر')+' به تومان:','50000'));if(!amount)return;if(action==='wallet_sub')amount=-Math.abs(amount);else amount=Math.abs(amount);}
+  if(action.startsWith('ticket')){tier=prompt('نوع بلیط (green/blue/red/bronze/silver/gold):','green')||'green';const cnt=Number(prompt('تعداد:','1'));if(!cnt)return;amount=action==='ticket_sub'?-Math.abs(cnt):Math.abs(cnt);}
+  if(action.startsWith('xp')){const x=Number(prompt('مقدارِ XP:','100'));if(!x)return;amount=action==='xp_sub'?-Math.abs(x):Math.abs(x);}
+  if(action==='notify'){msg=prompt('متنِ اعلان به کاربران:');if(!msg)return;}
+  if((action==='ban'||action==='unban')&&!confirm((action==='ban'?'بن':'آن‌بن')+' '+ids.length+' کاربر؟'))return;
+  const reason=action.startsWith('wallet')?(prompt('علتِ اصلاحِ موجودی:')||'عملیات گروهی'):'';
+  let ok=0,bad=0;
+  for(const uid of ids){try{
+    if(action.startsWith('wallet'))await api('POST','/admin/wallet/adjust',{userId:uid,amount,reason});
+    else if(action.startsWith('ticket'))await api('POST','/admin/users/'+uid+'/tickets',{tier,count:amount,mode:'add'});
+    else if(action.startsWith('xp')){const u=users.find(x=>x.id===uid)||{};await api('PATCH','/admin/users/'+uid,{xp:Math.max(0,(Number(u.xp)||0)+amount)});}
+    else if(action==='notify')await api('POST','/admin/users/'+uid+'/message',{title:'پیام از پشتیبانی',body:msg});
+    else if(action==='ban')await api('PATCH','/admin/users/'+uid+'/status',{status:'banned',reason:'عملیات گروهی'});
+    else if(action==='unban')await api('PATCH','/admin/users/'+uid+'/status',{status:'active',reason:''});
+    ok++;
+  }catch(e){bad++;}}
+  _USEL.clear();toast('انجام شد: '+fa(ok)+(bad?' · ناموفق '+fa(bad):''),bad?'bad':'ok');render();
+}
+async function userDetail(uid){
+  let ov; try{ov=await api('GET','/admin/users/'+uid+'/overview');}catch(e){return toast(e.message,'bad');}
+  let wds=[]; try{const wr=await api('GET','/admin/wallet/withdrawals?userId='+encodeURIComponent(uid)+'&pageSize=20');wds=wr.rows||[];}catch(e){}
+  const u=ov.user||{}, bal=ov.balances||{};
+  // Latest KYC captured at any withdrawal (national id / holder / card / sheba).
+  const kyc=wds.find(w=>w.nationalId||w.holderName||w.destination)||{};
+  const kycRow=(k,v)=>'<div style="display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid var(--line)"><span style="color:var(--muted);font-size:12px">'+k+'</span><b class="mono" dir="ltr" style="font-size:12px;word-break:break-all">'+esc(v||'—')+'</b></div>';
+  const wdList=wds.slice(0,8).map(w=>'<tr><td>'+fa(w.amount)+'</td><td class="mono" dir="ltr" style="font-size:11px">'+esc(wdFmtDest(w.destination))+'</td><td>'+esc(WD_STFA[w.status]||w.status)+'</td><td>'+fmtDate(w.createdAt)+'</td></tr>').join('');
+  const bankCard='<div class="card" style="margin-top:12px"><h3>اطلاعات بانکی و برداشت‌ها</h3>'+
+    (kyc.nationalId||kyc.holderName||kyc.destination||kyc.phone?
+      (kycRow('شماره موبایل',u.phone||kyc.phone)+kycRow('کد ملی',kyc.nationalId)+kycRow('نام صاحب کارت',kyc.holderName)+kycRow(String(kyc.destination||'').toUpperCase().startsWith('IR')?'شماره شبا':'شماره کارت',wdFmtDest(kyc.destination)))
+      :'<div class="note">این کاربر هنوز درخواست برداشتی ثبت نکرده است.</div>')+
+    (wdList?'<table style="margin-top:10px"><thead><tr><th>مبلغ</th><th>کارت/شبا</th><th>وضعیت</th><th>زمان</th></tr></thead><tbody>'+wdList+'</tbody></table>':'')+
+    '</div>';
+  const f=(id,label,val,type)=>'<div class="field"><label>'+label+'</label><input id="'+id+'" '+(type==='num'?'type="number"':'')+' value="'+esc(val==null?'':val)+'"></div>';
+  const tk=bal.tickets||{};
+  const txns=(ov.transactions||[]).slice(0,8).map(t=>'<tr><td>'+esc(t.type)+'</td><td>'+(t.direction==='in'?'+':'−')+fa(t.amount)+'</td><td>'+fmtDate(t.createdAt)+'</td></tr>').join('');
+  const dev=(ov.devices||[]).slice(0,5).map(d=>'<tr><td class="mono">'+esc((d.device&&d.device.id||d.id||'').slice(0,10))+'</td><td>'+esc(d.trustStatus||d.trust_status||'—')+'</td></tr>').join('');
+  modal('مدیریت کاربر: '+esc(u.username||''),
+    '<div class="grid g2">'+
+      f('ud_name','نام نمایشی',u.displayName)+f('ud_uname','نام کاربری',u.username)+
+      f('ud_xp','XP',u.xp,'num')+f('ud_level','Level',u.level,'num')+
+      f('ud_cup','کاپ هفتگی',u.weeklyScore,'num')+f('ud_coins','سکه',bal.coins,'num')+
+    '</div>'+
+    '<button class="btn pri" style="margin:4px 0 14px" onclick="saveUser(\''+uid+'\')">💾 ذخیرهٔ فیلدها</button>'+
+    '<div class="card" style="margin-bottom:12px"><h3>کیف پول و بلیط</h3>'+
+      '<div class="grid g2"><div><b style="color:var(--ok);font-size:18px">'+fa(bal.wallet)+'</b> تومان</div>'+
+      '<div style="display:flex;gap:6px"><input id="ud_adj" type="number" placeholder="± مبلغ اصلاح"><button class="btn info sm" onclick="adjUser(\''+uid+'\')">اصلاح</button></div></div>'+
+      '<div style="margin-top:10px;display:flex;gap:6px;align-items:center;flex-wrap:wrap"><span style="font-size:12px;color:var(--muted)">بلیط:</span>'+
+      '<select id="ud_tier" style="width:auto">'+['green','blue','red','bronze','silver','gold'].map(t=>'<option value="'+t+'">'+t+' ('+fa(tk[t]||0)+')</option>').join('')+'</select>'+
+      '<input id="ud_tkn" type="number" placeholder="تعداد" style="width:90px"><button class="btn sm ok" onclick="grantTicket(\''+uid+'\',\'add\')">افزودن</button><button class="btn sm" onclick="grantTicket(\''+uid+'\',\'set\')">تنظیم</button></div>'+
+    '</div>'+
+    bankCard+
+    '<div class="grid g2"><div class="card"><h3>تراکنش‌های اخیر</h3><table>'+(txns||'<tr><td class="empty">—</td></tr>')+'</table></div>'+
+      '<div class="card"><h3>دستگاه‌های ورود</h3><table>'+(dev||'<tr><td class="empty">—</td></tr>')+'</table></div></div>'+
+    '<div class="card" style="margin-top:12px"><h3>عملیات</h3>'+
+      '<div style="display:flex;gap:6px;margin-bottom:8px"><input id="ud_msg" placeholder="متن پیام به کاربر"><button class="btn info sm" onclick="msgUser(\''+uid+'\')">ارسال پیام</button></div>'+
+      '<div style="display:flex;gap:6px;flex-wrap:wrap">'+
+        (u.status==='banned'?'<button class="btn ok sm" onclick="setStatus(\''+uid+'\',\'active\')">آن‌بن</button>':'<button class="btn bad sm" onclick="setStatus(\''+uid+'\',\'banned\')">بن کاربر</button>')+
+        '<button class="btn sm" onclick="setStatus(\''+uid+'\',\'limited\')">محدود</button>'+
+        '<button class="btn sm" onclick="setRole(\''+uid+'\',\''+(u.role==='admin'?'user':'admin')+'\')">'+(u.role==='admin'?'حذف ادمین':'ادمین کردن')+'</button>'+
+        '<button class="btn bad sm" onclick="resetUser(\''+uid+'\')">ریست آمار</button>'+
+      '</div></div>');
+}
+function nv(id){const v=$('#'+id).value;return v===''?undefined:Number(v);}
+async function saveUser(uid){try{await api('PATCH','/admin/users/'+uid,{displayName:$('#ud_name').value,username:$('#ud_uname').value,xp:nv('ud_xp'),level:nv('ud_level'),weeklyScore:nv('ud_cup'),coins:nv('ud_coins')});toast('ذخیره شد','ok');document.querySelector('.modal-bg').remove();render();}catch(e){toast(e.message,'bad');}}
+async function adjUser(uid){const a=nv('ud_adj');if(a==null)return;const reason=prompt('علت اصلاح موجودی:')||'اصلاح ادمین';try{await api('POST','/admin/wallet/adjust',{userId:uid,amount:a,reason});toast('کیف پول اصلاح شد','ok');userDetailReopen(uid);}catch(e){toast(e.message,'bad');}}
+async function grantTicket(uid,mode){const tier=$('#ud_tier').value,count=Number($('#ud_tkn').value||0);try{await api('POST','/admin/users/'+uid+'/tickets',{tier,count,mode});toast('بلیط بروزرسانی شد','ok');userDetailReopen(uid);}catch(e){toast(e.message,'bad');}}
+async function msgUser(uid){const body=$('#ud_msg').value.trim();if(!body)return;try{await api('POST','/admin/users/'+uid+'/message',{title:'پیام پشتیبانی',body});toast('پیام ارسال شد','ok');}catch(e){toast(e.message,'bad');}}
+async function setStatus(uid,status){const reason=status!=='active'?(prompt('علت:')||''):'';try{await api('PATCH','/admin/users/'+uid+'/status',{status,reason});toast('وضعیت تغییر کرد','ok');userDetailReopen(uid);}catch(e){toast(e.message,'bad');}}
+async function setRole(uid,role){try{await api('PATCH','/admin/users/'+uid+'/role',{role});toast('نقش تغییر کرد','ok');userDetailReopen(uid);}catch(e){toast(e.message,'bad');}}
+async function resetUser(uid){if(!confirm('آمار (XP/Level/Cup) این کاربر صفر شود؟'))return;try{await api('POST','/admin/users/'+uid+'/reset');toast('ریست شد','ok');userDetailReopen(uid);}catch(e){toast(e.message,'bad');}}
+function userDetailReopen(uid){document.querySelectorAll('.modal-bg').forEach(m=>m.remove());userDetail(uid);}
+
+/* ================= MATCHES (running vs finished — always DB-true) ================= */
+let M_TAB='live';
+async function renderMatches(){
+  const tabs='<div class="subtabs"><button class="'+(M_TAB==='live'?'active':'')+'" onclick="M_TAB=\'live\';render()">🟢 در حال اجرا</button><button class="'+(M_TAB==='done'?'active':'')+'" onclick="M_TAB=\'done\';render()">🏁 پایان‌یافته (تاریخچه)</button></div>';
+  if(M_TAB==='done'){
+    const d=await api('GET','/admin/matches/history?limit=80').catch(()=>({rows:[]}));
+    $('#main').innerHTML=head('مدیریت مسابقات','مسابقاتِ پایان‌یافته — از دیتابیس (منبع حقیقت)')+tabs+
+      '<div class="note">به‌محضِ پایان، مسابقه از فهرستِ «در حال اجرا» خارج و اینجا ثبت می‌شود؛ وضعیت همیشه برابرِ وضعیتِ واقعیِ دیتابیس است. جایزهٔ برنده هم‌زمان در کیف پول، تراکنش، لیدربرد و گزارشِ مالی ثبت شده است.</div>'+
+      tbl(['شناسه','مود','وضعیت','اقتصاد','برنده','نتیجه','زمان'],(d.rows||[]).map(m=>{
+        const win=(m.players||[]).find(p=>p.userId===m.winnerUserId);
+        return ['<span class="mono">'+String(m.id).slice(0,8)+'</span>',m.modeId||'—','<span class="pill ok">'+esc(m.phase||'finished')+'</span>',m.economyType||'free',
+          win?('🏆 '+esc(win.username||String(win.userId).slice(0,8))):'—',
+          (m.players||[]).map(p=>esc(p.username||'')+' '+fa(p.score)).join(' — '),fmtDate(m.updatedAt)];
+      }));
+    return;
+  }
+  const d=await api('GET','/admin/matches').catch(()=>({rows:[]}));
+  $('#main').innerHTML=head('مدیریت مسابقات','اتاق‌های زنده — فقط مسابقاتِ در حالِ اجرا')+tabs+
+    tbl(['شناسه','مود','فاز','راند','اقتصاد','بازیکنان','عملیات'],(d.rows||[]).map(m=>[
+      '<span class="mono">'+String(m.id).slice(0,8)+'</span>',m.modeId,'<span class="pill info">'+m.phase+'</span>',fa(m.round),m.economyType||'free',
+      (m.players||[]).map(p=>esc(p.username||'')+' '+fa(p.score)).join(' vs '),
+      '<button class="btn sm bad" onclick="forceEnd(\''+m.id+'\','+JSON.stringify(JSON.stringify((m.players||[]).map(p=>({id:p.userId,n:p.username})))).replace(/"/g,'&quot;')+')">پایان اجباری</button>'
+    ]));
+}
+function forceEnd(mid,playersJson){
+  let players=[];try{players=JSON.parse(playersJson);}catch(e){}
+  const opts=players.map(p=>'<option value="'+p.id+'">'+esc(p.n||p.id)+'</option>').join('');
+  const bg=modal('پایان اجباری مسابقه','<div class="field"><label>برنده (خالی = بر اساس امتیاز فعلی)</label><select id="fe_win"><option value="">— بر اساس امتیاز —</option>'+opts+'</select></div><button class="btn bad" onclick="doForceEnd(\''+mid+'\')">پایان و تسویه</button>');
+}
+async function doForceEnd(mid){const w=$('#fe_win').value;try{await api('POST','/admin/matches/'+mid+'/force-end',{winnerUserId:w||undefined});toast('مسابقه پایان یافت','ok');document.querySelector('.modal-bg').remove();render();}catch(e){toast(e.message,'bad');}}
+
+/* ================= SUPPORT ================= */
+let SUP_ST='open';
+async function renderSupport(){
+  const d=await api('GET','/admin/support/tickets?status='+SUP_ST+'&limit=100').catch(()=>({}));
+  const list=d.rows||d||[];
+  const tabs=['open','answered','escalated','closed'].map(s=>'<button class="'+(SUP_ST===s?'active':'')+'" onclick="SUP_ST=\''+s+'\';render()">'+({open:'باز',answered:'پاسخ‌داده',escalated:'ارجاع‌شده',closed:'بسته'}[s])+'</button>').join('');
+  $('#main').innerHTML=head('پشتیبانی','تیکت‌های کاربران — پاسخ و مدیریت')+'<div class="subtabs">'+tabs+'</div>'+
+    tbl(['شناسه','کاربر','عنوان','دسته','وضعیت','زمان','عملیات'],(Array.isArray(list)?list:[]).map(t=>[
+      '<span class="mono">'+String(t.id).slice(0,8)+'</span>',String(t.userId||'').slice(0,8),esc(t.title||t.subject||''),esc(t.category||'—'),
+      '<span class="pill '+(t.status==='resolved'||t.status==='closed'?'ok':'pend')+'">'+esc(t.status)+'</span>',fmtDate(t.createdAt),
+      '<button class="btn sm info" onclick="supDetail(\''+t.id+'\')">باز کردن</button>'
+    ]));
+}
+async function supDetail(id){
+  let t;try{t=await api('GET','/admin/support/tickets/'+id);}catch(e){return toast(e.message,'bad');}
+  const msgs=(t.messages||t.replies||[]).map(m=>'<div style="padding:8px;border-bottom:1px solid var(--line)"><b style="font-size:11px;color:var(--muted)">'+esc(m.author||m.from||'—')+' · '+fmtDate(m.createdAt)+'</b><div>'+esc(m.body||m.text||'')+'</div></div>').join('');
+  modal('تیکت: '+esc(t.title||t.subject||''),
+    '<div class="card" style="margin-bottom:10px"><div style="color:var(--muted);font-size:12px">کاربر: '+String(t.userId||'').slice(0,10)+' · وضعیت: '+esc(t.status)+'</div><p>'+esc(t.body||t.description||'')+'</p></div>'+
+    (msgs?'<div class="card" style="margin-bottom:10px">'+msgs+'</div>':'')+
+    '<div class="field"><label>پاسخ</label><textarea id="sup_reply" rows="3"></textarea></div>'+
+    '<div style="display:flex;gap:6px"><button class="btn pri" onclick="supReply(\''+id+'\')">ارسال پاسخ</button>'+
+    '<button class="btn ok sm" onclick="supStatus(\''+id+'\',\'answered\')">پاسخ‌داده‌شد</button>'+
+    '<button class="btn info sm" onclick="supStatus(\''+id+'\',\'escalated\')">ارجاع</button>'+
+    '<button class="btn sm" onclick="supStatus(\''+id+'\',\'closed\')">بستن</button></div>');
+}
+async function supReply(id){const body=$('#sup_reply').value.trim();if(!body)return;try{await api('POST','/admin/support/tickets/'+id+'/reply',{body,message:body});toast('پاسخ ارسال شد','ok');document.querySelector('.modal-bg').remove();render();}catch(e){toast(e.message,'bad');}}
+async function supStatus(id,status){try{await api('PATCH','/admin/support/tickets/'+id+'/status',{status});toast('وضعیت تغییر کرد','ok');document.querySelector('.modal-bg').remove();render();}catch(e){toast(e.message,'bad');}}
+
+/* ================= QUESTIONS ================= */
+let Q_ST='';
+let Q_CAT='', Q_SEARCH='';
+async function renderQuestions(){
+  const all=await api('GET','/admin/questions').catch(()=>[]);
+  const list=(Array.isArray(all)?all:(all.rows||[]));
+  // category tabs derived from the real question bank
+  const catCount={}; list.forEach(q=>{const c=q.category||'عمومی';catCount[c]=(catCount[c]||0)+1;});
+  window._QCATCOUNT=catCount;
+  const cats=Object.keys(catCount).sort((a,b)=>catCount[b]-catCount[a]);
+  const s=(Q_SEARCH||'').trim().toLowerCase();
+  let filtered=list.filter(q=>(!Q_CAT||q.category===Q_CAT)&&(!Q_ST||q.status===Q_ST)&&(!s||String(q.text||'').toLowerCase().includes(s)));
+  const catTabs='<div class="subtabs"><button class="'+(Q_CAT===''?'active':'')+'" onclick="Q_CAT=\'\';render()">همه ('+fa(list.length)+')</button>'+
+    cats.map(c=>'<button class="'+(Q_CAT===c?'active':'')+'" onclick="Q_CAT='+JSON.stringify(c).replace(/"/g,'&quot;')+';render()">'+esc(c)+' ('+fa(catCount[c])+')</button>').join('')+'</div>';
+  $('#main').innerHTML=head('مدیریت سوالات',fa(filtered.length)+' سوال'+(Q_CAT?' در «'+esc(Q_CAT)+'»':''),
+    '<button class="btn pri" onclick="qAdd()">➕ افزودن</button> <button class="btn ok" onclick="qAdd(\'انتخاب موضوع\')">🎯 سؤال تعیین موضوع</button> <button class="btn info" onclick="qImport()">📥 ورود انبوه</button> <button class="btn" onclick="qSampleJson()">📄 نمونه JSON</button> <button class="btn" onclick="qExport()">CSV</button>')+
+    catTabs+
+    '<div class="toolbar"><input id="qsearch" placeholder="جستجوی متن سوال..." value="'+esc(Q_SEARCH)+'" onkeydown="if(event.key===\'Enter\'){Q_SEARCH=this.value;render();}"><button class="btn" onclick="Q_SEARCH=$(\'#qsearch\').value;render()">جستجو</button>'+
+    '<div class="subtabs" style="margin:0">'+['','approved','pending','archived'].map(st=>'<button class="'+(Q_ST===st?'active':'')+'" onclick="Q_ST=\''+st+'\';render()">'+(st===''?'همه وضعیت‌ها':{approved:'تأییدشده',pending:'در انتظار',archived:'بایگانی'}[st])+'</button>').join('')+'</div></div>'+
+    '<div id="qbulk"></div>'+
+    '<div class="tbl-wrap"><table><thead><tr>'+
+      '<th style="width:34px"><input type="checkbox" id="qselall" onclick="qSelAll(this.checked)"></th>'+
+      ['متن','دسته','سختی','پاسخ درست','استفاده','٪ صحیح','وضعیت','عملیات'].map(c=>'<th>'+c+'</th>').join('')+'</tr></thead><tbody>'+
+      (filtered.length?filtered.slice(0,300).map(q=>'<tr>'+
+        '<td><input type="checkbox" class="qsel" value="'+q.id+'" '+(_QSEL.has(q.id)?'checked':'')+' onclick="qSelOne(\''+q.id+'\',this.checked)"></td>'+
+        '<td>'+esc(String(q.text||'').slice(0,55))+'</td><td>'+esc(q.category||'—')+'</td>'+
+        '<td>'+esc(({easy:'آسان',medium:'متوسط',hard:'سخت'})[q.difficulty]||q.difficulty||'—')+'</td>'+
+        '<td>'+esc(String((q.options||[])[q.correctIndex]||('#'+((q.correctIndex||0)+1))).slice(0,22))+'</td>'+
+        '<td>'+fa(q.usageCount||q.timesUsed||0)+'</td><td>'+(q.correctRate!=null?fa(Math.round(q.correctRate))+'٪':'—')+'</td>'+
+        '<td><span class="pill '+(q.status==='approved'?'ok':q.status==='archived'||q.status==='rejected'?'bad':'pend')+'">'+esc(q.status)+'</span></td>'+
+        '<td>'+(q.status!=='approved'?'<button class="btn sm ok" onclick="qStatus(\''+q.id+'\',\'approved\')">تأیید</button> ':'')+'<button class="btn sm" onclick="qEdit(\''+q.id+'\')">ویرایش</button> <button class="btn sm bad" onclick="qDelete(\''+q.id+'\')">حذف</button></td>'+
+      '</tr>').join(''):'<tr><td colspan="9" class="empty">سوالی نیست</td></tr>')+
+    '</tbody></table></div>';
+  window._QALL=list; window._QFILT=filtered.slice(0,300).map(q=>q.id);
+  qBulkBar();
+  const qi=$('#qsearch'); if(qi&&Q_SEARCH){qi.focus();qi.setSelectionRange(qi.value.length,qi.value.length);}
+}
+let _QSEL=new Set();
+function qSelOne(id,on){ if(on)_QSEL.add(id); else _QSEL.delete(id); qBulkBar(); }
+function qSelAll(on){ (window._QFILT||[]).forEach(id=>on?_QSEL.add(id):_QSEL.delete(id)); document.querySelectorAll('.qsel').forEach(c=>c.checked=on); qBulkBar(); }
+function qBulkBar(){
+  const el=$('#qbulk'); if(!el)return; const n=_QSEL.size;
+  el.innerHTML=n?'<div class="toolbar" style="background:var(--panel2);padding:10px;border-radius:10px;border:1.5px solid var(--gold)"><b>'+fa(n)+' سوال انتخاب شد</b>'+
+    '<button class="btn sm ok" onclick="qBulk(\'approve\')">✅ تأیید همه</button>'+
+    '<button class="btn sm" onclick="qBulk(\'archive\')">📦 بایگانی همه</button>'+
+    '<button class="btn sm bad" onclick="qBulk(\'delete\')">🗑 حذف همه</button>'+
+    '<button class="btn sm" onclick="_QSEL.clear();render()">لغو انتخاب</button></div>':'';
+}
+async function qBulk(action){
+  const ids=[..._QSEL]; if(!ids.length)return;
+  const label={approve:'تأیید',archive:'بایگانی',delete:'حذف'}[action];
+  if(!confirm(label+' '+ids.length+' سوالِ انتخاب‌شده؟'+(action==='delete'?' (برگشت‌ناپذیر)':'')))return;
+  let ok=0,bad=0;
+  for(const id of ids){try{
+    if(action==='delete')await api('DELETE','/admin/questions/'+id);
+    else await api('PATCH','/admin/questions/'+id+'/status',{status:action==='approve'?'approved':'archived'});
+    ok++;
+  }catch(e){bad++;}}
+  _QSEL.clear();
+  toast(label+' شد: '+fa(ok)+(bad?' · ناموفق '+fa(bad):''),bad?'bad':'ok');
+  render();
+}
+async function qDelete(id){
+  if(!confirm('این سوال برای همیشه حذف شود؟'))return;
+  try{await api('DELETE','/admin/questions/'+id);toast('سوال حذف شد','ok');render();}catch(e){toast(e.message,'bad');}
+}
+function qEdit(id){
+  const q=(window._QALL||[]).find(x=>x.id===id); if(!q)return;
+  const opts=(q.options||['','','','']);
+  modal('ویرایش سوال','<div class="field"><label>متن سوال</label><input id="qe_text" value="'+esc(q.text)+'"></div>'+
+    '<div class="grid g2">'+opts.map((o,j)=>'<div class="field"><label>گزینه '+fa(j+1)+(j===q.correctIndex?' ✅':'')+'</label><input id="qe_o'+j+'" value="'+esc(o)+'"></div>').join('')+'</div>'+
+    '<div class="grid g3"><div class="field"><label>ایندکس پاسخ درست</label><input id="qe_ci" type="number" value="'+(q.correctIndex||0)+'"></div>'+
+    '<div class="field"><label>دسته</label><input id="qe_cat" value="'+esc(q.category||'')+'"></div>'+
+    '<div class="field"><label>سختی</label><select id="qe_diff"><option value="easy"'+(q.difficulty==='easy'?' selected':'')+'>آسان</option><option value="medium"'+(q.difficulty==='medium'?' selected':'')+'>متوسط</option><option value="hard"'+(q.difficulty==='hard'?' selected':'')+'>سخت</option></select></div></div>'+
+    '<button class="btn pri" onclick="qSaveEdit(\''+id+'\')">💾 ذخیره</button>');
+}
+async function qSaveEdit(id){
+  const opts=[0,1,2,3].map(j=>($('#qe_o'+j)||{}).value).filter(v=>v!=null&&v.trim()!=='');
+  try{await api('POST','/admin/questions',{id,text:$('#qe_text').value.trim(),options:opts,correctIndex:Number($('#qe_ci').value||0),category:$('#qe_cat').value.trim(),difficulty:$('#qe_diff').value,status:'approved'});toast('ذخیره شد','ok');document.querySelector('.modal-bg').remove();render();}catch(e){toast(e.message,'bad');}
+}
+function qSampleJson(){
+  const sample=[
+    {text:"پایتخت ایران کدام شهر است؟",options:["تهران","اصفهان","شیراز","مشهد"],correctIndex:0,category:Q_CAT||"جغرافیا",difficulty:"easy"},
+    {text:"بزرگ‌ترین سیارهٔ منظومهٔ شمسی؟",options:["زمین","مشتری","زحل","مریخ"],correctIndex:1,category:Q_CAT||"علوم",difficulty:"medium"}
+  ];
+  const blob=new Blob([JSON.stringify(sample,null,2)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='prizze-questions-sample.json';a.click();
+  toast('نمونه دانلود شد — با همین ساختار سوال بساز','ok');
+}
+function qAdd(presetCat){
+  const cat=presetCat||Q_CAT||'عمومی';
+  const isToss=cat==='انتخاب موضوع';
+  const cats=Object.keys((window._QCATCOUNT||{})).concat(['انتخاب موضوع']).filter((v,i,a)=>a.indexOf(v)===i);
+  modal(isToss?'افزودن سؤال تعیین موضوع':'افزودن سوال',
+    (isToss?'<div class="note">این سؤال در مرحلهٔ «تعیین موضوع» (سرعتی) به بازیکنان نشان داده می‌شود، نه به‌عنوان سؤال عادی بازی. دستهٔ آن باید «انتخاب موضوع» بماند.</div>':'')+
+    '<div class="field"><label>متن سوال</label><input id="q_text"></div>'+
+    '<div class="field"><label>گزینه‌ها (با ویرگول جدا کن — ۴ تا)</label><input id="q_opts" placeholder="گزینه۱, گزینه۲, گزینه۳, گزینه۴"></div>'+
+    '<div class="grid g3"><div class="field"><label>ایندکس پاسخ درست (۰ تا ۳)</label><input id="q_ci" type="number" value="0"></div>'+
+    '<div class="field"><label>دسته</label><input id="q_cat" value="'+esc(cat)+'" list="q_cat_list"><datalist id="q_cat_list">'+cats.map(c=>'<option value="'+esc(c)+'">').join('')+'</datalist></div>'+
+    '<div class="field"><label>سختی</label><select id="q_diff"><option value="easy">آسان</option><option value="medium">متوسط</option><option value="hard">سخت</option></select></div></div>'+
+    '<div class="field"><label>توضیح جواب (اختیاری)</label><input id="q_exp"></div>'+
+    '<button class="btn pri" onclick="qSave()">ذخیره</button>');
+}
+async function qSave(){
+  const opts=($('#q_opts').value||'').split(',').map(s=>s.trim()).filter(Boolean);
+  if(!$('#q_text').value.trim()||opts.length<2)return toast('متن و حداقل ۲ گزینه لازم است','bad');
+  try{await api('POST','/admin/questions',{text:$('#q_text').value.trim(),options:opts,correctIndex:Number($('#q_ci').value||0),category:$('#q_cat').value.trim(),difficulty:$('#q_diff').value,explanation:$('#q_exp').value.trim(),status:'active'});toast('سوال اضافه شد','ok');document.querySelector('.modal-bg').remove();render();}catch(e){toast(e.message,'bad');}
+}
+function qImport(){
+  modal('ورود انبوه سوال (JSON)','<div class="note">آرایه‌ای از سوالات بگذار — تعداد نامحدود با یک کلیک. سوالات <b>واقعاً</b> در دیتابیس ذخیره می‌شوند و نتیجهٔ دقیق (ذخیره‌شده / تکراری / ردشده + دلیلِ هر خطا) نمایش داده می‌شود. تکراری‌ها و ناقص‌ها خودکار رد می‌شوند؛ فیلد id لازم نیست.<br><span class="mono" style="direction:ltr;display:block;margin-top:6px;font-size:11px">[{"text":"...","options":["الف","ب","پ","ت"],"correctIndex":0,"category":"'+esc(Q_CAT||'عمومی')+'","difficulty":"easy"}]</span><button class="btn sm" style="margin-top:8px" onclick="qSampleJson()">📄 دانلود نمونه</button></div>'+
+    '<textarea class="json" id="q_json" placeholder="[ ... ]"></textarea><button class="btn pri" id="q_import_btn" style="margin-top:10px" onclick="qDoImport()">وارد کردن</button>');
+}
+async function qDoImport(){
+  let arr;try{arr=JSON.parse($('#q_json').value);}catch(e){return toast('JSON نامعتبر: '+e.message,'bad');}
+  if(!Array.isArray(arr))return toast('باید یک آرایه باشد','bad');
+  const btn=$('#q_import_btn'); if(btn){btn.disabled=true;btn.textContent='در حال ذخیره...';}
+  try{
+    const r=await api('POST','/admin/questions/import',{questions:arr});
+    // HONEST result — only what actually persisted in the DB.
+    const errHtml=(r.errors&&r.errors.length)?'<div class="card" style="margin-top:10px;max-height:180px;overflow:auto"><h3>خطاها</h3>'+r.errors.map(e=>'<div style="font-size:12px;color:var(--bad)">سوال #'+fa(e.index)+': '+esc(e.reason)+'</div>').join('')+'</div>':'';
+    modal('نتیجهٔ ورود',
+      '<div class="grid g3">'+stat('ذخیره شد','ok',fa(r.imported||0))+stat('تکراری','pend',fa(r.duplicates||0))+stat('ردشده','bad',fa(r.skipped||0))+'</div>'+
+      '<div class="note" style="margin-top:10px">از مجموع '+fa(r.total||arr.length)+' سوال، <b>'+fa(r.imported||0)+'</b> واقعاً در دیتابیس ذخیره شد.</div>'+errHtml+
+      '<button class="btn pri" style="margin-top:10px" onclick="this.closest(\'.modal-bg\').remove();document.querySelectorAll(\'.modal-bg\').forEach(m=>m.remove());render()">باشه</button>');
+    toast((r.imported||0)+' سوال ذخیره شد',(r.imported>0?'ok':'bad'));
+  }catch(e){toast('خطا: '+e.message,'bad'); if(btn){btn.disabled=false;btn.textContent='وارد کردن';}}
+}
+function qExport(){window.open(API+'/admin/questions/export','_blank');toast('اگر دانلود نشد، هدر x-admin-key لازم است — از CSV داخل شبکه استفاده کن');}
+async function qStatus(id,status){try{await api('PATCH','/admin/questions/'+id+'/status',{status});toast('وضعیت تغییر کرد','ok');render();}catch(e){toast(e.message,'bad');}}
+
+/* ================= AI QUESTION STUDIO ================= */
+let AI_DRAFTS=[];
+async function renderAiStudio(){
+  const qp=(CFG.questionPipeline)||{};
+  const aiOn=qp.aiEnabled;
+  $('#main').innerHTML=head('استودیوی سوال (AI)','تولید ← بازبینی ← راستی‌آزمایی ← تشخیص تکرار ← امتیاز کیفیت',
+    '<button class="btn" onclick="go(\'pipeline\')">صف کیفیت</button>')+
+    '<div class="note">معماری: <b>Generator → Reviewer → Fact-Checker → Duplicate → Quality → Database</b>. مدل‌ها و آستانه‌ها از «ویرایش خام Config» کلید <span class="mono">questionPipeline</span> تنظیم می‌شوند. AI فقط وقتی متغیرِ محیطیِ <span class="mono">ANTHROPIC_API_KEY</span> روی سرور تنظیم باشد فعال می‌شود؛ در غیر این صورت مراحلِ AI رد می‌شوند و سوال را دستی می‌سازی — ولی تشخیصِ تکرار و امتیازِ کیفیت همیشه کار می‌کنند.</div>'+
+    '<div class="card" style="margin-bottom:13px"><h3>۱) تولید سوال '+(aiOn?'<span class="pill ok">AI فعال</span>':'<span class="pill pend">AI غیرفعال — دستی</span>')+'</h3>'+
+      '<div class="grid g3"><div class="field"><label>موضوع</label><input id="ai_topic" placeholder="مثلاً فوتبال"></div>'+
+      '<div class="field"><label>سختی</label><select id="ai_diff"><option value="easy">آسان</option><option value="medium" selected>متوسط</option><option value="hard">سخت</option></select></div>'+
+      '<div class="field"><label>تعداد</label><input id="ai_count" type="number" value="3"></div></div>'+
+      '<button class="btn pri" onclick="aiGen()">🤖 تولید با AI</button> <button class="btn" onclick="aiManual()">✍️ ساخت دستی</button></div>'+
+    '<div id="ai_out"></div>';
+}
+async function aiGen(){
+  const out=$('#ai_out'); out.innerHTML='<div class="skel"></div>';
+  try{
+    const r=await api('POST','/admin/questions/ai/generate',{topic:$('#ai_topic').value.trim(),difficulty:$('#ai_diff').value,count:Number($('#ai_count').value||1)});
+    if(!r.configured){ out.innerHTML='<div class="note">🔌 AI پیکربندی نشده (ANTHROPIC_API_KEY تنظیم نیست). فعلاً «ساخت دستی» را بزن یا کلید را روی سرور ست کن.</div>'; return; }
+    AI_DRAFTS=r.drafts||[];
+    if(!AI_DRAFTS.length){ out.innerHTML='<div class="empty">مدل چیزی تولید نکرد'+(r.error?': '+esc(r.error):'')+'</div>'; return; }
+    out.innerHTML=AI_DRAFTS.map((d,i)=>draftCard(d,i)).join('');
+  }catch(e){ out.innerHTML='<div class="empty">'+esc(e.message)+'</div>'; }
+}
+function aiManual(){ AI_DRAFTS=[{topic:$('#ai_topic').value.trim(),difficulty:$('#ai_diff').value,question:'',options:['','','',''],correctAnswer:0,explanation:''}]; $('#ai_out').innerHTML=draftCard(AI_DRAFTS[0],0,true); }
+function draftCard(d,i,edit){
+  return '<div class="card" style="margin-bottom:11px"><h3>سوال '+fa(i+1)+' <span class="pill info">'+esc(d.difficulty||'')+'</span></h3>'+
+    '<div class="field"><label>متن سوال</label><input id="d_q_'+i+'" value="'+esc(d.question)+'"></div>'+
+    '<div class="grid g2">'+d.options.map((o,j)=>'<div class="field"><label>گزینه '+fa(j+1)+(j===d.correctAnswer?' ✅':'')+'</label><input id="d_o_'+i+'_'+j+'" value="'+esc(o)+'"></div>').join('')+'</div>'+
+    '<div class="grid g3"><div class="field"><label>ایندکس پاسخ درست</label><input id="d_ci_'+i+'" type="number" value="'+(d.correctAnswer||0)+'"></div>'+
+    '<div class="field"><label>موضوع</label><input id="d_cat_'+i+'" value="'+esc(d.topic||'')+'"></div>'+
+    '<div class="field"><label>سختی</label><input id="d_diff_'+i+'" value="'+esc(d.difficulty||'medium')+'"></div></div>'+
+    '<div class="field"><label>توضیح جواب</label><input id="d_exp_'+i+'" value="'+esc(d.explanation||'')+'"></div>'+
+    '<button class="btn pri" onclick="saveDraft('+i+')">💾 ذخیره + اجرای خط‌لوله</button></div>';
+}
+async function saveDraft(i){
+  const opts=[0,1,2,3].map(j=>($('#d_o_'+i+'_'+j)||{}).value||'').filter(x=>x!=='');
+  const q={text:$('#d_q_'+i).value.trim(),options:[0,1,2,3].map(j=>$('#d_o_'+i+'_'+j).value.trim()),correctIndex:Number($('#d_ci_'+i).value||0),category:$('#d_cat_'+i).value.trim(),difficulty:$('#d_diff_'+i).value.trim(),explanation:$('#d_exp_'+i).value.trim(),source:AI_DRAFTS[i]&&AI_DRAFTS[i].question?'ai':'manual'};
+  if(!q.text||q.options.filter(Boolean).length<2)return toast('متن و حداقل ۲ گزینه لازم است','bad');
+  try{
+    const saved=await api('POST','/admin/questions/draft',q);
+    const m=await api('POST','/admin/questions/'+saved.id+'/pipeline',{autoApprove:false});
+    modal('نتیجهٔ خط‌لولهٔ کیفیت',pipelineResultHtml(saved.id,m));
+    toast('ذخیره و ارزیابی شد','ok');
+  }catch(e){toast(e.message,'bad');}
+}
+function pipelineResultHtml(qid,m){
+  const q=m.quality||{}; const fc=m.factCheck||{}; const dup=m.duplicate||{};
+  const bar=(l,v)=>'<div class="cfg-row"><label>'+l+'</label><b style="color:'+(v>=80?'var(--ok)':v>=50?'var(--gold)':'var(--bad)')+'">'+fa(v||0)+'</b></div>';
+  return '<div class="card">'+
+    bar('امتیاز کیفیت کل',q.total)+bar('دقت (Accuracy)',q.accuracy)+bar('وضوح (Clarity)',q.clarity)+bar('نگارش (Grammar)',q.grammar)+bar('اصالت (Originality)',q.originality)+
+    '<div class="cfg-row"><label>تکراری؟</label><b style="color:'+(dup.isDuplicate?'var(--bad)':'var(--ok)')+'">'+(dup.isDuplicate?'بله ('+fa(dup.maxSimilarity)+'٪ شباهت)':'نه ('+fa(dup.maxSimilarity||0)+'٪)')+'</b></div>'+
+    '<div class="cfg-row"><label>راستی‌آزمایی</label><b>'+(fc.configured===false?'AI غیرفعال':(fc.verified===false?'❌ مشکوک':fc.verified===true?'✅ تأیید ('+fa(fc.confidence||0)+'٪)':'—'))+'</b></div>'+
+    '</div><div style="display:flex;gap:6px;margin-top:10px"><button class="btn ok" onclick="pipeApprove(\''+qid+'\')">✅ تأیید و ورود به بازی</button><button class="btn bad" onclick="pipeReject(\''+qid+'\')">رد</button></div>';
+}
+async function pipeApprove(qid){try{await api('POST','/admin/questions/'+qid+'/approve');toast('سوال تأیید و فعال شد','ok');document.querySelector('.modal-bg').remove();}catch(e){toast(e.message,'bad');}}
+async function pipeReject(qid){try{await api('POST','/admin/questions/'+qid+'/reject');toast('رد شد','ok');document.querySelector('.modal-bg').remove();}catch(e){toast(e.message,'bad');}}
+
+/* ================= PIPELINE QUEUE ================= */
+let PL_ST='';
+async function renderPipeline(){
+  const d=await api('GET','/admin/questions/pipeline'+(PL_ST?'?stage='+PL_ST:'')).catch(()=>({rows:[]}));
+  const stages={'':'همه',draft:'پیش‌نویس',reviewed:'بازبینی‌شده',fact_checked:'راستی‌آزمایی',dedup_checked:'ضدتکرار',scored:'امتیازخورده',approved:'تأییدشده',rejected:'ردشده',retired:'خارج‌شده'};
+  $('#main').innerHTML=head('خط‌لولهٔ کیفیت سوالات','وضعیت، امتیاز، بازخورد کاربران و خروجِ خودکار')+
+    '<div class="subtabs">'+Object.keys(stages).map(s=>'<button class="'+(PL_ST===s?'active':'')+'" onclick="PL_ST=\''+s+'\';render()">'+stages[s]+'</button>').join('')+'</div>'+
+    tbl(['سوال','منبع','مرحله','کیفیت','گزارش','بازخورد','عملیات'],(d.rows||[]).map(m=>[
+      esc(String((m.question&&m.question.text)||'—').slice(0,45)),
+      '<span class="pill '+(m.source==='ai'?'info':'')+'">'+(m.source==='ai'?'AI':'دستی')+'</span>',
+      '<span class="pill '+(m.stage==='approved'?'ok':m.stage==='retired'||m.stage==='rejected'?'bad':'pend')+'">'+(stages[m.stage]||m.stage)+'</span>',
+      '<b style="color:'+(m.qualityScore>=80?'var(--ok)':'var(--gold)')+'">'+fa(m.qualityScore)+'</b>',
+      fa(m.reportCount||0),
+      fbSummary(m.feedback),
+      '<button class="btn sm" onclick="rerunPipe(\''+m.questionId+'\')">اجرا مجدد</button> <button class="btn sm ok" onclick="pipeApprove(\''+m.questionId+'\')">تأیید</button>'
+    ]));
+}
+function fbSummary(f){if(!f)return '—';const p=[];if(f.tooHard)p.push('سخت'+fa(f.tooHard));if(f.tooEasy)p.push('آسان'+fa(f.tooEasy));if(f.wrongAnswer)p.push('غلط'+fa(f.wrongAnswer));if(f.report)p.push('گزارش'+fa(f.report));return p.join(' · ')||'—';}
+async function rerunPipe(qid){try{const m=await api('POST','/admin/questions/'+qid+'/pipeline',{});toast('خط‌لوله اجرا شد — کیفیت '+fa(m.qualityScore),'ok');render();}catch(e){toast(e.message,'bad');}}
+
+/* ================= CATEGORIES ================= */
+let _CATS=null;
+async function renderCategories(){
+  if(!CFG)await loadCfg();
+  _CATS=JSON.parse(JSON.stringify(Array.isArray(CFG.categories)?CFG.categories:[]));
+  // Count from the FULL question bank (all statuses), same source as the
+  // questions section, so the per-topic counts match what you see there.
+  const allQ=await api('GET','/admin/questions').catch(()=>[]);
+  const qlist=Array.isArray(allQ)?allQ:(allQ.rows||[]);
+  const cmap={}; qlist.forEach(q=>{const c=(q.category||'').trim(); if(c) cmap[c]=(cmap[c]||0)+1;});
+  _CATS.sort((a,b)=>(Number(a.order)||99)-(Number(b.order)||99));
+  const rows=_CATS.map((c,i)=>
+    '<div class="cfg-row" style="grid-template-columns:44px 1fr 90px 90px 120px;align-items:center">'+
+      '<input id="cat_ic_'+i+'" value="'+esc(c.icon||'')+'" style="text-align:center;font-size:18px" title="آیکون">'+
+      '<input id="cat_nm_'+i+'" value="'+esc(c.name||'')+'" title="نام موضوع">'+
+      '<input id="cat_or_'+i+'" type="number" value="'+(c.order||i+1)+'" title="ترتیب">'+
+      '<span style="font-size:12px;color:var(--muted)">'+fa(cmap[c.name]||0)+' سوال</span>'+
+      '<label style="font-size:12px;display:flex;gap:5px;align-items:center;justify-content:flex-end"><input id="cat_en_'+i+'" type="checkbox" '+(c.enabled!==false?'checked':'')+'> فعال '+
+        '<button class="btn sm bad" onclick="catDel('+i+')">حذف</button></label>'+
+    '</div>').join('');
+  $('#main').innerHTML=head('مدیریت موضوعات',fa(_CATS.length)+' موضوع — فعال/غیرفعال، ترتیب، آیکون','<button class="btn ok" onclick="catAdd()">➕ موضوع جدید</button> <button class="btn pri" onclick="catSave()">💾 ذخیره</button>')+
+    '<div class="note">این موضوعات مستقیم روی بازی اثر می‌گذارند: فقط موضوعاتِ <b>فعال</b> در انتخابِ موضوعِ بازی نمایش داده می‌شوند (بازی از config می‌خواند). بعد از ذخیره، در بازی Ctrl+Shift+R بزن.</div>'+
+    '<div class="card">'+
+      '<div class="cfg-row" style="grid-template-columns:44px 1fr 90px 90px 120px;color:var(--muted);font-size:11px;font-weight:800"><span>آیکون</span><span>نام موضوع</span><span>ترتیب</span><span>سوالات</span><span>وضعیت</span></div>'+
+      rows+
+      '<button class="btn pri" style="margin-top:12px" onclick="catSave()">💾 ذخیرهٔ همه</button>'+
+    '</div>';
+}
+function catAdd(){ catSyncFromDom(); _CATS.push({name:'موضوع جدید',icon:'❓',enabled:true,order:_CATS.length+1}); renderCatsFromMem(); }
+function catDel(i){ catSyncFromDom(); if(!confirm('این موضوع حذف شود؟ (سوالاتش پاک نمی‌شوند)'))return; _CATS.splice(i,1); renderCatsFromMem(); }
+function catSyncFromDom(){ _CATS.forEach((c,i)=>{const ic=$('#cat_ic_'+i),nm=$('#cat_nm_'+i),or=$('#cat_or_'+i),en=$('#cat_en_'+i); if(ic)c.icon=ic.value; if(nm)c.name=nm.value.trim(); if(or)c.order=Number(or.value)||i+1; if(en)c.enabled=en.checked;}); }
+function renderCatsFromMem(){ CFG.categories=_CATS; renderCategories(); }
+async function catSave(){
+  catSyncFromDom();
+  const clean=_CATS.filter(c=>c.name).map(c=>({name:c.name,icon:c.icon||'❓',enabled:c.enabled!==false,order:Number(c.order)||99}));
+  try{await api('PATCH','/admin/config',{categories:clean});toast('موضوعات ذخیره شد ✅','ok');await loadCfg();render();}catch(e){toast(e.message,'bad');}
+}
+
+/* ================= WALLET ================= */
+let AC_Q='';
+async function renderWallet(){
+  const d=await api('GET','/admin/wallet/accounts?q='+encodeURIComponent(AC_Q));
+  $('#main').innerHTML=head('مدیریت کیف پول','موجودی کاربران، دفترکل، اصلاح دستی')+
+    '<div class="toolbar"><input id="acq" placeholder="جستجو..." value="'+esc(AC_Q)+'" onkeydown="if(event.key===\'Enter\'){AC_Q=this.value.trim();render();}"><button class="btn" onclick="AC_Q=$(\'#acq\').value.trim();render()">جستجو</button> <button class="btn info" onclick="checkConsistency()">بررسی سازگاری دفترکل</button></div>'+
+    tbl(['کاربر','قابل‌برداشت','بلوکه','عملیات'],(d.rows||[]).map(u=>[
+      esc(u.username||'')+' <span class="mono" style="color:var(--muted)">'+String(u.userId).slice(0,8)+'</span>',
+      '<b style="color:var(--ok)">'+fa(u.account.available)+'</b>',fa(u.account.locked),
+      '<button class="btn sm" onclick="viewLedger(\''+u.userId+'\')">دفترکل</button> <button class="btn sm info" onclick="userDetail(\''+u.userId+'\')">مدیریت</button>'
+    ]));
+}
+async function viewLedger(uid){const d=await api('GET','/admin/wallet/users/'+uid+'/ledger?pageSize=60');modal('دفترکل',tbl(['نوع','مبلغ','مانده بعد','زمان','توضیح'],(d.rows||[]).map(e=>[esc(e.entryType),(e.kind==='credit'||e.kind==='release'?'+':'−')+fa(e.amount),fa(e.availableAfter),fmtDate(e.createdAt),esc(e.description||'')])));}
+async function checkConsistency(){try{const r=await api('GET','/admin/wallet/consistency');toast('بررسی شد: '+fa(r.checked)+' حساب، '+fa((r.mismatches||[]).length)+' مغایرت',(r.mismatches||[]).length?'bad':'ok');}catch(e){toast(e.message,'bad');}}
+
+/* ================= WITHDRAWALS ================= */
+let WD_ST='pending', _WD_ROWS={};
+const WD_STFA={pending:'در انتظار',approved:'تأییدشده',paid:'پرداخت‌شده',rejected:'ردشده',failed:'ناموفق'};
+async function renderWithdrawals(){
+  const d=await api('GET','/admin/wallet/withdrawals?status='+WD_ST+'&pageSize=100');
+  _WD_ROWS={}; (d.rows||[]).forEach(w=>{_WD_ROWS[w.id]=w;});
+  const st=WD_STFA;
+  $('#main').innerHTML=head('مدیریت برداشت‌ها','روی هر ردیف بزن تا جزئیات کامل (کاربر، کد ملی، موبایل، شبا) را ببینی')+
+    '<div class="subtabs">'+Object.keys(st).map(s=>'<button class="'+(WD_ST===s?'active':'')+'" onclick="WD_ST=\''+s+'\';render()">'+st[s]+'</button>').join('')+'</div>'+
+    tbl(['کاربر','کد ملی','کارت/شبا مقصد','مبلغ','وضعیت','زمان','عملیات'],(d.rows||[]).map(w=>{
+      let a='<button class="btn sm" onclick="wdDetail(\''+w.id+'\')">جزئیات</button>';
+      if(w.status==='pending')a+=' <button class="btn sm ok" onclick="wdAct(\''+w.id+'\',\'approve\')">تأیید</button> <button class="btn sm bad" onclick="wdReject(\''+w.id+'\')">رد</button>';
+      else if(w.status==='approved')a+=' <button class="btn sm info" onclick="wdPaid(\''+w.id+'\')">ثبت پرداخت</button> <button class="btn sm bad" onclick="wdReject(\''+w.id+'\')">رد</button>';
+      const user='<a onclick="wdDetail(\''+w.id+'\')" style="cursor:pointer;text-decoration:none"><b>'+esc(w.displayName||w.username||'کاربر')+'</b><br><span class="mono" style="font-size:11px;color:var(--muted)">'+esc(w.phone||String(w.userId).slice(0,8))+'</span></a>';
+      return [user,'<span class="mono">'+esc(w.nationalId||'—')+'</span>','<span class="mono" dir="ltr" style="font-size:12px">'+esc(wdFmtDest(w.destination))+'</span>','<b>'+fa(w.amount)+'</b>','<span class="pill '+(w.status==='paid'||w.status==='approved'?'ok':w.status==='rejected'||w.status==='failed'?'bad':'pend')+'">'+(st[w.status]||w.status)+'</span>',fmtDate(w.createdAt),a];
+    }));
+}
+function wdFmtDest(d){
+  const s=String(d||'').trim(); if(!s)return '—';
+  const digits=s.replace(/\D/g,'');
+  if(!s.toUpperCase().startsWith('IR')&&digits.length===16) return digits.replace(/(\d{4})(?=\d)/g,'$1 ');
+  return s;
+}
+function wdDetail(id){
+  const w=_WD_ROWS[id]; if(!w){toast('یافت نشد','bad');return;}
+  const r=(k,v)=>'<div style="display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--line)"><span style="color:var(--muted)">'+k+'</span><b style="text-align:left;word-break:break-all">'+v+'</b></div>';
+  let acts='';
+  if(w.status==='pending')acts='<button class="btn ok" onclick="this.closest(\'.modal-bg\').remove();wdAct(\''+w.id+'\',\'approve\')">تأیید</button><button class="btn bad" onclick="this.closest(\'.modal-bg\').remove();wdReject(\''+w.id+'\')">رد</button>';
+  else if(w.status==='approved')acts='<button class="btn info" onclick="this.closest(\'.modal-bg\').remove();wdPaid(\''+w.id+'\')">ثبت پرداخت</button><button class="btn bad" onclick="this.closest(\'.modal-bg\').remove();wdReject(\''+w.id+'\')">رد</button>';
+  modal('جزئیات درخواست برداشت',
+    r('نام کاربر', esc(w.displayName||'—')+(w.username?' <span class="mono" style="color:var(--muted)">@'+esc(w.username)+'</span>':''))+
+    r('شماره موبایل','<span class="mono">'+esc(w.phone||'—')+'</span>')+
+    r('کد ملی','<span class="mono">'+esc(w.nationalId||'—')+'</span>')+
+    r('نام صاحب حساب (بانکی)', esc(w.holderName||'—'))+
+    r(String(w.destination||'').toUpperCase().startsWith('IR')?'شماره شبا':'شماره کارت مقصد','<span class="mono" dir="ltr">'+esc(wdFmtDest(w.destination))+'</span>')+
+    r('مبلغ درخواستی','<span style="color:var(--gold)">'+fa(w.amount)+' تومان</span>')+
+    r('کارمزد', fa(w.fee||0)+' تومان')+
+    r('موجودی فعلی کیف پول', w.walletBalance!=null?fa(w.walletBalance)+' تومان':'—')+
+    r('وضعیت','<span class="pill '+(w.status==='paid'||w.status==='approved'?'ok':w.status==='rejected'||w.status==='failed'?'bad':'pend')+'">'+(WD_STFA[w.status]||w.status)+'</span>')+
+    r('زمان ثبت', fmtDate(w.createdAt))+
+    (w.reviewedAt?r('زمان بررسی',fmtDate(w.reviewedAt)):'')+
+    (w.paidAt?r('زمان پرداخت',fmtDate(w.paidAt)):'')+
+    (w.paymentReference?r('کد پیگیری واریز','<span class="mono">'+esc(w.paymentReference)+'</span>'):'')+
+    (w.rejectReason?r('علت رد', esc(w.rejectReason)):'')+
+    r('شناسهٔ کاربر','<span class="mono" style="font-size:11px">'+esc(w.userId)+'</span>')+
+    r('شناسهٔ درخواست','<span class="mono" style="font-size:11px">'+esc(w.id)+'</span>')+
+    (acts?'<div style="display:flex;gap:9px;margin-top:16px;flex-wrap:wrap">'+acts+'</div>':''));
+}
+async function wdAct(id,a){try{await api('POST','/admin/wallet/withdrawals/'+id+'/'+a);toast('انجام شد','ok');render();}catch(e){toast(e.message,'bad');}}
+async function wdPaid(id){const ref=prompt('کد پیگیری واریز:');if(ref===null)return;try{await api('POST','/admin/wallet/withdrawals/'+id+'/paid',{paymentReference:ref});toast('پرداخت ثبت شد','ok');render();}catch(e){toast(e.message,'bad');}}
+async function wdReject(id){const reason=prompt('علت رد:');if(reason===null)return;try{await api('POST','/admin/wallet/withdrawals/'+id+'/reject',{reason});toast('رد شد','ok');render();}catch(e){toast(e.message,'bad');}}
+
+/* ================= REWARD HOLDS (جوایز پارک‌شده — آزادسازی/رد) ================= */
+let RH_ST='pending';
+async function renderRewardHolds(){
+  const [diag,holds]=await Promise.all([
+    api('GET','/admin/rewards/holds/diagnostics').catch(()=>({})),
+    api('GET','/admin/rewards/holds?status='+RH_ST+'&limit=200').catch(()=>[])
+  ]);
+  const list=Array.isArray(holds)?holds:(holds.rows||[]);
+  const st={pending:'در انتظار',approved:'تأییدشده',released:'آزادشده',rejected:'ردشده'};
+  const money=v=>fa(v)+' ت';
+  $('#main').innerHTML=head('جوایز در انتظار','جوایزی که برای بررسی امنیتی پارک شده‌اند — تأیید (واریز) یا رد',
+    '<button class="btn sm" onclick="render()">↻ بروزرسانی</button>')+
+    '<div class="note">جوایزی که پیش از رفعِ باگ (یا هنگام روشن‌بودنِ بررسیِ امنیتی) پارک شده‌اند اینجا هستند. با «تأیید و واریز»، جایزه از طریقِ ledger به کیف پولِ کاربر واریز و در تراکنش/لیدربورد ثبت می‌شود. بردهای جدید (با تنظیمِ پیش‌فرض) دیگر پارک نمی‌شوند.</div>'+
+    '<div class="grid g4" style="margin-bottom:13px">'+
+      stat('در انتظار','gold',fa(diag.pending||0))+
+      stat('مبلغ در انتظار','gold',money(diag.pendingAmount||0))+
+      stat('آزادشده','ok',fa(diag.released||0))+
+      stat('ردشده','bad',fa(diag.rejected||0))+
+    '</div>'+
+    (RH_ST==='pending'&&list.length?'<button class="btn ok" style="margin-bottom:12px" onclick="releaseAllHolds()">✅ تأیید و واریزِ همهٔ '+fa(list.length)+' جایزه</button>':'')+
+    '<div class="subtabs">'+Object.keys(st).map(s=>'<button class="'+(RH_ST===s?'active':'')+'" onclick="RH_ST=\''+s+'\';render()">'+st[s]+'</button>').join('')+'</div>'+
+    tbl(['کاربر','مسابقه','نوع','مبلغ','ریسک','دلیل','زمان','عملیات'],list.map(h=>[
+      '<span class="mono">'+String(h.userId||'').slice(0,8)+'</span>',
+      '<span class="mono">'+String(h.matchId||'').slice(0,8)+'</span>',
+      esc(h.rewardType||'cash'),'<b style="color:var(--gold)">'+money(h.amount)+'</b>',
+      '<b style="color:'+((h.riskScore||0)>=70?'var(--bad)':'var(--gold)')+'">'+fa(h.riskScore||0)+'</b>',
+      esc(h.reason||'—'),fmtDate(h.createdAt),
+      (h.status==='pending'||h.status==='approved')?'<button class="btn sm ok" onclick="rhAct(\''+h.id+'\',\'approved\')">تأیید و واریز</button> <button class="btn sm bad" onclick="rhAct(\''+h.id+'\',\'rejected\')">رد</button>':'<span class="pill '+(h.status==='released'?'ok':'bad')+'">'+(st[h.status]||h.status)+'</span>'
+    ]));
+}
+async function rhAct(id,status){
+  if(status==='rejected'&&!confirm('این جایزه رد شود؟ (به کاربر واریز نمی‌شود)'))return;
+  try{await api('PATCH','/admin/rewards/holds/'+id+'/status',{status});toast(status==='approved'?'جایزه واریز شد ✅':'جایزه رد شد','ok');render();}catch(e){toast(e.message,'bad');}
+}
+async function releaseAllHolds(){
+  const holds=await api('GET','/admin/rewards/holds?status=pending&limit=500').catch(()=>[]);
+  const list=Array.isArray(holds)?holds:(holds.rows||[]);
+  if(!list.length)return toast('موردی برای واریز نیست');
+  if(!confirm('همهٔ '+list.length+' جایزهٔ در انتظار تأیید و به کیف پولِ کاربران واریز شود؟'))return;
+  let ok=0,bad=0;
+  for(const h of list){try{await api('PATCH','/admin/rewards/holds/'+h.id+'/status',{status:'approved'});ok++;}catch(e){bad++;}}
+  toast('واریز شد: '+fa(ok)+(bad?' · ناموفق: '+fa(bad):''),bad?'bad':'ok');render();
+}
+
+/* ================= TICKETS ================= */
+async function renderTickets(){
+  const tp=(CFG.economy&&CFG.economy.wallet&&CFG.economy.wallet.ticketPrices)||{};
+  const colors={green:'#2ecc71',blue:'#3aa0ff',red:'#ff5a48',bronze:'#cd7f32',silver:'#c8c8c8',gold:'#ffd21f'};
+  $('#main').innerHTML=head('مدیریت بلیط‌ها','قیمت بلیط‌ها (data-driven) — اعطای بلیط از بخش کاربران')+
+    '<div class="note">بلیط داراییِ جدا از کیف پول است. قیمت‌ها زنده از config خوانده می‌شوند؛ تغییر اینجا بلافاصله در فروشگاهِ بازی اعمال می‌شود.</div>'+
+    '<div class="card"><h3>قیمت بلیط‌ها (تومان)</h3>'+
+    ['green','blue','red','bronze','silver','gold'].map(k=>'<div class="cfg-row"><label><span style="color:'+(colors[k]||'#fff')+'">●</span> '+k+'</label><input id="tp_'+k+'" type="number" value="'+(tp[k]!=null?tp[k]:0)+'"></div>').join('')+
+    '<button class="btn pri" style="margin-top:10px" onclick="saveTicketPrices()">💾 ذخیره</button></div>';
+}
+async function saveTicketPrices(){
+  const p={};['green','blue','red','bronze','silver','gold'].forEach(k=>{const v=Number($('#tp_'+k).value);if(Number.isFinite(v))p[k]=v;});
+  try{await api('PATCH','/admin/config',{economy:{wallet:{ticketPrices:p}}});toast('قیمت بلیط‌ها ذخیره شد','ok');await loadCfg();render();}catch(e){toast(e.message,'bad');}
+}
+
+/* ================= GIFT CODES ================= */
+async function renderGiftCodes(){
+  const d=await api('GET','/admin/gift-codes').catch(()=>({rows:[]}));
+  $('#main').innerHTML=head('کدهای هدیه','ایجاد کد با جایزهٔ نقدی/سکه/بلیط/XP/کاپ','<button class="btn pri" onclick="gcAdd()">ایجاد کد</button>')+
+    tbl(['کد','جایزه','مقدار','استفاده','انقضا'],(d.rows||[]).map(c=>['<b class="mono">'+esc(c.code)+'</b>',esc(c.rewardType)+(c.tier?' ('+c.tier+')':''),fa(c.amount),fa(c.uses)+'/'+fa(c.maxUses),c.expiresAt?fmtDate(c.expiresAt):'∞']));
+}
+function gcAdd(){
+  modal('ایجاد کد هدیه','<div class="field"><label>کد (خالی = تصادفی)</label><input id="gc_code" dir="ltr" placeholder="PZWELCOME"></div>'+
+    '<div class="grid g2"><div class="field"><label>نوع جایزه</label><select id="gc_type"><option value="cash">نقدی</option><option value="coins">سکه</option><option value="ticket">بلیط</option><option value="xp">XP</option><option value="cup">کاپ</option></select></div>'+
+    '<div class="field"><label>مقدار</label><input id="gc_amt" type="number" value="0"></div></div>'+
+    '<div class="grid g2"><div class="field"><label>نوع بلیط (اگر جایزه بلیط است)</label><select id="gc_tier"><option value="">—</option>'+['green','blue','red','bronze','silver','gold'].map(t=>'<option>'+t+'</option>').join('')+'</select></div>'+
+    '<div class="field"><label>حداکثر استفاده</label><input id="gc_max" type="number" value="1"></div></div>'+
+    '<div class="field"><label>تاریخ انقضا (اختیاری)</label><input id="gc_exp" type="datetime-local"></div>'+
+    '<button class="btn pri" onclick="gcSave()">ایجاد</button>');
+}
+async function gcSave(){
+  const b={code:$('#gc_code').value.trim(),rewardType:$('#gc_type').value,amount:Number($('#gc_amt').value||0),tier:$('#gc_tier').value||undefined,maxUses:Number($('#gc_max').value||1),expiresAt:$('#gc_exp').value?new Date($('#gc_exp').value).toISOString():null};
+  try{const c=await api('POST','/admin/gift-codes',b);toast('کد ساخته شد: '+c.code,'ok');document.querySelector('.modal-bg').remove();render();}catch(e){toast(e.message,'bad');}
+}
+
+/* ================= LEADERBOARD ================= */
+async function renderLeaderboard(){
+  const [wk,ov,win]=await Promise.all([api('GET','/leaderboards/weekly?limit=20').catch(()=>({entries:[]})),api('GET','/leaderboards/overall?limit=20').catch(()=>({entries:[]})),api('GET','/leaderboards/winnings?limit=20').catch(()=>({entries:[]}))]);
+  const t=(title,e,unit)=>'<div class="card"><h3>'+title+'</h3>'+tbl(['رتبه','کاربر','امتیاز'],(e.entries||[]).map(x=>[fa(x.rank),esc(x.username||''),fa(x.score)+' '+unit]))+'</div>';
+  $('#main').innerHTML=head('لیدربرد','هفتگی (کاپ) · کلی (XP) · بیشترین برد (تومان)')+
+    '<div class="note">ریست هفتگیِ کاپ به‌صورت خودکار با تغییر هفتهٔ ISO انجام می‌شود (کلید <span class="mono">cup.weeklyReset</span>). جوایزِ رتبه از بخش لیگ‌ها/config تنظیم می‌شود.</div>'+
+    '<div class="grid g3">'+t('🏆 هفتگی',wk,'🏆')+t('✨ کلی',ov,'XP')+t('💰 بیشترین برد',win,'ت')+'</div>';
+}
+
+/* ================= NOTIFICATIONS ================= */
+const NT_STFA={pending:'در انتظار',sending:'در حال ارسال',sent:'ارسال شد',canceled:'لغو شد',failed:'ناموفق'};
+function ntTypeOptions(sel){const t={system:'عمومی/مهم (همه دریافت می‌کنند)',promo:'تبلیغی (طبق تنظیمات کاربر)',match_update:'مسابقه',wallet_update:'کیف پول',leaderboard_update:'لیدربرد'};return Object.keys(t).map(k=>'<option value="'+k+'"'+(sel===k?' selected':'')+'>'+t[k]+'</option>').join('');}
+function ntLocalDefault(){const d=new Date(Date.now()+3600000);d.setSeconds(0,0);const p=n=>String(n).padStart(2,'0');return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+'T'+p(d.getHours())+':'+p(d.getMinutes());}
+let NT_TAB='compose';
+const NT_LINKS={'':'— بدون مقصد —','/home':'🏠 خانه','/shop':'🛒 فروشگاه','/wallet':'👛 کیف پول','/match':'⚔️ شروع مسابقه','/league':'🛡️ لیگ','/rewards':'🎡 جوایز و گردونه','/profile':'👤 پروفایل','/notifications':'🔔 صندوق پیام'};
+async function renderNotifications(){
+  const tab=(k,label)=>'<button class="btn sm '+(NT_TAB===k?'pri':'')+'" onclick="NT_TAB=\''+k+'\';render()">'+label+'</button>';
+  const tabs=tab('dashboard','📊 داشبورد')+' '+tab('compose','✍️ ارسال پیام')+' '+tab('history','🗂️ کمپین‌ها و آنالیز')+' '+tab('scheduled','⏰ زمان‌بندی‌شده');
+  $('#main').innerHTML=head('مرکز اعلان‌ها','ارسال هدفمند به بخش واقعیِ کاربران، زمان‌بندی، و آنالیزِ باز/کلیک',tabs)+'<div id="ntBody"><div class="empty">در حال بارگذاری…</div></div>';
+  if(NT_TAB==='dashboard')return ntRenderDashboard();
+  if(NT_TAB==='history')return ntRenderHistory();
+  if(NT_TAB==='scheduled')return ntRenderScheduled();
+  return ntRenderCompose();
+}
+/* ---- Dashboard ---- */
+async function ntRenderDashboard(){
+  let d={};try{d=await api('GET','/admin/notifications/dashboard');}catch(e){}
+  const tile=(label,val,c)=>'<div class="card" style="flex:1;min-width:130px;text-align:center"><div class="sub">'+label+'</div><b style="font-size:24px;'+(c?'color:'+c:'')+'">'+fa(val||0)+'</b></div>';
+  $('#ntBody').innerHTML='<div style="display:flex;gap:12px;flex-wrap:wrap">'+
+    tile('ارسال‌شده امروز',d.sentToday,'var(--ok,#3c9)')+tile('کل تحویل',d.deliveredTotal)+tile('بازشده‌ها',d.opensTotal,'#5ea0ff')+
+    tile('کلیک‌ها',d.clicksTotal,'#FFB86B')+tile('زمان‌بندی‌شده',d.scheduled)+tile('ناموفق',d.failedTotal,'var(--bad,#e66)')+tile('کل کمپین‌ها',d.totalCampaigns)+
+  '</div><div class="note" style="margin-top:12px">«بازشده» و «کلیک» رویدادهای واقعی‌اند: وقتی کاربر پیام را باز می‌کند یا روی دکمهٔ مقصد می‌زند ثبت می‌شوند.</div>';
+}
+/* ---- Compose (rich + segment builder) ---- */
+function ntSegRow(inner){return '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'+inner+'</div>';}
+function ntRenderCompose(){
+  $('#ntBody').innerHTML=
+    '<div class="card" style="max-width:640px"><h3>محتوای پیام</h3>'+
+      '<div class="field"><label>عنوان</label><input id="nt_title" maxlength="120" placeholder="مثلاً: جایزهٔ ویژهٔ امشب 🎁"></div>'+
+      '<div class="field"><label>متن پیام</label><textarea id="nt_body" rows="3" maxlength="700" placeholder="متن نوتیفیکیشن که به دست کاربر می‌رسد..."></textarea></div>'+
+      ntSegRow('<div class="field"><label>نوع</label><select id="nt_type">'+ntTypeOptions('system')+'</select></div>'+
+        '<div class="field"><label>مقصد کلیک (Deep-link)</label><select id="nt_link">'+Object.keys(NT_LINKS).map(k=>'<option value="'+k+'">'+NT_LINKS[k]+'</option>').join('')+'</select></div>')+
+      '<div class="field"><label>تصویر/بنر (URL اختیاری)</label><input id="nt_image" dir="ltr" placeholder="https://... .jpg"></div>'+
+    '</div>'+
+    '<div class="card" style="max-width:640px"><h3>مخاطب هدف</h3>'+
+      '<div class="field"><label>گروه پایه</label><select id="seg_base" onchange="ntSegChange()"><option value="all">همهٔ کاربران</option><option value="online">آنلاین (۵ دقیقهٔ اخیر)</option><option value="offline">آفلاین</option><option value="new">کاربران جدید (۷ روز)</option><option value="inactive">غیرفعال (۷ روز+)</option><option value="manual">فهرست دستی آی‌دی</option></select></div>'+
+      '<div id="seg_filters">'+
+        ntSegRow('<div class="field"><label>اشتراک</label><select id="seg_plan"><option value="">فرقی ندارد</option><option value="free">رایگان</option><option value="paid">پولی</option></select></div>'+
+          '<div class="field"><label>وضعیت</label><select id="seg_status"><option value="">فعال (پیش‌فرض)</option><option value="any">همه</option><option value="limited">محدود</option><option value="banned">مسدود</option></select></div>')+
+        ntSegRow('<div class="field"><label>حداقل سطح</label><input id="seg_minlvl" type="number" placeholder="—"></div>'+
+          '<div class="field"><label>حداکثر سطح</label><input id="seg_maxlvl" type="number" placeholder="—"></div>')+
+        ntSegRow('<div class="field"><label>حداقل XP</label><input id="seg_minxp" type="number" placeholder="—"></div>'+
+          '<div class="field"><label>بلیط</label><select id="seg_tickets"><option value="">فرقی ندارد</option><option value="yes">دارای بلیط</option><option value="no">بدون بلیط</option></select></div>')+
+        ntSegRow('<div class="field"><label>موجودی کمتر از</label><input id="seg_walletlt" type="number" placeholder="— تومان"></div>'+
+          '<div class="field"><label>موجودی بیشتر از</label><input id="seg_walletgt" type="number" placeholder="— تومان"></div>')+
+      '</div>'+
+      '<div class="field" id="seg_manual_wrap" style="display:none"><label>آی‌دی کاربران (با ویرگول)</label><textarea id="seg_uids" rows="2" dir="ltr" placeholder="uuid1, uuid2, ..."></textarea></div>'+
+      '<button class="btn info" onclick="ntPreview()">👁️ پیش‌نمایش مخاطب</button> <span id="seg_count" style="font-weight:900;margin-inline-start:8px"></span>'+
+      '<div class="note" style="margin-top:8px">فیلترها با هم ترکیب می‌شوند (AND). «شهر» و «نسخهٔ اپ» عمداً نیامده‌اند چون اپ این داده‌ها را ذخیره نمی‌کند.</div>'+
+    '</div>'+
+    '<div class="card" style="max-width:640px"><h3>زمان ارسال</h3>'+
+      '<div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center">'+
+        '<label style="display:flex;gap:6px;align-items:center"><input type="radio" name="nt_when" value="now" checked onchange="ntWhenChange()"> فوری</label>'+
+        '<label style="display:flex;gap:6px;align-items:center"><input type="radio" name="nt_when" value="sched" onchange="ntWhenChange()"> زمان‌بندی</label>'+
+        '<input type="datetime-local" id="nt_at" style="display:none" value="'+ntLocalDefault()+'"></div>'+
+      '<div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">'+
+        '<button class="btn pri" id="nt_go" onclick="ntSubmit()">📣 ارسال فوری</button>'+
+        '<button class="btn" onclick="ntSubmit(true)">🧪 ارسال آزمایشی به خودم</button></div>'+
+    '</div>';
+}
+function ntSegChange(){const b=$('#seg_base').value;$('#seg_manual_wrap').style.display=b==='manual'?'block':'none';$('#seg_filters').style.display=b==='manual'?'none':'block';}
+function ntWhenChange(){const s=document.querySelector('input[name=nt_when]:checked').value;$('#nt_at').style.display=s==='sched'?'inline-block':'none';const g=$('#nt_go');if(g)g.textContent=s==='sched'?'🕒 زمان‌بندی':'📣 ارسال فوری';}
+function ntCollectSegment(){
+  const base=$('#seg_base').value;
+  if(base==='manual'){const ids=($('#seg_uids').value||'').split(',').map(s=>s.trim()).filter(Boolean);return {userIds:ids};}
+  const s={};if(base!=='all')s.base=base;
+  const plan=$('#seg_plan').value;if(plan)s.plan=plan;
+  const st=$('#seg_status').value;if(st)s.status=st;
+  const nv2=id=>{const v=$('#'+id).value;return v===''?undefined:Number(v);};
+  const minlvl=nv2('seg_minlvl');if(minlvl!=null)s.minLevel=minlvl;
+  const maxlvl=nv2('seg_maxlvl');if(maxlvl!=null)s.maxLevel=maxlvl;
+  const minxp=nv2('seg_minxp');if(minxp!=null)s.minXp=minxp;
+  const wlt=nv2('seg_walletlt');if(wlt!=null)s.walletLt=wlt;
+  const wgt=nv2('seg_walletgt');if(wgt!=null)s.walletGt=wgt;
+  const tk=$('#seg_tickets').value;if(tk==='yes')s.hasTickets=true;else if(tk==='no')s.hasTickets=false;
+  return s;
+}
+async function ntPreview(){
+  try{const seg=ntCollectSegment();const r=await api('POST','/admin/notifications/segment/preview',seg);$('#seg_count').innerHTML='👥 <b style="color:var(--ok,#3c9)">'+fa(r.count||0)+'</b> کاربر — <span style="color:var(--muted)">'+esc(r.description||'')+'</span>';}
+  catch(e){toast(e.message,'bad');}
+}
+async function ntSubmit(testToSelf){
+  const title=($('#nt_title')||{}).value?.trim(),body=($('#nt_body')||{}).value?.trim();
+  if(!title||!body)return toast('عنوان و متن لازم است','bad');
+  const type=$('#nt_type').value,link=$('#nt_link').value,image=($('#nt_image').value||'').trim();
+  const action=link?{url:link}:undefined;
+  const when=document.querySelector('input[name=nt_when]:checked').value;
+  const payload={title,body,type,image:image||undefined,action};
+  try{
+    if(testToSelf){
+      const tid=prompt('آی‌دی کاربرِ آزمایشی (فقط به همین یک نفر ارسال می‌شود):');
+      if(!tid||!tid.trim())return;
+      const r=await api('POST','/admin/notifications/broadcast',{...payload,segment:{userIds:[tid.trim()]}});
+      toast('پیام آزمایشی ارسال شد 🧪 — '+fa(r.audienceCount||0)+' مخاطب','ok');return;
+    }
+    if(when==='now'){
+      const r=await api('POST','/admin/notifications/broadcast',{...payload,segment:seg});
+      toast('ارسال شد ✅ — '+fa(r.audienceCount||0)+' مخاطب','ok');NT_TAB='history';render();
+    }else{
+      const at=$('#nt_at').value;if(!at)return toast('زمان ارسال را انتخاب کن','bad');
+      await api('POST','/admin/notifications/schedule',{...payload,segment:seg,scheduledAt:new Date(at).toISOString()});
+      toast('زمان‌بندی شد 🕒','ok');NT_TAB='scheduled';render();
+    }
+  }catch(e){toast(e.message,'bad');}
+}
+/* ---- History (campaigns + analytics) ---- */
+async function ntRenderHistory(){
+  let rows=[];try{const r=await api('GET','/admin/notifications/campaigns?limit=100');rows=r.rows||[];}catch(e){}
+  $('#ntBody').innerHTML='<div class="card"><h3>کمپین‌ها و آنالیز</h3>'+
+    tbl(['عنوان','مخاطب','تحویل','باز','کلیک','CTR','وضعیت','زمان','عملیات'],rows.map(c=>{
+      const st=c.status==='scheduled'?'زمان‌بندی':c.status==='sent'?'ارسال شد':c.status==='failed'?'ناموفق':'در حال ارسال';
+      const act='<button class="btn sm" onclick="ntCampaignDetail(\''+c.id+'\')">جزئیات</button> '+(c.status==='sent'?'<button class="btn sm ok" onclick="ntResend(\''+c.id+'\')">ارسال دوباره</button>':'');
+      return [esc(c.title)+'<br><span class="sub">'+esc(c.segmentDesc||'')+'</span>',fa(c.audienceCount||0),fa(c.sentCount||0),fa(c.opens||0),fa(c.clickedCount||0),fa(c.ctr||0)+'٪','<span class="pill '+(c.status==='sent'?'ok':c.status==='failed'?'bad':'pend')+'">'+st+'</span>',fmtDate(c.createdAt),act];
+    }))+(rows.length?'':'<div class="empty">هنوز کمپینی ارسال نشده.</div>')+'</div>';
+  window._NT_CAMPAIGNS={};rows.forEach(c=>window._NT_CAMPAIGNS[c.id]=c);
+}
+function ntCampaignDetail(id){
+  const c=(window._NT_CAMPAIGNS||{})[id];if(!c)return;
+  const r=(k,v)=>'<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--line)"><span style="color:var(--muted)">'+k+'</span><b>'+v+'</b></div>';
+  modal('کمپین: '+esc(c.title),
+    r('متن',esc(c.body))+r('مخاطب هدف',esc(c.segmentDesc||'همه')+' ('+fa(c.audienceCount||0)+')')+
+    r('ایجادشده',fa(c.createdCount||0))+r('تحویل (Push)',fa(c.sentCount||0))+r('نرخ تحویل',fa(c.deliveryRate||0)+'٪')+
+    r('بازشده',fa(c.opens||0))+r('نرخ بازشدن',fa(c.openRate||0)+'٪')+r('کلیک',fa(c.clickedCount||0))+r('CTR',fa(c.ctr||0)+'٪')+
+    (c.action&&c.action.url?r('مقصد کلیک',esc(NT_LINKS[c.action.url]||c.action.url)):'')+r('زمان',fmtDate(c.createdAt))+
+    '<div style="margin-top:14px">'+(c.status==='sent'?'<button class="btn ok" onclick="this.closest(\'.modal-bg\').remove();ntResend(\''+c.id+'\')">ارسال دوباره به همین مخاطب</button>':'')+'</div>');
+}
+async function ntResend(id){if(!confirm('این کمپین دوباره به مخاطب فعلی ارسال شود؟'))return;try{const r=await api('POST','/admin/notifications/campaigns/'+id+'/resend',{});toast('ارسال شد ✅ — '+fa(r.audienceCount||0)+' مخاطب','ok');render();}catch(e){toast(e.message,'bad');}}
+/* ---- Scheduled ---- */
+async function ntRenderScheduled(){
+  let sched=[];try{sched=await api('GET','/admin/notifications/scheduled?limit=200');}catch(e){}
+  $('#ntBody').innerHTML='<div class="card"><h3>پیام‌های زمان‌بندی‌شده</h3>'+
+    tbl(['عنوان','گیرنده','زمان ارسال','وضعیت','تحویل','عملیات'],(sched||[]).map(s=>{
+      const act=s.status==='pending'?'<button class="btn sm bad" onclick="ntCancel(\''+s.id+'\')">لغو</button>':'—';
+      const aud=s.audience==='specific'?((s.userIds||[]).length+' کاربر'):s.audience==='segment'?'سگمنت':'همه';
+      return [esc(s.title),aud,fmtDate(s.scheduledAt),'<span class="pill '+(s.status==='sent'?'ok':s.status==='failed'||s.status==='canceled'?'bad':'pend')+'">'+(NT_STFA[s.status]||s.status)+'</span>',s.status==='sent'?fa(s.deliveredCount||0)+' نفر':'—',act];
+    }))+((sched||[]).length?'':'<div class="empty">هنوز پیام زمان‌بندی‌شده‌ای نداری.</div>')+'</div>';
+}
+async function ntCancel(id){if(!confirm('این پیام زمان‌بندی‌شده لغو شود؟'))return;try{await api('POST','/admin/notifications/scheduled/'+id+'/cancel',{});toast('لغو شد','ok');render();}catch(e){toast(e.message,'bad');}}
+
+/* ================= QUESTION REPORTS ================= */
+let QR_STATUS='open';
+const QR_STFA={open:'باز',resolved:'رسیدگی‌شده',dismissed:'رد شده'};
+async function renderQReports(){
+  let res={rows:[],counts:{open:0,resolved:0,dismissed:0,total:0}};
+  try{res=await api('GET','/admin/question-reports?status='+QR_STATUS+'&limit=300');}catch(e){}
+  const c=res.counts||{open:0,resolved:0,dismissed:0,total:0};
+  const tab=(k,label)=>'<button class="btn sm '+(QR_STATUS===k?'pri':'')+'" onclick="QR_STATUS=\''+k+'\';render()">'+label+'</button>';
+  $('#main').innerHTML=head('گزارش سؤالات','گزارش‌هایی که کاربران در حین بازی برای سؤالات ثبت کرده‌اند',
+      tab('open','باز ('+fa(c.open)+')')+' '+tab('resolved','رسیدگی‌شده')+' '+tab('dismissed','رد شده')+' '+tab('all','همه'))+
+    '<div class="card" style="display:flex;gap:18px;flex-wrap:wrap">'+
+      '<div><div class="sub">باز</div><b style="font-size:22px;color:var(--bad,#e66)">'+fa(c.open)+'</b></div>'+
+      '<div><div class="sub">رسیدگی‌شده</div><b style="font-size:22px;color:var(--ok,#3c9)">'+fa(c.resolved)+'</b></div>'+
+      '<div><div class="sub">رد شده</div><b style="font-size:22px">'+fa(c.dismissed)+'</b></div>'+
+      '<div><div class="sub">کل</div><b style="font-size:22px">'+fa(c.total)+'</b></div>'+
+    '</div>'+
+    '<div class="card"><h3>فهرست گزارش‌ها</h3>'+
+      tbl(['سؤال','دلیل','توضیح کاربر','گزارش‌دهنده','زمان','وضعیت','عملیات'],(res.rows||[]).map(r=>{
+        const act=r.status==='open'
+          ? '<button class="btn sm ok" onclick="qrAct(\''+r.id+'\',\'resolve\')">رسیدگی شد</button> <button class="btn sm" onclick="qrAct(\''+r.id+'\',\'dismiss\')">رد</button> <button class="btn sm" onclick="qrEdit(\''+esc(r.questionId)+'\')">ویرایش سؤال</button>'
+          : '<button class="btn sm" onclick="qrEdit(\''+esc(r.questionId)+'\')">ویرایش سؤال</button>';
+        const st='<span class="pill '+(r.status==='resolved'?'ok':r.status==='dismissed'?'bad':'pend')+'">'+(QR_STFA[r.status]||r.status)+'</span>';
+        const qtext='<div style="max-width:260px">'+esc(r.questionText||'—')+(r.category?'<div class="sub">'+esc(r.category)+'</div>':'')+'</div>';
+        return [qtext,esc(r.reasonLabel||r.reason),esc(r.note||'—'),esc((r.userId||'—').slice(0,8)),fmtDate(r.createdAt),st,act];
+      }))+
+      ((res.rows||[]).length?'':'<div class="empty">گزارشی در این وضعیت نیست.</div>')+'</div>';
+}
+async function qrAct(id,action){
+  try{await api('POST','/admin/question-reports/'+id+'/'+action,{});toast(action==='resolve'?'رسیدگی ثبت شد ✅':'گزارش رد شد','ok');render();}
+  catch(e){toast(e.message,'bad');}
+}
+function qrEdit(qid){
+  go('questions');
+  // Wait until the questions list has loaded (_QALL populated), then open the edit modal.
+  let tries=0;
+  const iv=setInterval(()=>{
+    tries++;
+    const found=(window._QALL||[]).some(x=>x.id===qid);
+    if(found){ clearInterval(iv); try{qEdit(qid);}catch(e){} }
+    else if(tries>20){ clearInterval(iv); toast('سؤال در فهرست یافت نشد (شاید حذف/بایگانی شده)','bad'); }
+  },200);
+}
+
+/* ================= SHOP (catalog CRUD) ================= */
+let SHOP_CAT='';
+const SHOP_CATS={tickets:'🎫 بلیط مسابقات',util:'🧰 کاربردی',cosmetic:'✨ تزئینی',gift:'🎁 هدیه'};
+const SHOP_EFFECTS={p5050:'کمکی: حذف دو گزینه',psecond:'کمکی: حق دو انتخاب',pstats:'کمکی: درصد پاسخ',heart:'جان اضافی (❤️)',xp:'شتاب‌دهنده XP',coins:'سکه هدیه',
+  'ticket-bronze':'بلیط برنز','ticket-silver':'بلیط نقره','ticket-gold':'بلیط طلا','skin-gold':'اسکین طلایی','skin-neon':'اسکین نئون','skin-rainbow':'اسکین رنگین‌کمان',gift:'هدیه به دوست'};
+async function renderShopAdmin(){
+  let rows=[];try{const r=await api('GET','/admin/shop/items');rows=r.rows||[];}catch(e){}
+  window._SHOP_ROWS={};rows.forEach(it=>window._SHOP_ROWS[it.id]=it);
+  const cats=[...new Set(rows.map(i=>i.category))];
+  Object.keys(SHOP_CATS).forEach(k=>{if(cats.indexOf(k)<0)cats.push(k);});
+  const catTabs='<div class="subtabs"><button class="'+(SHOP_CAT===''?'active':'')+'" onclick="SHOP_CAT=\'\';render()">همه ('+fa(rows.length)+')</button>'+
+    cats.map(c=>{const n=rows.filter(i=>i.category===c).length;return '<button class="'+(SHOP_CAT===c?'active':'')+'" onclick="SHOP_CAT='+JSON.stringify(c).replace(/"/g,'&quot;')+';render()">'+esc(SHOP_CATS[c]||c)+' ('+fa(n)+')</button>';}).join('')+'</div>';
+  const list=rows.filter(i=>!SHOP_CAT||i.category===SHOP_CAT).sort((a,b)=>a.category===b.category?a.sortOrder-b.sortOrder:(a.category<b.category?-1:1));
+  $('#main').innerHTML=head('مدیریت فروشگاه','آیتم اضافه کن، قیمت و اثر بگذار، فعال/غیرفعال و مرتب کن — بلافاصله در بازی اعمال می‌شود','<button class="btn pri" onclick="shopEdit()">➕ افزودن آیتم</button>')+
+    catTabs+
+    '<div class="tbl-wrap"><table><thead><tr>'+['','نام','دسته','قیمت','ارز','اثر','ترتیب','وضعیت','عملیات'].map(c=>'<th>'+c+'</th>').join('')+'</tr></thead><tbody>'+
+    (list.length?list.map(it=>'<tr>'+
+      '<td style="font-size:22px">'+esc(it.icon||'🛍️')+'</td>'+
+      '<td><b>'+esc(it.name)+'</b>'+(it.badge?' <span class="pill ok">'+esc(it.badge)+'</span>':'')+'<br><span class="sub">'+esc(String(it.description||'').slice(0,40))+'</span></td>'+
+      '<td>'+esc(SHOP_CATS[it.category]||it.category)+'</td>'+
+      '<td><b>'+fa(it.price)+'</b></td>'+
+      '<td>'+(it.currency==='cash'?'تومان':'سکه')+'</td>'+
+      '<td>'+esc(SHOP_EFFECTS[it.effectKey]||it.effectKey)+(it.effectValue>1?' ×'+fa(it.effectValue):'')+'</td>'+
+      '<td>'+fa(it.sortOrder)+'</td>'+
+      '<td><span class="pill '+(it.enabled?'ok':'bad')+'">'+(it.enabled?'فعال':'غیرفعال')+'</span></td>'+
+      '<td><button class="btn sm" onclick="shopEdit(\''+it.id+'\')">ویرایش</button> <button class="btn sm '+(it.enabled?'':'ok')+'" onclick="shopToggle(\''+it.id+'\')">'+(it.enabled?'خاموش':'روشن')+'</button> <button class="btn sm bad" onclick="shopDelete(\''+it.id+'\')">حذف</button></td>'+
+    '</tr>').join(''):'<tr><td colspan="9" class="empty">آیتمی نیست — یکی اضافه کن</td></tr>')+'</tbody></table></div>';
+}
+function shopEdit(id){
+  const it=(window._SHOP_ROWS||{})[id]||{};
+  const catOpts=Object.keys(SHOP_CATS).map(k=>'<option value="'+k+'"'+(it.category===k?' selected':'')+'>'+esc(SHOP_CATS[k])+'</option>').join('')+'<option value="__custom">دستهٔ دلخواه…</option>';
+  const effOpts=Object.keys(SHOP_EFFECTS).map(k=>'<option value="'+k+'"'+(it.effectKey===k?' selected':'')+'>'+esc(SHOP_EFFECTS[k])+'</option>').join('');
+  modal(id?'ویرایش آیتم':'افزودن آیتم',
+    '<div class="grid g3"><div class="field"><label>آیکون (ایموجی)</label><input id="sh_icon" value="'+esc(it.icon||'🛍️')+'" style="text-align:center;font-size:20px"></div>'+
+    '<div class="field" style="grid-column:span 2"><label>نام آیتم</label><input id="sh_name" value="'+esc(it.name||'')+'"></div></div>'+
+    '<div class="field"><label>توضیح</label><input id="sh_desc" value="'+esc(it.description||'')+'"></div>'+
+    '<div class="grid g3">'+
+      '<div class="field"><label>دسته</label><select id="sh_cat" onchange="if(this.value===\'__custom\'){this.style.display=\'none\';document.getElementById(\'sh_cat_custom\').style.display=\'block\'}">'+catOpts+'</select><input id="sh_cat_custom" placeholder="نام دستهٔ جدید" style="display:none;margin-top:6px"></div>'+
+      '<div class="field"><label>قیمت</label><input id="sh_price" type="number" value="'+(it.price||0)+'"></div>'+
+      '<div class="field"><label>ارز</label><select id="sh_cur"><option value="coins"'+(it.currency!=='cash'?' selected':'')+'>سکه</option><option value="cash"'+(it.currency==='cash'?' selected':'')+'>تومان (کیف پول)</option></select></div>'+
+    '</div>'+
+    '<div class="grid g3">'+
+      '<div class="field"><label>اثر خرید</label><select id="sh_eff">'+effOpts+'</select></div>'+
+      '<div class="field"><label>مقدار اثر</label><input id="sh_effval" type="number" value="'+(it.effectValue||1)+'"></div>'+
+      '<div class="field"><label>ترتیب نمایش</label><input id="sh_order" type="number" value="'+(it.sortOrder||0)+'"></div>'+
+    '</div>'+
+    '<div class="grid g2"><div class="field"><label>برچسب (اختیاری)</label><input id="sh_badge" value="'+esc(it.badge||'')+'" placeholder="مثلاً محبوب / ٪۲۰ تخفیف"></div>'+
+    '<div class="field"><label>وضعیت</label><select id="sh_enabled"><option value="1"'+(it.enabled!==false?' selected':'')+'>فعال</option><option value="0"'+(it.enabled===false?' selected':'')+'>غیرفعال</option></select></div></div>'+
+    '<button class="btn pri" onclick="shopSaveItem(\''+(id||'')+'\')">💾 ذخیره</button>');
+}
+async function shopSaveItem(id){
+  let cat=$('#sh_cat').value; if(cat==='__custom')cat=($('#sh_cat_custom').value||'').trim()||'util';
+  const name=$('#sh_name').value.trim(); if(!name)return toast('نام آیتم لازم است','bad');
+  const body={id:id||undefined,icon:$('#sh_icon').value.trim()||'🛍️',name,description:$('#sh_desc').value.trim(),category:cat,
+    price:Number($('#sh_price').value||0),currency:$('#sh_cur').value,effectKey:$('#sh_eff').value,effectValue:Number($('#sh_effval').value||1),
+    sortOrder:Number($('#sh_order').value||0),badge:$('#sh_badge').value.trim(),enabled:$('#sh_enabled').value==='1'};
+  try{await api('POST','/admin/shop/items',body);toast('ذخیره شد ✅','ok');document.querySelector('.modal-bg').remove();render();}catch(e){toast(e.message,'bad');}
+}
+async function shopToggle(id){const it=(window._SHOP_ROWS||{})[id];if(!it)return;try{await api('POST','/admin/shop/items',{...it,enabled:!it.enabled});toast(it.enabled?'غیرفعال شد':'فعال شد','ok');render();}catch(e){toast(e.message,'bad');}}
+async function shopDelete(id){if(!confirm('این آیتم حذف شود؟'))return;try{await api('DELETE','/admin/shop/items/'+id);toast('حذف شد','ok');render();}catch(e){toast(e.message,'bad');}}
+
+/* ================= ADMIN ACCOUNTS + ACCESS ================= */
+function tabLabelMap(){const m={};NAV.forEach(g=>g[1].forEach(p=>{if(p[0]!=='accounts')m[p[0]]=p[1]+' '+p[2];}));return m;}
+function permChecklist(selected){
+  const sel=new Set(selected||[]); const all=sel.has('*');
+  let html='<label style="display:flex;gap:8px;align-items:center;font-weight:900;margin-bottom:8px"><input type="checkbox" id="perm_all" '+(all?'checked':'')+' onchange="document.querySelectorAll(\'.permchk\').forEach(c=>{c.checked=this.checked;c.disabled=this.checked})"> دسترسی کامل (همهٔ تب‌ها)</label>';
+  html+=NAV.map(g=>{
+    const items=g[1].filter(p=>p[0]!=='accounts');
+    if(!items.length)return '';
+    return '<div style="margin:8px 0 3px;color:var(--muted);font-size:11px;font-weight:800">'+g[0]+'</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">'+
+      items.map(p=>'<label style="display:flex;gap:6px;align-items:center;font-size:12.5px"><input type="checkbox" class="permchk" value="'+p[0]+'" '+(all||sel.has(p[0])?'checked':'')+' '+(all?'disabled':'')+'>'+p[1]+' '+esc(p[2])+'</label>').join('')+'</div>';
+  }).join('');
+  return html;
+}
+function collectPerms(){ if($('#perm_all')&&$('#perm_all').checked)return ['*']; return [...document.querySelectorAll('.permchk:checked')].map(c=>c.value); }
+async function renderAccounts(){
+  let data={rows:[]};try{data=await api('GET','/admin/accounts');}catch(e){$('#main').innerHTML=head('حساب‌ها')+'<div class="card empty">'+(e.message||'خطا')+'</div>';return;}
+  window._ACCS={};(data.rows||[]).forEach(a=>window._ACCS[a.id]=a);
+  const lbl=tabLabelMap();
+  const permTxt=a=>a.perms&&a.perms.indexOf('*')>=0?'<span class="pill ok">دسترسی کامل</span>':(a.perms||[]).map(k=>lbl[k]?lbl[k].split(' ').slice(1).join(' '):k).slice(0,8).join('، ')+((a.perms||[]).length>8?' …':'')||'—';
+  $('#main').innerHTML=head('حساب‌ها و دسترسی','برای هرکس حساب بساز و تک‌به‌تک تب‌های مجاز را انتخاب کن','<button class="btn pri" onclick="accEdit()">➕ حساب جدید</button>')+
+    '<div class="card" style="max-width:520px"><h3>🔑 تغییر رمز عبور من ('+esc(ME_USER||'owner')+')</h3>'+
+      '<div class="field"><label>رمز فعلی</label><input id="cp_cur" type="password" dir="ltr"></div>'+
+      '<div class="field"><label>رمز جدید</label><input id="cp_new" type="password" dir="ltr"></div>'+
+      '<button class="btn pri" onclick="changeMyPassword()">ذخیرهٔ رمز جدید</button>'+
+      '<div class="note" style="margin-top:6px">بعد از تغییر رمز، دوباره به‌صورت خودکار با رمز جدید وارد می‌شوی.</div></div>'+
+    '<div class="card"><h3>حساب‌های مدیریت</h3>'+
+      tbl(['نام کاربری','دسترسی‌ها','وضعیت','عملیات'],(data.rows||[]).map(a=>{
+        const act=a.isOwner?'<span class="pill">مدیر کل</span>':
+          '<button class="btn sm" onclick="accEdit(\''+a.id+'\')">ویرایش دسترسی</button> <button class="btn sm" onclick="accResetPass(\''+a.id+'\')">تغییر رمز</button> <button class="btn sm '+(a.active?'':'ok')+'" onclick="accToggle(\''+a.id+'\','+(!a.active)+')">'+(a.active?'غیرفعال':'فعال')+'</button> <button class="btn sm bad" onclick="accDelete(\''+a.id+'\')">حذف</button>';
+        return ['<b>'+esc(a.username)+'</b>'+(a.isOwner?' 👑':''),'<div style="max-width:340px;font-size:12px">'+permTxt(a)+'</div>','<span class="pill '+(a.active?'ok':'bad')+'">'+(a.active?'فعال':'غیرفعال')+'</span>',act];
+      }))+'</div>';
+}
+function accEdit(id){
+  const a=(window._ACCS||{})[id]||{};
+  modal(id?'ویرایش دسترسی: '+esc(a.username):'ساخت حساب مدیریت',
+    (id?'':'<div class="field"><label>نام کاربری</label><input id="ac_user" dir="ltr" placeholder="operator1"></div>'+
+        '<div class="field"><label>رمز عبور</label><input id="ac_pass" type="password" dir="ltr" placeholder="حداقل ۴ کاراکتر"></div>')+
+    '<div class="field"><label>تب‌های مجاز</label><div style="max-height:340px;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:10px">'+permChecklist(a.perms)+'</div></div>'+
+    '<button class="btn pri" onclick="accSave(\''+(id||'')+'\')">💾 ذخیره</button>');
+}
+async function accSave(id){
+  const perms=collectPerms();
+  try{
+    if(id){ await api('PATCH','/admin/accounts/'+id,{perms}); }
+    else{ const u=($('#ac_user').value||'').trim(), p=$('#ac_pass').value||''; if(!u||!p)return toast('نام کاربری و رمز لازم است','bad'); await api('POST','/admin/accounts',{username:u,password:p,perms}); }
+    toast('ذخیره شد ✅','ok');document.querySelector('.modal-bg').remove();render();
+  }catch(e){toast(e.message,'bad');}
+}
+async function accResetPass(id){const p=prompt('رمز جدید برای این حساب:');if(!p)return;try{await api('PATCH','/admin/accounts/'+id,{password:p});toast('رمز عوض شد ✅','ok');}catch(e){toast(e.message,'bad');}}
+async function accToggle(id,active){try{await api('PATCH','/admin/accounts/'+id,{active});toast(active?'فعال شد':'غیرفعال شد','ok');render();}catch(e){toast(e.message,'bad');}}
+async function accDelete(id){if(!confirm('این حساب حذف شود؟'))return;try{await api('DELETE','/admin/accounts/'+id);toast('حذف شد','ok');render();}catch(e){toast(e.message,'bad');}}
+async function changeMyPassword(){
+  const cur=$('#cp_cur').value, next=$('#cp_new').value;
+  if(!cur||!next)return toast('رمز فعلی و جدید را وارد کن','bad');
+  try{
+    const r=await api('POST','/admin/auth/password',{current:cur,next:next});
+    if(r&&r.token){ KEY=r.token; localStorage.setItem('pz_admin_key',KEY); }
+    toast('رمز عوض شد ✅ با رمز جدید وارد شدی','ok'); $('#cp_cur').value='';$('#cp_new').value='';
+  }catch(e){toast(e.message,'bad');}
+}
+
+/* ================= ANTI-CHEAT ================= */
+async function renderAntiCheat(){
+  const [sig,risk]=await Promise.all([api('GET','/admin/integrity/signals?limit=50').catch(()=>[]),api('GET','/admin/risk/users').catch(()=>[])]);
+  const ac=(CFG.antiCheat)||{};
+  const tog=(k,label)=>'<div class="cfg-row"><label>'+label+'</label><input id="ac_'+k+'" type="checkbox" '+(ac[k]?'checked':'')+'></div>';
+  const numr=(k,label)=>'<div class="cfg-row"><label>'+label+'</label><input id="ac_'+k+'" type="number" value="'+(ac[k]!=null?ac[k]:0)+'"></div>';
+  $('#main').innerHTML=head('سیستم ضدتقلب','فعال/غیرفعال کردن قوانین + سیگنال‌های تقلب')+
+    '<div class="grid g2"><div class="card"><h3>تنظیمات (data-driven)</h3>'+
+      tog('vpnDetection','تشخیص VPN')+tog('botDetection','تشخیص ربات')+tog('multiAccountDetection','تشخیص چندحساب')+
+      tog('ipLimitEnabled','محدودیت IP')+numr('maxAccountsPerIp','حداکثر حساب هر IP')+
+      tog('deviceLimitEnabled','محدودیت دستگاه')+numr('maxAccountsPerDevice','حداکثر حساب هر دستگاه')+
+      numr('impossibleAnswerMs','آستانهٔ پاسخِ غیرممکن (ms)')+
+      '<button class="btn pri" style="margin-top:10px" onclick="saveAntiCheat()">💾 ذخیره</button>'+
+      '<div class="note" style="margin-top:10px">تشخیص VPN/چندحساب هنوز به‌صورت کامل پیاده نشده و مقدار پیش‌فرض غیرفعال است؛ آستانهٔ پاسخِ غیرممکن و لاگِ سیگنال‌ها فعال‌اند.</div></div>'+
+    '<div class="card"><h3>کاربران پرریسک</h3>'+tbl(['کاربر','ریسک'],(Array.isArray(risk)?risk:risk.rows||[]).slice(0,15).map(u=>[String(u.userId||u.id||'').slice(0,10),fa(u.riskScore||0)]))+'</div></div>'+
+    '<div class="card" style="margin-top:13px"><h3>سیگنال‌های تقلب اخیر</h3>'+tbl(['نوع','کاربر','شدت','وضعیت','زمان'],(Array.isArray(sig)?sig:sig.rows||[]).slice(0,30).map(s=>[esc(s.type),String(s.userId||'').slice(0,8),'<span class="pill '+(s.severity==='critical'?'bad':'pend')+'">'+esc(s.severity)+'</span>',esc(s.status),fmtDate(s.createdAt)]))+'</div>';
+}
+async function saveAntiCheat(){
+  const p={};['vpnDetection','botDetection','multiAccountDetection','ipLimitEnabled','deviceLimitEnabled'].forEach(k=>p[k]=$('#ac_'+k).checked);
+  ['maxAccountsPerIp','maxAccountsPerDevice','impossibleAnswerMs'].forEach(k=>p[k]=Number($('#ac_'+k).value||0));
+  try{await api('PATCH','/admin/config',{antiCheat:p});toast('تنظیمات ضدتقلب ذخیره شد','ok');await loadCfg();render();}catch(e){toast(e.message,'bad');}
+}
+
+/* ================= SUSPICIOUS USERS (full list + resolve) ================= */
+async function renderSuspicious(){
+  const d=await api('GET','/admin/suspicious').catch(()=>({rows:[]}));
+  const rows=d.rows||[];
+  window._SUSP=rows;
+  $('#main').innerHTML=head('کاربران مشکوک','فهرست کاملِ هشدارها — شناسه، دلیل، امتیاز ریسک، زمان و جزئیات؛ با امکانِ رسیدگی',
+    '<button class="btn sm" onclick="render()">↻ بروزرسانی</button>')+
+    '<div class="note">این فهرست از سیگنال‌های تقلبِ باز، سرعتِ غیرعادیِ تراکنش و برداشت‌های ناموفق ساخته می‌شود و بر اساسِ امتیازِ ریسک مرتب شده است. با «رسیدگی» هر هشدار را تأیید (تقلب) یا رد (بی‌خطر) کن؛ پس از رسیدگی، کاربر از فهرست خارج می‌شود.</div>'+
+    tbl(['کاربر','دلیل','امتیاز ریسک','آخرین رویداد','تعداد سیگنال','عملیات'],rows.map((u,i)=>[
+      esc(u.username||'')+' <span class="mono" style="color:var(--muted)">'+String(u.userId).slice(0,8)+'</span>',
+      (u.reasons||[]).map(r=>'<span class="pill '+(String(r).match(/BURST|CRITICAL|multi/i)?'bad':'pend')+'">'+esc(reasonFa(r))+'</span>').join(' '),
+      '<b style="color:'+(u.riskScore>=70?'var(--bad)':u.riskScore>=40?'var(--gold)':'var(--muted)')+';font-size:15px">'+fa(u.riskScore||0)+'</b>',
+      fmtDate(u.lastAt),fa((u.signals||[]).length),
+      '<button class="btn sm info" onclick="suspDetail('+i+')">جزئیات و رسیدگی</button>'
+    ]));
+}
+function reasonFa(r){return ({high_velocity:'سرعتِ بالای تراکنش',failed_withdrawals:'برداشت‌های ناموفق',REPEATED_QUESTION_ANSWER:'پاسخِ تکراری',ANSWER_BURST:'پاسخِ رگباری',IMPOSSIBLE_ANSWER_TIME:'زمانِ غیرممکن',MULTI_ACCOUNT:'چندحسابی',DEVICE_SHARED_BY_MULTIPLE_USERS:'اشتراکِ دستگاه'}[r])||r;}
+function suspDetail(i){
+  const u=(window._SUSP||[])[i]; if(!u)return;
+  const sig=(u.signals||[]).map(s=>'<div class="card" style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><div><b>'+esc(reasonFa(s.type))+'</b> <span class="pill '+(s.severity==='critical'?'bad':'pend')+'">'+esc(s.severity||'')+'</span> <span class="pill '+(s.status==='open'?'pend':'ok')+'">'+esc(s.status||'')+'</span></div><div class="mono" style="color:var(--muted);font-size:10px">'+fmtDate(s.createdAt)+'</div></div>'+
+    (s.metadata?'<div class="mono" style="direction:ltr;text-align:left;font-size:10px;color:var(--muted);margin-top:6px;white-space:pre-wrap;word-break:break-all">'+esc(JSON.stringify(s.metadata))+'</div>':'')+
+    (s.status==='open'?'<div style="display:flex;gap:6px;margin-top:8px"><button class="btn sm bad" onclick="suspResolve(\''+s.id+'\',\'confirmed\','+i+')">✔ تأیید تقلب</button><button class="btn sm ok" onclick="suspResolve(\''+s.id+'\',\'dismissed\','+i+')">✖ بی‌خطر (رد)</button></div>':'<div style="margin-top:8px;color:var(--muted);font-size:11px">رسیدگی‌شده</div>')+
+    '</div>').join('')||'<div class="empty">این کاربر سیگنالِ تقلبِ ثبت‌شده‌ای ندارد؛ هشدار از سرعتِ تراکنش یا برداشتِ ناموفق است.</div>';
+  modal('رسیدگی به کاربر: '+esc(u.username||String(u.userId).slice(0,8)),
+    '<div class="grid g2" style="margin-bottom:12px"><div class="stat"><div class="k">امتیاز ریسک</div><div class="v '+(u.riskScore>=70?'bad':'gold')+'">'+fa(u.riskScore||0)+'</div></div>'+
+    '<div class="stat"><div class="k">شناسهٔ کاربر</div><div class="v" style="font-size:13px" dir="ltr">'+esc(u.userId)+'</div></div></div>'+
+    '<div style="display:flex;gap:6px;margin-bottom:12px"><button class="btn sm bad" onclick="suspBan(\''+u.userId+'\')">🚫 بن کاربر</button><button class="btn sm info" onclick="document.querySelectorAll(\'.modal-bg\').forEach(m=>m.remove());userDetail(\''+u.userId+'\')">مدیریت کامل</button></div>'+
+    '<h3 style="font-size:14px;margin:6px 0">سیگنال‌ها و رویدادها</h3>'+sig);
+}
+async function suspResolve(sid,status,i){try{await api('PATCH','/admin/integrity/signals/'+sid+'/status',{status});toast(status==='confirmed'?'به‌عنوان تقلب تأیید شد':'بی‌خطر علامت خورد','ok');document.querySelectorAll('.modal-bg').forEach(m=>m.remove());await renderSuspicious();}catch(e){toast(e.message,'bad');}}
+async function suspBan(uid){if(!confirm('این کاربر بن شود؟'))return;const reason=prompt('علت بن:')||'فعالیت مشکوک';try{await api('PATCH','/admin/users/'+uid+'/status',{status:'banned',reason});toast('کاربر بن شد','ok');document.querySelectorAll('.modal-bg').forEach(m=>m.remove());render();}catch(e){toast(e.message,'bad');}}
+
+/* ================= RESET TOOLS (per-area, confirmation-gated) ================= */
+const RESET_AREAS=[
+  ['wallet','کیف پول','دفترکل + موجودی + برداشت‌ها را پاک می‌کند',1],
+  ['tickets','بلیط‌ها','همهٔ بلیط‌های کاربران صفر می‌شود',0],
+  ['xp','XP کاربران','XP همه صفر می‌شود',0],
+  ['cup','کاپ هفتگی','امتیازِ کاپِ هفتگی صفر می‌شود',0],
+  ['level','سطح کاربران','سطحِ همه به ۱ برمی‌گردد',0],
+  ['league','لیگ‌ها','دادهٔ لیگ (config-محور) ریست می‌شود',0],
+  ['missions','مأموریت‌ها','پیشرفتِ مأموریت‌ها پاک می‌شود',0],
+  ['stats','آمار بازی','پاسخ‌ها و آمارِ بازی پاک می‌شود',0],
+  ['matchHistory','تاریخچهٔ مسابقات','همهٔ مسابقات و بازیکنانِ آن‌ها پاک می‌شود',1],
+  ['transactions','تراکنش‌ها','تاریخچهٔ تراکنش‌ها پاک می‌شود',1],
+  ['leaderboard','لیدربرد','رتبه‌بندی‌ها بازسازی/پاک می‌شود',0],
+  ['notifications','اعلان‌ها','همهٔ اعلان‌ها پاک می‌شود',0],
+  ['full','ریست کاملِ سیستم','همهٔ موارد بالا با هم — فقط برای شروعِ تازه',2]
+];
+async function renderReset(){
+  $('#main').innerHTML=head('ابزار ریست','ریستِ هر بخش به‌صورت جداگانه — عملیاتِ حساس نیازمندِ تأییدِ نهایی است')+
+    '<div class="note">⚠️ این عملیات‌ها <b>برگشت‌ناپذیر</b>اند و مستقیم روی دیتابیس اثر می‌گذارند. هر ریست در <b>Audit Log</b> ثبت می‌شود (چه کسی، چه بخشی، چند رکورد). مواردِ حساس (کیف پول، تراکنش، تاریخچه، ریستِ کامل) قبلِ اجرا نیازمندِ تایپِ کلمهٔ <span class="mono">RESET</span> هستند.</div>'+
+    '<div class="grid g3">'+RESET_AREAS.map(a=>{
+      const danger=a[3]; const bcls=danger>=2?'bad':danger>=1?'bad':'';
+      const border=danger>=2?'border-color:var(--bad);box-shadow:0 0 0 1.5px var(--bad) inset':danger>=1?'border-color:#5a2020':'';
+      return '<div class="card" style="'+border+'"><h3>'+(danger>=2?'☢️ ':danger>=1?'⚠️ ':'♻️ ')+esc(a[1])+'</h3><div style="color:var(--muted);font-size:12px;min-height:34px;line-height:1.6">'+esc(a[2])+'</div><button class="btn '+(bcls||'')+' sm" style="width:100%;margin-top:8px" onclick="doReset(\''+a[0]+'\','+danger+',\''+esc(a[1])+'\')">ریست '+esc(a[1])+'</button></div>';
+    }).join('')+'</div>';
+}
+function doReset(area,danger,label){
+  if(danger>=1){
+    modal('تأییدِ ریست: '+esc(label),
+      '<div class="note" style="background:rgba(255,90,72,.12);border-color:rgba(255,90,72,.4);color:#ffb3aa">این عملیات برگشت‌ناپذیر است و «'+esc(label)+'» را برای <b>همهٔ کاربران</b> پاک می‌کند. برای ادامه، کلمهٔ <b>RESET</b> را تایپ کن.</div>'+
+      '<div class="field"><label>تأیید نهایی</label><input id="rs_confirm" placeholder="RESET" dir="ltr" autocomplete="off"></div>'+
+      '<div class="field"><label>علت (اختیاری)</label><input id="rs_reason" placeholder="مثلاً پاک‌سازی محیطِ تست"></div>'+
+      '<button class="btn bad" onclick="doResetConfirmed(\''+area+'\')">اجرای ریست</button>');
+  } else {
+    if(!confirm('«'+label+'» برای همهٔ کاربران ریست شود؟'))return;
+    runReset(area,'RESET','');
+  }
+}
+async function doResetConfirmed(area){
+  const c=($('#rs_confirm').value||'').trim();
+  if(c!=='RESET')return toast('برای تأیید باید دقیقاً RESET تایپ شود','bad');
+  runReset(area,'RESET',($('#rs_reason').value||'').trim());
+}
+async function runReset(area,confirm,reason){
+  try{const r=await api('POST','/admin/reset',{area,confirm,reason});toast('ریست انجام شد — '+fa(r.affected||0)+' رکورد ('+esc(area)+')','ok');document.querySelectorAll('.modal-bg').forEach(m=>m.remove());}catch(e){toast(e.message,'bad');}
+}
+
+/* ================= REPORTS ================= */
+let REP_G='daily';
+async function renderReports(){
+  const [rep,top,failed]=await Promise.all([api('GET','/admin/wallet/reports?granularity='+REP_G),api('GET','/admin/wallet/reports/top-users?limit=15').catch(()=>[]),api('GET','/admin/wallet/reports/failed').catch(()=>({failedTransactions:[]}))]);
+  $('#main').innerHTML=head('گزارش‌ها','درآمد، کاربران پرگردش، ناموفق','<button class="btn sm '+(REP_G==='daily'?'pri':'')+'" onclick="REP_G=\'daily\';render()">روزانه</button> <button class="btn sm '+(REP_G==='monthly'?'pri':'')+'" onclick="REP_G=\'monthly\';render()">ماهانه</button>')+
+    '<div class="card" style="margin-bottom:13px"><h3>مالی</h3>'+tbl(['دوره','شارژ','جوایز','ورودی','برداشت','سود'],(rep.rows||[]).map(r=>[r.period,fa(r.deposits),fa(r.rewards),fa(r.stakes),fa(r.withdrawals),'<b style="color:var(--gold)">'+fa(r.systemProfit)+'</b>']))+'</div>'+
+    '<div class="grid g2"><div class="card"><h3>کاربران پرگردش</h3>'+tbl(['کاربر','گردش'],(top||[]).map(u=>[esc(u.username||String(u.userId).slice(0,8)),fa(u.volume)]))+'</div>'+
+      '<div class="card"><h3>تراکنش‌های ناموفق</h3>'+tbl(['نوع','مبلغ','زمان'],((failed.failedTransactions)||[]).slice(0,15).map(t=>[esc(t.type),fa(t.amount),fmtDate(t.createdAt)]))+'</div></div>';
+}
+
+/* ================= LOGS & DURABLE AUDIT ================= */
+async function renderLogs(){
+  const [durable,wau]=await Promise.all([
+    api('GET','/admin/audit?limit=150').catch(()=>({rows:[]})),
+    api('GET','/admin/wallet/audit?limit=80').catch(()=>[])
+  ]);
+  const D=durable.rows||[];
+  const money=v=>v==null?'—':fa(v);
+  const delta=d=>d==null?'—':(d>=0?'<span style="color:var(--ok)">+'+fa(d)+'</span>':'<span style="color:var(--bad)">'+fa(d)+'</span>');
+  $('#main').innerHTML=head('لاگ و Audit','ثبتِ دائمیِ همهٔ تغییراتِ پنل — چه کسی، چه چیزی، قبل/بعد/مقدارِ تغییر')+
+    '<div class="note">هر عملیاتِ مالی/مدیریتی به‌صورت <b>دائمی</b> اینجا ثبت می‌شود و بعد از ری‌استارتِ سرور هم می‌ماند. ستون‌های «قبل/بعد/تغییر» برای اصلاحِ موجودی و مقادیرِ عددی مقدار می‌گیرند؛ ریست‌ها با شمارِ رکوردِ متأثر ثبت می‌شوند.</div>'+
+    '<div class="card" style="margin-bottom:13px"><h3>🔐 Audit Log دائمی ('+fa(D.length)+' رکورد)</h3>'+
+      tbl(['زمان','ادمین','عملیات','کاربر هدف','قبل','بعد','تغییر','علت','شناسهٔ عملیات'],D.map(l=>[
+        fmtDate(l.createdAt),'<span class="mono">'+String(l.adminId||'').slice(0,8)+'</span>','<span class="pill info">'+esc(l.action)+'</span>',
+        l.targetUserId?'<span class="mono">'+String(l.targetUserId).slice(0,8)+'</span>':'—',
+        money(l.before),money(l.after),delta(l.delta),esc(l.reason||'—'),'<span class="mono" style="color:var(--muted)">'+String(l.id||'').slice(0,8)+'</span>'
+      ]))+'</div>'+
+    '<div class="card"><h3>لاگ عملیاتِ مالی (Wallet Audit)</h3>'+tbl(['عملیات','IP','خطا','زمان'],(Array.isArray(wau)?wau:wau.rows||[]).slice(0,40).map(l=>[esc(l.action),esc(l.ip||'—'),l.error?'<span style="color:var(--bad)">'+esc(l.error)+'</span>':'—',fmtDate(l.created_at||l.createdAt)]))+'</div>';
+}
+
+/* ================= ROLES ================= */
+async function renderRoles(){
+  const rows=await api('GET','/admin/users?q=&limit=200');
+  const admins=(rows.rows||rows||[]).filter(u=>u.role==='admin');
+  $('#main').innerHTML=head('نقش‌های ادمین','مدیرانِ فعلی سیستم')+
+    '<div class="note">در حال حاضر دو نقشِ واقعی وجود دارد: <b>admin</b> و <b>user</b>. نقش‌های تفکیکی (Moderator, Finance, Support, Question Manager) در config زیر کلید <span class="mono">roles</span> قابل تعریف‌اند و در آپدیت بعدی به سطوح دسترسی وصل می‌شوند (فعلاً غیرفعال).</div>'+
+    tbl(['کاربر','شناسه','عملیات'],admins.map(u=>[esc(u.username||''),'<span class="mono">'+String(u.id).slice(0,10)+'</span>','<button class="btn sm bad" onclick="setRole(\''+u.id+'\',\'user\')">حذف ادمین</button>']))+
+    '<div class="card" style="margin-top:13px"><h3>ادمین کردن کاربر</h3><div style="display:flex;gap:6px;max-width:420px"><input id="role_uid" placeholder="شناسهٔ کاربر"><button class="btn pri" onclick="setRole($(\'#role_uid\').value.trim(),\'admin\')">ادمین کن</button></div></div>';
+}
+
+/* ================= GENERIC CONFIG EDITOR (Data-Driven) ================= */
+/* Auto-builds an editable form for ANY config subtree, so every variable is
+   tunable from the panel. Booleans → checkbox, numbers → number, strings →
+   text; nested objects recurse; arrays fall back to the raw-JSON editor. */
+async function renderConfigSection(key,title){
+  if(!CFG)await loadCfg();
+  const node=CFG[key];
+  let body;
+  if(node==null){ body='<div class="empty">این بخش هنوز در config تعریف نشده.</div>'; }
+  else if(Array.isArray(node)||hasArrayDeep(node)){
+    body='<div class="note">این بخش شاملِ فهرست/آرایه است؛ برای افزودن آیتم (لیگ، مأموریت، محصول، بنر، رویداد و…) مستقیم اینجا JSON را ویرایش کن. خالی بودن یعنی هنوز موردی تعریف نشده (۰).</div>'+
+      '<textarea class="json" id="cfg_arr">'+esc(JSON.stringify(node,null,2))+'</textarea>'+
+      '<button class="btn pri" style="margin-top:10px" onclick="saveConfigArray(\''+key+'\')">💾 ذخیره</button>';
+  } else {
+    _CFG_FIELDS=[];
+    body='<div class="card">'+buildFields(node,key)+'<button class="btn pri" style="margin-top:12px" onclick="saveConfigForm(\''+key+'\')">💾 ذخیره</button></div>';
+  }
+  $('#main').innerHTML=head(title,'Data-Driven — تغییر بلافاصله اعمال و ماندگار می‌شود',
+    '<button class="btn" onclick="go(\'rawcfg\')">ویرایش خام کل</button>')+body;
+}
+let _CFG_FIELDS=[];
+function hasArrayDeep(o){ if(Array.isArray(o))return true; if(o&&typeof o==='object')return Object.values(o).some(v=>Array.isArray(v)); return false; }
+function buildFields(obj,path){
+  let html='';
+  for(const k of Object.keys(obj)){
+    const v=obj[k]; const p=path+'.'+k;
+    if(v!==null&&typeof v==='object'&&!Array.isArray(v)){
+      html+='<div style="margin:10px 0 4px;font-weight:800;color:var(--gold);font-size:13px">'+esc(k)+'</div>'+buildFields(v,p);
+    }else if(Array.isArray(v)){
+      html+='<div class="cfg-row"><label>'+esc(k)+'<span class="path">'+esc(p)+' (آرایه — از ویرایش خام)</span></label><input value="'+esc(JSON.stringify(v))+'" disabled></div>';
+    }else{
+      const id='cf_'+_CFG_FIELDS.length; _CFG_FIELDS.push({id,path:p,type:typeof v});
+      if(typeof v==='boolean')html+='<div class="cfg-row"><label>'+esc(k)+'<span class="path">'+esc(p)+'</span></label><input id="'+id+'" type="checkbox" '+(v?'checked':'')+'></div>';
+      else if(typeof v==='number')html+='<div class="cfg-row"><label>'+esc(k)+'<span class="path">'+esc(p)+'</span></label><input id="'+id+'" type="number" value="'+v+'"></div>';
+      else html+='<div class="cfg-row"><label>'+esc(k)+'<span class="path">'+esc(p)+'</span></label><input id="'+id+'" value="'+esc(v)+'"></div>';
+    }
+  }
+  return html;
+}
+function setDeep(obj,path,val){const ks=path.split('.');let o=obj;for(let i=0;i<ks.length-1;i++){o[ks[i]]=o[ks[i]]||{};o=o[ks[i]];}o[ks[ks.length-1]]=val;}
+async function saveConfigForm(key){
+  const patch={};
+  for(const f of _CFG_FIELDS){
+    const el=$('#'+f.id);if(!el)continue;
+    let val; if(f.type==='boolean')val=el.checked; else if(f.type==='number')val=Number(el.value); else val=el.value;
+    setDeep(patch,f.path,val);
+  }
+  try{await api('PATCH','/admin/config',patch);toast('ذخیره و اعمال شد ✅','ok');await loadCfg();render();}catch(e){toast(e.message||'خطا','bad');}
+}
+async function saveConfigArray(key){
+  let val;try{val=JSON.parse($('#cfg_arr').value);}catch(e){return toast('JSON نامعتبر: '+e.message,'bad');}
+  const patch={};patch[key]=val;
+  try{await api('PATCH','/admin/config',patch);toast('ذخیره شد ✅','ok');await loadCfg();render();}catch(e){toast(e.message,'bad');}
+}
+async function renderRawCfg(){
+  if(!CFG)await loadCfg();
+  $('#main').innerHTML=head('ویرایش خام Config','کلِ تنظیمات بازی — هر متغیری اینجا قابل تغییر است')+
+    '<div class="note">این JSON کلِ اقتصاد و بالانسِ بازی است. تغییر و ذخیره → بلافاصله اعمال و در دیتابیس ماندگار می‌شود (بعد از ری‌استارت هم می‌ماند). موارد پیاده‌نشده روی ۰/خالی‌اند و در آپدیت فعال می‌شوند.</div>'+
+    '<textarea class="json" id="rawjson" style="min-height:60vh">'+esc(JSON.stringify(CFG,null,2))+'</textarea>'+
+    '<div style="margin-top:10px;display:flex;gap:8px"><button class="btn pri" onclick="saveRaw()">💾 ذخیرهٔ کامل</button><button class="btn" onclick="loadCfg().then(render)">بازنشانی</button></div>';
+}
+async function saveRaw(){
+  let obj;try{obj=JSON.parse($('#rawjson').value);}catch(e){return toast('JSON نامعتبر: '+e.message,'bad');}
+  try{await api('PUT','/admin/config',obj);toast('کل تنظیمات ذخیره شد ✅','ok');await loadCfg();render();}catch(e){toast(e.message||'ذخیره ناموفق (بررسی ساختار modes/economy)','bad');}
+}
+
+/* ---- boot ---- */
+$('#inApi').value=API;$('#inKey').value=KEY;
+if(KEY)enterPanel();
+</script>
+</body>
+</html>
