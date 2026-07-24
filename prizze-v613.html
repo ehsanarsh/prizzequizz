@@ -85,18 +85,9 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
   animation:pzGlowB 3.6s ease-in-out infinite}
 @keyframes pzGlowO{0%,100%{opacity:.20;transform:translate(-50%,-50%) scale(.9)}48%{opacity:1;transform:translate(-50%,-50%) scale(1.06)}56%{opacity:.9}}
 @keyframes pzGlowB{0%,100%{opacity:.28;transform:translate(-50%,-50%) scale(.93)}52%{opacity:1;transform:translate(-50%,-50%) scale(1.07)}60%{opacity:.88}}
-/* Frost the DARK panels so the animated backdrop shows through — colors kept,
-   just translucent + blurred. Branded/gradient elements are intentionally left. */
-.phone.pz-paidbg .card,.phone.pz-paidbg .sheet,.phone.pz-paidbg .aaa-card,
-.phone.pz-paidbg .sup-card,.phone.pz-paidbg .ticket-card,.phone.pz-paidbg .faq-item,
-.phone.pz-paidbg .status-row,.phone.pz-paidbg .contact-card,.phone.pz-paidbg .kyc-status,
-.phone.pz-paidbg .wallet-card,.phone.pz-paidbg .wallet-mini,.phone.pz-paidbg .wallet-empty,
-.phone.pz-paidbg .sup-empty,.phone.pz-paidbg .fr-empty,.phone.pz-paidbg .friend-card,
-.phone.pz-paidbg .txn,.phone.pz-paidbg .add-panel,.phone.pz-paidbg .pzm-sheet{
-  background:rgba(18,18,24,.95)!important;
-  -webkit-backdrop-filter:blur(4px) saturate(1.05);backdrop-filter:blur(4px) saturate(1.05);
-}
-.phone.pz-paidbg .aaa-card,.phone.pz-paidbg .sheet{background:rgba(16,16,21,.96)!important}
+/* Frosting reverted to the previous look: paid panels keep their normal SOLID
+   backgrounds (no translucency, no blur) so buttons/text are fully crisp. The
+   animated backdrop still shows in the page margins/gaps between panels. */
 @media (prefers-reduced-motion: reduce){.pzimg,.pzglow{animation:none!important}.pzglow{opacity:.75}}
 .firefly{position:absolute;width:5px;height:5px;border-radius:50%;background:var(--bolt);
   box-shadow:0 0 10px 2px var(--bolt-glow);animation:dust 10s ease-in-out infinite;opacity:.5}
@@ -9819,7 +9810,7 @@ async function pzSubmitReport(){
   if(btn){ btn.disabled=false; btn.textContent='ارسال گزارش'; }
   pzCloseReport();
   if(r&&(r.id||r.status)){ try{toast('گزارش تو ثبت شد؛ ممنون 🙏');}catch(e){} }
-  else { try{toast('ارسال گزارش ناموفق بود');}catch(e){} }
+  else { const em=(r&&r.error&&(r.error.message||r.error.code))||(r&&r.message)||'خطای نامشخص'; try{toast('ارسال گزارش ناموفق: '+em);}catch(e){} try{console.warn('[PZ-REPORT] failed',r);}catch(e){} }
 }
 
 /* Post-match review — fetch each question of the match with both players' picks. */
@@ -9831,7 +9822,8 @@ async function pzOpenReview(){
   body.innerHTML='<p style="text-align:center;color:var(--muted);margin-top:40px">در حال بارگذاری…</p>';
   ov.classList.add('show');
   const r=await pzApi('GET','/matches/'+mid+'/review');
-  if(!r||r.error||!Array.isArray(r.rounds)){ body.innerHTML='<p style="text-align:center;color:var(--muted);margin-top:40px">مروری برای این مسابقه یافت نشد.</p>'; return; }
+  try{console.log('[PZ-REVIEW]',mid,r);}catch(e){}
+  if(!r||r.error||!Array.isArray(r.rounds)){ const em=(r&&r.error&&(r.error.message||r.error.code))||(r&&r.message)||'پاسخی نیامد'; body.innerHTML='<p style="text-align:center;color:var(--muted);margin-top:40px">مروری برای این مسابقه یافت نشد.<br><span style="font-size:11px;opacity:.7">('+pzEsc(em)+' — کد مسابقه: '+pzEsc(String(mid).slice(0,8))+')</span></p>'; return; }
   const myId=(typeof pzRt!=='undefined'&&pzRt&&pzRt.myId)||(_usr&&_usr.id)||null;
   const players=r.players||[];
   const opp=players.find(p=>p.userId!==myId);
