@@ -23,6 +23,8 @@ import { createScheduled, listScheduled, cancelScheduled } from '../../services/
 import { resolveSegment, describeSegment, type SegmentSpec } from '../../services/notificationSegmentService.js';
 import { createCampaign, recordCampaignResult, listCampaigns, campaignAnalytics, campaignDashboard } from '../../services/notificationCampaignService.js';
 import { listItems as shopList, saveItem as shopSave, removeItem as shopRemove } from '../../services/shopService.js';
+import { login as adminLogin, listAccounts, createAccount, updateAccount, deleteAccount, changeOwnPassword, resolveTokenSync, ADMIN_TABS } from '../../services/adminAccountService.js';
+import { currentAdmin } from '../../services/adminGuard.js';
 import { financeDiagnostics, listWithdrawals, reviewWithdrawal, transactionsToCsv } from '../../services/financeService.js';
 import { listRewardHolds, rewardHoldDiagnostics, reviewRewardHold } from '../../services/rewardReviewService.js';
 import { integrity } from '../../services/integrityService.js';
@@ -31,6 +33,64 @@ import type { DeviceTrustStatus, IntegritySeverity, IntegrityStatus, Notificatio
 import type { Question } from '../../types/domain.js';
 
 export function registerAdminRoutes(router: Router, base: string): void {
+  // ===== Admin auth + accounts (per-tab access control) =====
+  // Login with username+password → returns a session token (used as x-admin-key).
+  router.add('POST', `${base}/admin/auth/login`, async (ctx) => {
+    const b = (ctx.body ?? {}) as any;
+    const acc = await adminLogin(String(b.username ?? ''), String(b.password ?? ''));
+    if (!acc) return error(ctx.res, 401, 'LOGIN_FAILED', 'نام کاربری یا رمز عبور نادرست است.');
+    json(ctx.res, 200, { token: acc.token, username: acc.username, perms: acc.perms, isOwner: acc.isOwner });
+  });
+  // Who am I + my permissions (the panel uses this to build the nav it can see).
+  router.add('GET', `${base}/admin/auth/me`, (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    const me = currentAdmin(ctx);
+    json(ctx.res, 200, { master: me.master, username: me.account?.username ?? 'owner', isOwner: me.master || !!me.account?.isOwner, perms: me.perms, tabs: ADMIN_TABS });
+  });
+  // Change my own password (rotates my token; the panel re-logs in with the new).
+  router.add('POST', `${base}/admin/auth/password`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    const b = (ctx.body ?? {}) as any;
+    const key = String(ctx.req.headers['x-admin-key'] ?? '');
+    const acc = resolveTokenSync(key);
+    if (!acc) return error(ctx.res, 400, 'NO_ACCOUNT', 'این نشست با کلید اصلی (env) است؛ رمزِ کلید اصلی از سرور تنظیم می‌شود، نه از پنل. برای تغییر رمز، با یک حساب کاربری وارد شو.');
+    const r = await changeOwnPassword(acc.id, String(b.current ?? ''), String(b.next ?? ''));
+    if (!r.ok) return error(ctx.res, 400, r.error ?? 'FAILED', r.error === 'CURRENT_WRONG' ? 'رمز فعلی نادرست است.' : r.error === 'PASSWORD_TOO_SHORT' ? 'رمز جدید خیلی کوتاه است.' : 'تغییر رمز ناموفق بود.');
+    json(ctx.res, 200, { ok: true, token: r.token });
+  });
+  // Account management — owner/master only.
+  router.add('GET', `${base}/admin/accounts`, async (ctx) => {
+    if (!requireAdmin(ctx, { ownerOnly: true })) return;
+    json(ctx.res, 200, { rows: await listAccounts(), tabs: ADMIN_TABS });
+  });
+  router.add('POST', `${base}/admin/accounts`, async (ctx) => {
+    if (!requireAdmin(ctx, { ownerOnly: true })) return;
+    const b = (ctx.body ?? {}) as any;
+    try {
+      const acc = await createAccount({ username: String(b.username ?? ''), password: String(b.password ?? ''), perms: Array.isArray(b.perms) ? b.perms : [], createdBy: currentAdmin(ctx).account?.username ?? 'owner' });
+      audit(ctx.userId, 'ADMIN_ACCOUNT_CREATED', 'admin_account', acc.id, { username: acc.username, perms: acc.perms });
+      json(ctx.res, 201, { id: acc.id, username: acc.username, perms: acc.perms });
+    } catch (e) {
+      const c = e instanceof Error ? e.message : 'FAILED';
+      return error(ctx.res, 422, c, c === 'USERNAME_TAKEN' ? 'این نام کاربری قبلاً وجود دارد.' : c === 'USERNAME_INVALID' ? 'نام کاربری نامعتبر است (فقط حروف/عدد، حداقل ۳ کاراکتر).' : c === 'PASSWORD_TOO_SHORT' ? 'رمز عبور خیلی کوتاه است.' : 'ساخت حساب ناموفق بود.');
+    }
+  });
+  router.add('PATCH', `${base}/admin/accounts/:id`, async (ctx) => {
+    if (!requireAdmin(ctx, { ownerOnly: true })) return;
+    const b = (ctx.body ?? {}) as any;
+    const ok = await updateAccount(ctx.params.id!, { perms: Array.isArray(b.perms) ? b.perms : undefined, password: b.password ? String(b.password) : undefined, active: typeof b.active === 'boolean' ? b.active : undefined });
+    if (!ok) return error(ctx.res, 404, 'ACCOUNT_NOT_FOUND', 'حساب یافت نشد یا قابل تغییر نیست (مدیر کل).');
+    audit(ctx.userId, 'ADMIN_ACCOUNT_UPDATED', 'admin_account', ctx.params.id, { fields: Object.keys(b) });
+    json(ctx.res, 200, { updated: true });
+  });
+  router.add('DELETE', `${base}/admin/accounts/:id`, async (ctx) => {
+    if (!requireAdmin(ctx, { ownerOnly: true })) return;
+    const ok = await deleteAccount(ctx.params.id!);
+    if (!ok) return error(ctx.res, 404, 'ACCOUNT_NOT_FOUND', 'حساب یافت نشد یا قابل حذف نیست (مدیر کل).');
+    audit(ctx.userId, 'ADMIN_ACCOUNT_DELETED', 'admin_account', ctx.params.id, {});
+    json(ctx.res, 200, { deleted: true });
+  });
+
   router.add('GET', `${base}/admin/config`, (ctx) => {
     if (!requireAdmin(ctx)) return;
     json(ctx.res, 200, getEditableGameConfig());

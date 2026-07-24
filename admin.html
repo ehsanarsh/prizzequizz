@@ -75,9 +75,13 @@ textarea.json{min-height:300px;font-family:ui-monospace,monospace;font-size:12px
   <div class="login-card">
     <h1>⚡ پنل مدیریت</h1><p>PrizzeQuizz — کنترل کامل و Data-Driven</p>
     <div class="field"><label>آدرس API</label><input id="inApi" placeholder="https://دامنه/v1" dir="ltr"></div>
-    <div class="field"><label>کلید مدیریت</label><input id="inKey" type="password" placeholder="ADMIN_KEY" dir="ltr"></div>
+    <div class="field"><label>نام کاربری</label><input id="inUser" placeholder="owner" dir="ltr" autocomplete="username"></div>
+    <div class="field"><label>رمز عبور</label><input id="inPass" type="password" placeholder="••••••••" dir="ltr" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()"></div>
     <button class="btn pri" style="width:100%;margin-top:6px" onclick="doLogin()">ورود</button>
+    <div style="text-align:center;margin-top:10px"><a onclick="document.getElementById('keyWrap').style.display='block';this.style.display='none'" style="color:var(--muted);font-size:12px;cursor:pointer">ورود با کلید اصلی (پیشرفته)</a></div>
+    <div class="field" id="keyWrap" style="display:none;margin-top:8px"><label>کلید اصلی (ADMIN_KEY)</label><input id="inKey" type="password" placeholder="ADMIN_KEY" dir="ltr"></div>
     <p id="loginErr" style="color:var(--bad);margin:12px 0 0;font-size:12px"></p>
+    <p style="color:var(--muted);font-size:11px;margin-top:10px">اولین ورود: نام کاربری <b>owner</b> و رمز = همان کلید اصلیِ سرور. بعد از ورود می‌توانی رمز را عوض کنی و برای دیگران حساب بسازی.</p>
   </div>
 </section>
 
@@ -103,17 +107,41 @@ function fmtDate(d){if(!d)return '—';try{return new Date(d).toLocaleString('fa
 async function api(method,path,body){
   const r=await fetch(API+path,{method,headers:{'Content-Type':'application/json','x-admin-key':KEY},body:body?JSON.stringify(body):undefined});
   let d=null;try{d=await r.json();}catch(e){}
-  if(r.status===403)throw {code:'FORBIDDEN',message:'کلید مدیریت نامعتبر است'};
+  if(r.status===403)throw (d&&d.error)||{code:'FORBIDDEN',message:'دسترسی مجاز نیست'};
   if(!r.ok)throw (d&&d.error)||{message:'خطای '+r.status};
   return d&&d.data!==undefined?d.data:d;
 }
+let PERMS=['*'], IS_OWNER=true, ME_USER='';
+function canTab(k){ return PERMS.indexOf('*')>=0 || PERMS.indexOf(k)>=0; }
 async function doLogin(){
-  API=($('#inApi').value||'').trim().replace(/\/$/,'')||API; KEY=($('#inKey').value||'').trim();
-  if(!KEY){$('#loginErr').textContent='کلید را وارد کن';return;}
-  try{ await api('GET','/admin/wallet/consistency'); localStorage.setItem('pz_admin_api',API);localStorage.setItem('pz_admin_key',KEY);
-    $('#login').classList.add('hidden');$('#shell').classList.remove('hidden'); await loadCfg(); buildNav(); go('dashboard');
+  API=($('#inApi').value||'').trim().replace(/\/$/,'')||API;
+  const key=($('#inKey')&&$('#inKey').value||'').trim();
+  const user=($('#inUser').value||'').trim(), pass=($('#inPass').value||'');
+  $('#loginErr').textContent='';
+  try{
+    if(key){ KEY=key; }                         // advanced: direct master key
+    else {
+      if(!user||!pass){$('#loginErr').textContent='نام کاربری و رمز را وارد کن';return;}
+      const r=await fetch(API+'/admin/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:user,password:pass})});
+      const d=await r.json().catch(()=>null);
+      if(!r.ok){$('#loginErr').textContent=(d&&d.error&&d.error.message)||'ورود ناموفق';return;}
+      KEY=(d&&d.data&&d.data.token)||(d&&d.token);
+    }
+    localStorage.setItem('pz_admin_api',API);localStorage.setItem('pz_admin_key',KEY);
+    await enterPanel();
   }catch(e){$('#loginErr').textContent=e.message||'ورود ناموفق';}
 }
+async function enterPanel(){
+  try{ await loadMe(); }catch(e){ showLogin((e&&e.message)||'نشست منقضی شده؛ دوباره وارد شو'); return false; }
+  $('#login').classList.add('hidden');$('#shell').classList.remove('hidden');
+  await loadCfg(); buildNav();
+  // land on the first tab this account may actually see
+  const first=(NAV.flatMap(g=>g[1]).map(p=>p[0]).filter(canTab))[0]||'dashboard';
+  go(canTab('dashboard')?'dashboard':first);
+  return true;
+}
+function showLogin(msg){ $('#shell').classList.add('hidden'); $('#login').classList.remove('hidden'); if(msg)$('#loginErr').textContent=msg; }
+async function loadMe(){ const me=await api('GET','/admin/auth/me'); PERMS=me.perms||['*']; IS_OWNER=!!me.isOwner; ME_USER=me.username||''; }
 function logout(){localStorage.removeItem('pz_admin_key');location.reload();}
 async function loadCfg(){ try{ CFG=await api('GET','/admin/config'); $('#cfgVer').textContent='config '+(CFG.version||''); }catch(e){ CFG={}; } }
 
@@ -124,10 +152,15 @@ const NAV=[
   ['اقتصاد',[['wallet','👛','کیف پول'],['withdrawals','💸','برداشت‌ها'],['rewardholds','⏳','جوایز در انتظار'],['tickets','🎫','بلیط‌ها'],['shop','🛒','فروشگاه'],['giftcodes','🎁','کدهای هدیه']]],
   ['بالانس بازی (Data-Driven)',[['cfg_xp','✨','XP'],['cfg_level','🏅','Level'],['cfg_cup','🏆','Cup'],['cfg_gameplay','🕹️','گیم‌پلی مودها'],['leagues','🛡️','لیگ‌ها'],['missions','🎯','مأموریت‌ها'],['rewards','🎉','جوایز/چرخونه/استریک']]],
   ['رشد و تعامل',[['leaderboard','📈','لیدربرد'],['campaign','🎁','کمپین کاربر جدید'],['events','📅','رویدادها'],['banners','🖼️','بنرها'],['notifications','🔔','اعلان‌ها']]],
-  ['سیستم',[['anticheat','🛡️','ضدتقلب'],['suspicious','🚨','کاربران مشکوک'],['reports','📑','گزارش‌ها'],['logs','📝','لاگ و Audit'],['reset','♻️','ابزار ریست'],['roles','🔑','نقش‌های ادمین'],['general','⚙️','تنظیمات عمومی'],['rawcfg','🧩','ویرایش خام Config']]]
+  ['سیستم',[['anticheat','🛡️','ضدتقلب'],['suspicious','🚨','کاربران مشکوک'],['reports','📑','گزارش‌ها'],['logs','📝','لاگ و Audit'],['reset','♻️','ابزار ریست'],['accounts','🔐','حساب‌ها و دسترسی'],['general','⚙️','تنظیمات عمومی'],['rawcfg','🧩','ویرایش خام Config']]]
 ];
 function buildNav(){
-  $('#nav').innerHTML=NAV.map(g=>'<div class="navgroup">'+g[0]+'</div>'+g[1].map(p=>'<button data-p="'+p[0]+'" onclick="go(\''+p[0]+'\')"><span class="ico">'+p[1]+'</span>'+p[2]+'</button>').join('')).join('');
+  $('#nav').innerHTML=NAV.map(g=>{
+    // Only show tabs this account may access; 'accounts' is owner-only.
+    const items=g[1].filter(p=>(p[0]==='accounts'?IS_OWNER:canTab(p[0])));
+    if(!items.length)return '';
+    return '<div class="navgroup">'+g[0]+'</div>'+items.map(p=>'<button data-p="'+p[0]+'" onclick="go(\''+p[0]+'\')"><span class="ico">'+p[1]+'</span>'+p[2]+'</button>').join('');
+  }).join('');
 }
 let CUR='dashboard';
 function go(p){CUR=p;document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('active',b.dataset.p===p));render();}
@@ -140,7 +173,11 @@ const CONFIG_PAGES={cfg_xp:['xp','تنظیمات XP'],cfg_level:['level','تنظ
 
 async function render(){
   loading();
+  // Access guard: block sections this account isn't permitted to see.
+  if(CUR==='accounts'){ if(!IS_OWNER){$('#main').innerHTML=head('دسترسی محدود')+'<div class="card empty">فقط مدیر کل به این بخش دسترسی دارد.</div>';return;} }
+  else if(!canTab(CUR)){ $('#main').innerHTML=head('دسترسی محدود')+'<div class="card empty">به این بخش دسترسی نداری. از مدیر کل بخواه دسترسی این تب را فعال کند.</div>';return; }
   try{
+    if(CUR==='accounts')return renderAccounts();
     if(CONFIG_PAGES[CUR])return renderConfigSection(CONFIG_PAGES[CUR][0],CONFIG_PAGES[CUR][1]);
     const fn={dashboard:renderDashboard,finance:renderFinance,users:renderUsers,matches:renderMatches,support:renderSupport,questions:renderQuestions,qreports:renderQReports,aistudio:renderAiStudio,pipeline:renderPipeline,categories:renderCategories,wallet:renderWallet,withdrawals:renderWithdrawals,rewardholds:renderRewardHolds,tickets:renderTickets,giftcodes:renderGiftCodes,shop:renderShopAdmin,leaderboard:renderLeaderboard,notifications:renderNotifications,anticheat:renderAntiCheat,suspicious:renderSuspicious,reports:renderReports,logs:renderLogs,reset:renderReset,roles:renderRoles,rawcfg:renderRawCfg}[CUR];
     if(fn)return fn();
@@ -1055,6 +1092,67 @@ async function shopSaveItem(id){
 async function shopToggle(id){const it=(window._SHOP_ROWS||{})[id];if(!it)return;try{await api('POST','/admin/shop/items',{...it,enabled:!it.enabled});toast(it.enabled?'غیرفعال شد':'فعال شد','ok');render();}catch(e){toast(e.message,'bad');}}
 async function shopDelete(id){if(!confirm('این آیتم حذف شود؟'))return;try{await api('DELETE','/admin/shop/items/'+id);toast('حذف شد','ok');render();}catch(e){toast(e.message,'bad');}}
 
+/* ================= ADMIN ACCOUNTS + ACCESS ================= */
+function tabLabelMap(){const m={};NAV.forEach(g=>g[1].forEach(p=>{if(p[0]!=='accounts')m[p[0]]=p[1]+' '+p[2];}));return m;}
+function permChecklist(selected){
+  const sel=new Set(selected||[]); const all=sel.has('*');
+  let html='<label style="display:flex;gap:8px;align-items:center;font-weight:900;margin-bottom:8px"><input type="checkbox" id="perm_all" '+(all?'checked':'')+' onchange="document.querySelectorAll(\'.permchk\').forEach(c=>{c.checked=this.checked;c.disabled=this.checked})"> دسترسی کامل (همهٔ تب‌ها)</label>';
+  html+=NAV.map(g=>{
+    const items=g[1].filter(p=>p[0]!=='accounts');
+    if(!items.length)return '';
+    return '<div style="margin:8px 0 3px;color:var(--muted);font-size:11px;font-weight:800">'+g[0]+'</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">'+
+      items.map(p=>'<label style="display:flex;gap:6px;align-items:center;font-size:12.5px"><input type="checkbox" class="permchk" value="'+p[0]+'" '+(all||sel.has(p[0])?'checked':'')+' '+(all?'disabled':'')+'>'+p[1]+' '+esc(p[2])+'</label>').join('')+'</div>';
+  }).join('');
+  return html;
+}
+function collectPerms(){ if($('#perm_all')&&$('#perm_all').checked)return ['*']; return [...document.querySelectorAll('.permchk:checked')].map(c=>c.value); }
+async function renderAccounts(){
+  let data={rows:[]};try{data=await api('GET','/admin/accounts');}catch(e){$('#main').innerHTML=head('حساب‌ها')+'<div class="card empty">'+(e.message||'خطا')+'</div>';return;}
+  window._ACCS={};(data.rows||[]).forEach(a=>window._ACCS[a.id]=a);
+  const lbl=tabLabelMap();
+  const permTxt=a=>a.perms&&a.perms.indexOf('*')>=0?'<span class="pill ok">دسترسی کامل</span>':(a.perms||[]).map(k=>lbl[k]?lbl[k].split(' ').slice(1).join(' '):k).slice(0,8).join('، ')+((a.perms||[]).length>8?' …':'')||'—';
+  $('#main').innerHTML=head('حساب‌ها و دسترسی','برای هرکس حساب بساز و تک‌به‌تک تب‌های مجاز را انتخاب کن','<button class="btn pri" onclick="accEdit()">➕ حساب جدید</button>')+
+    '<div class="card" style="max-width:520px"><h3>🔑 تغییر رمز عبور من ('+esc(ME_USER||'owner')+')</h3>'+
+      '<div class="field"><label>رمز فعلی</label><input id="cp_cur" type="password" dir="ltr"></div>'+
+      '<div class="field"><label>رمز جدید</label><input id="cp_new" type="password" dir="ltr"></div>'+
+      '<button class="btn pri" onclick="changeMyPassword()">ذخیرهٔ رمز جدید</button>'+
+      '<div class="note" style="margin-top:6px">بعد از تغییر رمز، دوباره به‌صورت خودکار با رمز جدید وارد می‌شوی.</div></div>'+
+    '<div class="card"><h3>حساب‌های مدیریت</h3>'+
+      tbl(['نام کاربری','دسترسی‌ها','وضعیت','عملیات'],(data.rows||[]).map(a=>{
+        const act=a.isOwner?'<span class="pill">مدیر کل</span>':
+          '<button class="btn sm" onclick="accEdit(\''+a.id+'\')">ویرایش دسترسی</button> <button class="btn sm" onclick="accResetPass(\''+a.id+'\')">تغییر رمز</button> <button class="btn sm '+(a.active?'':'ok')+'" onclick="accToggle(\''+a.id+'\','+(!a.active)+')">'+(a.active?'غیرفعال':'فعال')+'</button> <button class="btn sm bad" onclick="accDelete(\''+a.id+'\')">حذف</button>';
+        return ['<b>'+esc(a.username)+'</b>'+(a.isOwner?' 👑':''),'<div style="max-width:340px;font-size:12px">'+permTxt(a)+'</div>','<span class="pill '+(a.active?'ok':'bad')+'">'+(a.active?'فعال':'غیرفعال')+'</span>',act];
+      }))+'</div>';
+}
+function accEdit(id){
+  const a=(window._ACCS||{})[id]||{};
+  modal(id?'ویرایش دسترسی: '+esc(a.username):'ساخت حساب مدیریت',
+    (id?'':'<div class="field"><label>نام کاربری</label><input id="ac_user" dir="ltr" placeholder="operator1"></div>'+
+        '<div class="field"><label>رمز عبور</label><input id="ac_pass" type="password" dir="ltr" placeholder="حداقل ۴ کاراکتر"></div>')+
+    '<div class="field"><label>تب‌های مجاز</label><div style="max-height:340px;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:10px">'+permChecklist(a.perms)+'</div></div>'+
+    '<button class="btn pri" onclick="accSave(\''+(id||'')+'\')">💾 ذخیره</button>');
+}
+async function accSave(id){
+  const perms=collectPerms();
+  try{
+    if(id){ await api('PATCH','/admin/accounts/'+id,{perms}); }
+    else{ const u=($('#ac_user').value||'').trim(), p=$('#ac_pass').value||''; if(!u||!p)return toast('نام کاربری و رمز لازم است','bad'); await api('POST','/admin/accounts',{username:u,password:p,perms}); }
+    toast('ذخیره شد ✅','ok');document.querySelector('.modal-bg').remove();render();
+  }catch(e){toast(e.message,'bad');}
+}
+async function accResetPass(id){const p=prompt('رمز جدید برای این حساب:');if(!p)return;try{await api('PATCH','/admin/accounts/'+id,{password:p});toast('رمز عوض شد ✅','ok');}catch(e){toast(e.message,'bad');}}
+async function accToggle(id,active){try{await api('PATCH','/admin/accounts/'+id,{active});toast(active?'فعال شد':'غیرفعال شد','ok');render();}catch(e){toast(e.message,'bad');}}
+async function accDelete(id){if(!confirm('این حساب حذف شود؟'))return;try{await api('DELETE','/admin/accounts/'+id);toast('حذف شد','ok');render();}catch(e){toast(e.message,'bad');}}
+async function changeMyPassword(){
+  const cur=$('#cp_cur').value, next=$('#cp_new').value;
+  if(!cur||!next)return toast('رمز فعلی و جدید را وارد کن','bad');
+  try{
+    const r=await api('POST','/admin/auth/password',{current:cur,next:next});
+    if(r&&r.token){ KEY=r.token; localStorage.setItem('pz_admin_key',KEY); }
+    toast('رمز عوض شد ✅ با رمز جدید وارد شدی','ok'); $('#cp_cur').value='';$('#cp_new').value='';
+  }catch(e){toast(e.message,'bad');}
+}
+
 /* ================= ANTI-CHEAT ================= */
 async function renderAntiCheat(){
   const [sig,risk]=await Promise.all([api('GET','/admin/integrity/signals?limit=50').catch(()=>[]),api('GET','/admin/risk/users').catch(()=>[])]);
@@ -1264,7 +1362,7 @@ async function saveRaw(){
 
 /* ---- boot ---- */
 $('#inApi').value=API;$('#inKey').value=KEY;
-if(KEY)doLogin();
+if(KEY)enterPanel();
 </script>
 </body>
 </html>
