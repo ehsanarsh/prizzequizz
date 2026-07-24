@@ -131,5 +131,27 @@ const bank = makeBank();
   ok('toss bank never leaks into game questions', !leaked);
 }
 
+// 10) THIN TOPIC never switches topics: a topic with very few questions must
+// repeat within itself rather than cross into another topic (the reported bug
+// "وسط سوال یهو موضوع عوض میشه"). Bank: chosen topic has only 2 questions, plus
+// a big rival topic that must NEVER appear.
+{
+  const thin: Q[] = [
+    { id: 'logo-easy-0', category: 'لوگو', difficulty: 'easy', text: 't', options: ['a','b','c','d'], correctIndex: 0 },
+    { id: 'logo-medium-0', category: 'لوگو', difficulty: 'medium', text: 't', options: ['a','b','c','d'], correctIndex: 0 }
+  ];
+  for (const lv of ['easy','medium','hard','veryhard']) for (let i=0;i<8;i++) thin.push({ id:`ورزش-${lv}-${i}`, category:'ورزش', difficulty:lv, text:'t', options:['a','b','c','d'], correctIndex:0 });
+  const m = match({ duelTopics: { '1': 'لوگو', '2': 'لوگو' }, duelTopic: 'لوگو' });
+  let stayed = true, gotOne = true;
+  for (let r = 0; r < 16; r++) {
+    const q = selectQuestionForRound(m, thin, r).q;
+    if (!q) { gotOne = false; }
+    else if (q.category !== 'لوگو') { stayed = false; }
+    ans(m, r, true, true); // both-correct → ladder climbs into levels the topic lacks
+  }
+  ok('thin topic always returns a question', gotOne);
+  ok('thin topic NEVER switches to another topic (repeats instead)', stayed);
+}
+
 console.log(`\nadaptiveDifficulty: ${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);

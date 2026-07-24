@@ -81,9 +81,22 @@ export function pickDeterministic<T extends AdaptiveQuestion>(all: T[], topic: s
     const cands = stable(all.filter((q) => notSelectCat(q) && notUsed(q) && q.difficulty === lvl && (!inTopic || topicOk(q))));
     return cands.length ? cands[seed % cands.length]! : null;
   };
-  // 1) same topic, nearest level (closest first, one level at a time)
+  // Same as pickAt but ALLOWS already-used questions (repeat) — used only when the
+  // chosen topic has no fresh question left, so we repeat WITHIN the topic instead
+  // of switching topics (topic-switch mid-match is the bug we must never cause).
+  const pickAtRepeat = (lvl: string): T | null => {
+    const cands = stable(all.filter((q) => notSelectCat(q) && q.difficulty === lvl && topicOk(q)));
+    return cands.length ? cands[seed % cands.length]! : null;
+  };
+  // 1) same topic, nearest level, NOT yet used (closest first, one level at a time)
   for (const lvl of nearest) { const q = pickAt(true, lvl); if (q) return q; }
-  // 2) any topic, nearest level (closest first) — last resort, still no repeats
+  // 2) same topic, nearest level, ALLOWING repeats — a thin topic must repeat a
+  //    question rather than cross into another topic. Since `nearest` covers every
+  //    level, this returns a question whenever the topic has ANY question at all,
+  //    so the topic is guaranteed to stay fixed for the whole match.
+  for (const lvl of nearest) { const q = pickAtRepeat(lvl); if (q) return q; }
+  // 3) any topic, nearest level (unused) — absolute last resort, only reached when
+  //    the chosen topic has ZERO questions (mixed/«popular» mode, or a misconfig).
   for (const lvl of nearest) { const q = pickAt(false, lvl); if (q) return q; }
   return null;
 }

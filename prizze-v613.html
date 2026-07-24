@@ -3937,13 +3937,13 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
   .pz-reportbtn:hover{background:rgba(242,106,106,.24)}
   .pz-reportbtn:active{transform:scale(.95)}
   /* Bottom-sheet overlay (report reasons) */
-  .pz-sheetov{position:absolute;inset:0;z-index:90;display:none;align-items:flex-end;justify-content:center;background:rgba(8,8,10,.72);backdrop-filter:blur(5px)}
+  .pz-sheetov{position:absolute;inset:0;z-index:95;display:none;align-items:flex-end;justify-content:center;background:rgba(8,8,10,.72);backdrop-filter:blur(5px)}
   .pz-sheetov.show{display:flex}
   .pz-sheetov .pzs-card{width:100%;max-height:88%;overflow-y:auto;background:#181820;border-top-left-radius:22px;border-top-right-radius:22px;border-top:1px solid rgba(255,255,255,.1);padding:18px 16px 22px;animation:pzSheetUp .28s cubic-bezier(.2,1,.4,1)}
   @keyframes pzSheetUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
-  .pzs-title{font-size:17px;font-weight:900;text-align:center;margin-bottom:4px}
-  .pzs-sub{font-size:12.5px;color:var(--muted);text-align:center;margin-bottom:14px}
-  .pz-reason{display:flex;align-items:center;gap:10px;width:100%;text-align:right;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:13px 14px;margin-bottom:9px;font-size:14px;font-weight:700;font-family:inherit;color:var(--ink,#fff);cursor:pointer;transition:.15s}
+  .pzs-title{font-size:17px;font-weight:900;text-align:center;margin-bottom:4px;color:#F5F5F8}
+  .pzs-sub{font-size:12.5px;color:#B9B9C4;text-align:center;margin-bottom:14px}
+  .pz-reason{display:flex;align-items:center;gap:10px;width:100%;text-align:right;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:14px;padding:13px 14px;margin-bottom:9px;font-size:14px;font-weight:700;font-family:inherit;color:#F2F2F5;cursor:pointer;transition:.15s}
   .pz-reason:hover{background:rgba(255,255,255,.09)}
   .pz-reason.sel{border-color:var(--gold);background:rgba(255,210,63,.12)}
   .pz-reason .pzr-rad{width:18px;height:18px;border-radius:50%;border:2px solid rgba(255,255,255,.35);flex-shrink:0;position:relative}
@@ -9769,6 +9769,7 @@ document.addEventListener('DOMContentLoaded',()=>{
 /* ============ QUESTION REPORT + POST-MATCH REVIEW ============ */
 let PZ_CUR_Q={id:null,matchId:null};
 let PZ_LAST_MATCH=null;
+let PZ_REVIEW_MID=null;
 let _pzReasonSel=null;
 /* Preset reasons (fallback if the server list doesn't load). Codes MUST match
    the backend questionReportService. */
@@ -9855,9 +9856,16 @@ async function pzOpenReview(){
     });
     if(!mine) html+='<div style="font-size:11px;color:var(--muted);margin-top:4px">تو به این سؤال پاسخ ندادی</div>';
     if(!oppA) html+='<div style="font-size:11px;color:var(--muted);margin-top:2px">حریف به این سؤال پاسخ نداد</div>';
+    if(rd.questionId) html+='<button class="pz-reportbtn" style="position:static;margin-top:10px;display:inline-flex" onclick="pzReportFromReview('+"'"+pzEsc(rd.questionId)+"'"+')">⚠️ گزارش این سؤال</button>';
     html+='</div>';
   });
   body.innerHTML=html;
+  PZ_REVIEW_MID=mid;
+}
+/* Report a question from the post-match review (calm, no time pressure). */
+function pzReportFromReview(qid){
+  PZ_CUR_Q={id:qid, matchId:PZ_REVIEW_MID||PZ_LAST_MATCH||null};
+  pzOpenReport();
 }
 function pzCloseReview(){ const ov=document.getElementById('pzReviewOverlay'); if(ov) ov.classList.remove('show'); }
 function pzEsc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
