@@ -120,7 +120,7 @@ async function loadCfg(){ try{ CFG=await api('GET','/admin/config'); $('#cfgVer'
 /* ---- nav: 25 sections grouped ---- */
 const NAV=[
   ['اصلی',[['dashboard','📊','داشبورد'],['finance','💰','داشبورد مالی'],['users','👤','کاربران'],['matches','🎮','مسابقات'],['support','🎧','پشتیبانی']]],
-  ['محتوا',[['questions','❓','سوالات'],['aistudio','🤖','استودیوی سوال (AI)'],['pipeline','🔬','خط‌لولهٔ کیفیت'],['categories','🏷️','موضوعات']]],
+  ['محتوا',[['questions','❓','سوالات'],['qreports','🚩','گزارش سؤالات'],['aistudio','🤖','استودیوی سوال (AI)'],['pipeline','🔬','خط‌لولهٔ کیفیت'],['categories','🏷️','موضوعات']]],
   ['اقتصاد',[['wallet','👛','کیف پول'],['withdrawals','💸','برداشت‌ها'],['rewardholds','⏳','جوایز در انتظار'],['tickets','🎫','بلیط‌ها'],['shop','🛒','فروشگاه'],['giftcodes','🎁','کدهای هدیه']]],
   ['بالانس بازی (Data-Driven)',[['cfg_xp','✨','XP'],['cfg_level','🏅','Level'],['cfg_cup','🏆','Cup'],['cfg_gameplay','🕹️','گیم‌پلی مودها'],['leagues','🛡️','لیگ‌ها'],['missions','🎯','مأموریت‌ها'],['rewards','🎉','جوایز/چرخونه/استریک']]],
   ['رشد و تعامل',[['leaderboard','📈','لیدربرد'],['campaign','🎁','کمپین کاربر جدید'],['events','📅','رویدادها'],['banners','🖼️','بنرها'],['notifications','🔔','اعلان‌ها']]],
@@ -142,7 +142,7 @@ async function render(){
   loading();
   try{
     if(CONFIG_PAGES[CUR])return renderConfigSection(CONFIG_PAGES[CUR][0],CONFIG_PAGES[CUR][1]);
-    const fn={dashboard:renderDashboard,finance:renderFinance,users:renderUsers,matches:renderMatches,support:renderSupport,questions:renderQuestions,aistudio:renderAiStudio,pipeline:renderPipeline,categories:renderCategories,wallet:renderWallet,withdrawals:renderWithdrawals,rewardholds:renderRewardHolds,tickets:renderTickets,giftcodes:renderGiftCodes,leaderboard:renderLeaderboard,notifications:renderNotifications,anticheat:renderAntiCheat,suspicious:renderSuspicious,reports:renderReports,logs:renderLogs,reset:renderReset,roles:renderRoles,rawcfg:renderRawCfg}[CUR];
+    const fn={dashboard:renderDashboard,finance:renderFinance,users:renderUsers,matches:renderMatches,support:renderSupport,questions:renderQuestions,qreports:renderQReports,aistudio:renderAiStudio,pipeline:renderPipeline,categories:renderCategories,wallet:renderWallet,withdrawals:renderWithdrawals,rewardholds:renderRewardHolds,tickets:renderTickets,giftcodes:renderGiftCodes,leaderboard:renderLeaderboard,notifications:renderNotifications,anticheat:renderAntiCheat,suspicious:renderSuspicious,reports:renderReports,logs:renderLogs,reset:renderReset,roles:renderRoles,rawcfg:renderRawCfg}[CUR];
     if(fn)return fn();
   }catch(e){$('#main').innerHTML=head('خطا')+'<div class="card empty">'+(e.message||'خطا')+'</div>';}
 }
@@ -841,6 +841,49 @@ async function ntSubmit(){
   }catch(e){toast(e.message,'bad');}
 }
 async function ntCancel(id){if(!confirm('این پیام زمان‌بندی‌شده لغو شود؟'))return;try{await api('POST','/admin/notifications/scheduled/'+id+'/cancel',{});toast('لغو شد','ok');render();}catch(e){toast(e.message,'bad');}}
+
+/* ================= QUESTION REPORTS ================= */
+let QR_STATUS='open';
+const QR_STFA={open:'باز',resolved:'رسیدگی‌شده',dismissed:'رد شده'};
+async function renderQReports(){
+  let res={rows:[],counts:{open:0,resolved:0,dismissed:0,total:0}};
+  try{res=await api('GET','/admin/question-reports?status='+QR_STATUS+'&limit=300');}catch(e){}
+  const c=res.counts||{open:0,resolved:0,dismissed:0,total:0};
+  const tab=(k,label)=>'<button class="btn sm '+(QR_STATUS===k?'pri':'')+'" onclick="QR_STATUS=\''+k+'\';render()">'+label+'</button>';
+  $('#main').innerHTML=head('گزارش سؤالات','گزارش‌هایی که کاربران در حین بازی برای سؤالات ثبت کرده‌اند',
+      tab('open','باز ('+fa(c.open)+')')+' '+tab('resolved','رسیدگی‌شده')+' '+tab('dismissed','رد شده')+' '+tab('all','همه'))+
+    '<div class="card" style="display:flex;gap:18px;flex-wrap:wrap">'+
+      '<div><div class="sub">باز</div><b style="font-size:22px;color:var(--bad,#e66)">'+fa(c.open)+'</b></div>'+
+      '<div><div class="sub">رسیدگی‌شده</div><b style="font-size:22px;color:var(--ok,#3c9)">'+fa(c.resolved)+'</b></div>'+
+      '<div><div class="sub">رد شده</div><b style="font-size:22px">'+fa(c.dismissed)+'</b></div>'+
+      '<div><div class="sub">کل</div><b style="font-size:22px">'+fa(c.total)+'</b></div>'+
+    '</div>'+
+    '<div class="card"><h3>فهرست گزارش‌ها</h3>'+
+      tbl(['سؤال','دلیل','توضیح کاربر','گزارش‌دهنده','زمان','وضعیت','عملیات'],(res.rows||[]).map(r=>{
+        const act=r.status==='open'
+          ? '<button class="btn sm ok" onclick="qrAct(\''+r.id+'\',\'resolve\')">رسیدگی شد</button> <button class="btn sm" onclick="qrAct(\''+r.id+'\',\'dismiss\')">رد</button> <button class="btn sm" onclick="qrEdit(\''+esc(r.questionId)+'\')">ویرایش سؤال</button>'
+          : '<button class="btn sm" onclick="qrEdit(\''+esc(r.questionId)+'\')">ویرایش سؤال</button>';
+        const st='<span class="pill '+(r.status==='resolved'?'ok':r.status==='dismissed'?'bad':'pend')+'">'+(QR_STFA[r.status]||r.status)+'</span>';
+        const qtext='<div style="max-width:260px">'+esc(r.questionText||'—')+(r.category?'<div class="sub">'+esc(r.category)+'</div>':'')+'</div>';
+        return [qtext,esc(r.reasonLabel||r.reason),esc(r.note||'—'),esc((r.userId||'—').slice(0,8)),fmtDate(r.createdAt),st,act];
+      }))+
+      ((res.rows||[]).length?'':'<div class="empty">گزارشی در این وضعیت نیست.</div>')+'</div>';
+}
+async function qrAct(id,action){
+  try{await api('POST','/admin/question-reports/'+id+'/'+action,{});toast(action==='resolve'?'رسیدگی ثبت شد ✅':'گزارش رد شد','ok');render();}
+  catch(e){toast(e.message,'bad');}
+}
+function qrEdit(qid){
+  go('questions');
+  // Wait until the questions list has loaded (_QALL populated), then open the edit modal.
+  let tries=0;
+  const iv=setInterval(()=>{
+    tries++;
+    const found=(window._QALL||[]).some(x=>x.id===qid);
+    if(found){ clearInterval(iv); try{qEdit(qid);}catch(e){} }
+    else if(tries>20){ clearInterval(iv); toast('سؤال در فهرست یافت نشد (شاید حذف/بایگانی شده)','bad'); }
+  },200);
+}
 
 /* ================= ANTI-CHEAT ================= */
 async function renderAntiCheat(){

@@ -2,6 +2,7 @@ import type { Router } from '../../http/router.js';
 import { error, json } from '../../http/response.js';
 import { nextQuestion } from '../../services/questionEngine.js';
 import { recordFeedback } from '../../services/questionPipelineService.js';
+import { createReport, REPORT_REASONS } from '../../services/questionReportService.js';
 import { repositories } from '../../repositories/index.js';
 
 export function registerQuestionRoutes(router: Router, base: string): void {
@@ -41,6 +42,32 @@ export function registerQuestionRoutes(router: Router, base: string): void {
       json(ctx.res, 200, r);
     } catch (e) {
       return error(ctx.res, 400, 'FEEDBACK_INVALID', e instanceof Error ? e.message : 'invalid');
+    }
+  });
+
+  // The preset reasons the report sheet offers (code + Persian label). The client
+  // renders these so labels stay server-driven and in sync with the admin queue.
+  router.add('GET', `${base}/questions/report-reasons`, async (ctx) => {
+    json(ctx.res, 200, REPORT_REASONS.map((r) => ({ code: r.code, label: r.label })));
+  });
+
+  // A player reports a problem with a question they saw in a match. Stored as an
+  // individual report that lands in the admin review queue AND bumps the pipeline
+  // feedback counter (auto-retire) via the service.
+  router.add('POST', `${base}/questions/:id/report`, async (ctx) => {
+    if (!ctx.userId) return error(ctx.res, 401, 'UNAUTHORIZED', 'Login required.');
+    const body = (ctx.body as any) ?? {};
+    try {
+      const r = await createReport({
+        questionId: ctx.params.id!,
+        matchId: body.matchId ? String(body.matchId) : undefined,
+        userId: ctx.userId,
+        reason: String(body.reason ?? ''),
+        note: body.note ? String(body.note) : undefined
+      });
+      json(ctx.res, 201, { id: r.id, status: r.status, reason: r.reason });
+    } catch (e) {
+      return error(ctx.res, 400, 'REPORT_INVALID', e instanceof Error ? e.message : 'invalid');
     }
   });
 }

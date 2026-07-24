@@ -13,6 +13,7 @@ import { activeMatchState } from '../../services/matchStateStore.js';
 import { createGiftCode, listGiftCodes, redeemGiftCode } from '../../services/giftCodeService.js';
 import { aiGenerate, approve as approvePipeline, createDraft, getMeta as getPipelineMeta, listPipeline, reject as rejectPipeline, runPipeline } from '../../services/questionPipelineService.js';
 import { listAdminAudit, recordAdmin } from '../../services/adminAuditService.js';
+import { listReports, reportCounts, setReportStatus } from '../../services/questionReportService.js';
 import { RESET_AREAS, type ResetArea, dashboardMetrics, financeSummary, finishedMatches, resetArea, runningMatches, suspiciousUsers } from '../../services/adminOpsService.js';
 import { getAccount } from '../../services/walletLedgerService.js';
 import { matchmakingQueue } from '../../services/matchmakingQueue.js';
@@ -327,6 +328,33 @@ export function registerAdminRoutes(router: Router, base: string): void {
     if (!requireAdmin(ctx)) return;
     const m = await getPipelineMeta(ctx.params.id!);
     json(ctx.res, 200, m ?? { feedback: {}, reportCount: 0 });
+  });
+
+  // --- Player question reports (review queue) ---------------------------------
+  router.add('GET', `${base}/admin/question-reports`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    const status = ctx.query.get('status') || 'open';
+    const [rows, counts] = await Promise.all([
+      listReports(status, Number(ctx.query.get('limit') ?? 200)),
+      reportCounts()
+    ]);
+    json(ctx.res, 200, { rows, counts });
+  });
+
+  router.add('POST', `${base}/admin/question-reports/:id/resolve`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    const ok = await setReportStatus(ctx.params.id!, 'resolved', ctx.userId);
+    if (!ok) return error(ctx.res, 404, 'REPORT_NOT_FOUND', 'Report not found or already handled.');
+    audit(ctx.userId, 'QUESTION_REPORT_RESOLVED', 'question_report', ctx.params.id, {});
+    json(ctx.res, 200, { resolved: true });
+  });
+
+  router.add('POST', `${base}/admin/question-reports/:id/dismiss`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    const ok = await setReportStatus(ctx.params.id!, 'dismissed', ctx.userId);
+    if (!ok) return error(ctx.res, 404, 'REPORT_NOT_FOUND', 'Report not found or already handled.');
+    audit(ctx.userId, 'QUESTION_REPORT_DISMISSED', 'question_report', ctx.params.id, {});
+    json(ctx.res, 200, { dismissed: true });
   });
 
   router.add('GET', `${base}/admin/analytics`, async (ctx) => {

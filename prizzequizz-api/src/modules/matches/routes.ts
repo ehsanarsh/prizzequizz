@@ -213,6 +213,46 @@ export function registerMatchRoutes(router: Router, base: string): void {
     json(ctx.res, 200, { id: q.id, text: q.text, options: q.options, correctIndex: q.correctIndex, category: q.category, difficulty: q.difficulty });
   });
 
+  // POST-MATCH REVIEW: every real question of the match with BOTH players'
+  // answers and the correct one, so a player can see, round-by-round, what they
+  // answered vs. what the opponent answered. Built from the persisted answer log
+  // (both players get the same question per round, and selectedIndex is already
+  // stored in ORIGINAL option order — see the answer endpoint note), so option
+  // shuffle on the client doesn't matter here.
+  router.add('GET', `${base}/matches/:id/review`, async (ctx) => {
+    const matchId = ctx.params.id!;
+    let match: Match | null = null;
+    try { match = await getMatch(matchId); } catch { /* fall through */ }
+    const players = (match?.players ?? []).map((p) => ({ userId: p.userId, username: p.username, score: p.score }));
+    const answers = await repositories.answers.listByMatch(matchId).catch(() => []);
+    // Group by questionId, keeping the first-seen order (≈ round order), and skip
+    // the topic-selection (toss) bank — those aren't real quiz questions.
+    const order: string[] = [];
+    const byQ = new Map<string, Record<string, { selectedIndex: number; correct: boolean }>>();
+    for (const a of answers) {
+      if (!byQ.has(a.questionId)) { byQ.set(a.questionId, {}); order.push(a.questionId); }
+      byQ.get(a.questionId)![a.userId] = { selectedIndex: a.selectedIndex, correct: a.correct };
+    }
+    const rounds: any[] = [];
+    let idx = 0;
+    for (const qid of order) {
+      const q = await repositories.questions.findById(qid).catch(() => null);
+      if (q && q.category === TOPIC_SELECT_CATEGORY) continue; // exclude toss questions
+      rounds.push({
+        round: idx,
+        questionId: qid,
+        text: q?.text ?? '—',
+        options: q?.options ?? [],
+        correctIndex: q?.correctIndex ?? -1,
+        category: q?.category ?? '',
+        difficulty: q?.difficulty ?? '',
+        answers: byQ.get(qid) ?? {}
+      });
+      idx += 1;
+    }
+    json(ctx.res, 200, { matchId, modeId: match?.modeId ?? null, winnerUserId: match?.winnerUserId ?? null, players, rounds });
+  });
+
   router.add('GET', `${base}/matches/:id`, async (ctx) => json(ctx.res, 200, toSnapshot(await getMatch(ctx.params.id!))));
   router.add('POST', `${base}/matches/:id/start`, async (ctx) => json(ctx.res, 200, toSnapshot(await startMatch(ctx.params.id!))));
   router.add('POST', `${base}/matches/:id/continue`, async (ctx) => json(ctx.res, 200, toSnapshot(await startMatch(ctx.params.id!))));
