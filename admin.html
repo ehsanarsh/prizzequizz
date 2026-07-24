@@ -298,7 +298,18 @@ async function uBulk(action){
 }
 async function userDetail(uid){
   let ov; try{ov=await api('GET','/admin/users/'+uid+'/overview');}catch(e){return toast(e.message,'bad');}
+  let wds=[]; try{const wr=await api('GET','/admin/wallet/withdrawals?userId='+encodeURIComponent(uid)+'&pageSize=20');wds=wr.rows||[];}catch(e){}
   const u=ov.user||{}, bal=ov.balances||{};
+  // Latest KYC captured at any withdrawal (national id / holder / card / sheba).
+  const kyc=wds.find(w=>w.nationalId||w.holderName||w.destination)||{};
+  const kycRow=(k,v)=>'<div style="display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid var(--line)"><span style="color:var(--muted);font-size:12px">'+k+'</span><b class="mono" dir="ltr" style="font-size:12px;word-break:break-all">'+esc(v||'—')+'</b></div>';
+  const wdList=wds.slice(0,8).map(w=>'<tr><td>'+fa(w.amount)+'</td><td class="mono" dir="ltr" style="font-size:11px">'+esc(wdFmtDest(w.destination))+'</td><td>'+esc(WD_STFA[w.status]||w.status)+'</td><td>'+fmtDate(w.createdAt)+'</td></tr>').join('');
+  const bankCard='<div class="card" style="margin-top:12px"><h3>اطلاعات بانکی و برداشت‌ها</h3>'+
+    (kyc.nationalId||kyc.holderName||kyc.destination||kyc.phone?
+      (kycRow('شماره موبایل',u.phone||kyc.phone)+kycRow('کد ملی',kyc.nationalId)+kycRow('نام صاحب کارت',kyc.holderName)+kycRow(String(kyc.destination||'').toUpperCase().startsWith('IR')?'شماره شبا':'شماره کارت',wdFmtDest(kyc.destination)))
+      :'<div class="note">این کاربر هنوز درخواست برداشتی ثبت نکرده است.</div>')+
+    (wdList?'<table style="margin-top:10px"><thead><tr><th>مبلغ</th><th>کارت/شبا</th><th>وضعیت</th><th>زمان</th></tr></thead><tbody>'+wdList+'</tbody></table>':'')+
+    '</div>';
   const f=(id,label,val,type)=>'<div class="field"><label>'+label+'</label><input id="'+id+'" '+(type==='num'?'type="number"':'')+' value="'+esc(val==null?'':val)+'"></div>';
   const tk=bal.tickets||{};
   const txns=(ov.transactions||[]).slice(0,8).map(t=>'<tr><td>'+esc(t.type)+'</td><td>'+(t.direction==='in'?'+':'−')+fa(t.amount)+'</td><td>'+fmtDate(t.createdAt)+'</td></tr>').join('');
@@ -317,6 +328,7 @@ async function userDetail(uid){
       '<select id="ud_tier" style="width:auto">'+['green','blue','red','bronze','silver','gold'].map(t=>'<option value="'+t+'">'+t+' ('+fa(tk[t]||0)+')</option>').join('')+'</select>'+
       '<input id="ud_tkn" type="number" placeholder="تعداد" style="width:90px"><button class="btn sm ok" onclick="grantTicket(\''+uid+'\',\'add\')">افزودن</button><button class="btn sm" onclick="grantTicket(\''+uid+'\',\'set\')">تنظیم</button></div>'+
     '</div>'+
+    bankCard+
     '<div class="grid g2"><div class="card"><h3>تراکنش‌های اخیر</h3><table>'+(txns||'<tr><td class="empty">—</td></tr>')+'</table></div>'+
       '<div class="card"><h3>دستگاه‌های ورود</h3><table>'+(dev||'<tr><td class="empty">—</td></tr>')+'</table></div></div>'+
     '<div class="card" style="margin-top:12px"><h3>عملیات</h3>'+
@@ -668,13 +680,19 @@ async function renderWithdrawals(){
   const st=WD_STFA;
   $('#main').innerHTML=head('مدیریت برداشت‌ها','روی هر ردیف بزن تا جزئیات کامل (کاربر، کد ملی، موبایل، شبا) را ببینی')+
     '<div class="subtabs">'+Object.keys(st).map(s=>'<button class="'+(WD_ST===s?'active':'')+'" onclick="WD_ST=\''+s+'\';render()">'+st[s]+'</button>').join('')+'</div>'+
-    tbl(['کاربر','کد ملی','مبلغ','وضعیت','زمان','عملیات'],(d.rows||[]).map(w=>{
+    tbl(['کاربر','کد ملی','کارت/شبا مقصد','مبلغ','وضعیت','زمان','عملیات'],(d.rows||[]).map(w=>{
       let a='<button class="btn sm" onclick="wdDetail(\''+w.id+'\')">جزئیات</button>';
       if(w.status==='pending')a+=' <button class="btn sm ok" onclick="wdAct(\''+w.id+'\',\'approve\')">تأیید</button> <button class="btn sm bad" onclick="wdReject(\''+w.id+'\')">رد</button>';
       else if(w.status==='approved')a+=' <button class="btn sm info" onclick="wdPaid(\''+w.id+'\')">ثبت پرداخت</button> <button class="btn sm bad" onclick="wdReject(\''+w.id+'\')">رد</button>';
       const user='<a onclick="wdDetail(\''+w.id+'\')" style="cursor:pointer;text-decoration:none"><b>'+esc(w.displayName||w.username||'کاربر')+'</b><br><span class="mono" style="font-size:11px;color:var(--muted)">'+esc(w.phone||String(w.userId).slice(0,8))+'</span></a>';
-      return [user,'<span class="mono">'+esc(w.nationalId||'—')+'</span>','<b>'+fa(w.amount)+'</b>','<span class="pill '+(w.status==='paid'||w.status==='approved'?'ok':w.status==='rejected'||w.status==='failed'?'bad':'pend')+'">'+(st[w.status]||w.status)+'</span>',fmtDate(w.createdAt),a];
+      return [user,'<span class="mono">'+esc(w.nationalId||'—')+'</span>','<span class="mono" dir="ltr" style="font-size:12px">'+esc(wdFmtDest(w.destination))+'</span>','<b>'+fa(w.amount)+'</b>','<span class="pill '+(w.status==='paid'||w.status==='approved'?'ok':w.status==='rejected'||w.status==='failed'?'bad':'pend')+'">'+(st[w.status]||w.status)+'</span>',fmtDate(w.createdAt),a];
     }));
+}
+function wdFmtDest(d){
+  const s=String(d||'').trim(); if(!s)return '—';
+  const digits=s.replace(/\D/g,'');
+  if(!s.toUpperCase().startsWith('IR')&&digits.length===16) return digits.replace(/(\d{4})(?=\d)/g,'$1 ');
+  return s;
 }
 function wdDetail(id){
   const w=_WD_ROWS[id]; if(!w){toast('یافت نشد','bad');return;}
@@ -687,7 +705,7 @@ function wdDetail(id){
     r('شماره موبایل','<span class="mono">'+esc(w.phone||'—')+'</span>')+
     r('کد ملی','<span class="mono">'+esc(w.nationalId||'—')+'</span>')+
     r('نام صاحب حساب (بانکی)', esc(w.holderName||'—'))+
-    r('شماره شبا','<span class="mono">'+esc(w.destination||'—')+'</span>')+
+    r(String(w.destination||'').toUpperCase().startsWith('IR')?'شماره شبا':'شماره کارت مقصد','<span class="mono" dir="ltr">'+esc(wdFmtDest(w.destination))+'</span>')+
     r('مبلغ درخواستی','<span style="color:var(--gold)">'+fa(w.amount)+' تومان</span>')+
     r('کارمزد', fa(w.fee||0)+' تومان')+
     r('موجودی فعلی کیف پول', w.walletBalance!=null?fa(w.walletBalance)+' تومان':'—')+

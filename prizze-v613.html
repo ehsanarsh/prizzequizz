@@ -4042,14 +4042,13 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
     <h1 style="font-size:19px;font-weight:900">احراز هویت مالی 🔐</h1>
     <p style="color:var(--muted);font-size:13px;margin:4px 0 16px">برای برداشت، اطلاعات بانکی‌ات رو تأیید کن</p>
     <div class="kyc-note"><span>🛡️</span><span>اطلاعات شما رمزنگاری‌شده ذخیره می‌شه و فقط برای واریز جایزه استفاده می‌شه.</span></div>
+    <div class="field"><label>کارت مقصد واریز</label>
+      <div id="wdCardPick" style="display:flex;flex-direction:column;gap:8px"></div>
+      <button type="button" class="btn btn-ghost" style="margin-top:8px;width:100%" onclick="openBankSheet()">＋ افزودن کارت جدید</button>
+      <small style="display:block;color:var(--muted);font-size:11px;font-weight:700;margin-top:6px">جایزه به همین کارت واریز می‌شود. کارت را با یک ضربه انتخاب کن.</small></div>
     <div class="field"><label>نام و نام خانوادگی (مطابق کارت بانکی)</label><input class="input" id="wdName" placeholder="نام صاحب حساب"></div>
     <div class="field"><label>کد ملی</label><input class="input mono" id="wdNid" inputmode="numeric" placeholder="۰۰۱۲۳۴۵۶۷۸" dir="ltr"></div>
     <div class="field"><label>مبلغ برداشت (تومان)</label><input class="input mono" id="wdAmount" inputmode="numeric" placeholder="مثلاً ۲۰۰۰۰۰" dir="ltr"></div>
-    <div class="field"><label>شماره شبا</label>
-      <div class="iban-wrap" style="display:flex;align-items:center;gap:8px;background:#F7F4EC;border:2px solid #000;border-radius:15px;padding:0 14px;box-shadow:var(--hard-sm)">
-        <span style="color:#141414;font-weight:900;font-size:15px" dir="ltr">IR</span>
-        <input class="input mono" id="wdIban" style="border:none;background:transparent;box-shadow:none;padding:15px 0;flex:1;min-width:0;color:#141414;letter-spacing:.5px" inputmode="numeric" placeholder="۰۶۰ ۰۱۲۰ ۰۰۰۰ ..." dir="ltr"></div>
-      <small style="display:block;color:var(--muted);font-size:11px;font-weight:700;margin-top:5px">۲۴ رقم بعد از IR — کل شماره شبا باید کامل و خوانا باشد.</small></div>
     <button class="btn btn-primary" style="margin-top:6px" onclick="submitKyc()">ثبت و درخواست برداشت</button>
   </div>
 
@@ -4097,9 +4096,10 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
     <div class="grab"></div>
     <h1 style="font-size:19px;font-weight:900">افزودن کارت بانکی 💳</h1>
     <p style="color:var(--muted);font-size:13px;margin:4px 0 12px">کارت باید به نام خودت باشد</p>
-    <div class="field"><label>نام بانک</label><input class="input" id="bankNameInput" placeholder="مثلاً ملت"></div>
-    <div class="field"><label>شماره کارت</label><input class="input mono" id="bankCardInput" inputmode="numeric" placeholder="6037 0000 0000 0000" dir="ltr"></div>
-    <div class="field"><label>شماره شبا</label><input class="input mono" id="bankIbanInput" placeholder="IR..." dir="ltr"></div>
+    <div class="field"><label>شماره کارت (۱۶ رقم)</label><input class="input mono" id="bankCardInput" inputmode="numeric" maxlength="19" placeholder="6037 0000 0000 0000" dir="ltr"></div>
+    <div class="field"><label>نام صاحب کارت</label><input class="input" id="bankHolderInput" placeholder="نام و نام خانوادگی روی کارت"></div>
+    <div class="field"><label>نام بانک (اختیاری)</label><input class="input" id="bankNameInput" placeholder="خودکار از روی شماره کارت"></div>
+    <div class="field"><label>شماره شبا (اختیاری)</label><input class="input mono" id="bankIbanInput" placeholder="IR..." dir="ltr"></div>
     <button class="btn btn-primary" onclick="submitBankCard()">ثبت کارت</button>
   </div>
 
@@ -6334,10 +6334,18 @@ function spendPracticeCoins(n){if(practiceCoins<n){showSmartSnackbar({icon:'🪙
 function earnPracticeCoins(n,label){practiceCoins+=n;savePracticeCoins();updateWalletUI();return n;}
 const tickets={gold:0,silver:0,bronze:1};
 let ticketClaimable=true;
-let BANK_CARDS=[
-  {id:'mellat',bank:'بانک ملت',num:'**** **** **** ۴۲۱۸',iban:'IR1201200000000004218',def:true,verified:true},
-  {id:'saman',bank:'بانک سامان',num:'**** **** **** ۸۸۰۹',iban:'IR4505600000000008809',def:false,verified:true}
-];
+/* No default/demo cards — the user adds their own, and they persist locally so
+   the withdrawal screen can select a saved card with one tap. */
+let BANK_CARDS=[];
+try{ const _sc=localStorage.getItem('pz_bank_cards'); if(_sc){ const _a=JSON.parse(_sc); if(Array.isArray(_a)) BANK_CARDS=_a; } }catch(e){}
+function pzSaveCards(){ try{ localStorage.setItem('pz_bank_cards',JSON.stringify(BANK_CARDS)); }catch(e){} }
+/* Guess the bank from the card's 6-digit BIN prefix (common Iranian banks). */
+function pzBankFromCard(digits){
+  const bin=String(digits||'').replace(/\D/g,'').slice(0,6);
+  const m={'603799':'ملی','610433':'ملت','627353':'تجارت','589210':'سپه','627412':'اقتصاد نوین','622106':'پارسیان','502229':'پاسارگاد','627381':'انصار','621986':'سامان','589463':'رفاه','627760':'پست بانک','628023':'مسکن','627488':'کارآفرین','502806':'شهر','502908':'توسعه تعاون','603769':'صادرات','610433 ':'ملت','636214':'آینده','636795':'مرکزی','639347':'پاسارگاد','504172':'رسالت','505785':'ایران‌زمین','636949':'حکمت'};
+  return m[bin]?('بانک '+m[bin]):'کارت بانکی';
+}
+function pzMaskCard(digits){ const d=String(digits||'').replace(/\D/g,''); return d.length>=4?('**** **** **** '+d.slice(-4)):d; }
 let TXNS=[
   {id:1,i:'🏆',n:'برد دوئل ۱به‌۱',t:'امروز ۱۴:۳۰',amt:180000,pos:true,st:'ok',type:'win',ref:'PQ-WIN-1001'},
   {id:2,i:'⚔️',n:'ورودی مسابقه آخرین بازمانده',t:'امروز ۱۳:۱۰',amt:60000,pos:false,st:'ok',type:'game',ref:'PQ-GAME-8821'},
@@ -6395,9 +6403,11 @@ function renderTxns(){
   renderWalletStats();
 }
 function renderCardsTab(c){
-  c.innerHTML='<div class="wallet-card"><h3>کارت‌های بانکی</h3><p>برای برداشت جایزه، کارت یا شبای تأییدشده انتخاب کن.</p><div class="sup-actions"><button class="btn btn-primary" onclick="openBankSheet()">＋ افزودن کارت</button><button class="btn btn-ghost" onclick="copyDefaultIban()">کپی شبای پیش‌فرض</button></div></div>'+BANK_CARDS.map(bankCardHTML).join('');
+  const empty='<div class="wallet-empty" style="text-align:center;padding:18px"><div style="font-size:40px">💳</div><b style="display:block;margin:8px 0 4px">هنوز کارتی ثبت نکرده‌ای</b><span style="color:var(--muted);font-size:13px">برای برداشت جایزه، اول کارت بانکی‌ات را اضافه کن.</span></div>';
+  c.innerHTML='<div class="wallet-card"><h3>کارت‌های بانکی من</h3><p>کارت‌هایی که اینجا اضافه می‌کنی، در برداشت با یک کلیک قابل انتخاب‌اند.</p><div class="sup-actions"><button class="btn btn-primary" onclick="openBankSheet()">＋ افزودن کارت</button></div></div>'+(BANK_CARDS.length?BANK_CARDS.map(bankCardHTML).join(''):empty);
 }
-function bankCardHTML(c){return '<div class="bank-card"><div class="bank-top"><b>'+c.bank+'</b><span class="ticket-badge '+(c.verified?'answered':'open')+'">'+(c.verified?'تأییدشده':'در انتظار')+'</span></div><div class="num">'+c.num+'</div><div class="iban">'+c.iban+'</div><div class="bank-actions"><button class="btn '+(c.def?'btn-green':'btn-ghost')+' btn-sm" onclick="setDefaultCard(\''+c.id+'\')">'+(c.def?'پیش‌فرض':'انتخاب')+'</button><button class="btn btn-ghost btn-sm" onclick="copyIban(\''+c.id+'\')">کپی شبا</button><button class="btn btn-red btn-sm" onclick="removeBankCard(\''+c.id+'\')">حذف</button></div></div>';}
+function bankCardHTML(c){const mask=c.mask||pzMaskCard(c.num||'');return '<div class="bank-card"><div class="bank-top"><b>'+esc0(c.bank||'کارت بانکی')+'</b>'+(c.def?'<span class="ticket-badge answered">پیش‌فرض</span>':'')+'</div><div class="num" dir="ltr">'+esc0(mask)+'</div>'+(c.holder?'<div class="iban">'+esc0(c.holder)+'</div>':'')+(c.iban?'<div class="iban" dir="ltr">'+esc0(c.iban)+'</div>':'')+'<div class="bank-actions"><button class="btn '+(c.def?'btn-green':'btn-ghost')+' btn-sm" onclick="setDefaultCard(\''+c.id+'\')">'+(c.def?'پیش‌فرض ✓':'پیش‌فرض کن')+'</button><button class="btn btn-red btn-sm" onclick="removeBankCard(\''+c.id+'\')">حذف</button></div></div>';}
+function esc0(s){return String(s==null?'':s).replace(/[&<>"']/g,x=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[x]));}
 function renderWalletSecurity(c){
   c.innerHTML='<div class="kyc-status"><div class="ks">✓</div><div><b>سطح احراز: تأیید اولیه</b><br><span>برداشت، شارژ و بازی‌های جایزه‌دار فعال هستند.</span></div></div><div class="wallet-card"><h3>محدودیت‌ها و کارمزد</h3><div class="fee-row"><span>حداقل برداشت</span><b>'+fa(50000)+' تومان</b></div><div class="fee-row"><span>حداکثر برداشت روزانه</span><b>'+fa(5000000)+' تومان</b></div><div class="fee-row"><span>کارمزد برداشت</span><b>۵٪ جایزه</b></div><div class="fee-row"><span>کارمزد شارژ</span><b>۰ تومان</b></div></div><div class="wallet-card"><h3>عملیات امنیتی</h3><div class="sup-actions"><button class="btn btn-primary" onclick="openKyc()">به‌روزرسانی اطلاعات مالی</button><button class="btn btn-ghost" onclick="exportWalletStatement()">خروجی گردش حساب</button><button class="btn btn-orange" onclick="showAaaModal({icon:\'🛡️\',title:\'گزارش امنیتی\',sub:\'هیچ ورود مشکوکی برای کیف پول ثبت نشده است.\',primaryText:\'باشه\',secondaryText:\'\'})">گزارش امنیتی</button></div></div>';
 }
@@ -6430,13 +6440,25 @@ function submitKyc(){
 function openBankSheet(){document.getElementById('bankBg').classList.add('show');document.getElementById('bankSheet').classList.add('show');}
 function closeBankSheet(){document.getElementById('bankBg').classList.remove('show');document.getElementById('bankSheet').classList.remove('show');}
 function submitBankCard(){
-  const bank=document.getElementById('bankNameInput').value.trim(),num=document.getElementById('bankCardInput').value.trim(),iban=document.getElementById('bankIbanInput').value.trim();
-  if(!bank||num.replace(/\D/g,'').length<16||!iban.toUpperCase().startsWith('IR')){toast('اطلاعات کارت یا شبا کامل نیست');return;}
-  BANK_CARDS.push({id:'card'+Date.now(),bank:'بانک '+bank.replace(/^بانک\s*/,''),num:'**** **** **** '+num.replace(/\D/g,'').slice(-4),iban:iban.toUpperCase(),def:BANK_CARDS.length===0,verified:true});
-  closeBankSheet();renderWallet();toast('کارت بانکی اضافه شد ✅');
+  const digits=(document.getElementById('bankCardInput').value||'').replace(/\D/g,'');
+  const holder=(document.getElementById('bankHolderInput')?document.getElementById('bankHolderInput').value.trim():'');
+  let bank=(document.getElementById('bankNameInput')?document.getElementById('bankNameInput').value.trim():'');
+  const iban=(document.getElementById('bankIbanInput')?document.getElementById('bankIbanInput').value.trim():'');
+  if(digits.length!==16){toast('شماره کارت باید دقیقاً ۱۶ رقم باشد');return;}
+  if(!holder){toast('نام صاحب کارت را وارد کن');return;}
+  if(!bank) bank=pzBankFromCard(digits);
+  else bank='بانک '+bank.replace(/^بانک\s*/,'');
+  if(BANK_CARDS.some(c=>String(c.num).replace(/\D/g,'')===digits)){toast('این کارت قبلاً اضافه شده');return;}
+  BANK_CARDS.push({id:'card'+Date.now(),bank:bank,holder:holder,num:digits,mask:pzMaskCard(digits),iban:(iban||'').toUpperCase(),def:BANK_CARDS.length===0});
+  pzSaveCards();
+  ['bankCardInput','bankHolderInput','bankNameInput','bankIbanInput'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
+  closeBankSheet();renderWallet();
+  /* If the withdraw sheet is open, refresh its card picker and select the new card. */
+  try{ if(document.getElementById('kycSheet')&&document.getElementById('kycSheet').classList.contains('show')){ _wdCardId=BANK_CARDS[BANK_CARDS.length-1].id; pzRenderWdCards(); } }catch(e){}
+  toast('کارت بانکی اضافه شد ✅');
 }
-function setDefaultCard(id){BANK_CARDS.forEach(c=>c.def=c.id===id);renderWallet();toast('کارت پیش‌فرض تغییر کرد');}
-function removeBankCard(id){if(BANK_CARDS.length<=1){toast('حداقل یک کارت باید باقی بماند');return;}BANK_CARDS=BANK_CARDS.filter(c=>c.id!==id);if(!BANK_CARDS.some(c=>c.def))BANK_CARDS[0].def=true;renderWallet();toast('کارت حذف شد');}
+function setDefaultCard(id){BANK_CARDS.forEach(c=>c.def=c.id===id);pzSaveCards();renderWallet();toast('کارت پیش‌فرض تغییر کرد');}
+function removeBankCard(id){BANK_CARDS=BANK_CARDS.filter(c=>c.id!==id);if(BANK_CARDS.length&&!BANK_CARDS.some(c=>c.def))BANK_CARDS[0].def=true;pzSaveCards();renderWallet();toast('کارت حذف شد');}
 function copyIban(id){const c=BANK_CARDS.find(x=>x.id===id);try{navigator.clipboard&&navigator.clipboard.writeText(c.iban);}catch(e){}toast('شبا کپی شد');}
 function copyDefaultIban(){const c=BANK_CARDS.find(x=>x.def)||BANK_CARDS[0];if(c)copyIban(c.id);}
 function showTxnDetail(id){const t=TXNS.find(x=>x.id===id);if(!t)return;showAaaModal({icon:t.i,title:t.n,sub:'مبلغ: '+(t.pos?'+':'−')+fa(t.amt)+' تومان<br>زمان: '+t.t+'<br>وضعیت: '+(t.st==='pend'?'در حال بررسی':t.st==='paid'?'واریز شد':'موفق')+'<br>کد پیگیری: '+t.ref,primaryText:'کپی کد پیگیری',secondaryText:'بستن',onPrimary:()=>{try{navigator.clipboard&&navigator.clipboard.writeText(t.ref);}catch(e){}closeAaaModal(false);toast('کد پیگیری کپی شد');},onSecondary:()=>closeAaaModal(false)});}
@@ -9692,27 +9714,41 @@ submitTopup=async function(){
 /* ---- Withdraw: STEP 1 — validate form, "send" the mobile code, open the OTP
    sheet. The request is NOT recorded until the code is verified (server-side). */
 let _pzWd=null;   /* pending withdraw payload between step 1 and step 2 */
+let _wdCardId=null;   /* selected destination card for the withdrawal */
+/* Render the saved cards as one-tap selectable rows inside the withdraw sheet. */
+function pzRenderWdCards(){
+  const box=document.getElementById('wdCardPick'); if(!box) return;
+  if(!BANK_CARDS.length){ _wdCardId=null; box.innerHTML='<div style="background:rgba(255,255,255,.05);border:1.5px dashed rgba(255,255,255,.2);border-radius:14px;padding:14px;text-align:center;color:var(--muted);font-size:13px">هنوز کارتی نداری. با دکمهٔ پایین یک کارت اضافه کن.</div>'; return; }
+  if(!_wdCardId||!BANK_CARDS.some(c=>c.id===_wdCardId)) _wdCardId=(BANK_CARDS.find(c=>c.def)||BANK_CARDS[0]).id;
+  box.innerHTML=BANK_CARDS.map(c=>{const sel=c.id===_wdCardId;return '<button type="button" onclick="pzPickWdCard(\''+c.id+'\')" style="display:flex;align-items:center;gap:10px;width:100%;text-align:right;border:2px solid '+(sel?'var(--bolt,#FFD21F)':'rgba(255,255,255,.14)')+';background:'+(sel?'rgba(255,210,31,.12)':'rgba(255,255,255,.05)')+';border-radius:14px;padding:11px 13px;font-family:inherit;cursor:pointer;color:inherit">'+
+    '<span style="width:18px;height:18px;border-radius:50%;border:2px solid '+(sel?'var(--bolt,#FFD21F)':'rgba(255,255,255,.35)')+';flex-shrink:0;position:relative">'+(sel?'<span style="position:absolute;inset:3px;border-radius:50%;background:var(--bolt,#FFD21F)"></span>':'')+'</span>'+
+    '<span style="flex:1;min-width:0"><b style="display:block;font-size:13px">'+esc0(c.bank||'کارت بانکی')+'</b><span class="mono" dir="ltr" style="font-size:12px;color:var(--muted)">'+esc0(c.mask||pzMaskCard(c.num))+'</span></span>'+
+    '</button>';}).join('');
+}
+function pzPickWdCard(id){ _wdCardId=id; const c=BANK_CARDS.find(x=>x.id===id); if(c&&c.holder){const n=document.getElementById('wdName'); if(n&&!n.value.trim())n.value=c.holder;} pzRenderWdCards(); }
 submitKyc=async function(){
   const amtEl=document.getElementById('wdAmount');
   const amount=parseInt((amtEl.value||'').replace(/[^\d]/g,''))||0;
   const name=(document.getElementById('wdName')?.value||'').trim();
   const nid=(document.getElementById('wdNid')?.value||'').replace(/\D/g,'');
-  const ibanDigits=(document.getElementById('wdIban')?.value||'').replace(/\D/g,'');
+  const card=BANK_CARDS.find(c=>c.id===_wdCardId);
+  if(!card){toast('اول یک کارت مقصد اضافه و انتخاب کن');return;}
+  const cardDigits=String(card.num||'').replace(/\D/g,'');
   let ok=true;
-  [['wdName',name],['wdNid',nid],['wdIban',ibanDigits]].forEach(([id,v])=>{const el=document.getElementById(id);if(el){el.style.borderColor=v?'':'var(--bad)';if(!v)ok=false;}});
-  if(!ok){toast('لطفاً همه‌ی فیلدها را کامل کن');return;}
+  [['wdName',name],['wdNid',nid]].forEach(([id,v])=>{const el=document.getElementById(id);if(el){el.style.borderColor=v?'':'var(--bad)';if(!v)ok=false;}});
+  if(!ok){toast('نام و کد ملی را کامل کن');return;}
   const btn=document.querySelector('#kycSheet .btn-primary'); const _t=btn?btn.textContent:'';
   if(btn){btn.disabled=true;btn.textContent='در حال ارسال کد…';}
-  _pzWd={amount,destination:'IR'+ibanDigits,nationalId:nid,holderName:name,idempotencyKey:'wd_'+Date.now()};
+  /* destination = the card number (what the operator pays to); we also send the
+     card holder + iban so the admin sees everything. */
+  _pzWd={amount,destination:cardDigits,cardNumber:cardDigits,cardBank:card.bank||'',iban:card.iban||'',nationalId:nid,holderName:name,idempotencyKey:'wd_'+Date.now()};
   const s=await pzApi('POST','/wallet/withdrawals/send-otp',{});
   if(btn){btn.disabled=false;btn.textContent=_t;}
-  /* Even if the send call fails we still open the code screen (the fixed demo
-     code works); show the masked phone when the server returns it. */
   const ph=(s&&s.ok&&s.data&&s.data.phone)?s.data.phone:'';
   closeKyc();
   const am=document.getElementById('wotpAmount'), de=document.getElementById('wotpDest'), hint=document.getElementById('wotpHint'), code=document.getElementById('wotpCode'), err=document.getElementById('wotpErr');
   if(am)am.textContent=fa(amount)+' تومان';
-  if(de)de.textContent='به شبا IR'+ibanDigits;
+  if(de)de.textContent='به کارت '+(card.mask||pzMaskCard(cardDigits));
   if(hint)hint.textContent=ph?('کد تأیید به شمارهٔ '+ph+' ارسال شد. برای ثبت درخواست، کد را وارد کن.'):'کد تأیید به موبایل ثبت‌شده‌ات ارسال شد. برای ثبت درخواست، کد را وارد کن.';
   if(err)err.textContent='';
   if(code)code.value='';
@@ -9744,7 +9780,7 @@ async function confirmWithdrawOtp(){
   toast('✅ درخواست برداشت '+fa(amount)+' تومان ثبت شد و مبلغ بلوکه شد؛ بعد از تأیید اپراتور واریز می‌شود.');
   try{renderWallet();}catch(e){}
 }
-openKyc=function(){document.getElementById('kycBg').classList.add('show');document.getElementById('kycSheet').classList.add('show');const a=document.getElementById('wdAmount');const lim=(pzWalletDash&&pzWalletDash.limits)||{minWithdraw:200000};if(a&&!a.value)a.value=Math.max(lim.minWithdraw,Math.min(wallet,lim.minWithdraw));};
+openKyc=function(){document.getElementById('kycBg').classList.add('show');document.getElementById('kycSheet').classList.add('show');const a=document.getElementById('wdAmount');const lim=(pzWalletDash&&pzWalletDash.limits)||{minWithdraw:200000};if(a&&!a.value)a.value=Math.max(lim.minWithdraw,Math.min(wallet,lim.minWithdraw));try{pzRenderWdCards();const c=BANK_CARDS.find(x=>x.id===_wdCardId);const n=document.getElementById('wdName');if(c&&c.holder&&n&&!n.value.trim())n.value=c.holder;}catch(e){}};
 
 /* Keep the header/screen in sync after money-moving game flows. */
 try{
