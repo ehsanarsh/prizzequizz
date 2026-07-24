@@ -60,8 +60,8 @@ export const postgresRepositories: RepositoryBundle = {
   },
   questions: {
     async findById(id: string): Promise<Question | null> { const { rows } = await pool().query('select * from questions where id=$1', [id]); return rows[0] ? questionFromRow(rows[0]) : null; },
-    async listApproved(): Promise<Question[]> { const { rows } = await pool().query("select * from questions where status='approved' order by created_at asc limit 500"); return rows.map(questionFromRow); },
-    async listAll(status?: string): Promise<Question[]> { const { rows } = status ? await pool().query('select * from questions where status=$1 order by created_at desc limit 1000',[status]) : await pool().query('select * from questions order by created_at desc limit 1000'); return rows.map(questionFromRow); },
+    async listApproved(): Promise<Question[]> { const { rows } = await pool().query("select * from questions where status='approved' order by created_at asc limit 100000"); return rows.map(questionFromRow); },
+    async listAll(status?: string): Promise<Question[]> { const { rows } = status ? await pool().query('select * from questions where status=$1 order by created_at desc limit 100000',[status]) : await pool().query('select * from questions order by created_at desc limit 100000'); return rows.map(questionFromRow); },
     async save(q: Question): Promise<void> { await pool().query(`insert into questions(id,text,options,correct_index,category,difficulty,tags,status,version) values($1,$2,$3,$4,$5,$6,$7,$8,$9) on conflict(id) do update set text=$2, options=$3, correct_index=$4, category=$5, difficulty=$6, tags=$7, status=$8, version=$9`, [q.id,q.text,JSON.stringify(q.options),q.correctIndex,q.category,q.difficulty,q.tags,q.status,q.version]); },
     async remove(id: string): Promise<void> { await pool().query('delete from questions where id=$1', [id]); }
   },
