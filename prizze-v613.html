@@ -9783,7 +9783,7 @@ let PZ_REPORT_REASONS=[
   {code:'other',label:'دلیل دیگر'}
 ];
 (async function pzLoadReportReasons(){
-  try{ const r=await pzApi('GET','/questions/report-reasons',null,false); if(Array.isArray(r)&&r.length&&r[0]&&r[0].code) PZ_REPORT_REASONS=r; }catch(e){}
+  try{ const r=await pzApi('GET','/questions/report-reasons',null,false); const list=(r&&r.data)||r; if(Array.isArray(list)&&list.length&&list[0]&&list[0].code) PZ_REPORT_REASONS=list; }catch(e){}
 })();
 function pzRenderReasons(){
   const box=document.getElementById('pzReasonList'); if(!box) return;
@@ -9809,7 +9809,8 @@ async function pzSubmitReport(){
   const r=await pzApi('POST','/questions/'+PZ_CUR_Q.id+'/report',{reason:_pzReasonSel,note:note,matchId:PZ_CUR_Q.matchId||undefined});
   if(btn){ btn.disabled=false; btn.textContent='ارسال گزارش'; }
   pzCloseReport();
-  if(r&&(r.id||r.status)){ try{toast('گزارش تو ثبت شد؛ ممنون 🙏');}catch(e){} }
+  const d=(r&&r.data)||r;
+  if(r&&r.ok!==false&&d&&(d.id||d.status)){ try{toast('گزارش تو ثبت شد؛ ممنون 🙏');}catch(e){} }
   else { const em=(r&&r.error&&(r.error.message||r.error.code))||(r&&r.message)||'خطای نامشخص'; try{toast('ارسال گزارش ناموفق: '+em);}catch(e){} try{console.warn('[PZ-REPORT] failed',r);}catch(e){} }
 }
 
@@ -9823,17 +9824,18 @@ async function pzOpenReview(){
   ov.classList.add('show');
   const r=await pzApi('GET','/matches/'+mid+'/review');
   try{console.log('[PZ-REVIEW]',mid,r);}catch(e){}
-  if(!r||r.error||!Array.isArray(r.rounds)){ const em=(r&&r.error&&(r.error.message||r.error.code))||(r&&r.message)||'پاسخی نیامد'; body.innerHTML='<p style="text-align:center;color:var(--muted);margin-top:40px">مروری برای این مسابقه یافت نشد.<br><span style="font-size:11px;opacity:.7">('+pzEsc(em)+' — کد مسابقه: '+pzEsc(String(mid).slice(0,8))+')</span></p>'; return; }
+  const rev=(r&&r.data)||r;
+  if(!rev||(r&&r.error)||!Array.isArray(rev.rounds)){ const em=(r&&r.error&&(r.error.message||r.error.code))||(r&&r.message)||'پاسخی نیامد'; body.innerHTML='<p style="text-align:center;color:var(--muted);margin-top:40px">مروری برای این مسابقه یافت نشد.<br><span style="font-size:11px;opacity:.7">('+pzEsc(em)+' — کد مسابقه: '+pzEsc(String(mid).slice(0,8))+')</span></p>'; return; }
   const myId=(typeof pzRt!=='undefined'&&pzRt&&pzRt.myId)||(_usr&&_usr.id)||null;
-  const players=r.players||[];
+  const players=rev.players||[];
   const opp=players.find(p=>p.userId!==myId);
   const oppName=(opp&&(opp.username||'حریف'))||'حریف';
-  if(!r.rounds.length){ body.innerHTML='<p style="text-align:center;color:var(--muted);margin-top:40px">پاسخی برای نمایش ثبت نشده است.</p>'; return; }
+  if(!rev.rounds.length){ body.innerHTML='<p style="text-align:center;color:var(--muted);margin-top:40px">پاسخی برای نمایش ثبت نشده است.</p>'; return; }
   let html='<div class="pzrv-legend">'+
     '<span><i class="pzrv-dot" style="background:#37D67A"></i>پاسخ درست</span>'+
     '<span><span class="pzrv-tag me">تو</span>پاسخ تو</span>'+
     '<span><span class="pzrv-tag opp">'+pzEsc(oppName)+'</span>پاسخ حریف</span></div>';
-  r.rounds.forEach((rd,i)=>{
+  rev.rounds.forEach((rd,i)=>{
     const mine=(rd.answers&&myId&&rd.answers[myId])?rd.answers[myId]:null;
     const oppA=(rd.answers&&opp&&rd.answers[opp.userId])?rd.answers[opp.userId]:null;
     const dm=(typeof pzDiffMeta==='function')?pzDiffMeta(rd.difficulty):null;
