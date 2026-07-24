@@ -136,13 +136,13 @@ function head(t,s,r){return '<div class="head"><div><h2>'+t+'</h2>'+(s?'<div cla
 function stat(k,cls,v){return '<div class="stat"><div class="k">'+k+'</div><div class="v '+(cls||'')+'">'+v+'</div></div>';}
 function tbl(cols,rows){if(!rows||!rows.length)return '<div class="empty">داده‌ای نیست</div>';return '<div class="tbl-wrap"><table><thead><tr>'+cols.map(c=>'<th>'+c+'</th>').join('')+'</tr></thead><tbody>'+rows.map(r=>'<tr>'+r.map(c=>'<td>'+c+'</td>').join('')+'</tr>').join('')+'</tbody></table></div>';}
 function modal(title,html){const bg=document.createElement('div');bg.className='modal-bg';bg.onclick=e=>{if(e.target===bg)bg.remove();};bg.innerHTML='<div class="modal"><div class="head"><h2 style="font-size:16px">'+title+'</h2><button class="btn sm" onclick="this.closest(\'.modal-bg\').remove()">✕</button></div>'+html+'</div>';document.body.appendChild(bg);return bg;}
-const CONFIG_PAGES={cfg_xp:['xp','تنظیمات XP'],cfg_level:['level','تنظیمات Level'],cfg_cup:['cup','تنظیمات Cup'],cfg_gameplay:['gameplay','گیم‌پلی هر مود'],leagues:['leagues','مدیریت لیگ‌ها'],missions:['missions','مأموریت‌ها'],rewards:['rewards','جوایز/چرخونه/استریک'],events:['events','رویدادها'],banners:['banners','بنرها'],shop:['shop','فروشگاه'],general:['general','تنظیمات عمومی'],anticheat:['antiCheat','ضدتقلب'],campaign:['campaign','کمپین کاربر جدید']};
+const CONFIG_PAGES={cfg_xp:['xp','تنظیمات XP'],cfg_level:['level','تنظیمات Level'],cfg_cup:['cup','تنظیمات Cup'],cfg_gameplay:['gameplay','گیم‌پلی هر مود'],leagues:['leagues','مدیریت لیگ‌ها'],missions:['missions','مأموریت‌ها'],rewards:['rewards','جوایز/چرخونه/استریک'],events:['events','رویدادها'],banners:['banners','بنرها'],general:['general','تنظیمات عمومی'],anticheat:['antiCheat','ضدتقلب'],campaign:['campaign','کمپین کاربر جدید']};
 
 async function render(){
   loading();
   try{
     if(CONFIG_PAGES[CUR])return renderConfigSection(CONFIG_PAGES[CUR][0],CONFIG_PAGES[CUR][1]);
-    const fn={dashboard:renderDashboard,finance:renderFinance,users:renderUsers,matches:renderMatches,support:renderSupport,questions:renderQuestions,qreports:renderQReports,aistudio:renderAiStudio,pipeline:renderPipeline,categories:renderCategories,wallet:renderWallet,withdrawals:renderWithdrawals,rewardholds:renderRewardHolds,tickets:renderTickets,giftcodes:renderGiftCodes,leaderboard:renderLeaderboard,notifications:renderNotifications,anticheat:renderAntiCheat,suspicious:renderSuspicious,reports:renderReports,logs:renderLogs,reset:renderReset,roles:renderRoles,rawcfg:renderRawCfg}[CUR];
+    const fn={dashboard:renderDashboard,finance:renderFinance,users:renderUsers,matches:renderMatches,support:renderSupport,questions:renderQuestions,qreports:renderQReports,aistudio:renderAiStudio,pipeline:renderPipeline,categories:renderCategories,wallet:renderWallet,withdrawals:renderWithdrawals,rewardholds:renderRewardHolds,tickets:renderTickets,giftcodes:renderGiftCodes,shop:renderShopAdmin,leaderboard:renderLeaderboard,notifications:renderNotifications,anticheat:renderAntiCheat,suspicious:renderSuspicious,reports:renderReports,logs:renderLogs,reset:renderReset,roles:renderRoles,rawcfg:renderRawCfg}[CUR];
     if(fn)return fn();
   }catch(e){$('#main').innerHTML=head('خطا')+'<div class="card empty">'+(e.message||'خطا')+'</div>';}
 }
@@ -993,6 +993,67 @@ function qrEdit(qid){
     else if(tries>20){ clearInterval(iv); toast('سؤال در فهرست یافت نشد (شاید حذف/بایگانی شده)','bad'); }
   },200);
 }
+
+/* ================= SHOP (catalog CRUD) ================= */
+let SHOP_CAT='';
+const SHOP_CATS={tickets:'🎫 بلیط مسابقات',util:'🧰 کاربردی',cosmetic:'✨ تزئینی',gift:'🎁 هدیه'};
+const SHOP_EFFECTS={p5050:'کمکی: حذف دو گزینه',psecond:'کمکی: حق دو انتخاب',pstats:'کمکی: درصد پاسخ',heart:'جان اضافی (❤️)',xp:'شتاب‌دهنده XP',coins:'سکه هدیه',
+  'ticket-bronze':'بلیط برنز','ticket-silver':'بلیط نقره','ticket-gold':'بلیط طلا','skin-gold':'اسکین طلایی','skin-neon':'اسکین نئون','skin-rainbow':'اسکین رنگین‌کمان',gift:'هدیه به دوست'};
+async function renderShopAdmin(){
+  let rows=[];try{const r=await api('GET','/admin/shop/items');rows=r.rows||[];}catch(e){}
+  window._SHOP_ROWS={};rows.forEach(it=>window._SHOP_ROWS[it.id]=it);
+  const cats=[...new Set(rows.map(i=>i.category))];
+  Object.keys(SHOP_CATS).forEach(k=>{if(cats.indexOf(k)<0)cats.push(k);});
+  const catTabs='<div class="subtabs"><button class="'+(SHOP_CAT===''?'active':'')+'" onclick="SHOP_CAT=\'\';render()">همه ('+fa(rows.length)+')</button>'+
+    cats.map(c=>{const n=rows.filter(i=>i.category===c).length;return '<button class="'+(SHOP_CAT===c?'active':'')+'" onclick="SHOP_CAT='+JSON.stringify(c).replace(/"/g,'&quot;')+';render()">'+esc(SHOP_CATS[c]||c)+' ('+fa(n)+')</button>';}).join('')+'</div>';
+  const list=rows.filter(i=>!SHOP_CAT||i.category===SHOP_CAT).sort((a,b)=>a.category===b.category?a.sortOrder-b.sortOrder:(a.category<b.category?-1:1));
+  $('#main').innerHTML=head('مدیریت فروشگاه','آیتم اضافه کن، قیمت و اثر بگذار، فعال/غیرفعال و مرتب کن — بلافاصله در بازی اعمال می‌شود','<button class="btn pri" onclick="shopEdit()">➕ افزودن آیتم</button>')+
+    catTabs+
+    '<div class="tbl-wrap"><table><thead><tr>'+['','نام','دسته','قیمت','ارز','اثر','ترتیب','وضعیت','عملیات'].map(c=>'<th>'+c+'</th>').join('')+'</tr></thead><tbody>'+
+    (list.length?list.map(it=>'<tr>'+
+      '<td style="font-size:22px">'+esc(it.icon||'🛍️')+'</td>'+
+      '<td><b>'+esc(it.name)+'</b>'+(it.badge?' <span class="pill ok">'+esc(it.badge)+'</span>':'')+'<br><span class="sub">'+esc(String(it.description||'').slice(0,40))+'</span></td>'+
+      '<td>'+esc(SHOP_CATS[it.category]||it.category)+'</td>'+
+      '<td><b>'+fa(it.price)+'</b></td>'+
+      '<td>'+(it.currency==='cash'?'تومان':'سکه')+'</td>'+
+      '<td>'+esc(SHOP_EFFECTS[it.effectKey]||it.effectKey)+(it.effectValue>1?' ×'+fa(it.effectValue):'')+'</td>'+
+      '<td>'+fa(it.sortOrder)+'</td>'+
+      '<td><span class="pill '+(it.enabled?'ok':'bad')+'">'+(it.enabled?'فعال':'غیرفعال')+'</span></td>'+
+      '<td><button class="btn sm" onclick="shopEdit(\''+it.id+'\')">ویرایش</button> <button class="btn sm '+(it.enabled?'':'ok')+'" onclick="shopToggle(\''+it.id+'\')">'+(it.enabled?'خاموش':'روشن')+'</button> <button class="btn sm bad" onclick="shopDelete(\''+it.id+'\')">حذف</button></td>'+
+    '</tr>').join(''):'<tr><td colspan="9" class="empty">آیتمی نیست — یکی اضافه کن</td></tr>')+'</tbody></table></div>';
+}
+function shopEdit(id){
+  const it=(window._SHOP_ROWS||{})[id]||{};
+  const catOpts=Object.keys(SHOP_CATS).map(k=>'<option value="'+k+'"'+(it.category===k?' selected':'')+'>'+esc(SHOP_CATS[k])+'</option>').join('')+'<option value="__custom">دستهٔ دلخواه…</option>';
+  const effOpts=Object.keys(SHOP_EFFECTS).map(k=>'<option value="'+k+'"'+(it.effectKey===k?' selected':'')+'>'+esc(SHOP_EFFECTS[k])+'</option>').join('');
+  modal(id?'ویرایش آیتم':'افزودن آیتم',
+    '<div class="grid g3"><div class="field"><label>آیکون (ایموجی)</label><input id="sh_icon" value="'+esc(it.icon||'🛍️')+'" style="text-align:center;font-size:20px"></div>'+
+    '<div class="field" style="grid-column:span 2"><label>نام آیتم</label><input id="sh_name" value="'+esc(it.name||'')+'"></div></div>'+
+    '<div class="field"><label>توضیح</label><input id="sh_desc" value="'+esc(it.description||'')+'"></div>'+
+    '<div class="grid g3">'+
+      '<div class="field"><label>دسته</label><select id="sh_cat" onchange="if(this.value===\'__custom\'){this.style.display=\'none\';document.getElementById(\'sh_cat_custom\').style.display=\'block\'}">'+catOpts+'</select><input id="sh_cat_custom" placeholder="نام دستهٔ جدید" style="display:none;margin-top:6px"></div>'+
+      '<div class="field"><label>قیمت</label><input id="sh_price" type="number" value="'+(it.price||0)+'"></div>'+
+      '<div class="field"><label>ارز</label><select id="sh_cur"><option value="coins"'+(it.currency!=='cash'?' selected':'')+'>سکه</option><option value="cash"'+(it.currency==='cash'?' selected':'')+'>تومان (کیف پول)</option></select></div>'+
+    '</div>'+
+    '<div class="grid g3">'+
+      '<div class="field"><label>اثر خرید</label><select id="sh_eff">'+effOpts+'</select></div>'+
+      '<div class="field"><label>مقدار اثر</label><input id="sh_effval" type="number" value="'+(it.effectValue||1)+'"></div>'+
+      '<div class="field"><label>ترتیب نمایش</label><input id="sh_order" type="number" value="'+(it.sortOrder||0)+'"></div>'+
+    '</div>'+
+    '<div class="grid g2"><div class="field"><label>برچسب (اختیاری)</label><input id="sh_badge" value="'+esc(it.badge||'')+'" placeholder="مثلاً محبوب / ٪۲۰ تخفیف"></div>'+
+    '<div class="field"><label>وضعیت</label><select id="sh_enabled"><option value="1"'+(it.enabled!==false?' selected':'')+'>فعال</option><option value="0"'+(it.enabled===false?' selected':'')+'>غیرفعال</option></select></div></div>'+
+    '<button class="btn pri" onclick="shopSaveItem(\''+(id||'')+'\')">💾 ذخیره</button>');
+}
+async function shopSaveItem(id){
+  let cat=$('#sh_cat').value; if(cat==='__custom')cat=($('#sh_cat_custom').value||'').trim()||'util';
+  const name=$('#sh_name').value.trim(); if(!name)return toast('نام آیتم لازم است','bad');
+  const body={id:id||undefined,icon:$('#sh_icon').value.trim()||'🛍️',name,description:$('#sh_desc').value.trim(),category:cat,
+    price:Number($('#sh_price').value||0),currency:$('#sh_cur').value,effectKey:$('#sh_eff').value,effectValue:Number($('#sh_effval').value||1),
+    sortOrder:Number($('#sh_order').value||0),badge:$('#sh_badge').value.trim(),enabled:$('#sh_enabled').value==='1'};
+  try{await api('POST','/admin/shop/items',body);toast('ذخیره شد ✅','ok');document.querySelector('.modal-bg').remove();render();}catch(e){toast(e.message,'bad');}
+}
+async function shopToggle(id){const it=(window._SHOP_ROWS||{})[id];if(!it)return;try{await api('POST','/admin/shop/items',{...it,enabled:!it.enabled});toast(it.enabled?'غیرفعال شد':'فعال شد','ok');render();}catch(e){toast(e.message,'bad');}}
+async function shopDelete(id){if(!confirm('این آیتم حذف شود؟'))return;try{await api('DELETE','/admin/shop/items/'+id);toast('حذف شد','ok');render();}catch(e){toast(e.message,'bad');}}
 
 /* ================= ANTI-CHEAT ================= */
 async function renderAntiCheat(){

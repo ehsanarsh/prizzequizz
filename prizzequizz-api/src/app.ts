@@ -19,6 +19,7 @@ import { registerWalletRoutes } from './modules/wallet/routes.js';
 import { registerFriendRoutes } from './modules/friends/routes.js';
 import { registerSupportRoutes } from './modules/support/routes.js';
 import { registerOpsRoutes } from './modules/ops/routes.js';
+import { registerShopRoutes } from './modules/shop/routes.js';
 import { registerAdminRoutes } from './modules/admin/routes.js';
 import { attachRealtimeGateway } from './realtime/gateway.js';
 import { startMatchmakingWorker } from './services/matchmakingWorker.js';
@@ -52,6 +53,7 @@ export function createApiServer(options: ApiServerOptions = {}): Server {
   registerFriendRoutes(router, base);
   registerSupportRoutes(router, base);
   registerOpsRoutes(router, base);
+  registerShopRoutes(router, base);
   registerAdminRoutes(router, base);
 
   const server = createServer((req, res) => {

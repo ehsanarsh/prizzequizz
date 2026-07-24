@@ -4277,6 +4277,7 @@ function go(id){
   if(cur&&cur.id!==id)screenStack.push(cur.id);
   showScreen(id);
   if(id==='friends'&&typeof friendsLoad==='function'){try{friendsLoad();}catch(e){}}
+  if(id==='shop'&&typeof pzLoadShop==='function'){try{pzLoadShop();}catch(e){}}
   if(id==='support'){ _supLoaded=false; _supOpenId=null; supportActiveTab='home'; try{renderSupport();}catch(e){} }
   try{history.pushState({id},'');}catch(e){}
 }
@@ -6495,30 +6496,74 @@ const SHOP={
     {i:'🎁',n:'جعبه سورپرایز',d:'هدیه‌ی شانسی',p:80000,key:'gift'},
   ],
 };
+let _shopCurTab='util';
 function renderShop(tab){
-  if(tab==='tickets'){ renderTicketShop(); return; }
-  const c=document.getElementById('shopContent');c.innerHTML='<div class="shop-grid"></div>';
+  _shopCurTab=tab||_shopCurTab;
+  if(_shopCurTab==='tickets'){ renderTicketShop(); return; }
+  const c=document.getElementById('shopContent');if(!c)return;
+  const items=(SHOP[_shopCurTab]||[]);
+  if(!items.length){ c.innerHTML='<div class="wallet-empty" style="text-align:center;padding:30px;color:var(--muted)"><div style="font-size:40px">🛍️</div><p style="margin-top:8px">آیتمی در این بخش نیست.</p></div>'; return; }
+  c.innerHTML='<div class="shop-grid"></div>';
   const g=c.querySelector('.shop-grid');
-  SHOP[tab].forEach(it=>{
+  items.forEach(it=>{
     const d=document.createElement('div');d.className='item';
-    d.innerHTML='<div class="it-ico">'+it.i+'</div><b>'+it.n+'</b><p>'+it.d+'</p><div class="price">'+fa(it.p)+' ت</div>';
+    const cur=it.cur==='coins'?' 🪙':' ت';
+    d.innerHTML=(it.badge?'<span class="shop-badge" style="position:absolute;top:8px;left:8px;background:var(--bolt,#FFD21F);color:#111;font-size:9px;font-weight:900;padding:2px 7px;border-radius:20px">'+esc0(it.badge)+'</span>':'')+
+      '<div class="it-ico">'+esc0(it.i)+'</div><b>'+esc0(it.n)+'</b><p>'+esc0(it.d)+'</p><div class="price">'+fa(it.p)+cur+'</div>';
+    d.style.position='relative';
     d.onclick=()=>buyItem(it,d);
     g.appendChild(d);
   });
 }
+/* Load the admin-managed catalog from the server; rebuild tabs + items. Falls
+   back to the built-in SHOP if the server is unreachable. */
+async function pzLoadShop(){
+  try{
+    const r=await pzApi('GET','/shop/items',null,false);
+    const d=(r&&r.data)||r;
+    const items=d&&d.items;
+    if(!Array.isArray(items)||!items.length)return;
+    const byCat={};
+    items.forEach(it=>{ (byCat[it.category]??=[]).push({i:it.icon,n:it.name,d:it.description,p:it.price,key:it.effectKey,val:it.effectValue,cur:it.currency,badge:it.badge}); });
+    // Replace non-ticket categories with server data (tickets tab stays config-driven).
+    Object.keys(byCat).forEach(cat=>{ if(cat!=='tickets') SHOP[cat]=byCat[cat]; });
+    pzRebuildShopTabs(Object.keys(byCat));
+    if(document.getElementById('shop')&&document.getElementById('shop').classList.contains('active')) renderShop(_shopCurTab);
+  }catch(e){}
+}
+/* Rebuild the shop tab bar so admin-added custom categories appear too. */
+const _SHOP_TAB_LABELS={tickets:'🎫 بلیط مسابقات',util:'🧰 آیتم‌های کاربردی',cosmetic:'✨ آیتم‌های تزئینی',gift:'🎁 هدیه به دوست'};
+function pzRebuildShopTabs(serverCats){
+  const bar=document.getElementById('shopTabs');if(!bar)return;
+  const order=['tickets','util','cosmetic','gift'];
+  (serverCats||[]).forEach(c=>{if(order.indexOf(c)<0)order.push(c);});
+  const cats=order.filter(c=>c==='tickets'||(SHOP[c]&&SHOP[c].length));
+  bar.innerHTML=cats.map((c,i)=>'<button class="tab'+(c===_shopCurTab?' active':'')+'" onclick="shopTab(this,\''+c+'\')">'+esc0(_SHOP_TAB_LABELS[c]||c)+'</button>').join('');
+}
 function buyItem(it,el){
-  if(!pay(it.p,'خرید '+it.n,'🛍️'))return;
+  const val=Math.max(1,Number(it.val||1));
+  const isCoins=(it.cur==='coins');
+  const priceTxt=fa(it.p)+(isCoins?' 🪙':' ت');
+  /* Pay from the right balance: coins vs wallet (تومان). */
+  if(isCoins){
+    if((coins||0)<it.p){toast('سکهٔ کافی نداری');return;}
+    coins-=it.p; try{updateWalletUI();}catch(e){}
+  } else {
+    if(!pay(it.p,'خرید '+it.n,'🛍️'))return;
+  }
   sfx('correct');vib([30]);
   el.classList.add('pop');
-  const pr=el.querySelector('.price');pr.textContent='✓ خریده شد';
-  setTimeout(()=>{pr.textContent=fa(it.p)+' ت';el.classList.remove('pop');},1400);
-  const r=el.getBoundingClientRect(),v=document.getElementById('vp').getBoundingClientRect();
-  burstAt(r.left-v.left+r.width/2,r.top-v.top+r.height/2);
-  if(it.key==='p5050'||it.key==='psecond'||it.key==='pstats'){powerups[it.key]=(powerups[it.key]||0)+1;savePowerups();renderPowerups();toast(it.n+' به کمک‌هات اضافه شد ✅');}
-  else if(it.key==='heart'){hearts++;updateWalletUI();toast('یک جان اضافه شد ❤️');}
-  else if(it.key==='xp'){toast('شتاب‌دهنده XP فعال شد! ⚡ (۱ ساعت)');}
-  else if(it.key&&it.key.startsWith('skin')){applySkin(it.key);toast(it.n+' فعال شد!');}
-  else toast('هدیه ارسال شد 🎁');
+  const pr=el.querySelector('.price');if(pr)pr.textContent='✓ خریده شد';
+  setTimeout(()=>{if(pr)pr.textContent=priceTxt;el.classList.remove('pop');},1400);
+  try{const r=el.getBoundingClientRect(),v=document.getElementById('vp').getBoundingClientRect();burstAt(r.left-v.left+r.width/2,r.top-v.top+r.height/2);}catch(e){}
+  const k=it.key||'';
+  if(k==='p5050'||k==='psecond'||k==='pstats'){powerups[k]=(powerups[k]||0)+val;savePowerups();renderPowerups();toast(it.n+' به کمک‌هایت اضافه شد ✅');}
+  else if(k==='heart'){hearts+=val;updateWalletUI();toast(fa(val)+' جان اضافه شد ❤️');}
+  else if(k==='coins'){coins+=val;updateWalletUI();toast(fa(val)+' سکه اضافه شد 🪙');}
+  else if(k==='xp'){toast('شتاب‌دهنده XP فعال شد! ⚡ (۱ ساعت)');}
+  else if(k.indexOf('ticket-')===0){const tier=k.split('-')[1];if(tickets&&tier&&tickets[tier]!=null){tickets[tier]+=val;try{renderHeaderTickets();}catch(e){}}toast(fa(val)+' بلیط اضافه شد 🎫');}
+  else if(k.indexOf('skin')===0){applySkin(k);toast(it.n+' فعال شد!');}
+  else toast('خرید انجام شد 🎁');
 }
 function applySkin(k){
   const f=k==='skin-gold'?'saturate(1.5) brightness(1.12) sepia(.25)':k==='skin-neon'?'saturate(1.9) hue-rotate(12deg) drop-shadow(0 0 8px rgba(255,210,31,.8))':'hue-rotate(0deg)';
@@ -6526,6 +6571,7 @@ function applySkin(k){
   if(k==='skin-rainbow'){let h=0;setInterval(()=>{h=(h+4)%360;document.querySelectorAll('.mascot image').forEach(el=>el.style.filter='hue-rotate('+h+'deg)');},120);}
 }
 renderShop('util');
+try{ pzLoadShop(); }catch(e){}
 
 /* ============================================================
    MATCH TICKET SYSTEM — paid entry via tickets (not direct pay).

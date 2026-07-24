@@ -22,6 +22,7 @@ import { notifications } from '../../services/notificationService.js';
 import { createScheduled, listScheduled, cancelScheduled } from '../../services/scheduledNotificationService.js';
 import { resolveSegment, describeSegment, type SegmentSpec } from '../../services/notificationSegmentService.js';
 import { createCampaign, recordCampaignResult, listCampaigns, campaignAnalytics, campaignDashboard } from '../../services/notificationCampaignService.js';
+import { listItems as shopList, saveItem as shopSave, removeItem as shopRemove } from '../../services/shopService.js';
 import { financeDiagnostics, listWithdrawals, reviewWithdrawal, transactionsToCsv } from '../../services/financeService.js';
 import { listRewardHolds, rewardHoldDiagnostics, reviewRewardHold } from '../../services/rewardReviewService.js';
 import { integrity } from '../../services/integrityService.js';
@@ -357,6 +358,36 @@ export function registerAdminRoutes(router: Router, base: string): void {
     if (!ok) return error(ctx.res, 404, 'REPORT_NOT_FOUND', 'Report not found or already handled.');
     audit(ctx.userId, 'QUESTION_REPORT_DISMISSED', 'question_report', ctx.params.id, {});
     json(ctx.res, 200, { dismissed: true });
+  });
+
+  // --- Shop catalog management (add items, set prices, toggle, reorder) -------
+  router.add('GET', `${base}/admin/shop/items`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    json(ctx.res, 200, { rows: await shopList({ category: ctx.query.get('category') || undefined }) });
+  });
+  router.add('POST', `${base}/admin/shop/items`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    const b = (ctx.body ?? {}) as any;
+    if (!String(b.name ?? '').trim()) return error(ctx.res, 422, 'NAME_REQUIRED', 'نام آیتم الزامی است.');
+    try {
+      const item = await shopSave({
+        id: b.id || undefined, category: String(b.category || 'util'), icon: b.icon, name: String(b.name),
+        description: b.description, price: Number(b.price ?? 0), currency: b.currency === 'cash' ? 'cash' : 'coins',
+        effectKey: b.effectKey, effectValue: Number(b.effectValue ?? 1), badge: b.badge,
+        enabled: b.enabled != null ? !!b.enabled : true, sortOrder: Number(b.sortOrder ?? 0)
+      });
+      audit(ctx.userId, b.id ? 'SHOP_ITEM_UPDATED' : 'SHOP_ITEM_CREATED', 'shop_item', item.id, { name: item.name, price: item.price });
+      json(ctx.res, 201, item);
+    } catch (e) {
+      return error(ctx.res, 422, 'SHOP_SAVE_FAILED', e instanceof Error ? e.message : 'ذخیره ناموفق بود.');
+    }
+  });
+  router.add('DELETE', `${base}/admin/shop/items/:id`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    const ok = await shopRemove(ctx.params.id!);
+    if (!ok) return error(ctx.res, 404, 'SHOP_ITEM_NOT_FOUND', 'آیتم یافت نشد.');
+    audit(ctx.userId, 'SHOP_ITEM_DELETED', 'shop_item', ctx.params.id, {});
+    json(ctx.res, 200, { deleted: true });
   });
 
   router.add('GET', `${base}/admin/analytics`, async (ctx) => {

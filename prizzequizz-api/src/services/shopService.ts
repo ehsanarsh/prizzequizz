@@ -1,0 +1,159 @@
+/* SHOP CATALOG — admin-managed, server-driven.
+ * The in-game shop reads its items from here, so an admin can add items, set
+ * prices, toggle availability and reorder — no client redeploy. Postgres-backed
+ * with a memory fallback, and seeded once from the classic built-in catalog so
+ * the shop is never empty on a fresh install. */
+import { getPgPool } from '../database/postgres.js';
+import { id } from '../utils/id.js';
+
+export type ShopCurrency = 'coins' | 'cash';
+export interface ShopItem {
+  id: string;
+  category: string;          // tickets | util | cosmetic | gift | (custom)
+  icon: string;
+  name: string;
+  description: string;
+  price: number;
+  currency: ShopCurrency;
+  effectKey: string;         // p5050 | psecond | pstats | heart | xp | skin-* | gift | ticket-bronze/silver/gold | coins
+  effectValue: number;       // how much the effect grants (e.g. +1 lifeline, +100 coins)
+  badge?: string;            // e.g. «محبوب», «جدید», «٪۲۰ تخفیف»
+  enabled: boolean;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+function pg(): ReturnType<typeof getPgPool> | null {
+  try { return process.env.DATABASE_URL ? getPgPool() : null; } catch { return null; }
+}
+
+let _schemaReady = false;
+async function ensureSchema(pool: ReturnType<typeof getPgPool>): Promise<void> {
+  if (_schemaReady) return;
+  await pool.query(`CREATE TABLE IF NOT EXISTS shop_items (
+    id TEXT PRIMARY KEY,
+    category VARCHAR(32) NOT NULL DEFAULT 'util',
+    icon VARCHAR(16) NOT NULL DEFAULT '🛍️',
+    name VARCHAR(120) NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    price BIGINT NOT NULL DEFAULT 0,
+    currency VARCHAR(8) NOT NULL DEFAULT 'coins',
+    effect_key VARCHAR(32) NOT NULL DEFAULT 'gift',
+    effect_value INT NOT NULL DEFAULT 1,
+    badge VARCHAR(40),
+    enabled BOOLEAN NOT NULL DEFAULT true,
+    sort_order INT NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now())`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_shop_items_cat ON shop_items(category, sort_order)`);
+  _schemaReady = true;
+}
+
+const mem: ShopItem[] = [];
+
+function rowToItem(r: any): ShopItem {
+  return {
+    id: r.id, category: r.category, icon: r.icon, name: r.name, description: r.description ?? '',
+    price: Number(r.price ?? 0), currency: r.currency === 'cash' ? 'cash' : 'coins',
+    effectKey: r.effect_key, effectValue: Number(r.effect_value ?? 1), badge: r.badge ?? undefined,
+    enabled: r.enabled !== false, sortOrder: Number(r.sort_order ?? 0),
+    createdAt: r.created_at?.toISOString?.() ?? String(r.created_at),
+    updatedAt: r.updated_at?.toISOString?.() ?? String(r.updated_at)
+  };
+}
+
+// Classic built-in catalog — seeded once so the shop is populated on day one.
+const SEED: Array<Omit<ShopItem, 'id' | 'createdAt' | 'updatedAt'>> = [
+  { category: 'util', icon: '✂️', name: 'حذف دو گزینه', description: 'یک استفاده به کمک‌هایت اضافه می‌شود', price: 20000, currency: 'cash', effectKey: 'p5050', effectValue: 1, enabled: true, sortOrder: 1, badge: 'محبوب' },
+  { category: 'util', icon: '🔁', name: 'حق دو انتخاب', description: 'اگر جواب اول غلط بود، یک انتخاب دیگر', price: 30000, currency: 'cash', effectKey: 'psecond', effectValue: 1, enabled: true, sortOrder: 2 },
+  { category: 'util', icon: '📊', name: 'درصد پاسخ دیگران', description: 'درصد پاسخ بقیه روی گزینه‌ها', price: 25000, currency: 'cash', effectKey: 'pstats', effectValue: 1, enabled: true, sortOrder: 3 },
+  { category: 'util', icon: '❤️', name: 'جان اضافی', description: 'برای حالت‌های دارای جان', price: 50000, currency: 'cash', effectKey: 'heart', effectValue: 1, enabled: true, sortOrder: 4 },
+  { category: 'util', icon: '⚡', name: 'شتاب‌دهنده XP', description: 'دو برابر امتیاز برای ۱ ساعت', price: 40000, currency: 'cash', effectKey: 'xp', effectValue: 1, enabled: true, sortOrder: 5 },
+  { category: 'cosmetic', icon: '👑', name: 'اسکین طلایی', description: 'هیولای شاهانه با درخشش طلا', price: 120000, currency: 'cash', effectKey: 'skin-gold', effectValue: 1, enabled: true, sortOrder: 1 },
+  { category: 'cosmetic', icon: '🕶️', name: 'اسکین نئون', description: 'ظاهر خفن شب‌تاب', price: 60000, currency: 'cash', effectKey: 'skin-neon', effectValue: 1, enabled: true, sortOrder: 2 },
+  { category: 'cosmetic', icon: '🌈', name: 'اسکین رنگین‌کمان', description: 'رنگ‌های چرخان دور کاراکتر', price: 100000, currency: 'cash', effectKey: 'skin-rainbow', effectValue: 1, enabled: true, sortOrder: 3 },
+  { category: 'gift', icon: '🎟️', name: 'ژتون بازی برای دوست', description: 'یک بازی رایگان هدیه بده', price: 30000, currency: 'cash', effectKey: 'gift', effectValue: 1, enabled: true, sortOrder: 1 },
+  { category: 'gift', icon: '💝', name: 'بستهٔ کمک‌ها', description: '۳ کمک برای دوستت', price: 60000, currency: 'cash', effectKey: 'gift', effectValue: 3, enabled: true, sortOrder: 2 },
+  { category: 'gift', icon: '🎁', name: 'جعبهٔ سورپرایز', description: 'هدیهٔ شانسی', price: 80000, currency: 'cash', effectKey: 'gift', effectValue: 1, enabled: true, sortOrder: 3 }
+];
+
+let _seeded = false;
+async function seedIfEmpty(): Promise<void> {
+  if (_seeded) return;
+  const existing = await listAllRaw();
+  if (existing.length === 0) {
+    for (const s of SEED) await saveItem({ ...s });
+  }
+  _seeded = true;
+}
+
+async function listAllRaw(): Promise<ShopItem[]> {
+  const pool = pg();
+  if (pool) {
+    await ensureSchema(pool);
+    const { rows } = await pool.query(`SELECT * FROM shop_items ORDER BY category, sort_order, created_at`);
+    return rows.map(rowToItem);
+  }
+  return mem.slice().sort((a, b) => a.category === b.category ? a.sortOrder - b.sortOrder : a.category < b.category ? -1 : 1);
+}
+
+export async function listItems(opts: { category?: string; enabledOnly?: boolean } = {}): Promise<ShopItem[]> {
+  await seedIfEmpty();
+  let items = await listAllRaw();
+  if (opts.category) items = items.filter((i) => i.category === opts.category);
+  if (opts.enabledOnly) items = items.filter((i) => i.enabled);
+  return items;
+}
+
+export async function getItem(itemId: string): Promise<ShopItem | null> {
+  return (await listAllRaw()).find((i) => i.id === itemId) ?? null;
+}
+
+export async function saveItem(input: Partial<ShopItem> & { name: string; category: string }): Promise<ShopItem> {
+  const now = new Date().toISOString();
+  const existing = input.id ? await getItem(input.id) : null;
+  const item: ShopItem = {
+    id: input.id || id(),
+    category: String(input.category || 'util').trim() || 'util',
+    icon: (input.icon || existing?.icon || '🛍️').slice(0, 16),
+    name: String(input.name).slice(0, 120),
+    description: String(input.description ?? existing?.description ?? '').slice(0, 400),
+    price: Math.max(0, Math.round(Number(input.price ?? existing?.price ?? 0))),
+    currency: (input.currency ?? existing?.currency) === 'cash' ? 'cash' : 'coins',
+    effectKey: String(input.effectKey ?? existing?.effectKey ?? 'gift').slice(0, 32),
+    effectValue: Math.max(0, Math.round(Number(input.effectValue ?? existing?.effectValue ?? 1))),
+    badge: (input.badge ?? existing?.badge) || undefined,
+    enabled: input.enabled != null ? !!input.enabled : (existing?.enabled ?? true),
+    sortOrder: Number(input.sortOrder ?? existing?.sortOrder ?? 0),
+    createdAt: existing?.createdAt || now,
+    updatedAt: now
+  };
+  if (!item.name) throw new Error('NAME_REQUIRED');
+  const pool = pg();
+  if (pool) {
+    await ensureSchema(pool);
+    await pool.query(
+      `INSERT INTO shop_items(id,category,icon,name,description,price,currency,effect_key,effect_value,badge,enabled,sort_order,created_at,updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+       ON CONFLICT (id) DO UPDATE SET category=$2,icon=$3,name=$4,description=$5,price=$6,currency=$7,effect_key=$8,effect_value=$9,badge=$10,enabled=$11,sort_order=$12,updated_at=$14`,
+      [item.id, item.category, item.icon, item.name, item.description, item.price, item.currency, item.effectKey, item.effectValue, item.badge ?? null, item.enabled, item.sortOrder, item.createdAt, item.updatedAt]);
+  } else {
+    const i = mem.findIndex((x) => x.id === item.id);
+    if (i >= 0) mem[i] = item; else mem.push(item);
+  }
+  return item;
+}
+
+export async function removeItem(itemId: string): Promise<boolean> {
+  const pool = pg();
+  if (pool) {
+    await ensureSchema(pool);
+    const { rowCount } = await pool.query(`DELETE FROM shop_items WHERE id=$1`, [itemId]);
+    return (rowCount ?? 0) > 0;
+  }
+  const i = mem.findIndex((x) => x.id === itemId);
+  if (i < 0) return false;
+  mem.splice(i, 1);
+  return true;
+}
