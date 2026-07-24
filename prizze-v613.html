@@ -2955,6 +2955,16 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
 @keyframes pzFloat{0%{transform:translateY(0) translateX(0) rotate(0deg)}100%{transform:translateY(-118vh) translateX(24px) rotate(360deg)}}
 @keyframes pzTwinkle{0%,100%{opacity:.12}45%{opacity:1}70%{opacity:.5}}
 @media (prefers-reduced-motion: reduce){.pzp{animation:pzTwinkle 4s ease-in-out infinite}#pzWall .pzw{animation:none}}
+/* HOME header sits directly on the wallpaper: no panel background, pinned (no
+   scroll), and every bare text gets a strong shadow so it stays readable. The
+   chips/pills keep their own backgrounds. */
+#home .pz-header{background:transparent!important;border-bottom:none!important;box-shadow:none!important;position:sticky;top:0;z-index:8;-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
+#home .pz-header .pzh-nameline b,#home .pz-header .pzh-xptxt{text-shadow:0 1px 4px rgba(0,0,0,.95),0 0 3px rgba(0,0,0,.9)}
+#home .pz-header .pzh-lvl{text-shadow:0 1px 3px rgba(0,0,0,.9)}
+#home .pz-header .pzh-xpbar{box-shadow:0 1px 4px rgba(0,0,0,.6)}
+/* Bare-text belongings anywhere in the home header get a subtle dark chip so
+   they never disappear on a bright part of the photo. */
+#home .pz-header .pzh-nameline{background:rgba(6,10,14,.34);border-radius:10px;padding:2px 8px;backdrop-filter:blur(1px);-webkit-backdrop-filter:blur(1px)}
 </style>
 <div id="pzWall" aria-hidden="true">
   <div class="pzw pzw-home"></div>
