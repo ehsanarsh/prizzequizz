@@ -1,6 +1,7 @@
 import type { Router } from '../../http/router.js';
 import { error, json } from '../../http/response.js';
 import { notifications } from '../../services/notificationService.js';
+import { bumpCampaignClick } from '../../services/notificationCampaignService.js';
 import { bodyObject, optionalString, requiredString } from '../../utils/validation.js';
 
 export function registerNotificationRoutes(router: Router, base: string): void {
@@ -52,6 +53,18 @@ export function registerNotificationRoutes(router: Router, base: string): void {
     const updated = await notifications.markRead(ctx.params.id!, ctx.userId ?? 'u1');
     if (!updated) return error(ctx.res, 404, 'NOTIFICATION_NOT_FOUND', 'Notification not found.');
     json(ctx.res, 200, { updated });
+  });
+
+  // Click / action-tap tracking: marks the notification read (=opened) and, if it
+  // belongs to an admin campaign, bumps that campaign's click counter for CTR.
+  router.add('POST', `${base}/notifications/:id/click`, async (ctx) => {
+    const uid = ctx.userId ?? 'u1';
+    const list = await notifications.list(uid, 100);
+    const n = list.find((x) => x.id === ctx.params.id);
+    await notifications.markRead(ctx.params.id!, uid);
+    const campaignId = n && n.data && (n.data as any).campaignId;
+    if (campaignId) { try { await bumpCampaignClick(String(campaignId)); } catch { /* analytics optional */ } }
+    json(ctx.res, 200, { tracked: true, url: (n && n.data && (n.data as any).url) || '/' });
   });
 
   router.add('POST', `${base}/notifications/read-all`, async (ctx) => {

@@ -3997,6 +3997,16 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
     <div class="pzrv-body" id="pzReviewBody"></div>
   </div>
 
+  <!-- Notification inbox (صندوق پیام‌ها) -->
+  <div class="pz-reviewov" id="pzInboxOverlay">
+    <div class="pzrv-head">
+      <button class="iconbtn" onclick="pzCloseInbox()">✕</button>
+      <h2>📬 صندوق پیام‌ها</h2>
+      <button class="btn-link" onclick="pzInboxReadAll()" style="background:none;border:none;color:var(--bolt,#FFD21F);font-weight:900;font-family:inherit;font-size:12.5px;cursor:pointer">خواندن همه</button>
+    </div>
+    <div class="pzrv-body" id="pzInboxBody"></div>
+  </div>
+
   <!-- Elimination overlay -->
   <div id="elimOverlay">
     <div class="elim-title" id="elimTitle">۳ نفر سقوط کردند!</div>
@@ -5730,6 +5740,7 @@ function renderSettingDetail(type){
   const titles={notifications:'اعلان‌ها 🔔',audio:'صدا و لرزش 🔊',gameplay:'تنظیمات بازی 🎮',appearance:'ظاهر و دسترس‌پذیری 🎨',language:'زبان 🌐',security:'امنیت حساب 🔐',privacy:'حریم خصوصی 🛡️',data:'داده‌ها و راهنماها 🧰'};title.textContent=titles[type]||'تنظیمات';
   if(type==='notifications'){
     html+='<p class="set-note">نوع اعلان‌هایی که از بازی دریافت می‌کنی را تنظیم کن.</p>';
+    html+=settingAction('📬','صندوق پیام‌ها','همهٔ اعلان‌های دریافتی‌ات را ببین','pzOpenInbox()');
     html+=settingSwitch('notifications','اعلان‌ها','فعال یا غیرفعال کردن همه اعلان‌های بازی');
     html+=settingSwitch('notifMatch','یادآوری مسابقه','دعوت به دوئل، شروع روم و نوبت بازی');
     html+=settingSwitch('notifLeague','لیگ هفتگی','صعود، بلیت جدید و پایان هفته لیگ');
@@ -9930,6 +9941,62 @@ function pzReportFromReview(qid){
 }
 function pzCloseReview(){ const ov=document.getElementById('pzReviewOverlay'); if(ov) ov.classList.remove('show'); }
 function pzEsc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+/* ============ NOTIFICATION INBOX (صندوق پیام‌ها) ============ */
+let _pzInbox=[];
+async function pzOpenInbox(){
+  const ov=document.getElementById('pzInboxOverlay'), body=document.getElementById('pzInboxBody');
+  if(!ov||!body) return;
+  body.innerHTML='<p style="text-align:center;color:var(--muted);margin-top:40px">در حال بارگذاری…</p>';
+  ov.classList.add('show');
+  const r=await pzApi('GET','/notifications?limit=50');
+  const list=(r&&r.data)||r;
+  _pzInbox=Array.isArray(list)?list:[];
+  if(!_pzInbox.length){ body.innerHTML='<div style="text-align:center;color:var(--muted);margin-top:50px"><div style="font-size:44px">📭</div><p style="margin-top:8px">هنوز پیامی نداری.</p></div>'; return; }
+  body.innerHTML=_pzInbox.map(n=>{
+    const unread=!n.readAt;
+    const img=(n.data&&n.data.image)?'<img src="'+pzEsc(n.data.image)+'" alt="" style="width:100%;max-height:150px;object-fit:cover;border-radius:12px;margin:8px 0" onerror="this.style.display=\'none\'">':'';
+    const hasLink=n.data&&n.data.url;
+    return '<div onclick="pzInboxTap(\''+n.id+'\')" style="background:'+(unread?'rgba(255,210,31,.08)':'rgba(255,255,255,.04)')+';border:1px solid '+(unread?'rgba(255,210,31,.3)':'rgba(255,255,255,.08)')+';border-radius:16px;padding:14px;margin-bottom:10px;cursor:pointer">'+
+      '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">'+(unread?'<span style="width:8px;height:8px;border-radius:50%;background:var(--bolt,#FFD21F);flex-shrink:0"></span>':'')+'<b style="flex:1;font-size:14px">'+pzEsc(n.title||'')+'</b><span style="font-size:11px;color:var(--muted)">'+pzRelTime(n.createdAt)+'</span></div>'+
+      img+
+      '<div style="font-size:13px;color:var(--ink,#ddd);line-height:1.7">'+pzEsc(n.body||'')+'</div>'+
+      (hasLink?'<div style="margin-top:8px;color:var(--bolt,#FFD21F);font-weight:800;font-size:12.5px">'+pzEsc((n.data.actionLabel)||'مشاهده')+' ‹</div>':'')+
+    '</div>';
+  }).join('');
+}
+function pzCloseInbox(){ const ov=document.getElementById('pzInboxOverlay'); if(ov) ov.classList.remove('show'); }
+async function pzInboxTap(id){
+  const n=_pzInbox.find(x=>x.id===id);
+  /* Track click (also marks read) — CTR + open analytics for the admin. */
+  try{ pzApi('POST','/notifications/'+id+'/click',{}); }catch(e){}
+  const url=n&&n.data&&n.data.url;
+  if(url){ pzCloseInbox(); pzNotifNav(url); }
+  else { if(n)n.readAt=new Date().toISOString(); pzOpenInbox(); }
+  try{ pzInboxBadge(); }catch(e){}
+}
+async function pzInboxReadAll(){ try{ await pzApi('POST','/notifications/read-all',{}); }catch(e){} _pzInbox.forEach(n=>n.readAt=n.readAt||new Date().toISOString()); pzOpenInbox(); try{pzInboxBadge();}catch(e){} }
+/* Map a notification deep-link to an in-app screen (best-effort, safe). */
+function pzNotifNav(url){
+  const map={'/home':'home','/shop':'shop','/wallet':'wallet','/profile':'profile','/notifications':null,'/match':'home','/league':'home','/rewards':'home'};
+  const scr=(url in map)?map[url]:'home';
+  if(url==='/notifications'){ setTimeout(pzOpenInbox,150); return; }
+  try{ if(scr&&typeof go==='function') go(scr); }catch(e){}
+  /* Fire the natural entry action for a couple of destinations. */
+  try{ if(url==='/wallet'&&typeof renderWallet==='function') renderWallet(); }catch(e){}
+}
+/* Unread badge on the bell (if present). */
+async function pzInboxBadge(){
+  try{
+    const r=await pzApi('GET','/notifications?limit=50'); const list=(r&&r.data)||r;
+    const n=(Array.isArray(list)?list:[]).filter(x=>!x.readAt).length;
+    const b=document.getElementById('pzBellBadge');
+    if(b){ b.textContent=fa(n); b.style.display=n>0?'flex':'none'; }
+  }catch(e){}
+}
+/* Alias used by testNotification() + refreshers. */
+function loadNotifications(){ try{ pzInboxBadge(); }catch(e){} const ov=document.getElementById('pzInboxOverlay'); if(ov&&ov.classList.contains('show')) pzOpenInbox(); }
+try{ setTimeout(()=>{ try{ if(_tok) pzInboxBadge(); }catch(e){} }, 2500); }catch(e){}
 
 </script>
 </body>

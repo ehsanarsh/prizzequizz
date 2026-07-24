@@ -9,14 +9,20 @@ import { notifications } from './notificationService.js';
 import { logger } from './logger.js';
 import { id } from '../utils/id.js';
 import type { NotificationType } from '../types/domain.js';
+import { resolveSegment, type SegmentSpec } from './notificationSegmentService.js';
+import { recordCampaignResult } from './notificationCampaignService.js';
 
 export interface ScheduledNotification {
   id: string;
   title: string;
   body: string;
   type: NotificationType;
-  audience: 'all' | 'specific';
+  audience: 'all' | 'specific' | 'segment';
   userIds: string[];
+  segment?: SegmentSpec;
+  image?: string;
+  action?: Record<string, unknown>;
+  campaignId?: string;
   scheduledAt: string;          // ISO; when it should fire
   status: 'pending' | 'sent' | 'canceled' | 'failed';
   push: boolean;
@@ -53,6 +59,11 @@ async function ensureSchema(pool: ReturnType<typeof getPgPool>): Promise<void> {
     delivered_count INT NOT NULL DEFAULT 0,
     error TEXT)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_sched_notif_status_time ON scheduled_notifications(status, scheduled_at)`);
+  // Rich-notification + segment columns (added over time; safe to re-run).
+  await pool.query(`ALTER TABLE scheduled_notifications ADD COLUMN IF NOT EXISTS segment JSONB`);
+  await pool.query(`ALTER TABLE scheduled_notifications ADD COLUMN IF NOT EXISTS image TEXT`);
+  await pool.query(`ALTER TABLE scheduled_notifications ADD COLUMN IF NOT EXISTS action JSONB`);
+  await pool.query(`ALTER TABLE scheduled_notifications ADD COLUMN IF NOT EXISTS campaign_id TEXT`);
   _schemaReady = true;
 }
 
@@ -62,6 +73,7 @@ function rowToSched(r: any): ScheduledNotification {
   return {
     id: r.id, title: r.title, body: r.body, type: r.type, audience: r.audience,
     userIds: Array.isArray(r.user_ids) ? r.user_ids : (r.user_ids ? JSON.parse(r.user_ids) : []),
+    segment: r.segment ?? undefined, image: r.image ?? undefined, action: r.action ?? undefined, campaignId: r.campaign_id ?? undefined,
     scheduledAt: r.scheduled_at?.toISOString?.() ?? String(r.scheduled_at),
     status: r.status, push: r.push !== false, createdBy: r.created_by ?? undefined,
     createdAt: r.created_at?.toISOString?.() ?? String(r.created_at),
@@ -71,8 +83,9 @@ function rowToSched(r: any): ScheduledNotification {
 }
 
 export async function createScheduled(input: {
-  title: string; body: string; type?: any; audience?: 'all' | 'specific';
-  userIds?: string[]; scheduledAt: string; push?: boolean; createdBy?: string;
+  title: string; body: string; type?: any; audience?: 'all' | 'specific' | 'segment';
+  userIds?: string[]; segment?: SegmentSpec; image?: string; action?: Record<string, unknown>;
+  campaignId?: string; scheduledAt: string; push?: boolean; createdBy?: string;
 }): Promise<ScheduledNotification> {
   const title = String(input.title ?? '').trim();
   const body = String(input.body ?? '').trim();
@@ -80,21 +93,22 @@ export async function createScheduled(input: {
   if (!body) throw new Error('BODY_REQUIRED');
   const ts = Date.parse(input.scheduledAt);
   if (!Number.isFinite(ts)) throw new Error('SCHEDULE_TIME_INVALID');
-  const audience: 'all' | 'specific' = input.audience === 'specific' ? 'specific' : 'all';
+  const audience: 'all' | 'specific' | 'segment' = input.audience === 'specific' ? 'specific' : input.audience === 'segment' ? 'segment' : 'all';
   const userIds = audience === 'specific' ? (Array.isArray(input.userIds) ? input.userIds.map(String).filter(Boolean) : []) : [];
   if (audience === 'specific' && !userIds.length) throw new Error('NO_RECIPIENTS');
   const row: ScheduledNotification = {
     id: id(), title: title.slice(0, 200), body: body.slice(0, 800), type: normType(input.type),
-    audience, userIds, scheduledAt: new Date(ts).toISOString(), status: 'pending',
+    audience, userIds, segment: input.segment, image: input.image, action: input.action, campaignId: input.campaignId,
+    scheduledAt: new Date(ts).toISOString(), status: 'pending',
     push: input.push !== false, createdBy: input.createdBy, createdAt: new Date().toISOString(), deliveredCount: 0
   };
   const pool = pg();
   if (pool) {
     await ensureSchema(pool);
     await pool.query(
-      `INSERT INTO scheduled_notifications(id,title,body,type,audience,user_ids,scheduled_at,status,push,created_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,'pending',$8,$9)`,
-      [row.id, row.title, row.body, row.type, row.audience, JSON.stringify(row.userIds), row.scheduledAt, row.push, row.createdBy ?? null]);
+      `INSERT INTO scheduled_notifications(id,title,body,type,audience,user_ids,segment,image,action,campaign_id,scheduled_at,status,push,created_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'pending',$12,$13)`,
+      [row.id, row.title, row.body, row.type, row.audience, JSON.stringify(row.userIds), row.segment ? JSON.stringify(row.segment) : null, row.image ?? null, row.action ? JSON.stringify(row.action) : null, row.campaignId ?? null, row.scheduledAt, row.push, row.createdBy ?? null]);
   } else {
     mem.push(row);
   }
@@ -151,9 +165,17 @@ export async function dispatchDue(now = Date.now()): Promise<number> {
     }
     for (const s of due) {
       try {
-        const userIds = s.audience === 'specific' ? s.userIds : (await repositories.users.list(5000)).map((u) => u.id);
-        const res = await notifications.broadcast({ userIds, type: s.type, title: s.title, body: s.body, data: { scheduled: true, scheduledId: s.id }, push: s.push });
+        let userIds: string[];
+        if (s.audience === 'specific') userIds = s.userIds;
+        else if (s.audience === 'segment' && s.segment) userIds = (await resolveSegment(s.segment)).userIds;
+        else userIds = (await repositories.users.list(5000)).map((u) => u.id);
+        const data: Record<string, unknown> = { scheduled: true, scheduledId: s.id };
+        if (s.campaignId) data.campaignId = s.campaignId;
+        if (s.action && (s.action as any).url) data.url = (s.action as any).url;
+        if (s.image) data.image = s.image;
+        const res = await notifications.broadcast({ userIds, type: s.type, title: s.title, body: s.body, data, push: s.push });
         await markSent(s.id, res.created);
+        if (s.campaignId) { try { await recordCampaignResult(s.campaignId, { created: res.created, sent: res.sent, failed: 0, status: 'sent' }); } catch { /* analytics optional */ } }
         fired += 1;
         logger.info('scheduled_notification_sent', { id: s.id, delivered: res.created });
       } catch (e) {

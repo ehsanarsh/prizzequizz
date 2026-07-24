@@ -815,57 +815,139 @@ async function renderLeaderboard(){
 const NT_STFA={pending:'در انتظار',sending:'در حال ارسال',sent:'ارسال شد',canceled:'لغو شد',failed:'ناموفق'};
 function ntTypeOptions(sel){const t={system:'عمومی/مهم (همه دریافت می‌کنند)',promo:'تبلیغی (طبق تنظیمات کاربر)',match_update:'مسابقه',wallet_update:'کیف پول',leaderboard_update:'لیدربرد'};return Object.keys(t).map(k=>'<option value="'+k+'"'+(sel===k?' selected':'')+'>'+t[k]+'</option>').join('');}
 function ntLocalDefault(){const d=new Date(Date.now()+3600000);d.setSeconds(0,0);const p=n=>String(n).padStart(2,'0');return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+'T'+p(d.getHours())+':'+p(d.getMinutes());}
+let NT_TAB='compose';
+const NT_LINKS={'':'— بدون مقصد —','/home':'🏠 خانه','/shop':'🛒 فروشگاه','/wallet':'👛 کیف پول','/match':'⚔️ شروع مسابقه','/league':'🛡️ لیگ','/rewards':'🎡 جوایز و گردونه','/profile':'👤 پروفایل','/notifications':'🔔 صندوق پیام'};
 async function renderNotifications(){
-  let sched=[];try{sched=await api('GET','/admin/notifications/scheduled?limit=200');}catch(e){}
-  $('#main').innerHTML=head('پیام‌ها و اعلان‌ها','ارسال فوری یا زمان‌بندی‌شده — به همهٔ کاربران یا افراد مشخص')+
-    '<div class="card" style="max-width:600px"><h3>ساخت پیام</h3>'+
-    '<div class="field"><label>عنوان</label><input id="nt_title" maxlength="120" placeholder="مثلاً: جایزهٔ ویژهٔ امشب 🎁"></div>'+
-    '<div class="field"><label>متن پیام</label><textarea id="nt_body" rows="3" maxlength="700" placeholder="متن نوتیفیکیشن که به دست کاربر می‌رسد..."></textarea></div>'+
-    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'+
-      '<div class="field"><label>نوع</label><select id="nt_type">'+ntTypeOptions('system')+'</select></div>'+
-      '<div class="field"><label>لینک مقصد (اختیاری)</label><input id="nt_url" dir="ltr" placeholder="/wallet"></div>'+
+  const tab=(k,label)=>'<button class="btn sm '+(NT_TAB===k?'pri':'')+'" onclick="NT_TAB=\''+k+'\';render()">'+label+'</button>';
+  const tabs=tab('dashboard','📊 داشبورد')+' '+tab('compose','✍️ ارسال پیام')+' '+tab('history','🗂️ کمپین‌ها و آنالیز')+' '+tab('scheduled','⏰ زمان‌بندی‌شده');
+  $('#main').innerHTML=head('مرکز اعلان‌ها','ارسال هدفمند به بخش واقعیِ کاربران، زمان‌بندی، و آنالیزِ باز/کلیک',tabs)+'<div id="ntBody"><div class="empty">در حال بارگذاری…</div></div>';
+  if(NT_TAB==='dashboard')return ntRenderDashboard();
+  if(NT_TAB==='history')return ntRenderHistory();
+  if(NT_TAB==='scheduled')return ntRenderScheduled();
+  return ntRenderCompose();
+}
+/* ---- Dashboard ---- */
+async function ntRenderDashboard(){
+  let d={};try{d=await api('GET','/admin/notifications/dashboard');}catch(e){}
+  const tile=(label,val,c)=>'<div class="card" style="flex:1;min-width:130px;text-align:center"><div class="sub">'+label+'</div><b style="font-size:24px;'+(c?'color:'+c:'')+'">'+fa(val||0)+'</b></div>';
+  $('#ntBody').innerHTML='<div style="display:flex;gap:12px;flex-wrap:wrap">'+
+    tile('ارسال‌شده امروز',d.sentToday,'var(--ok,#3c9)')+tile('کل تحویل',d.deliveredTotal)+tile('بازشده‌ها',d.opensTotal,'#5ea0ff')+
+    tile('کلیک‌ها',d.clicksTotal,'#FFB86B')+tile('زمان‌بندی‌شده',d.scheduled)+tile('ناموفق',d.failedTotal,'var(--bad,#e66)')+tile('کل کمپین‌ها',d.totalCampaigns)+
+  '</div><div class="note" style="margin-top:12px">«بازشده» و «کلیک» رویدادهای واقعی‌اند: وقتی کاربر پیام را باز می‌کند یا روی دکمهٔ مقصد می‌زند ثبت می‌شوند.</div>';
+}
+/* ---- Compose (rich + segment builder) ---- */
+function ntSegRow(inner){return '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'+inner+'</div>';}
+function ntRenderCompose(){
+  $('#ntBody').innerHTML=
+    '<div class="card" style="max-width:640px"><h3>محتوای پیام</h3>'+
+      '<div class="field"><label>عنوان</label><input id="nt_title" maxlength="120" placeholder="مثلاً: جایزهٔ ویژهٔ امشب 🎁"></div>'+
+      '<div class="field"><label>متن پیام</label><textarea id="nt_body" rows="3" maxlength="700" placeholder="متن نوتیفیکیشن که به دست کاربر می‌رسد..."></textarea></div>'+
+      ntSegRow('<div class="field"><label>نوع</label><select id="nt_type">'+ntTypeOptions('system')+'</select></div>'+
+        '<div class="field"><label>مقصد کلیک (Deep-link)</label><select id="nt_link">'+Object.keys(NT_LINKS).map(k=>'<option value="'+k+'">'+NT_LINKS[k]+'</option>').join('')+'</select></div>')+
+      '<div class="field"><label>تصویر/بنر (URL اختیاری)</label><input id="nt_image" dir="ltr" placeholder="https://... .jpg"></div>'+
     '</div>'+
-    '<div class="field"><label>گیرندگان</label><select id="nt_aud" onchange="ntAudChange()"><option value="all">همهٔ کاربران</option><option value="specific">کاربران مشخص</option></select></div>'+
-    '<div class="field" id="nt_uids_wrap" style="display:none"><label>شناسه/آی‌دی کاربران (با ویرگول جدا کن)</label><textarea id="nt_uids" rows="2" dir="ltr" placeholder="uuid1, uuid2, ..."></textarea></div>'+
-    '<div class="field"><label>زمان ارسال</label>'+
-      '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">'+
+    '<div class="card" style="max-width:640px"><h3>مخاطب هدف</h3>'+
+      '<div class="field"><label>گروه پایه</label><select id="seg_base" onchange="ntSegChange()"><option value="all">همهٔ کاربران</option><option value="online">آنلاین (۵ دقیقهٔ اخیر)</option><option value="offline">آفلاین</option><option value="new">کاربران جدید (۷ روز)</option><option value="inactive">غیرفعال (۷ روز+)</option><option value="manual">فهرست دستی آی‌دی</option></select></div>'+
+      '<div id="seg_filters">'+
+        ntSegRow('<div class="field"><label>اشتراک</label><select id="seg_plan"><option value="">فرقی ندارد</option><option value="free">رایگان</option><option value="paid">پولی</option></select></div>'+
+          '<div class="field"><label>وضعیت</label><select id="seg_status"><option value="">فعال (پیش‌فرض)</option><option value="any">همه</option><option value="limited">محدود</option><option value="banned">مسدود</option></select></div>')+
+        ntSegRow('<div class="field"><label>حداقل سطح</label><input id="seg_minlvl" type="number" placeholder="—"></div>'+
+          '<div class="field"><label>حداکثر سطح</label><input id="seg_maxlvl" type="number" placeholder="—"></div>')+
+        ntSegRow('<div class="field"><label>حداقل XP</label><input id="seg_minxp" type="number" placeholder="—"></div>'+
+          '<div class="field"><label>بلیط</label><select id="seg_tickets"><option value="">فرقی ندارد</option><option value="yes">دارای بلیط</option><option value="no">بدون بلیط</option></select></div>')+
+        ntSegRow('<div class="field"><label>موجودی کمتر از</label><input id="seg_walletlt" type="number" placeholder="— تومان"></div>'+
+          '<div class="field"><label>موجودی بیشتر از</label><input id="seg_walletgt" type="number" placeholder="— تومان"></div>')+
+      '</div>'+
+      '<div class="field" id="seg_manual_wrap" style="display:none"><label>آی‌دی کاربران (با ویرگول)</label><textarea id="seg_uids" rows="2" dir="ltr" placeholder="uuid1, uuid2, ..."></textarea></div>'+
+      '<button class="btn info" onclick="ntPreview()">👁️ پیش‌نمایش مخاطب</button> <span id="seg_count" style="font-weight:900;margin-inline-start:8px"></span>'+
+      '<div class="note" style="margin-top:8px">فیلترها با هم ترکیب می‌شوند (AND). «شهر» و «نسخهٔ اپ» عمداً نیامده‌اند چون اپ این داده‌ها را ذخیره نمی‌کند.</div>'+
+    '</div>'+
+    '<div class="card" style="max-width:640px"><h3>زمان ارسال</h3>'+
+      '<div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center">'+
         '<label style="display:flex;gap:6px;align-items:center"><input type="radio" name="nt_when" value="now" checked onchange="ntWhenChange()"> فوری</label>'+
         '<label style="display:flex;gap:6px;align-items:center"><input type="radio" name="nt_when" value="sched" onchange="ntWhenChange()"> زمان‌بندی</label>'+
-        '<input type="datetime-local" id="nt_at" style="display:none" value="'+ntLocalDefault()+'">'+
-      '</div></div>'+
-    '<button class="btn pri" id="nt_go" onclick="ntSubmit()">📣 ارسال</button>'+
-    '<div class="note" style="margin-top:8px">می‌توانی چند پیام با زمان‌های مختلف بسازی؛ هر کدام یک ردیف جدا در فهرست پایین می‌شود و سرور دقیقاً در همان زمان می‌فرستد.</div></div>'+
-    '<div class="card" style="max-width:760px"><h3>پیام‌های زمان‌بندی‌شده</h3>'+
-      tbl(['عنوان','گیرنده','زمان ارسال','وضعیت','تحویل','عملیات'],(sched||[]).map(s=>{
-        const act=s.status==='pending'?'<button class="btn sm bad" onclick="ntCancel(\''+s.id+'\')">لغو</button>':'—';
-        const aud=s.audience==='specific'?((s.userIds||[]).length+' کاربر'):'همه';
-        return [esc(s.title),aud,fmtDate(s.scheduledAt),'<span class="pill '+(s.status==='sent'?'ok':s.status==='failed'||s.status==='canceled'?'bad':'pend')+'">'+(NT_STFA[s.status]||s.status)+'</span>',s.status==='sent'?fa(s.deliveredCount||0)+' نفر':'—',act];
-      }))+
-      ((sched||[]).length?'':'<div class="empty">هنوز پیام زمان‌بندی‌شده‌ای نداری.</div>')+'</div>';
+        '<input type="datetime-local" id="nt_at" style="display:none" value="'+ntLocalDefault()+'"></div>'+
+      '<div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">'+
+        '<button class="btn pri" id="nt_go" onclick="ntSubmit()">📣 ارسال فوری</button>'+
+        '<button class="btn" onclick="ntSubmit(true)">🧪 ارسال آزمایشی به خودم</button></div>'+
+    '</div>';
 }
-function ntAudChange(){$('#nt_uids_wrap').style.display=$('#nt_aud').value==='specific'?'block':'none';}
-function ntWhenChange(){const s=document.querySelector('input[name=nt_when]:checked').value;$('#nt_at').style.display=s==='sched'?'inline-block':'none';$('#nt_go').textContent=s==='sched'?'🕒 زمان‌بندی و افزودن':'📣 ارسال فوری';}
-async function ntSubmit(){
-  const title=$('#nt_title').value.trim(),body=$('#nt_body').value.trim();
+function ntSegChange(){const b=$('#seg_base').value;$('#seg_manual_wrap').style.display=b==='manual'?'block':'none';$('#seg_filters').style.display=b==='manual'?'none':'block';}
+function ntWhenChange(){const s=document.querySelector('input[name=nt_when]:checked').value;$('#nt_at').style.display=s==='sched'?'inline-block':'none';const g=$('#nt_go');if(g)g.textContent=s==='sched'?'🕒 زمان‌بندی':'📣 ارسال فوری';}
+function ntCollectSegment(){
+  const base=$('#seg_base').value;
+  if(base==='manual'){const ids=($('#seg_uids').value||'').split(',').map(s=>s.trim()).filter(Boolean);return {userIds:ids};}
+  const s={};if(base!=='all')s.base=base;
+  const plan=$('#seg_plan').value;if(plan)s.plan=plan;
+  const st=$('#seg_status').value;if(st)s.status=st;
+  const nv2=id=>{const v=$('#'+id).value;return v===''?undefined:Number(v);};
+  const minlvl=nv2('seg_minlvl');if(minlvl!=null)s.minLevel=minlvl;
+  const maxlvl=nv2('seg_maxlvl');if(maxlvl!=null)s.maxLevel=maxlvl;
+  const minxp=nv2('seg_minxp');if(minxp!=null)s.minXp=minxp;
+  const wlt=nv2('seg_walletlt');if(wlt!=null)s.walletLt=wlt;
+  const wgt=nv2('seg_walletgt');if(wgt!=null)s.walletGt=wgt;
+  const tk=$('#seg_tickets').value;if(tk==='yes')s.hasTickets=true;else if(tk==='no')s.hasTickets=false;
+  return s;
+}
+async function ntPreview(){
+  try{const seg=ntCollectSegment();const r=await api('POST','/admin/notifications/segment/preview',seg);$('#seg_count').innerHTML='👥 <b style="color:var(--ok,#3c9)">'+fa(r.count||0)+'</b> کاربر — <span style="color:var(--muted)">'+esc(r.description||'')+'</span>';}
+  catch(e){toast(e.message,'bad');}
+}
+async function ntSubmit(testToSelf){
+  const title=($('#nt_title')||{}).value?.trim(),body=($('#nt_body')||{}).value?.trim();
   if(!title||!body)return toast('عنوان و متن لازم است','bad');
-  const type=$('#nt_type').value,url=$('#nt_url').value.trim();
-  const aud=$('#nt_aud').value;
-  const userIds=aud==='specific'?$('#nt_uids').value.split(',').map(s=>s.trim()).filter(Boolean):[];
-  if(aud==='specific'&&!userIds.length)return toast('حداقل یک آی‌دی کاربر وارد کن','bad');
+  const type=$('#nt_type').value,link=$('#nt_link').value,image=($('#nt_image').value||'').trim();
+  const action=link?{url:link}:undefined;
   const when=document.querySelector('input[name=nt_when]:checked').value;
-  const data=url?{url}:{};
+  const payload={title,body,type,image:image||undefined,action};
   try{
+    if(testToSelf){
+      const tid=prompt('آی‌دی کاربرِ آزمایشی (فقط به همین یک نفر ارسال می‌شود):');
+      if(!tid||!tid.trim())return;
+      const r=await api('POST','/admin/notifications/broadcast',{...payload,segment:{userIds:[tid.trim()]}});
+      toast('پیام آزمایشی ارسال شد 🧪 — '+fa(r.audienceCount||0)+' مخاطب','ok');return;
+    }
     if(when==='now'){
-      await api('POST','/admin/notifications/broadcast',{title,body,type,data,userIds:aud==='specific'?userIds:undefined});
-      toast('پیام فوری ارسال شد ✅','ok');
+      const r=await api('POST','/admin/notifications/broadcast',{...payload,segment:seg});
+      toast('ارسال شد ✅ — '+fa(r.audienceCount||0)+' مخاطب','ok');NT_TAB='history';render();
     }else{
       const at=$('#nt_at').value;if(!at)return toast('زمان ارسال را انتخاب کن','bad');
-      const scheduledAt=new Date(at).toISOString();
-      await api('POST','/admin/notifications/schedule',{title,body,type,data,audience:aud,userIds,scheduledAt});
-      toast('پیام زمان‌بندی شد 🕒','ok');
+      await api('POST','/admin/notifications/schedule',{...payload,segment:seg,scheduledAt:new Date(at).toISOString()});
+      toast('زمان‌بندی شد 🕒','ok');NT_TAB='scheduled';render();
     }
-    $('#nt_title').value='';$('#nt_body').value='';render();
   }catch(e){toast(e.message,'bad');}
+}
+/* ---- History (campaigns + analytics) ---- */
+async function ntRenderHistory(){
+  let rows=[];try{const r=await api('GET','/admin/notifications/campaigns?limit=100');rows=r.rows||[];}catch(e){}
+  $('#ntBody').innerHTML='<div class="card"><h3>کمپین‌ها و آنالیز</h3>'+
+    tbl(['عنوان','مخاطب','تحویل','باز','کلیک','CTR','وضعیت','زمان','عملیات'],rows.map(c=>{
+      const st=c.status==='scheduled'?'زمان‌بندی':c.status==='sent'?'ارسال شد':c.status==='failed'?'ناموفق':'در حال ارسال';
+      const act='<button class="btn sm" onclick="ntCampaignDetail(\''+c.id+'\')">جزئیات</button> '+(c.status==='sent'?'<button class="btn sm ok" onclick="ntResend(\''+c.id+'\')">ارسال دوباره</button>':'');
+      return [esc(c.title)+'<br><span class="sub">'+esc(c.segmentDesc||'')+'</span>',fa(c.audienceCount||0),fa(c.sentCount||0),fa(c.opens||0),fa(c.clickedCount||0),fa(c.ctr||0)+'٪','<span class="pill '+(c.status==='sent'?'ok':c.status==='failed'?'bad':'pend')+'">'+st+'</span>',fmtDate(c.createdAt),act];
+    }))+(rows.length?'':'<div class="empty">هنوز کمپینی ارسال نشده.</div>')+'</div>';
+  window._NT_CAMPAIGNS={};rows.forEach(c=>window._NT_CAMPAIGNS[c.id]=c);
+}
+function ntCampaignDetail(id){
+  const c=(window._NT_CAMPAIGNS||{})[id];if(!c)return;
+  const r=(k,v)=>'<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--line)"><span style="color:var(--muted)">'+k+'</span><b>'+v+'</b></div>';
+  modal('کمپین: '+esc(c.title),
+    r('متن',esc(c.body))+r('مخاطب هدف',esc(c.segmentDesc||'همه')+' ('+fa(c.audienceCount||0)+')')+
+    r('ایجادشده',fa(c.createdCount||0))+r('تحویل (Push)',fa(c.sentCount||0))+r('نرخ تحویل',fa(c.deliveryRate||0)+'٪')+
+    r('بازشده',fa(c.opens||0))+r('نرخ بازشدن',fa(c.openRate||0)+'٪')+r('کلیک',fa(c.clickedCount||0))+r('CTR',fa(c.ctr||0)+'٪')+
+    (c.action&&c.action.url?r('مقصد کلیک',esc(NT_LINKS[c.action.url]||c.action.url)):'')+r('زمان',fmtDate(c.createdAt))+
+    '<div style="margin-top:14px">'+(c.status==='sent'?'<button class="btn ok" onclick="this.closest(\'.modal-bg\').remove();ntResend(\''+c.id+'\')">ارسال دوباره به همین مخاطب</button>':'')+'</div>');
+}
+async function ntResend(id){if(!confirm('این کمپین دوباره به مخاطب فعلی ارسال شود؟'))return;try{const r=await api('POST','/admin/notifications/campaigns/'+id+'/resend',{});toast('ارسال شد ✅ — '+fa(r.audienceCount||0)+' مخاطب','ok');render();}catch(e){toast(e.message,'bad');}}
+/* ---- Scheduled ---- */
+async function ntRenderScheduled(){
+  let sched=[];try{sched=await api('GET','/admin/notifications/scheduled?limit=200');}catch(e){}
+  $('#ntBody').innerHTML='<div class="card"><h3>پیام‌های زمان‌بندی‌شده</h3>'+
+    tbl(['عنوان','گیرنده','زمان ارسال','وضعیت','تحویل','عملیات'],(sched||[]).map(s=>{
+      const act=s.status==='pending'?'<button class="btn sm bad" onclick="ntCancel(\''+s.id+'\')">لغو</button>':'—';
+      const aud=s.audience==='specific'?((s.userIds||[]).length+' کاربر'):s.audience==='segment'?'سگمنت':'همه';
+      return [esc(s.title),aud,fmtDate(s.scheduledAt),'<span class="pill '+(s.status==='sent'?'ok':s.status==='failed'||s.status==='canceled'?'bad':'pend')+'">'+(NT_STFA[s.status]||s.status)+'</span>',s.status==='sent'?fa(s.deliveredCount||0)+' نفر':'—',act];
+    }))+((sched||[]).length?'':'<div class="empty">هنوز پیام زمان‌بندی‌شده‌ای نداری.</div>')+'</div>';
 }
 async function ntCancel(id){if(!confirm('این پیام زمان‌بندی‌شده لغو شود؟'))return;try{await api('POST','/admin/notifications/scheduled/'+id+'/cancel',{});toast('لغو شد','ok');render();}catch(e){toast(e.message,'bad');}}
 

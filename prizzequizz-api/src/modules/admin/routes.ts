@@ -20,6 +20,8 @@ import { matchmakingQueue } from '../../services/matchmakingQueue.js';
 import { leaderboards } from '../../services/leaderboardService.js';
 import { notifications } from '../../services/notificationService.js';
 import { createScheduled, listScheduled, cancelScheduled } from '../../services/scheduledNotificationService.js';
+import { resolveSegment, describeSegment, type SegmentSpec } from '../../services/notificationSegmentService.js';
+import { createCampaign, recordCampaignResult, listCampaigns, campaignAnalytics, campaignDashboard } from '../../services/notificationCampaignService.js';
 import { financeDiagnostics, listWithdrawals, reviewWithdrawal, transactionsToCsv } from '../../services/financeService.js';
 import { listRewardHolds, rewardHoldDiagnostics, reviewRewardHold } from '../../services/rewardReviewService.js';
 import { integrity } from '../../services/integrityService.js';
@@ -461,21 +463,72 @@ export function registerAdminRoutes(router: Router, base: string): void {
     json(ctx.res, 200, updated);
   });
 
+  // Resolve an audience segment to a live count (audience preview) BEFORE sending.
+  router.add('POST', `${base}/admin/notifications/segment/preview`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    const spec = (ctx.body ?? {}) as SegmentSpec;
+    const { userIds, count } = await resolveSegment(spec);
+    json(ctx.res, 200, { count, sample: userIds.slice(0, 20), description: describeSegment(spec) });
+  });
+
+  // Build the notification `data` payload (deep-link action + image + campaign id)
+  // shared by immediate + scheduled sends.
+  const buildData = (b: any, campaignId: string) => {
+    const data: Record<string, unknown> = { campaignId };
+    const url = b?.action?.url ?? b?.url;
+    if (typeof url === 'string' && url.trim()) data.url = url.trim();
+    if (b?.action?.label) data.actionLabel = String(b.action.label);
+    if (typeof b?.image === 'string' && b.image.trim()) data.image = b.image.trim();
+    if (typeof b?.data === 'object' && b.data) Object.assign(data, b.data);
+    return data;
+  };
+
+  // Immediate send to a real segment, recorded as a campaign with analytics.
   router.add('POST', `${base}/admin/notifications/broadcast`, async (ctx) => {
     if (!requireAdmin(ctx)) return;
     const body = ctx.body as any;
-    const users = await repositories.users.list(1000);
-    const userIds = Array.isArray(body?.userIds) && body.userIds.length ? body.userIds.map(String) : users.map((u) => u.id);
-    const result = await notifications.broadcast({
-      userIds,
-      type: String(body?.type ?? 'system') as NotificationType,
-      title: String(body?.title ?? 'PrizzeQuizz'),
-      body: String(body?.body ?? ''),
-      data: typeof body?.data === 'object' && body.data ? body.data : {},
-      push: Boolean(body?.push ?? true)
-    });
-    audit(ctx.userId, 'NOTIFICATION_BROADCAST', 'notification', undefined, { ...result, type: body?.type ?? 'system' });
-    json(ctx.res, 202, result);
+    const type = String(body?.type ?? 'system') as NotificationType;
+    const title = String(body?.title ?? 'PrizzeQuizz');
+    const msg = String(body?.body ?? '');
+    if (!title.trim() || !msg.trim()) return error(ctx.res, 422, 'CONTENT_REQUIRED', 'عنوان و متن پیام الزامی است.');
+    // Back-compat: an explicit userIds array still works; otherwise resolve segment.
+    const spec: SegmentSpec = (body?.segment && typeof body.segment === 'object') ? body.segment
+      : (Array.isArray(body?.userIds) && body.userIds.length ? { userIds: body.userIds.map(String) } : { base: 'all' });
+    const { userIds, count } = await resolveSegment(spec);
+    const campaign = await createCampaign({ title, body: msg, type, image: body?.image, action: body?.action, segment: spec as any, segmentDesc: describeSegment(spec), audienceCount: count, status: 'sending', createdBy: ctx.userId });
+    const result = await notifications.broadcast({ userIds, type, title, body: msg, data: buildData(body, campaign.id), push: Boolean(body?.push ?? true) });
+    await recordCampaignResult(campaign.id, { created: result.created, sent: result.sent, failed: 0, status: 'sent' });
+    audit(ctx.userId, 'NOTIFICATION_BROADCAST', 'notification', campaign.id, { ...result, type, audience: count });
+    json(ctx.res, 202, { ...result, audienceCount: count, campaignId: campaign.id });
+  });
+
+  // Re-send a past campaign to its (freshly re-resolved) segment.
+  router.add('POST', `${base}/admin/notifications/campaigns/:id/resend`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    const src = (await listCampaigns(500)).find((c) => c.id === ctx.params.id);
+    if (!src) return error(ctx.res, 404, 'CAMPAIGN_NOT_FOUND', 'کمپین یافت نشد.');
+    const spec = (src.segment ?? { base: 'all' }) as SegmentSpec;
+    const { userIds, count } = await resolveSegment(spec);
+    const campaign = await createCampaign({ title: src.title, body: src.body, type: src.type, image: src.image, action: src.action, segment: spec as any, segmentDesc: src.segmentDesc, audienceCount: count, status: 'sending', createdBy: ctx.userId });
+    const data: Record<string, unknown> = { campaignId: campaign.id };
+    if (src.action && (src.action as any).url) data.url = (src.action as any).url;
+    if (src.image) data.image = src.image;
+    const result = await notifications.broadcast({ userIds, type: src.type as NotificationType, title: src.title, body: src.body, data, push: true });
+    await recordCampaignResult(campaign.id, { created: result.created, sent: result.sent, failed: 0, status: 'sent' });
+    audit(ctx.userId, 'NOTIFICATION_RESENT', 'notification', campaign.id, { from: src.id, audience: count });
+    json(ctx.res, 202, { ...result, audienceCount: count, campaignId: campaign.id });
+  });
+
+  // Campaign history (with computed analytics) + a dashboard rollup.
+  router.add('GET', `${base}/admin/notifications/campaigns`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    const rows = await listCampaigns(Number(ctx.query.get('limit') ?? 100));
+    const withStats = await Promise.all(rows.map(async (c) => (await campaignAnalytics(c.id)) ?? c));
+    json(ctx.res, 200, { rows: withStats });
+  });
+  router.add('GET', `${base}/admin/notifications/dashboard`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    json(ctx.res, 200, await campaignDashboard());
   });
 
   // Schedule a notification for a future date+time (fires automatically at that
@@ -484,14 +537,20 @@ export function registerAdminRoutes(router: Router, base: string): void {
     if (!requireAdmin(ctx)) return;
     const b = (ctx.body ?? {}) as any;
     try {
+      // segment / specific / all
+      const hasSegment = b.segment && typeof b.segment === 'object';
+      const audience: 'all' | 'specific' | 'segment' = hasSegment ? 'segment' : (b.audience === 'specific' ? 'specific' : 'all');
+      const spec: SegmentSpec = hasSegment ? b.segment : (audience === 'specific' ? { userIds: (b.userIds || []).map(String) } : { base: 'all' });
+      const count = (await resolveSegment(spec)).count;
+      const campaign = await createCampaign({ title: String(b.title ?? ''), body: String(b.body ?? ''), type: b.type, image: b.image, action: b.action, segment: spec as any, segmentDesc: describeSegment(spec), audienceCount: count, status: 'scheduled', scheduledAt: String(b.scheduledAt ?? ''), createdBy: ctx.userId });
       const sched = await createScheduled({
         title: String(b.title ?? ''), body: String(b.body ?? ''), type: b.type,
-        audience: b.audience === 'specific' ? 'specific' : 'all',
-        userIds: Array.isArray(b.userIds) ? b.userIds.map(String) : [],
+        audience, userIds: Array.isArray(b.userIds) ? b.userIds.map(String) : [],
+        segment: hasSegment ? b.segment : undefined, image: b.image, action: b.action, campaignId: campaign.id,
         scheduledAt: String(b.scheduledAt ?? ''), push: b.push !== false, createdBy: ctx.userId
       });
       audit(ctx.userId, 'NOTIFICATION_SCHEDULED', 'notification', sched.id, { scheduledAt: sched.scheduledAt, audience: sched.audience, type: sched.type });
-      json(ctx.res, 201, sched);
+      json(ctx.res, 201, { ...sched, audienceCount: count, campaignId: campaign.id });
     } catch (e) {
       const code = e instanceof Error ? e.message : 'SCHEDULE_INVALID';
       return error(ctx.res, 422, code, code === 'SCHEDULE_TIME_INVALID' ? 'زمان زمان‌بندی نامعتبر است.' : code === 'NO_RECIPIENTS' ? 'گیرنده‌ای انتخاب نشده است.' : 'عنوان و متن پیام الزامی است.');
