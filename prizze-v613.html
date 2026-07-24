@@ -3156,6 +3156,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
             <div class="pzh-nameline"><b id="hdrName">بازیکن</b><span class="pzh-xptxt" id="hdrXpN">۰ XP</span></div>
             <div class="pzh-xpbar"><i id="hdrXp"></i></div>
           </div>
+          <button class="pzh-spin" onclick="pzOpenInbox()" id="bellHdrBtn" style="position:relative">🔔<span id="pzBellBadge" style="display:none;position:absolute;top:-4px;left:-4px;min-width:17px;height:17px;padding:0 4px;border-radius:9px;background:#F26A6A;color:#fff;font-size:10px;font-weight:900;display:none;align-items:center;justify-content:center;box-shadow:0 1px 3px rgba(0,0,0,.5)">۰</span></button>
           <button class="pzh-spin" onclick="openSpin()" id="spinHdrBtn">🎡</button>
         </div>
         <div class="pzh-wallets">
@@ -5786,6 +5787,7 @@ function renderSettingDetail(type){
   if(type==='notifications'){
     html+='<p class="set-note">نوع اعلان‌هایی که از بازی دریافت می‌کنی را تنظیم کن.</p>';
     html+=settingAction('📬','صندوق پیام‌ها','همهٔ اعلان‌های دریافتی‌ات را ببین','pzOpenInbox()');
+    html+=settingAction('📲','اعلان روی گوشی','حتی وقتی داخل بازی نیستی، خبر بگیر','pzEnablePush(true)');
     html+=settingSwitch('notifications','اعلان‌ها','فعال یا غیرفعال کردن همه اعلان‌های بازی');
     html+=settingSwitch('notifMatch','یادآوری مسابقه','دعوت به دوئل، شروع روم و نوبت بازی');
     html+=settingSwitch('notifLeague','لیگ هفتگی','صعود، بلیت جدید و پایان هفته لیگ');
@@ -10087,6 +10089,49 @@ async function pzInboxBadge(){
 /* Alias used by testNotification() + refreshers. */
 function loadNotifications(){ try{ pzInboxBadge(); }catch(e){} const ov=document.getElementById('pzInboxOverlay'); if(ov&&ov.classList.contains('show')) pzOpenInbox(); }
 try{ setTimeout(()=>{ try{ if(_tok) pzInboxBadge(); }catch(e){} }, 2500); }catch(e){}
+
+/* ============ WEB PUSH (real phone notifications, even when app is closed) ============ */
+function pzUrlB64ToUint8(base64){
+  const pad='='.repeat((4-base64.length%4)%4);
+  const b=(base64+pad).replace(/-/g,'+').replace(/_/g,'/');
+  const raw=atob(b); const arr=new Uint8Array(raw.length);
+  for(let i=0;i<raw.length;i++) arr[i]=raw.charCodeAt(i);
+  return arr;
+}
+let _pzSWReg=null;
+async function pzRegisterSW(){
+  if(!('serviceWorker' in navigator)) return null;
+  try{ _pzSWReg=await navigator.serviceWorker.register('/pz-sw.js');
+    navigator.serviceWorker.addEventListener('message',(e)=>{ if(e.data&&e.data.type==='pz-open'&&e.data.url){ try{ pzNotifNav(e.data.url); }catch(_){} } });
+    return _pzSWReg;
+  }catch(e){ return null; }
+}
+/* Subscribe this device to push. Call on a user gesture (permission prompt). */
+async function pzEnablePush(interactive){
+  try{
+    if(!('serviceWorker' in navigator)||!('PushManager' in window)){ if(interactive)toast('مرورگر تو از اعلانِ پوش پشتیبانی نمی‌کند'); return false; }
+    if(!_tok){ if(interactive)toast('اول وارد شو'); return false; }
+    const reg=_pzSWReg||await pzRegisterSW(); if(!reg){ if(interactive)toast('سرویس‌ورکر نصب نشد'); return false; }
+    let perm=Notification.permission;
+    if(perm==='default'&&interactive) perm=await Notification.requestPermission();
+    if(perm!=='granted'){ if(interactive)toast('اجازهٔ اعلان داده نشد'); return false; }
+    const kr=await pzApi('GET','/notifications/vapid-public-key',null,false);
+    const pub=(kr&&kr.data&&kr.data.publicKey)||(kr&&kr.publicKey);
+    if(!pub){ if(interactive)toast('پوش روی سرور هنوز فعال نشده (VAPID)'); return false; }
+    let sub=await reg.pushManager.getSubscription();
+    if(!sub){ sub=await reg.pushManager.subscribe({userVisibleOnly:true, applicationServerKey:pzUrlB64ToUint8(pub)}); }
+    const j=sub.toJSON();
+    await pzApi('POST','/notifications/push-subscriptions',{endpoint:j.endpoint, keys:{p256dh:j.keys.p256dh, auth:j.keys.auth}, deviceLabel:(navigator.userAgent||'').slice(0,80)});
+    if(interactive)toast('اعلانِ گوشی فعال شد ✅');
+    try{ localStorage.setItem('pz_push_on','1'); }catch(e){}
+    return true;
+  }catch(e){ if(interactive)toast('فعال‌سازی اعلان ناموفق بود'); try{console.warn('[PZ-PUSH]',e);}catch(_){} return false; }
+}
+/* On load: register SW; if the user already granted permission, re-subscribe
+   silently so the server always has a fresh subscription for this device. */
+try{ setTimeout(()=>{ pzRegisterSW().then(()=>{ if(_tok && typeof Notification!=='undefined' && Notification.permission==='granted') pzEnablePush(false); }); }, 3000); }catch(e){}
+/* Keep the header bell badge fresh (new server messages arrive between opens). */
+try{ setInterval(()=>{ try{ if(_tok) pzInboxBadge(); }catch(e){} }, 45000); }catch(e){}
 
 
 /* ===== Photo wallpapers per screen + floating glow particles ===== */

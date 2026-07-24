@@ -9,6 +9,18 @@ export function registerNotificationRoutes(router: Router, base: string): void {
     json(ctx.res, 200, await notifications.list(ctx.userId ?? 'u1', Number(ctx.query.get('limit') ?? 50)));
   });
 
+  // Public VAPID key the client needs to subscribe to web-push. Null when push
+  // isn't configured on the server (client then falls back to in-app only).
+  router.add('GET', `${base}/notifications/vapid-public-key`, async (ctx) => {
+    json(ctx.res, 200, { publicKey: process.env.VAPID_PUBLIC_KEY || null });
+  });
+
+  // Count of unread notifications (for the header bell badge).
+  router.add('GET', `${base}/notifications/unread-count`, async (ctx) => {
+    const rows = await notifications.list(ctx.userId ?? 'u1', 100);
+    json(ctx.res, 200, { count: rows.filter((n) => !n.readAt).length });
+  });
+
   // Send a REAL test notification to the current user (appears in their list +
   // push), so the settings screen's "test" button is not a fake toast.
   router.add('POST', `${base}/notifications/test`, async (ctx) => {
