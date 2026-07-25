@@ -3632,7 +3632,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
         <span id="profUser" style="font-size:12px;color:var(--muted);font-weight:800" dir="ltr">@player</span>
       </div>
       <div class="pad" style="padding-top:0">
-        <button class="btn btn-ghost btn-sm" style="width:100%;margin-bottom:14px" onclick="charBack='profile';go('character')">🎭 ویرایش کاراکتر</button>
+        <button class="btn btn-ghost btn-sm soon-dim" style="width:100%;margin-bottom:14px" onclick="charBack='profile';go('character')">🎭 ویرایش کاراکتر <span class="soon-tag">بزودی 🚧</span></button>
         <div class="field"><label>نام و نام خانوادگی</label><input class="input" id="profEditName" placeholder="نام و نام خانوادگی"></div>
         <div class="field"><label>نام کاربری</label><input class="input" id="profEditUsername" dir="ltr" placeholder="username"></div>
         <button class="btn btn-primary" onclick="submitProfileEdit()">ذخیره تغییرات</button>
@@ -3653,7 +3653,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
       <div class="set-group-title">تجربه بازی</div>
       <div class="row" onclick="openSettingDetail('notifications')"><div class="r-ico">🔔</div><div class="r-txt"><b>اعلان‌ها</b><span id="setSumNotifications">مدیریت پیام‌ها و یادآوری‌ها</span></div><span class="r-arrow">‹</span></div>
       <div class="row" onclick="openSettingDetail('audio')"><div class="r-ico">🔊</div><div class="r-txt"><b>صدا و لرزش</b><span id="setSumAudio">افکت‌های صوتی بازی</span></div><span class="r-arrow">‹</span></div>
-      <div class="row" onclick="charBack='settings';go('character')"><div class="r-ico">🎭</div><div class="r-txt"><b>ویرایش کاراکتر</b><span>ظاهر، رنگ، لباس و اکسسوری شخصیت</span></div><span class="r-arrow">‹</span></div>
+      <div class="row soon-dim" onclick="charBack='settings';go('character')"><div class="r-ico">🎭</div><div class="r-txt"><b>ویرایش کاراکتر</b><span>ظاهر، رنگ، لباس و اکسسوری شخصیت</span></div><span class="soon-tag">بزودی 🚧</span></div>
       <div class="row" onclick="openSettingDetail('gameplay')"><div class="r-ico">🎮</div><div class="r-txt"><b>تنظیمات بازی</b><span id="setSumGameplay">راهنماها، چت سریع و تایمرها</span></div><span class="r-arrow">‹</span></div>
       <div class="row" onclick="openSettingDetail('appearance')"><div class="r-ico">🎨</div><div class="r-txt"><b>ظاهر و دسترس‌پذیری</b><span id="setSumAppearance">کنتراست، انیمیشن و تراکم صفحه</span></div><span class="r-arrow">‹</span></div>
       <div class="set-group-title">حساب و حریم خصوصی</div>
@@ -9709,6 +9709,7 @@ function comingSoon(key){
   const _origGo=go;
   go=function(id){
     if(id==='missions'){ return comingSoon('missions'); }
+    if(id==='character'){ return comingSoon('character'); } /* builder ready but gated until art is final */
     return _origGo(id);
   };
   const _origEnterMode=(typeof enterMode==='function')?enterMode:null;

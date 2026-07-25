@@ -95,29 +95,43 @@ export async function releaseRewardHold(id: string, reviewedBy = 'system'): Prom
   if (!hold) return null;
   if (hold.status === 'released') return hold;
   if (hold.status !== 'pending' && hold.status !== 'approved') return hold;
+
+  // The CRITICAL, must-not-fail step is crediting the user. Everything after it
+  // (denormalized user row, legacy transaction, rewards ledger, leaderboard,
+  // notification) is best-effort bookkeeping — a failure there must NOT block a
+  // legitimate payout or leave the hold stuck as pending. We credit first, then
+  // do the rest defensively.
   const user = await repositories.users.findById(hold.userId);
-  if (!user) return null;
-  if (hold.rewardType === 'cash') {
-    // Cash releases go through the ledger — atomic + idempotent per hold — and
-    // take the same platform rake as a normal win so a held win nets the same.
-    const gross = hold.amount;
-    const rakePercent = getRakePercent();
-    const fee = Math.round((gross * rakePercent) / 100);
-    const posted = await postEntry({ userId: hold.userId, entryType: 'match_reward', kind: 'credit', amount: gross, idempotencyKey: `hold_release:${hold.id}`, refType: 'match', refId: hold.matchId, description: 'جایزه آزادشده پس از بررسی', metadata: { gross, rakePercent, fee } });
-    if (fee > 0) await postEntry({ userId: hold.userId, entryType: 'fee', kind: 'debit', amount: fee, idempotencyKey: `hold_release_fee:${hold.id}`, refType: 'match', refId: hold.matchId, description: `کارمزد پلتفرم ${rakePercent}٪` });
-    user.wallet = (await getAccount(hold.userId)).available;
-  } else {
-    if (hold.rewardType === 'coins') user.coins += hold.amount;
-    if (hold.rewardType === 'xp') user.xp += hold.amount;
-    await repositories.users.save(user);
-    await repositories.transactions.save({ id: idGen(), userId: hold.userId, type: 'reward', currency: hold.rewardType, amount: hold.amount, direction: 'in', status: 'ok', reference: hold.matchId, createdAt: new Date().toISOString() });
+  try {
+    if (hold.rewardType === 'cash') {
+      // Cash releases go through the ledger — atomic + idempotent per hold — and
+      // take the same platform rake as a normal win so a held win nets the same.
+      const gross = hold.amount;
+      const rakePercent = getRakePercent();
+      const fee = Math.round((gross * rakePercent) / 100);
+      await postEntry({ userId: hold.userId, entryType: 'match_reward', kind: 'credit', amount: gross, idempotencyKey: `hold_release:${hold.id}`, refType: 'match', refId: hold.matchId, description: 'جایزه آزادشده پس از بررسی', metadata: { gross, rakePercent, fee } });
+      if (fee > 0) await postEntry({ userId: hold.userId, entryType: 'fee', kind: 'debit', amount: fee, idempotencyKey: `hold_release_fee:${hold.id}`, refType: 'match', refId: hold.matchId, description: `کارمزد پلتفرم ${rakePercent}٪` });
+      if (user) { try { user.wallet = (await getAccount(hold.userId)).available; } catch { /* mirror only */ } }
+    } else if (user) {
+      if (hold.rewardType === 'coins') user.coins += hold.amount;
+      if (hold.rewardType === 'xp') user.xp += hold.amount;
+      await repositories.users.save(user);
+      try { await repositories.transactions.save({ id: idGen(), userId: hold.userId, type: 'reward', currency: hold.rewardType, amount: hold.amount, direction: 'in', status: 'ok', reference: hold.matchId, createdAt: new Date().toISOString() }); } catch (e) { logger.warn('reward_hold_txn_failed', { holdId: hold.id, message: (e as Error).message }); }
+    }
+  } catch (e) {
+    // The actual credit failed — surface it so the admin sees a real reason and
+    // the hold stays pending (retryable), instead of silently doing nothing.
+    logger.error('reward_hold_credit_failed', { holdId: hold.id, userId: hold.userId, amount: hold.amount, message: (e as Error).message });
+    throw e;
   }
-  await repositories.rewards.save({ id: hold.rewardId, userId: hold.userId, matchId: hold.matchId, type: hold.rewardType, amount: hold.amount, status: 'granted', idempotencyKey: hold.idempotencyKey });
-  await leaderboards.recordReward(user, { type: hold.rewardType, amount: hold.amount, status: 'granted' });
+
+  // Best-effort bookkeeping — never let these throw out of a successful payout.
+  try { await repositories.rewards.save({ id: hold.rewardId, userId: hold.userId, matchId: hold.matchId, type: hold.rewardType, amount: hold.amount, status: 'granted', idempotencyKey: hold.idempotencyKey }); } catch (e) { logger.warn('reward_hold_reward_save_failed', { holdId: hold.id, message: (e as Error).message }); }
+  if (user) { try { await leaderboards.recordReward(user, { type: hold.rewardType, amount: hold.amount, status: 'granted' }); } catch (e) { logger.warn('reward_hold_leaderboard_failed', { holdId: hold.id, message: (e as Error).message }); } }
   const released = await repositories.rewardHolds.updateStatus(hold.id, 'released', reviewedBy, { releasedAt: new Date().toISOString() });
-  await notifications.create({ userId: hold.userId, type: 'wallet_update', title: 'جایزه آزاد شد', body: `${hold.amount.toLocaleString('fa-IR')} ${hold.rewardType === 'cash' ? 'تومان' : 'سکه'} بعد از بررسی به حساب تو اضافه شد.`, data: { holdId: hold.id, matchId: hold.matchId, amount: hold.amount, url: '/wallet' }, push: true });
+  try { await notifications.create({ userId: hold.userId, type: 'wallet_update', title: 'جایزه آزاد شد', body: `${hold.amount.toLocaleString('fa-IR')} ${hold.rewardType === 'cash' ? 'تومان' : 'سکه'} بعد از بررسی به حساب تو اضافه شد.`, data: { holdId: hold.id, matchId: hold.matchId, amount: hold.amount, url: '/wallet' }, push: true }); } catch (e) { logger.warn('reward_hold_notify_failed', { holdId: hold.id, message: (e as Error).message }); }
   logger.info('reward_hold_released', { holdId: hold.id, userId: hold.userId, amount: hold.amount });
-  return released;
+  return released ?? hold;
 }
 
 function idGen(): string { return id(); }
