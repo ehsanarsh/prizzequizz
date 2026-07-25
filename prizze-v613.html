@@ -3102,71 +3102,62 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
 
     <!-- ============ CHARACTER (AAA) ============ -->
     <section class="screen" id="character">
-      <!-- header -->
-      <div class="cc-top">
-        <div class="cc-back" onclick="go(charBack||'plans')">‹</div>
-        <div class="cc-title">
+      <style id="cbCSS">
+        #character{display:flex;flex-direction:column;min-height:100%;background:#0e1510}
+        .cb-top{display:flex;align-items:center;gap:10px;padding:14px 16px 6px}
+        .cb-back{width:38px;height:38px;border-radius:12px;background:rgba(255,255,255,.08);color:#fff;font-size:24px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex:none}
+        .cb-title{flex:1}
+        .cb-title h1{font-size:19px;font-weight:900;color:#fff;margin:0}
+        .cb-title p{font-size:11px;color:#9fb0a4;margin:2px 0 0}
+        .cb-rand{border:0;border-radius:12px;padding:9px 12px;background:linear-gradient(135deg,#F5A800,#FFE24A);color:#1a1000;font-weight:900;font-size:13px;cursor:pointer;flex:none}
+        /* fixed square stage — every layer shares these exact coordinates */
+        .cb-stage{margin:6px auto 4px;width:min(74vw,300px);aspect-ratio:1/1;position:relative}
+        .cb-canvas{position:absolute;inset:0;border-radius:24px;background:radial-gradient(120% 100% at 50% 20%,rgba(255,210,31,.10),rgba(255,255,255,.03) 60%,transparent);box-shadow:inset 0 0 0 1px rgba(255,255,255,.06)}
+        .cb-canvas .cbl{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;pointer-events:none;image-rendering:auto}
+        .cb-shadow{position:absolute;left:18%;right:18%;bottom:6%;height:14px;border-radius:50%;background:rgba(0,0,0,.35);filter:blur(5px)}
+        .cb-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#5c6b60;font-size:12px;font-weight:800}
+        /* category tabs — horizontal scroll */
+        .cb-cats{display:flex;gap:8px;overflow-x:auto;padding:8px 14px;scrollbar-width:none}
+        .cb-cats::-webkit-scrollbar{display:none}
+        .cb-cat{flex:none;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 6px;min-width:58px;border-radius:14px;background:rgba(255,255,255,.05);cursor:pointer;transition:.15s;border:1.5px solid transparent}
+        .cb-cat.active{background:rgba(255,210,31,.16);border-color:rgba(255,210,31,.6)}
+        .cb-cat .ci{font-size:20px}
+        .cb-cat b{font-size:10px;color:#cdd8d0;font-weight:800;white-space:nowrap}
+        .cb-cat.active b{color:#FFE24A}
+        /* thumbnails of the active category */
+        .cb-panel{flex:1;background:linear-gradient(180deg,rgba(255,255,255,.04),rgba(255,255,255,.02));border-radius:22px 22px 0 0;padding:14px 12px 18px;margin-top:4px}
+        .cb-panel-h{display:flex;align-items:center;justify-content:space-between;padding:0 4px 10px}
+        .cb-panel-h b{color:#fff;font-size:14px;font-weight:900}
+        .cb-thumbs{display:flex;gap:10px;overflow-x:auto;padding:2px 2px 10px;scrollbar-width:none}
+        .cb-thumbs::-webkit-scrollbar{display:none}
+        .cb-thumb{flex:none;width:70px;height:70px;border-radius:16px;background:rgba(255,255,255,.06);border:2px solid transparent;cursor:pointer;position:relative;display:flex;align-items:center;justify-content:center;transition:.15s;overflow:hidden}
+        .cb-thumb img{width:100%;height:100%;object-fit:contain}
+        .cb-thumb.sel{border-color:#FFD21F;background:rgba(255,210,31,.14);box-shadow:0 0 0 3px rgba(255,210,31,.18)}
+        .cb-thumb.none{color:#8a978c;font-size:11px;font-weight:900;flex-direction:column;gap:2px}
+        .cb-thumb.sel .cb-check{position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#FFD21F;color:#1a1000;font-size:11px;font-weight:900;display:flex;align-items:center;justify-content:center}
+        .cb-actions{display:flex;gap:10px;margin-top:8px}
+        .cb-actions .btn{flex:1}
+      </style>
+      <div class="cb-top">
+        <div class="cb-back" onclick="go(charBack||'plans')">‹</div>
+        <div class="cb-title">
           <h1>ساخت کاراکتر <span class="spk">✨</span></h1>
-          <p>کاراکتر خودت رو بساز و وارد بازی شو!</p>
+          <p>هر قطعه را انتخاب کن؛ زنده روی کاراکتر می‌نشیند</p>
         </div>
-        <button class="cc-rand" onclick="ccRandom()">🎲 تصادفی</button>
+        <button class="cb-rand" onclick="cbRandom()">🎲 تصادفی</button>
       </div>
-      <!-- stepper -->
-      <div class="cc-steps" id="ccSteps">
-        <div class="cc-step active" data-s="0"><div class="dot">۱</div><div class="lbl">ظاهر</div></div>
-        <div class="cc-line"></div>
-        <div class="cc-step" data-s="1"><div class="dot">۲</div><div class="lbl">رنگ</div></div>
-        <div class="cc-line"></div>
-        <div class="cc-step" data-s="2"><div class="dot">۳</div><div class="lbl">لباس</div></div>
-        <div class="cc-line"></div>
-        <div class="cc-step" data-s="3"><div class="dot">۴</div><div class="lbl">اکسسوری</div></div>
-        <div class="cc-line"></div>
-        <div class="cc-step" data-s="4"><div class="dot">۵</div><div class="lbl">تایید</div></div>
+      <div class="cb-stage">
+        <div class="cb-canvas" id="cbCanvas"><div class="cb-empty" id="cbEmpty">در حال بارگذاری…</div></div>
+        <div class="cb-shadow"></div>
       </div>
-      <!-- stage -->
-      <div class="cc-stage">
-        <div class="cc-rail" id="ccRail">
-          <div class="cc-cat active" data-cat="monster" onclick="ccPickCat(this)"><div class="ci">👾</div><b>هیولا</b></div>
-          <div class="cc-cat" data-cat="animal" onclick="ccPickCat(this)"><div class="ci">🐻</div><b>حیوان</b></div>
-          <div class="cc-cat" data-cat="alien" onclick="ccPickCat(this)"><div class="ci">👽</div><b>فضایی</b></div>
-          <div class="cc-cat" data-cat="robot" onclick="ccPickCat(this)"><div class="ci">🤖</div><b>ربات</b></div>
-          <div class="cc-cat" data-cat="fantasy" onclick="ccPickCat(this)"><div class="ci">🐲</div><b>فانتزی</b></div>
+      <div class="cb-cats" id="cbCats"></div>
+      <div class="cb-panel">
+        <div class="cb-panel-h"><b id="cbCatName">قطعه‌ها</b><span id="cbCatCount" style="color:#8a978c;font-size:11px;font-weight:800"></span></div>
+        <div class="cb-thumbs" id="cbThumbs"></div>
+        <div class="cb-actions">
+          <button class="btn btn-ghost" onclick="cbSkip()">بعداً</button>
+          <button class="btn btn-primary" onclick="cbSave()" id="cbSaveBtn">ذخیره کاراکتر</button>
         </div>
-        <div class="cc-preview">
-          <img class="cc-char" id="ccChar" alt="character">
-          <div class="cc-podium"></div>
-        </div>
-        <div class="cc-tools">
-          <div class="cc-tool" onclick="ccSpin()"><div class="ti">🔄</div><span>چرخش</span></div>
-          <div class="cc-tool" onclick="ccZoom()"><div class="ti">🔍</div><span>بزرگنمایی</span></div>
-        </div>
-      </div>
-      <!-- editor panel -->
-      <div class="cc-panel">
-        <div class="cc-tabs" id="ccTabs">
-          <button class="cc-tab active" data-f="horns" onclick="ccPickFeat(this)"><span class="te">🐏</span>شاخ</button>
-          <button class="cc-tab" data-f="eyes" onclick="ccPickFeat(this)"><span class="te">👁️</span>چشم</button>
-          <button class="cc-tab" data-f="mouth" onclick="ccPickFeat(this)"><span class="te">👄</span>دهان</button>
-          <button class="cc-tab" data-f="body" onclick="ccPickFeat(this)"><span class="te">🧸</span>بدن</button>
-          <button class="cc-tab" data-f="detail" onclick="ccPickFeat(this)"><span class="te">✨</span>جزئیات</button>
-        </div>
-        <div class="cc-thumbrow">
-          <div class="cc-arrow" onclick="ccScrollThumbs(-1)">‹</div>
-          <div class="cc-thumbs" id="ccThumbs"></div>
-          <div class="cc-arrow" onclick="ccScrollThumbs(1)">›</div>
-        </div>
-        <div class="cc-colors" id="ccColors">
-          <div class="cc-sw sel" style="background:#FFD21F" data-c="#FFD21F"><span class="chk">✓</span></div>
-          <div class="cc-sw" style="background:#33D97C" data-c="#33D97C"><span class="chk">✓</span></div>
-          <div class="cc-sw" style="background:#3F9BF2" data-c="#3F9BF2"><span class="chk">✓</span></div>
-          <div class="cc-sw" style="background:#9B6BFF" data-c="#9B6BFF"><span class="chk">✓</span></div>
-          <div class="cc-sw" style="background:#FF6BB0" data-c="#FF6BB0"><span class="chk">✓</span></div>
-          <div class="cc-sw" style="background:#F2483C" data-c="#F2483C"><span class="chk">✓</span></div>
-          <div class="cc-sw" style="background:#FF9524" data-c="#FF9524"><span class="chk">✓</span></div>
-          <div class="cc-sw" style="background:#22C7BE" data-c="#22C7BE"><span class="chk">✓</span></div>
-        </div>
-        <button class="btn btn-primary" onclick="ccConfirm()">ادامه و تایید</button>
-        <button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="ccSkip()">بعداً می‌سازم — رد کن</button>
       </div>
     </section>
 
@@ -3641,7 +3632,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
         <span id="profUser" style="font-size:12px;color:var(--muted);font-weight:800" dir="ltr">@player</span>
       </div>
       <div class="pad" style="padding-top:0">
-        <button class="btn btn-ghost btn-sm soon-dim" style="width:100%;margin-bottom:14px" onclick="charBack='profile';go('character')">🎭 ویرایش کاراکتر <span class="soon-tag">بزودی 🚧</span></button>
+        <button class="btn btn-ghost btn-sm" style="width:100%;margin-bottom:14px" onclick="charBack='profile';go('character')">🎭 ویرایش کاراکتر</button>
         <div class="field"><label>نام و نام خانوادگی</label><input class="input" id="profEditName" placeholder="نام و نام خانوادگی"></div>
         <div class="field"><label>نام کاربری</label><input class="input" id="profEditUsername" dir="ltr" placeholder="username"></div>
         <button class="btn btn-primary" onclick="submitProfileEdit()">ذخیره تغییرات</button>
@@ -3662,7 +3653,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
       <div class="set-group-title">تجربه بازی</div>
       <div class="row" onclick="openSettingDetail('notifications')"><div class="r-ico">🔔</div><div class="r-txt"><b>اعلان‌ها</b><span id="setSumNotifications">مدیریت پیام‌ها و یادآوری‌ها</span></div><span class="r-arrow">‹</span></div>
       <div class="row" onclick="openSettingDetail('audio')"><div class="r-ico">🔊</div><div class="r-txt"><b>صدا و لرزش</b><span id="setSumAudio">افکت‌های صوتی بازی</span></div><span class="r-arrow">‹</span></div>
-      <div class="row soon-dim" onclick="charBack='settings';go('character')"><div class="r-ico">🎭</div><div class="r-txt"><b>ویرایش کاراکتر</b><span>ظاهر، رنگ، لباس و اکسسوری شخصیت</span></div><span class="soon-tag">بزودی 🚧</span></div>
+      <div class="row" onclick="charBack='settings';go('character')"><div class="r-ico">🎭</div><div class="r-txt"><b>ویرایش کاراکتر</b><span>ظاهر، رنگ، لباس و اکسسوری شخصیت</span></div><span class="r-arrow">‹</span></div>
       <div class="row" onclick="openSettingDetail('gameplay')"><div class="r-ico">🎮</div><div class="r-txt"><b>تنظیمات بازی</b><span id="setSumGameplay">راهنماها، چت سریع و تایمرها</span></div><span class="r-arrow">‹</span></div>
       <div class="row" onclick="openSettingDetail('appearance')"><div class="r-ico">🎨</div><div class="r-txt"><b>ظاهر و دسترس‌پذیری</b><span id="setSumAppearance">کنتراست، انیمیشن و تراکم صفحه</span></div><span class="r-arrow">‹</span></div>
       <div class="set-group-title">حساب و حریم خصوصی</div>
@@ -4225,95 +4216,129 @@ function paintMascots(){document.querySelectorAll('.mascot').forEach(m=>m.innerH
 paintMascots();
 
 /* ============ CHARACTER CREATOR (AAA) ============ */
-let ccStep=0,ccCat='monster',ccFeat='horns',ccColor='#FFD21F',ccSpinning=false,ccZoomed=false;
-const ccFeats={
-  horns:[{e:'🦌',n:'شاخ کوچک'},{e:'🦏',n:'شاخ بزرگ'},{e:'🐮',n:'شاخ گاوی'},{e:'👿',n:'شاخ شیطانی'},{e:'🦄',n:'یونیکورن'},{e:'🌀',n:'مارپیچ'}],
-  eyes:[{e:'👁️',n:'معمولی'},{e:'🌟',n:'ستاره‌ای'},{e:'💫',n:'درخشان'},{e:'🔵',n:'آبی'},{e:'❤️',n:'قلبی'},{e:'🌀',n:'مارپیچ'}],
-  mouth:[{e:'😁',n:'لبخند'},{e:'😬',n:'دندانی'},{e:'😮',n:'باز'},{e:'😜',n:'شیطان'},{e:'😛',n:'زبان‌دراز'},{e:'😤',n:'دماغ'}],
-  body:[{e:'💪',n:'عضله'},{e:'🦶',n:'پای بزرگ'},{e:'🧸',n:'کرکی'},{e:'⚡',n:'سریع'},{e:'🛡️',n:'زره'},{e:'🌪️',n:'طوفانی'}],
-  detail:[{e:'🎩',n:'کلاه'},{e:'👑',n:'تاج'},{e:'🎀',n:'روبان'},{e:'🔮',n:'کریستال'},{e:'⭐',n:'ستاره'},{e:'🌈',n:'رنگین'}]
-};
-let ccSelections={horns:0,eyes:0,mouth:0,body:0,detail:0};
+/* ============ CHARACTER BUILDER — layered, server-driven ============
+   Every part is a full-canvas transparent image; layers stack on ONE fixed
+   300x300 stage sorted by z-index, so nothing shifts when a part is swapped.
+   The catalog + saved build come from the API — add new parts from the admin
+   panel and they appear here automatically, no client change needed. */
+const CB_CATS=[
+  {k:'body',ic:'🧸',n:'بدن'},
+  {k:'eyesDouble',ic:'👀',n:'دو چشم'},
+  {k:'eyesSingle',ic:'👁️',n:'تک‌چشم'},
+  {k:'eyebrows',ic:'🤨',n:'ابرو'},
+  {k:'beard',ic:'🧔',n:'ریش'},
+  {k:'hair',ic:'💇',n:'مو'},
+  {k:'horns',ic:'🐏',n:'شاخ'},
+  {k:'hat',ic:'🎩',n:'کلاه'},
+  {k:'glasses',ic:'🕶️',n:'عینک'},
+  {k:'arms',ic:'💪',n:'دست'},
+  {k:'legs',ic:'🦵',n:'پا'},
+  {k:'shoes',ic:'👟',n:'کفش'},
+  {k:'accessories',ic:'🎀',n:'اکسسوری'}
+];
+let cbByCat={}, cbZ={}, cbBuild={}, cbCat='body', cbLoaded=false;
 
-function ccInit(){
-  const img=document.getElementById('ccChar');
-  if(img&&window.ART_CHAR){img.src=window.ART_CHAR;img.style.filter='drop-shadow(0 14px 0 rgba(0,0,0,.28)) drop-shadow(0 0 30px rgba(255,210,31,.25))';}
-  ccBuildThumbs();
-  document.querySelectorAll('#ccColors .cc-sw').forEach(sw=>{sw.onclick=()=>ccPickColor(sw);});
+async function cbInit(){
+  cbRenderCats();
+  if(!cbLoaded){ cbSetEmpty('در حال بارگذاری…'); await cbLoad(); }
+  cbPickCat(cbCat);
+  cbRenderPreview();
+}
+window.ccInit=cbInit; // keep the existing navigation hook (id==='character') working
+
+async function cbLoad(){
+  try{
+    const r=await pzApi('GET','/character-builder/parts',null,true);
+    const d=(r&&r.data)||{};
+    cbByCat=d.byCategory||{};
+    (d.parts||[]).forEach(p=>{cbZ[p.id]=p.zIndex;});
+    const rb=await pzApi('GET','/character-builder/build',null,true);
+    cbBuild=((rb&&rb.data&&rb.data.build)||{});
+    cbLoaded=true;
+  }catch(e){ cbSetEmpty('خطا در بارگذاری قطعه‌ها'); }
 }
 
-function ccPickColor(sw){
-  document.querySelectorAll('#ccColors .cc-sw').forEach(s=>s.classList.remove('sel'));
-  sw.classList.add('sel');ccColor=sw.dataset.c;
-  const img=document.getElementById('ccChar');
-  const hm={'#FFD21F':0,'#33D97C':90,'#3F9BF2':195,'#9B6BFF':255,'#FF6BB0':310,'#F2483C':350,'#FF9524':30,'#22C7BE':175};
-  const rot=hm[ccColor]||0;
-  if(img) img.style.filter=(rot===0?'':'hue-rotate('+rot+'deg) ')+'drop-shadow(0 14px 0 rgba(0,0,0,.28)) drop-shadow(0 0 30px rgba(255,210,31,.25))';
-  vib(20);
+function faN(n){try{return Number(n).toLocaleString('fa-IR');}catch(e){return String(n);}}
+
+function cbRenderCats(){
+  const el=document.getElementById('cbCats'); if(!el)return;
+  el.innerHTML=CB_CATS.map(c=>`<div class="cb-cat${c.k===cbCat?' active':''}" data-cat="${c.k}" onclick="cbPickCat('${c.k}')"><div class="ci">${c.ic}</div><b>${c.n}</b></div>`).join('');
 }
 
-function ccPickCat(el){
-  document.querySelectorAll('#ccRail .cc-cat').forEach(c=>c.classList.remove('active'));
-  el.classList.add('active');ccCat=el.dataset.cat;
-  const img=document.getElementById('ccChar');
-  if(img){img.style.transition='opacity .25s,transform .35s';img.style.opacity='0';img.style.transform='scale(0.85) translateY(8px)';
-    setTimeout(()=>{if(window.ART_CHAR)img.src=window.ART_CHAR;img.style.opacity='1';img.style.transform='';},320);}
-  vib(15);
+function cbPickCat(cat){
+  cbCat=cat;
+  document.querySelectorAll('#cbCats .cb-cat').forEach(c=>c.classList.toggle('active',c.dataset.cat===cat));
+  const meta=CB_CATS.find(c=>c.k===cat)||{n:''};
+  const nn=document.getElementById('cbCatName'); if(nn)nn.textContent=meta.n;
+  cbRenderThumbs();
+  vib(10);
 }
 
-function ccPickFeat(el){
-  document.querySelectorAll('#ccTabs .cc-tab').forEach(t=>t.classList.remove('active'));
-  el.classList.add('active');ccFeat=el.dataset.f;ccBuildThumbs();vib(10);
+function cbRenderThumbs(){
+  const c=document.getElementById('cbThumbs'); if(!c)return;
+  const list=cbByCat[cbCat]||[];
+  const sel=cbBuild[cbCat]||null;
+  const cc=document.getElementById('cbCatCount'); if(cc)cc.textContent=list.length?(faN(list.length)+' مدل'):'به‌زودی';
+  let html=`<div class="cb-thumb none${sel?'':' sel'}" onclick="cbPickPart(null)"><span style="font-size:20px">🚫</span>حذف</div>`;
+  html+=list.map(p=>`<div class="cb-thumb${p.id===sel?' sel':''}" onclick="cbPickPart('${p.id}')"><img src="${p.imageUrl}" alt="${(p.name||'').replace(/"/g,'')}"><span class="cb-check">✓</span></div>`).join('');
+  c.innerHTML=html;
 }
 
-function ccBuildThumbs(){
-  const c=document.getElementById('ccThumbs');if(!c)return;
-  const items=ccFeats[ccFeat]||[];const sel=ccSelections[ccFeat]||0;
-  c.innerHTML=items.map((it,i)=>`<div class="cc-thumb${i===sel?' sel':''}" onclick="ccPickThumb(${i})">${it.e}</div>`).join('');
+function cbPickPart(partId){
+  cbBuild[cbCat]=partId; // null = None
+  cbRenderThumbs();
+  cbRenderPreview();
+  vib(14); try{sfx('select');}catch(e){}
 }
 
-function ccPickThumb(i){
-  ccSelections[ccFeat]=i;
-  document.querySelectorAll('#ccThumbs .cc-thumb').forEach((t,idx)=>t.classList.toggle('sel',idx===i));
-  vib(15);sfx('select');
+function cbRenderPreview(){
+  const cv=document.getElementById('cbCanvas'); if(!cv)return;
+  const layers=[];
+  for(const c of CB_CATS){
+    const id=cbBuild[c.k];
+    if(!id) continue;
+    const p=(cbByCat[c.k]||[]).find(x=>x.id===id);
+    if(p) layers.push(p);
+  }
+  layers.sort((a,b)=>((a.zIndex||cbZ[a.id]||50)-(b.zIndex||cbZ[b.id]||50)));
+  if(!layers.length){ cbSetEmpty('یک بدن انتخاب کن تا شروع شود'); return; }
+  cv.innerHTML=layers.map(p=>`<img class="cbl" src="${p.imageUrl}" alt="">`).join('');
 }
 
-function ccScrollThumbs(dir){
-  const el=document.getElementById('ccThumbs');if(el)el.scrollBy({left:dir*72,behavior:'smooth'});
+function cbSetEmpty(msg){
+  const cv=document.getElementById('cbCanvas'); if(cv)cv.innerHTML=`<div class="cb-empty">${msg}</div>`;
 }
 
-function ccSpin(){
-  if(ccSpinning)return;ccSpinning=true;
-  const img=document.getElementById('ccChar');
-  if(img){img.style.transition='transform 0.7s cubic-bezier(.2,.9,.3,1)';img.style.transform='rotateY(360deg) scale(1.08)';
-    setTimeout(()=>{img.style.transform='';ccSpinning=false;},750);}
-  vib(20);sfx('select');
+function cbRandom(){
+  const optional=['hat','glasses','beard','accessories','horns','eyesSingle'];
+  for(const c of CB_CATS){
+    const list=cbByCat[c.k]||[];
+    if(!list.length){ continue; }
+    if(optional.includes(c.k) && Math.random()<0.4){ cbBuild[c.k]=null; }
+    else { cbBuild[c.k]=list[Math.floor(Math.random()*list.length)].id; }
+  }
+  // Don't wear both single and double eyes at once.
+  if(cbBuild.eyesDouble && cbBuild.eyesSingle){ if(Math.random()<0.5)cbBuild.eyesSingle=null; else cbBuild.eyesDouble=null; }
+  cbRenderThumbs(); cbRenderPreview();
+  vib([30,50,30]); try{sfx('found');}catch(e){}
 }
 
-function ccZoom(){
-  ccZoomed=!ccZoomed;
-  const img=document.getElementById('ccChar');
-  if(img){img.style.transition='transform 0.4s cubic-bezier(.2,.9,.3,1)';img.style.transform=ccZoomed?'scale(1.38)':'scale(1)';}
-  vib(15);
-}
-
-function ccRandom(){
-  const cats=['monster','animal','alien','robot','fantasy'];
-  const catEl=document.querySelector('#ccRail .cc-cat[data-cat="'+cats[Math.floor(Math.random()*cats.length)]+'"]');
-  if(catEl)ccPickCat(catEl);
-  Object.keys(ccSelections).forEach(k=>{ccSelections[k]=Math.floor(Math.random()*6);});
-  ccBuildThumbs();
-  const swatches=[...document.querySelectorAll('#ccColors .cc-sw')];
-  if(swatches.length)ccPickColor(swatches[Math.floor(Math.random()*swatches.length)]);
-  vib([30,50,30]);sfx('found');
+async function cbSave(){
+  const btn=document.getElementById('cbSaveBtn');
+  if(btn){btn.disabled=true;btn.textContent='در حال ذخیره…';}
+  try{
+    const r=await pzApi('PUT','/character-builder/build',{build:cbBuild},true);
+    if(r&&r.ok!==false){ try{localStorage.setItem('pz_char',JSON.stringify(cbBuild));}catch(e){} toast('کاراکترت ذخیره شد! 🎉'); _ccFinish(); }
+    else { toast('ذخیره نشد؛ دوباره تلاش کن'); }
+  }catch(e){ toast('خطای شبکه در ذخیره'); }
+  finally{ if(btn){btn.disabled=false;btn.textContent='ذخیره کاراکتر';} }
 }
 
 /* Where to go after the character screen: 'plans' during first-time onboarding,
-   or 'settings' when editing later. (var → reachable from inline onclick.) */
+   or 'settings'/'profile' when editing later. (var → reachable from inline onclick.) */
 var charBack='plans';
 function _ccFinish(){ try{localStorage.setItem('pz_charDone','1');}catch(e){} const b=charBack||'plans'; if(b==='plans')plansBack='home'; charBack='plans'; go(b); }
-function ccConfirm(){ toast('کاراکترت ساخته شد! 🎉'); _ccFinish(); }
-function ccSkip(){ toast('باشه؛ هر وقت خواستی از تنظیمات کاراکترت رو بساز'); _ccFinish(); }
+function cbSkip(){ toast('باشه؛ هر وقت خواستی از تنظیمات کاراکترت رو بساز'); _ccFinish(); }
 
 
 /* ============ NAVIGATION (with back-button safety) ============ */
@@ -9684,7 +9709,6 @@ function comingSoon(key){
   const _origGo=go;
   go=function(id){
     if(id==='missions'){ return comingSoon('missions'); }
-    if(id==='character'){ return comingSoon('character'); }
     return _origGo(id);
   };
   const _origEnterMode=(typeof enterMode==='function')?enterMode:null;

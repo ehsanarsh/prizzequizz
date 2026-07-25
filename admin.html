@@ -148,7 +148,7 @@ async function loadCfg(){ try{ CFG=await api('GET','/admin/config'); $('#cfgVer'
 /* ---- nav: 25 sections grouped ---- */
 const NAV=[
   ['اصلی',[['dashboard','📊','داشبورد'],['finance','💰','داشبورد مالی'],['users','👤','کاربران'],['matches','🎮','مسابقات'],['support','🎧','پشتیبانی']]],
-  ['محتوا',[['questions','❓','سوالات'],['qreports','🚩','گزارش سؤالات'],['aistudio','🤖','استودیوی سوال (AI)'],['pipeline','🔬','خط‌لولهٔ کیفیت'],['categories','🏷️','موضوعات']]],
+  ['محتوا',[['questions','❓','سوالات'],['qreports','🚩','گزارش سؤالات'],['aistudio','🤖','استودیوی سوال (AI)'],['pipeline','🔬','خط‌لولهٔ کیفیت'],['categories','🏷️','موضوعات'],['characterbuilder','🎭','قطعات کاراکتر']]],
   ['اقتصاد',[['wallet','👛','کیف پول'],['withdrawals','💸','برداشت‌ها'],['rewardholds','⏳','جوایز در انتظار'],['tickets','🎫','بلیط‌ها'],['shop','🛒','فروشگاه'],['giftcodes','🎁','کدهای هدیه']]],
   ['بالانس بازی (Data-Driven)',[['cfg_xp','✨','XP'],['cfg_level','🏅','Level'],['cfg_cup','🏆','Cup'],['cfg_gameplay','🕹️','گیم‌پلی مودها'],['leagues','🛡️','لیگ‌ها'],['missions','🎯','مأموریت‌ها'],['rewards','🎉','جوایز/چرخونه/استریک']]],
   ['رشد و تعامل',[['leaderboard','📈','لیدربرد'],['campaign','🎁','کمپین کاربر جدید'],['events','📅','رویدادها'],['banners','🖼️','بنرها'],['notifications','🔔','اعلان‌ها']]],
@@ -179,7 +179,7 @@ async function render(){
   try{
     if(CUR==='accounts')return renderAccounts();
     if(CONFIG_PAGES[CUR])return renderConfigSection(CONFIG_PAGES[CUR][0],CONFIG_PAGES[CUR][1]);
-    const fn={dashboard:renderDashboard,finance:renderFinance,users:renderUsers,matches:renderMatches,support:renderSupport,questions:renderQuestions,qreports:renderQReports,aistudio:renderAiStudio,pipeline:renderPipeline,categories:renderCategories,wallet:renderWallet,withdrawals:renderWithdrawals,rewardholds:renderRewardHolds,tickets:renderTickets,giftcodes:renderGiftCodes,shop:renderShopAdmin,leaderboard:renderLeaderboard,notifications:renderNotifications,anticheat:renderAntiCheat,suspicious:renderSuspicious,reports:renderReports,logs:renderLogs,reset:renderReset,roles:renderRoles,rawcfg:renderRawCfg}[CUR];
+    const fn={dashboard:renderDashboard,finance:renderFinance,users:renderUsers,matches:renderMatches,support:renderSupport,questions:renderQuestions,qreports:renderQReports,aistudio:renderAiStudio,pipeline:renderPipeline,categories:renderCategories,wallet:renderWallet,withdrawals:renderWithdrawals,rewardholds:renderRewardHolds,tickets:renderTickets,giftcodes:renderGiftCodes,shop:renderShopAdmin,characterbuilder:renderCharParts,leaderboard:renderLeaderboard,notifications:renderNotifications,anticheat:renderAntiCheat,suspicious:renderSuspicious,reports:renderReports,logs:renderLogs,reset:renderReset,roles:renderRoles,rawcfg:renderRawCfg}[CUR];
     if(fn)return fn();
   }catch(e){$('#main').innerHTML=head('خطا')+'<div class="card empty">'+(e.message||'خطا')+'</div>';}
 }
@@ -1091,6 +1091,60 @@ async function shopSaveItem(id){
 }
 async function shopToggle(id){const it=(window._SHOP_ROWS||{})[id];if(!it)return;try{await api('POST','/admin/shop/items',{...it,enabled:!it.enabled});toast(it.enabled?'غیرفعال شد':'فعال شد','ok');render();}catch(e){toast(e.message,'bad');}}
 async function shopDelete(id){if(!confirm('این آیتم حذف شود؟'))return;try{await api('DELETE','/admin/shop/items/'+id);toast('حذف شد','ok');render();}catch(e){toast(e.message,'bad');}}
+
+/* ================= CHARACTER BUILDER PARTS ================= */
+const CHAR_CATS={body:'🧸 بدن',eyesDouble:'👀 دو چشم',eyesSingle:'👁️ تک‌چشم',eyebrows:'🤨 ابرو',beard:'🧔 ریش',hair:'💇 مو',horns:'🐏 شاخ',hat:'🎩 کلاه',glasses:'🕶️ عینک',arms:'💪 دست',legs:'🦵 پا',shoes:'👟 کفش',accessories:'🎀 اکسسوری'};
+let CHAR_CAT='';
+async function renderCharParts(){
+  let data={categories:[],parts:[]};try{data=await api('GET','/admin/character-parts');}catch(e){$('#main').innerHTML=head('قطعات کاراکتر')+'<div class="card empty">'+(e.message||'خطا')+'</div>';return;}
+  const rows=data.parts||[];window._CP_ROWS={};rows.forEach(p=>window._CP_ROWS[p.id]=p);
+  const order=(data.categories&&data.categories.length?data.categories:Object.keys(CHAR_CATS));
+  const catTabs='<div class="subtabs"><button class="'+(CHAR_CAT===''?'active':'')+'" onclick="CHAR_CAT=\'\';render()">همه ('+fa(rows.length)+')</button>'+
+    order.map(c=>{const n=rows.filter(i=>i.category===c).length;return '<button class="'+(CHAR_CAT===c?'active':'')+'" onclick="CHAR_CAT='+JSON.stringify(c).replace(/"/g,'&quot;')+';render()">'+esc(CHAR_CATS[c]||c)+' ('+fa(n)+')</button>';}).join('')+'</div>';
+  const list=rows.filter(i=>!CHAR_CAT||i.category===CHAR_CAT).sort((a,b)=>a.category===b.category?a.sortOrder-b.sortOrder:(order.indexOf(a.category)-order.indexOf(b.category)));
+  $('#main').innerHTML=head('قطعات کاراکتر','قطعهٔ جدید اضافه کن (تصویر PNG/SVG شفاف، هم‌اندازهٔ ۳۰۰×۳۰۰). هر قطعه‌ای اضافه کنی، بی‌درنگ در سازندهٔ کاراکترِ بازی ظاهر می‌شود.','<button class="btn pri" onclick="cpEdit()">➕ افزودن قطعه</button>')+
+    catTabs+
+    '<div class="tbl-wrap"><table><thead><tr>'+['','نام','دسته','لایه (z)','ترتیب','وضعیت','عملیات'].map(c=>'<th>'+c+'</th>').join('')+'</tr></thead><tbody>'+
+    (list.length?list.map(it=>'<tr>'+
+      '<td><div style="width:46px;height:46px;border-radius:10px;background:#0e1510;background-image:linear-gradient(45deg,#1c261e 25%,transparent 25%,transparent 75%,#1c261e 75%),linear-gradient(45deg,#1c261e 25%,transparent 25%,transparent 75%,#1c261e 75%);background-size:10px 10px;background-position:0 0,5px 5px;display:flex;align-items:center;justify-content:center"><img src="'+esc(it.imageUrl)+'" style="max-width:100%;max-height:100%;object-fit:contain"></div></td>'+
+      '<td><b>'+esc(it.name)+'</b></td>'+
+      '<td>'+esc(CHAR_CATS[it.category]||it.category)+'</td>'+
+      '<td>'+fa(it.zIndex)+'</td>'+
+      '<td>'+fa(it.sortOrder)+'</td>'+
+      '<td><span class="pill '+(it.enabled?'ok':'bad')+'">'+(it.enabled?'فعال':'غیرفعال')+'</span></td>'+
+      '<td><button class="btn sm" onclick="cpEdit(\''+it.id+'\')">ویرایش</button> <button class="btn sm '+(it.enabled?'':'ok')+'" onclick="cpToggle(\''+it.id+'\')">'+(it.enabled?'خاموش':'روشن')+'</button> <button class="btn sm bad" onclick="cpDelete(\''+it.id+'\')">حذف</button></td>'+
+    '</tr>').join(''):'<tr><td colspan="7" class="empty">قطعه‌ای نیست — یکی اضافه کن</td></tr>')+'</tbody></table></div>';
+}
+function cpEdit(id){
+  const it=(window._CP_ROWS||{})[id]||{};
+  const catOpts=Object.keys(CHAR_CATS).map(k=>'<option value="'+k+'"'+(it.category===k?' selected':'')+'>'+esc(CHAR_CATS[k])+'</option>').join('');
+  modal(id?'ویرایش قطعه':'افزودن قطعه',
+    '<div class="grid g2">'+
+      '<div class="field"><label>نام قطعه</label><input id="cp_name" value="'+esc(it.name||'')+'" placeholder="مثلاً شاخ قرمز"></div>'+
+      '<div class="field"><label>دسته</label><select id="cp_cat">'+catOpts+'</select></div>'+
+    '</div>'+
+    '<div class="field"><label>تصویر قطعه (URL یا data:image؛ شفاف و ۳۰۰×۳۰۰)</label><input id="cp_img" value="'+esc(it.imageUrl||'')+'" dir="ltr" placeholder="https://… یا data:image/png;base64,…" oninput="cpPreview()"></div>'+
+    '<div style="display:flex;gap:12px;align-items:center;margin:4px 0 10px"><div style="width:90px;height:90px;border-radius:12px;background:#0e1510;background-image:linear-gradient(45deg,#1c261e 25%,transparent 25%,transparent 75%,#1c261e 75%),linear-gradient(45deg,#1c261e 25%,transparent 25%,transparent 75%,#1c261e 75%);background-size:16px 16px;background-position:0 0,8px 8px;display:flex;align-items:center;justify-content:center"><img id="cp_prev" src="'+esc(it.imageUrl||'')+'" style="max-width:100%;max-height:100%;object-fit:contain"></div><div class="note">پیش‌نمایش روی زمینهٔ شطرنجی — قطعه باید کاملاً شفاف و در مختصات ثابت باشد تا با بقیهٔ لایه‌ها جفت شود.</div></div>'+
+    '<div class="grid g3">'+
+      '<div class="field"><label>لایه (z-index)</label><input id="cp_z" type="number" value="'+(it.zIndex!=null?it.zIndex:'')+'" placeholder="خودکار"></div>'+
+      '<div class="field"><label>ترتیب نمایش</label><input id="cp_order" type="number" value="'+(it.sortOrder||0)+'"></div>'+
+      '<div class="field"><label>وضعیت</label><select id="cp_enabled"><option value="1"'+(it.enabled!==false?' selected':'')+'>فعال</option><option value="0"'+(it.enabled===false?' selected':'')+'>غیرفعال</option></select></div>'+
+    '</div>'+
+    '<div class="note" style="margin-bottom:8px">لایه‌ها از کوچک به بزرگ روی هم می‌نشینند (بدن پایین، اکسسوری بالا). اگر z را خالی بگذاری، بر اساس دسته خودکار انتخاب می‌شود.</div>'+
+    '<button class="btn pri" onclick="cpSave(\''+(id||'')+'\')">💾 ذخیره</button>');
+}
+function cpPreview(){const v=$('#cp_img').value.trim();const img=$('#cp_prev');if(img)img.src=v;}
+async function cpSave(id){
+  const name=$('#cp_name').value.trim(); if(!name)return toast('نام قطعه لازم است','bad');
+  const img=$('#cp_img').value.trim(); if(!img)return toast('تصویر قطعه لازم است','bad');
+  const zRaw=$('#cp_z').value.trim();
+  const body={id:id||undefined,name,category:$('#cp_cat').value,imageUrl:img,
+    sortOrder:Number($('#cp_order').value||0),enabled:$('#cp_enabled').value==='1'};
+  if(zRaw!=='')body.zIndex=Number(zRaw);
+  try{await api('POST','/admin/character-parts',body);toast('ذخیره شد ✅','ok');document.querySelector('.modal-bg').remove();render();}catch(e){toast(e.message,'bad');}
+}
+async function cpToggle(id){const it=(window._CP_ROWS||{})[id];if(!it)return;try{await api('PATCH','/admin/character-parts/'+id,{enabled:!it.enabled});toast(it.enabled?'غیرفعال شد':'فعال شد','ok');render();}catch(e){toast(e.message,'bad');}}
+async function cpDelete(id){if(!confirm('این قطعه حذف شود؟'))return;try{await api('DELETE','/admin/character-parts/'+id);toast('حذف شد','ok');render();}catch(e){toast(e.message,'bad');}}
 
 /* ================= ADMIN ACCOUNTS + ACCESS ================= */
 function tabLabelMap(){const m={};NAV.forEach(g=>g[1].forEach(p=>{if(p[0]!=='accounts')m[p[0]]=p[1]+' '+p[2];}));return m;}
