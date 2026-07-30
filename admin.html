@@ -149,7 +149,7 @@ async function loadCfg(){ try{ CFG=await api('GET','/admin/config'); $('#cfgVer'
 const NAV=[
   ['اصلی',[['dashboard','📊','داشبورد'],['finance','💰','داشبورد مالی'],['users','👤','کاربران'],['matches','🎮','مسابقات'],['lastsurvivor','🏆','آخرین بازمانده'],['support','🎧','پشتیبانی']]],
   ['محتوا',[['questions','❓','سوالات'],['qreports','🚩','گزارش سؤالات'],['aistudio','🤖','استودیوی سوال (AI)'],['pipeline','🔬','خط‌لولهٔ کیفیت'],['categories','🏷️','موضوعات'],['characterbuilder','🎭','قطعات کاراکتر']]],
-  ['اقتصاد',[['wallet','👛','کیف پول'],['withdrawals','💸','برداشت‌ها'],['rewardholds','⏳','جوایز در انتظار'],['tickets','🎫','بلیط‌ها'],['shop','🛒','فروشگاه'],['giftcodes','🎁','کدهای هدیه']]],
+  ['اقتصاد',[['wallet','👛','کیف پول'],['withdrawals','💸','برداشت‌ها'],['rewardholds','⏳','جوایز در انتظار'],['tickets','🎫','بلیط‌ها'],['shop','🛒','فروشگاه'],['giftcodes','🎁','کدهای هدیه'],['payments','🏦','درگاه پرداخت']]],
   ['بالانس بازی (Data-Driven)',[['cfg_xp','✨','XP'],['cfg_level','🏅','Level'],['cfg_cup','🏆','Cup'],['cfg_gameplay','🕹️','گیم‌پلی مودها'],['leagues','🛡️','لیگ‌ها'],['missions','🎯','مأموریت‌ها'],['rewards','🎉','جوایز/چرخونه/استریک']]],
   ['رشد و تعامل',[['leaderboard','📈','لیدربرد'],['campaign','🎁','کمپین کاربر جدید'],['events','📅','رویدادها'],['banners','🖼️','بنرها'],['notifications','🔔','اعلان‌ها'],['sms','📱','پنل پیامکی']]],
   ['سیستم',[['anticheat','🛡️','ضدتقلب'],['suspicious','🚨','کاربران مشکوک'],['reports','📑','گزارش‌ها'],['logs','📝','لاگ و Audit'],['reset','♻️','ابزار ریست'],['accounts','🔐','حساب‌ها و دسترسی'],['general','⚙️','تنظیمات عمومی'],['rawcfg','🧩','ویرایش خام Config']]]
@@ -179,7 +179,7 @@ async function render(){
   try{
     if(CUR==='accounts')return renderAccounts();
     if(CONFIG_PAGES[CUR])return renderConfigSection(CONFIG_PAGES[CUR][0],CONFIG_PAGES[CUR][1]);
-    const fn={dashboard:renderDashboard,finance:renderFinance,users:renderUsers,matches:renderMatches,support:renderSupport,questions:renderQuestions,qreports:renderQReports,aistudio:renderAiStudio,pipeline:renderPipeline,categories:renderCategories,wallet:renderWallet,withdrawals:renderWithdrawals,rewardholds:renderRewardHolds,tickets:renderTickets,giftcodes:renderGiftCodes,shop:renderShopAdmin,characterbuilder:renderCharParts,lastsurvivor:renderLastSurvivor,sms:renderSms,leaderboard:renderLeaderboard,notifications:renderNotifications,anticheat:renderAntiCheat,suspicious:renderSuspicious,reports:renderReports,logs:renderLogs,reset:renderReset,roles:renderRoles,rawcfg:renderRawCfg}[CUR];
+    const fn={dashboard:renderDashboard,finance:renderFinance,users:renderUsers,matches:renderMatches,support:renderSupport,questions:renderQuestions,qreports:renderQReports,aistudio:renderAiStudio,pipeline:renderPipeline,categories:renderCategories,wallet:renderWallet,withdrawals:renderWithdrawals,rewardholds:renderRewardHolds,tickets:renderTickets,giftcodes:renderGiftCodes,shop:renderShopAdmin,characterbuilder:renderCharParts,lastsurvivor:renderLastSurvivor,sms:renderSms,payments:renderPayments,leaderboard:renderLeaderboard,notifications:renderNotifications,anticheat:renderAntiCheat,suspicious:renderSuspicious,reports:renderReports,logs:renderLogs,reset:renderReset,roles:renderRoles,rawcfg:renderRawCfg}[CUR];
     if(fn)return fn();
   }catch(e){$('#main').innerHTML=head('خطا')+'<div class="card empty">'+(e.message||'خطا')+'</div>';}
 }
@@ -1322,6 +1322,113 @@ async function smsRenderBlacklist(b){
 }
 async function smsBlAdd(){ const n=$('#bl_num').value.trim(); if(!n)return toast('شماره لازم است','bad'); try{await api('POST','/admin/sms/blacklist',{number:n,reason:$('#bl_reason').value.trim()});toast('اضافه شد','ok');renderSms();}catch(e){toast(e.message,'bad');} }
 async function smsBlDel(n){ try{await api('DELETE','/admin/sms/blacklist/'+encodeURIComponent(n));toast('حذف شد','ok');renderSms();}catch(e){toast(e.message,'bad');} }
+
+/* ================= MULTI-GATEWAY PAYMENTS ================= */
+let PAY_SUB='gateways';
+const GW_TYPES={zibal:'زیبال',zarinpal:'زرین‌پال',nextpay:'نکست‌پی',idpay:'آیدی‌پی',bitpay:'بیت‌پی',sandbox:'تست (Sandbox)',custom:'سفارشی'};
+const PIST={created:'ایجاد شد',pending:'در انتظار',paid:'موفق',failed:'ناموفق',expired:'منقضی'};
+async function renderPayments(){
+  const subtabs='<div class="subtabs">'+[['gateways','🏦 درگاه‌ها'],['settings','⚙️ واریز/برداشت'],['reports','📊 گزارش درگاه‌ها'],['tx','📄 تراکنش‌ها']].map(s=>'<button class="'+(PAY_SUB===s[0]?'active':'')+'" onclick="PAY_SUB=\''+s[0]+'\';renderPayments()">'+s[1]+'</button>').join('')+'</div>';
+  $('#main').innerHTML=head('درگاه پرداخت چنددرگاهی','چند درگاه ثبت کن، اولویت بده و سوییچ خودکار داشته باش؛ تنظیمات واریز/برداشت و گزارش هر درگاه')+subtabs+'<div id="payBody"><div class="skel"></div></div>';
+  const b=$('#payBody');
+  try{
+    if(PAY_SUB==='gateways')return payGateways(b);
+    if(PAY_SUB==='settings')return paySettings(b);
+    if(PAY_SUB==='reports')return payReports(b);
+    if(PAY_SUB==='tx')return payTx(b);
+  }catch(e){ b.innerHTML='<div class="card empty">'+(e.message||'خطا')+'</div>'; }
+}
+async function payGateways(b){
+  const d=await api('GET','/admin/payments/gateways'); const rows=d.rows||[];
+  window._GW={};rows.forEach(g=>window._GW[g.id]=g);
+  b.innerHTML='<div class="note">درگاه‌ها به‌ترتیب «اولویت» (کوچک‌تر = زودتر) امتحان می‌شوند؛ اگر درگاهِ فعالِ اول در دسترس نبود، پرداخت به بعدی می‌رود.</div>'+
+    '<button class="btn pri" style="margin-bottom:10px" onclick="gwEdit()">➕ افزودن درگاه</button>'+
+    tbl(['اولویت','نام','نوع','وضعیت','حالت','Callback','عملیات'],rows.map(g=>[
+      fa(g.priority),'<b>'+esc(g.name)+'</b>',esc(GW_TYPES[g.type]||g.type),
+      '<span class="pill '+(g.enabled?'ok':'bad')+'">'+(g.enabled?'فعال':'غیرفعال')+'</span>',
+      g.sandbox?'<span class="pill">تست</span>':'<span class="pill ok">واقعی</span>',
+      '<span class="mono" style="font-size:11px">'+esc(g.callbackUrl||'—')+'</span>',
+      '<button class="btn sm" onclick="gwEdit(\''+g.id+'\')">ویرایش</button> <button class="btn sm" onclick="gwTest(\''+g.id+'\')">تست اتصال</button> <button class="btn sm bad" onclick="gwDel(\''+g.id+'\')">حذف</button>'
+    ]));
+}
+function gwEdit(id){
+  const g=(window._GW||{})[id]||{};
+  const typeOpts=Object.keys(GW_TYPES).map(k=>'<option value="'+k+'"'+(g.type===k?' selected':'')+'>'+esc(GW_TYPES[k])+'</option>').join('');
+  modal(id?'ویرایش درگاه':'افزودن درگاه',
+    '<div class="grid g2"><div class="field"><label>نام درگاه</label><input id="gw_name" value="'+esc(g.name||'')+'"></div>'+
+    '<div class="field"><label>نوع</label><select id="gw_type">'+typeOpts+'</select></div></div>'+
+    '<div class="grid g2"><div class="field"><label>API Key '+(g.apiKeySet?'(ثبت‌شده)':'')+'</label><input id="gw_apikey" dir="ltr" placeholder="'+(g.apiKeySet?esc(g.apiKey):'کلید')+'"></div>'+
+    '<div class="field"><label>Merchant ID</label><input id="gw_merchant" dir="ltr" value="'+esc(g.merchantId||'')+'"></div></div>'+
+    '<div class="grid g2"><div class="field"><label>Secret '+(g.secretSet?'(ثبت‌شده)':'')+'</label><input id="gw_secret" type="password" dir="ltr" placeholder="'+(g.secretSet?'••••':'در صورت نیاز')+'"></div>'+
+    '<div class="field"><label>Callback URL</label><input id="gw_cb" dir="ltr" value="'+esc(g.callbackUrl||'/v1/payments/callback')+'"></div></div>'+
+    '<div class="grid g3"><div class="field"><label>اولویت</label><input id="gw_prio" type="number" value="'+(g.priority!=null?g.priority:100)+'"></div>'+
+    '<div class="field"><label>وضعیت</label><select id="gw_enabled"><option value="1"'+(g.enabled!==false?' selected':'')+'>فعال</option><option value="0"'+(g.enabled===false?' selected':'')+'>غیرفعال</option></select></div>'+
+    '<div class="field"><label>حالت</label><select id="gw_sandbox"><option value="1"'+(g.sandbox!==false?' selected':'')+'>تست</option><option value="0"'+(g.sandbox===false?' selected':'')+'>واقعی</option></select></div></div>'+
+    '<button class="btn pri" onclick="gwSave(\''+(id||'')+'\')">💾 ذخیره</button>');
+}
+async function gwSave(id){
+  const name=$('#gw_name').value.trim(); if(!name)return toast('نام لازم است','bad');
+  const body={id:id||undefined,name,type:$('#gw_type').value,merchantId:$('#gw_merchant').value.trim(),secret:$('#gw_secret').value.trim(),apiKey:$('#gw_apikey').value.trim(),callbackUrl:$('#gw_cb').value.trim(),priority:Number($('#gw_prio').value||100),enabled:$('#gw_enabled').value==='1',sandbox:$('#gw_sandbox').value==='1'};
+  try{await api('POST','/admin/payments/gateways',body);toast('ذخیره شد ✅','ok');document.querySelector('.modal-bg').remove();renderPayments();}catch(e){toast(e.message,'bad');}
+}
+async function gwTest(id){ try{const r=await api('POST','/admin/payments/gateways/'+id+'/test');toast(r.message,r.ok?'ok':'bad');}catch(e){toast(e.message,'bad');} }
+async function gwDel(id){ if(!confirm('این درگاه حذف شود؟'))return; try{await api('DELETE','/admin/payments/gateways/'+id);toast('حذف شد','ok');renderPayments();}catch(e){toast(e.message,'bad');} }
+async function paySettings(b){
+  const s=await api('GET','/admin/payments/settings');
+  const gws=(await api('GET','/admin/payments/gateways').catch(()=>({rows:[]}))).rows||[];
+  const defOpts='<option value="">خودکار (بر اساس اولویت)</option>'+gws.map(g=>'<option value="'+g.id+'"'+(s.defaultGatewayId===g.id?' selected':'')+'>'+esc(g.name)+'</option>').join('');
+  const nn=(id,v)=>'<input id="'+id+'" type="number" value="'+(v!=null?v:0)+'" style="width:100%">';
+  b.innerHTML='<div class="card"><h3>💳 واریز</h3><div class="grid g4">'+
+    '<div class="field"><label>وضعیت</label><select id="ps_dEn"><option value="1"'+(s.deposit.enabled?' selected':'')+'>فعال</option><option value="0"'+(!s.deposit.enabled?' selected':'')+'>غیرفعال</option></select></div>'+
+    '<div class="field"><label>حداقل (ت)</label>'+nn('ps_dMin',s.deposit.min)+'</div>'+
+    '<div class="field"><label>حداکثر (ت)</label>'+nn('ps_dMax',s.deposit.max)+'</div>'+
+    '<div class="field"><label>سقف روزانه (ت)</label>'+nn('ps_dCap',s.deposit.dailyCap)+'</div>'+
+    '<div class="field"><label>تعداد تراکنش مجاز/روز</label>'+nn('ps_dTx',s.deposit.txPerDay)+'</div>'+
+    '</div></div>'+
+    '<div class="card"><h3>🏧 برداشت</h3><div class="grid g4">'+
+    '<div class="field"><label>وضعیت</label><select id="ps_wEn"><option value="1"'+(s.withdraw.enabled?' selected':'')+'>فعال</option><option value="0"'+(!s.withdraw.enabled?' selected':'')+'>غیرفعال</option></select></div>'+
+    '<div class="field"><label>حداقل (ت)</label>'+nn('ps_wMin',s.withdraw.min)+'</div>'+
+    '<div class="field"><label>حداکثر (ت)</label>'+nn('ps_wMax',s.withdraw.max)+'</div>'+
+    '<div class="field"><label>سقف روزانه (ت)</label>'+nn('ps_wCap',s.withdraw.dailyCap)+'</div>'+
+    '<div class="field"><label>کارمزد برداشت (ت)</label>'+nn('ps_wFee',s.withdraw.fee)+'</div>'+
+    '<div class="field"><label>پرداخت کارمزد توسط</label><select id="ps_wPayer"><option value="user"'+(s.withdraw.feePayer==='user'?' selected':'')+'>کاربر</option><option value="system"'+(s.withdraw.feePayer==='system'?' selected':'')+'>سیستم</option></select></div>'+
+    '<div class="field"><label>تأیید برداشت</label><select id="ps_wAuto"><option value="0"'+(!s.withdraw.autoApprove?' selected':'')+'>دستی (ادمین)</option><option value="1"'+(s.withdraw.autoApprove?' selected':'')+'>خودکار</option></select></div>'+
+    '<div class="field"><label>ساعت مجاز از</label>'+nn('ps_wFrom',s.withdraw.hoursFrom)+'</div>'+
+    '<div class="field"><label>تا</label>'+nn('ps_wTo',s.withdraw.hoursTo)+'</div>'+
+    '</div></div>'+
+    '<div class="card"><h3>🎛️ عمومی</h3><div class="grid g2">'+
+    '<div class="field"><label>کارمزد واریز (٪)</label>'+nn('ps_fee',s.feePercent)+'</div>'+
+    '<div class="field"><label>درگاه پیش‌فرض</label><select id="ps_def">'+defOpts+'</select></div>'+
+    '</div></div>'+
+    '<button class="btn pri" onclick="paySaveSettings()">💾 ذخیرهٔ تنظیمات</button>';
+}
+async function paySaveSettings(){
+  const n=id=>Number(($('#'+id)||{}).value||0);
+  const patch={deposit:{enabled:$('#ps_dEn').value==='1',min:n('ps_dMin'),max:n('ps_dMax'),dailyCap:n('ps_dCap'),txPerDay:n('ps_dTx')},
+    withdraw:{enabled:$('#ps_wEn').value==='1',min:n('ps_wMin'),max:n('ps_wMax'),dailyCap:n('ps_wCap'),fee:n('ps_wFee'),feePayer:$('#ps_wPayer').value,autoApprove:$('#ps_wAuto').value==='1',hoursFrom:n('ps_wFrom'),hoursTo:n('ps_wTo')},
+    feePercent:n('ps_fee'),defaultGatewayId:$('#ps_def').value||null};
+  try{await api('PUT','/admin/payments/settings',patch);toast('ذخیره شد ✅','ok');renderPayments();}catch(e){toast(e.message,'bad');}
+}
+async function payReports(b){
+  const d=await api('GET','/admin/payments/reports'); const rows=d.rows||[];
+  b.innerHTML=tbl(['درگاه','نوع','کل','موفق','ناموفق','در انتظار','نرخ موفقیت','مجموع واریز (ت)'],rows.map(r=>[
+    '<b>'+esc(r.name)+'</b>',esc(GW_TYPES[r.type]||r.type),fa(r.total),
+    '<span style="color:var(--ok,#28C46A)">'+fa(r.paid)+'</span>','<span style="color:var(--bad,#F26A6A)">'+fa(r.failed)+'</span>',fa(r.pending),
+    '<b>'+fa(r.successRate)+'٪</b>','<b style="color:var(--gold)">'+fa(r.paidAmount)+'</b>'
+  ]));
+}
+let PAY_TXST='';
+async function payTx(b){
+  const rows=await api('GET','/admin/payments/intents?limit=200'+(PAY_TXST?'&status='+PAY_TXST:'')).catch(()=>[]);
+  const list=Array.isArray(rows)?rows:(rows.rows||[]);
+  const filter='<div class="subtabs">'+[['','همه'],['paid','موفق'],['pending','در انتظار'],['failed','ناموفق']].map(s=>'<button class="'+(PAY_TXST===s[0]?'active':'')+'" onclick="PAY_TXST=\''+s[0]+'\';renderPayments()">'+s[1]+'</button>').join('')+'</div>';
+  b.innerHTML=filter+tbl(['زمان','کاربر','مبلغ','درگاه','وضعیت','کد مرجع'],list.map(i=>[
+    fmtDate(i.createdAt),'<span class="mono">'+String(i.userId||'').slice(0,8)+'</span>','<b>'+fa(i.amount)+'</b>',
+    esc((i.metadata&&i.metadata.gatewayName)||i.provider||'—'),
+    '<span class="pill '+(i.status==='paid'?'ok':(i.status==='failed'||i.status==='expired'?'bad':''))+'">'+(PIST[i.status]||i.status)+'</span>',
+    '<span class="mono" style="font-size:11px">'+esc(i.providerReference||'—')+'</span>'
+  ]));
+}
 
 /* ================= ADMIN ACCOUNTS + ACCESS ================= */
 function tabLabelMap(){const m={};NAV.forEach(g=>g[1].forEach(p=>{if(p[0]!=='accounts')m[p[0]]=p[1]+' '+p[2];}));return m;}

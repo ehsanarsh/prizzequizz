@@ -18,6 +18,7 @@ import { id } from '../utils/id.js';
 import { logger } from './logger.js';
 import { notifications } from './notificationService.js';
 import { WALLET_LIMITS, WalletError, postEntry } from './walletLedgerService.js';
+import { getPaymentSettings, pickActiveGateway } from './paymentGatewayService.js';
 
 export interface PaymentDiagnostics {
   provider: PaymentProvider;
@@ -50,6 +51,12 @@ function signatureValid(intent: PaymentIntent, sig: string, status: 'paid' | 'fa
 export async function createPaymentIntent(input: { userId: string; amount: number; callbackUrl?: string; idempotencyKey?: string }): Promise<PaymentIntent> {
   const amount = Math.round(Number(input.amount));
   if (!Number.isFinite(amount) || amount < WALLET_LIMITS.minDeposit || amount > WALLET_LIMITS.maxDeposit) throw new WalletError('PAYMENT_AMOUNT_INVALID', 'مبلغ پرداخت نامعتبر است.');
+  // Admin deposit policy (from the multi-gateway panel) — takes precedence.
+  const settings = await getPaymentSettings();
+  if (!settings.deposit.enabled) throw new WalletError('DEPOSIT_DISABLED', 'واریز موقتاً غیرفعال است.');
+  if (amount < settings.deposit.min || amount > settings.deposit.max) throw new WalletError('PAYMENT_AMOUNT_INVALID', `مبلغ باید بین ${settings.deposit.min.toLocaleString('fa-IR')} و ${settings.deposit.max.toLocaleString('fa-IR')} تومان باشد.`);
+  // Pick the highest-priority enabled gateway (auto-switch handled at retry).
+  const gateway = await pickActiveGateway();
   const key = input.idempotencyKey ? `payment:${input.userId}:${input.idempotencyKey}` : `payment:${input.userId}:${amount}:${Date.now()}:${id().slice(0, 8)}`;
   const existing = await repositories.payments.findByIdempotencyKey(key);
   if (existing) return existing;
@@ -72,7 +79,7 @@ export async function createPaymentIntent(input: { userId: string; amount: numbe
     callbackUrl: input.callbackUrl,
     providerReference: `sandbox_${intentId}`,
     idempotencyKey: key,
-    metadata: { sandbox: provider() === 'sandbox' },
+    metadata: { sandbox: gateway ? gateway.sandbox : provider() === 'sandbox', gatewayId: gateway?.id, gatewayName: gateway?.name, gatewayType: gateway?.type },
     createdAt: now,
     updatedAt: now
   };
