@@ -3193,9 +3193,13 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
       .ls-hd-row .c b{display:block;color:var(--paper);font-size:18px;font-weight:900}
       .ls-hd-row .c span{color:#c9c2b3;font-size:10px}
       .ls-hd .pz-prize{margin-top:10px;text-align:center;color:#FFE24A;font-weight:900;font-size:15px}
-      .ls-tabs{display:flex;gap:8px;margin:6px 14px}
-      .ls-tab{flex:1;padding:10px;border-radius:13px;background:var(--ink-2);color:var(--paper);font-weight:900;font-size:13px;text-align:center;cursor:pointer;border:2px solid #000;box-shadow:var(--hard-sm)}
-      .ls-tab.on{background:linear-gradient(180deg,#FFE24A,var(--bolt-2));color:#141414}
+      /* Real bottom TABS (زبانه) — pinned under the content, active one is lit
+         and connected to the panel above it, not a floating button. */
+      .ls-tabs{display:flex;margin-top:auto;background:var(--ink-2);border-top:var(--stroke);padding-bottom:env(safe-area-inset-bottom)}
+      .ls-tab{flex:1;padding:12px 6px 13px;color:var(--muted);font-weight:900;font-size:13px;text-align:center;cursor:pointer;position:relative;display:flex;flex-direction:column;align-items:center;gap:3px;transition:color .15s}
+      .ls-tab .ti{font-size:19px;line-height:1}
+      .ls-tab.on{color:var(--bolt)}
+      .ls-tab.on::before{content:"";position:absolute;top:-2.5px;left:10%;right:10%;height:4px;border-radius:0 0 6px 6px;background:var(--bolt);box-shadow:0 0 12px var(--bolt-glow)}
       .ls-grid{flex:1;min-height:0;overflow-y:auto;padding:10px 14px;display:grid;grid-template-columns:repeat(4,1fr);gap:10px;align-content:start}
       .ls-pl{display:flex;flex-direction:column;align-items:center;gap:4px;position:relative;transition:.3s}
       .ls-pl .av{width:52px;height:52px;border-radius:15px;background:var(--ink-3) center/cover;display:flex;align-items:center;justify-content:center;font-size:22px;border:2px solid #000;box-shadow:var(--hard-sm);position:relative;overflow:hidden}
@@ -4612,7 +4616,7 @@ function lsRender(snap){
   lsSnap=snap; if(snap.me) lsMyId=snap.me.userId;
   const r=snap.room;
   const key=r.status+'|'+r.phase+'|'+r.round;
-  if(key!==lsLastKey){ lsLastKey=key; lsBuild(snap); if(r.phase==='ready'||r.phase==='question'){ lsAnswered=(snap.me&&snap.me.answeredThisRound)||false; } if(r.phase==='elimination')lsDeadDismissed=false; try{if(r.phase==='elimination')sfx('found');}catch(e){} }
+  if(key!==lsLastKey){ lsLastKey=key; lsBuild(snap); if(r.phase==='ready'){ lsPuUsed={}; lsSecondArmed=false; } if(r.phase==='ready'||r.phase==='question'){ lsAnswered=(snap.me&&snap.me.answeredThisRound)||false; } if(r.phase==='elimination')lsDeadDismissed=false; try{if(r.phase==='elimination')sfx('found');}catch(e){} }
   lsLive(snap);
   // A player who has cashed out is DONE — show the victory result right away
   // instead of making them watch the rest of the match.
@@ -4689,7 +4693,6 @@ function lsLive(snap){
   if(vf&&r.status==='waiting'){ const pct=snap.players.length?Math.round(snap.votes*100/snap.players.length):0; vf.style.width=pct+'%'; if(vt)vt.textContent='شروع با همین تعداد — '+lsFa(pct)+'٪ ('+lsFa(snap.votes)+'/'+lsFa(snap.players.length)+')'; }
   // refresh waiting grid + dashboard grids in place
   if(r.status==='waiting'&&lsTab==='players'){ const g=document.getElementById('lsGrid'); if(g)g.innerHTML=lsPlayersCells(snap,false); }
-  if(r.status==='waiting'&&lsTab==='chat'){ const rs=document.getElementById('lsChatRoom'); if(rs)rs.innerHTML=lsRoomStrip(snap); }
   if(r.status==='running'&&(r.phase==='dashboard'||r.phase==='cashout')){ const g=document.getElementById('lsDashGrid'); if(g)g.innerHTML=lsDashCells(snap); }
 }
 
@@ -4701,10 +4704,10 @@ function lsWaitHtml(snap){
     <div class="c"><b id="lsTimer">${lsTimer(snap)}</b><span>تا شروع</span></div>
     <div class="c"><b id="lsPrize" style="color:#FFE24A">${lsFa(r.grossPool)}</b><span>مجموع جوایز (ت)</span></div>
   </div></div>
-  <div class="ls-tabs"><div class="ls-tab ${lsTab==='players'?'on':''}" onclick="lsSetTab('players')">بازیکنان</div>${r.chatEnabled?`<div class="ls-tab ${lsTab==='chat'?'on':''}" onclick="lsSetTab('chat')">چت روم</div>`:''}</div>
   <div class="ls-grid" id="lsGrid" style="${lsTab==='players'?'':'display:none'}">${lsPlayersCells(snap,false)}</div>
-  <div class="ls-chat" id="lsChatWrap" style="${lsTab==='chat'?'':'display:none'}"><div class="ls-chat-room" id="lsChatRoom">${lsRoomStrip(snap)}</div><div class="ls-chat-list" id="lsChatList"></div><div class="ls-chat-in"><input id="lsChatInput" placeholder="پیام…" maxlength="240"><button onclick="lsChatSend()">↑</button></div></div>
-  ${r.manualStartEnabled?`<div class="ls-vote" id="lsVoteBtn" onclick="lsVote()" style="${lsTab==='chat'?'display:none':''}"><i id="lsVoteFill"></i><span id="lsVoteTxt">شروع با همین تعداد</span></div>`:''}`;
+  <div class="ls-chat" id="lsChatWrap" style="${lsTab==='chat'?'':'display:none'}"><div class="ls-chat-list" id="lsChatList"></div><div class="ls-chat-in"><input id="lsChatInput" placeholder="پیام…" maxlength="240"><button onclick="lsChatSend()">↑</button></div></div>
+  ${r.manualStartEnabled?`<div class="ls-vote" id="lsVoteBtn" onclick="lsVote()"><i id="lsVoteFill"></i><span id="lsVoteTxt">شروع با همین تعداد</span></div>`:''}
+  <div class="ls-tabs" role="tablist"><div class="ls-tab ${lsTab==='players'?'on':''}" data-tab="players" role="tab" onclick="lsSetTab('players')"><span class="ti">👥</span>بازیکنان</div>${r.chatEnabled?`<div class="ls-tab ${lsTab==='chat'?'on':''}" data-tab="chat" role="tab" onclick="lsSetTab('chat')"><span class="ti">💬</span>چت روم</div>`:''}</div>`;
 }
 /* Real COLOURED character art for every player — the same mascotSVG the duel and
    home header use, tinted deterministically per user so everyone is distinct. */
@@ -4800,19 +4803,31 @@ function lsReadyGate(snap){
    (curBox/curCorrect/qLocked) AND on knowing the correct answer — which LS
    deliberately keeps server-side. So we render the same buttons and rebind them
    to a server-backed implementation. */
-let lsSecondArmed=false;
+let lsSecondArmed=false, lsPuUsed={};
+/* Render OUR OWN lifeline row (same .pu look as the duel) and bind it directly.
+   Depending on the duel's renderPowerups()/usePower() was the reason these did
+   nothing: usePower() bails on its own globals (qLocked/curBox/curCorrect) which
+   Last Survivor never sets. */
 function lsBindPowerups(){
-  try{ if(typeof renderPowerups==='function')renderPowerups(); }catch(e){}
-  document.querySelectorAll('#lsBody [data-pwslot] .pu').forEach((el,idx)=>{
-    const type=['5050','second','stats'][idx];
-    el.onclick=function(ev){ ev.stopPropagation(); lsUsePower(type,el); };
+  const slot=document.querySelector('#lsBody [data-pwslot]'); if(!slot) return;
+  const defs=[['5050','✂️','۵۰:۵۰','p5050'],['second','🔁','انتخاب دوم','psecond'],['stats','📊','درصد بقیه','pstats']];
+  const have=(typeof powerups!=='undefined'&&powerups)||{p5050:0,psecond:0,pstats:0};
+  slot.innerHTML=defs.map(d=>{
+    const left=Number(have[d[3]]||0), used=!!lsPuUsed[d[0]];
+    const off=used||left<=0;
+    return '<div class="pu'+(off?' disabled used':'')+'" data-ls-pu="'+d[0]+'"><span class="pu-i">'+d[1]+'</span><span class="pu-l">'+d[2]+'</span><span class="pu-c">'+(used?'استفاده شد':'×'+lsFa(left))+'</span></div>';
+  }).join('');
+  slot.querySelectorAll('[data-ls-pu]').forEach(el=>{
+    el.onclick=function(ev){ ev.preventDefault(); ev.stopPropagation(); lsUsePower(el.getAttribute('data-ls-pu'),el); };
   });
 }
 async function lsUsePower(type,el){
-  if(!lsRoomId||lsAnswered) return;
-  if(el&&el.classList.contains('disabled')) return;
+  if(!lsRoomId){ toast('الان قابل استفاده نیست'); return; }
+  if(lsAnswered){ toast('جوابت ثبت شده'); return; }
+  if(lsPuUsed[type]){ toast('قبلاً استفاده شده'); return; }
   const key={'5050':'p5050','second':'psecond','stats':'pstats'}[type];
-  try{ if(typeof _puAvail==='function'&&key&&!_puAvail(key)){ toast('این کمک تمام شده'); return; } }catch(e){}
+  const have=(typeof powerups!=='undefined'&&powerups)||{};
+  if(Number(have[key]||0)<=0){ toast('این کمک تمام شده'); return; }
   const r=await pzApi('POST','/last-survivor/rooms/'+lsRoomId+'/lifeline',{type});
   if(!r||r.ok===false){ toast((r&&r.error&&r.error.message)||'الان قابل استفاده نیست'); return; }
   const d=r.data||{};
@@ -4836,7 +4851,8 @@ async function lsUsePower(type,el){
       });
     }
   }
-  try{ if(typeof _puConsume==='function'&&key)_puConsume(key); }catch(e){}
+  lsPuUsed[type]=true;
+  try{ if(typeof powerups!=='undefined'&&powerups&&key&&powerups[key]>0){ powerups[key]--; localStorage.setItem('pz_lifelines',JSON.stringify(powerups)); } }catch(e){}
   lsBindPowerups();
 }
 
@@ -4881,10 +4897,11 @@ function lsRoomStrip(snap){
   return (snap.players||[]).map(p=>{const dim=p.status==='eliminated'?'opacity:.4;filter:grayscale(1)':'';
     return `<div class="cav"><div class="a" style="${dim}">${lsAvatarHTML(p)}</div><small>${(p.username||'').slice(0,6)}</small></div>`;}).join('');
 }
-function lsSetTab(t){ lsTab=t; const g=document.getElementById('lsGrid'),c=document.getElementById('lsChatWrap'),v=document.getElementById('lsVoteBtn');
-  if(g)g.style.display=t==='players'?'':'none'; if(c)c.style.display=t==='chat'?'':'none'; if(v)v.style.display=t==='chat'?'none':'';
-  document.querySelectorAll('#lsGame .ls-tab').forEach(el=>el.classList.toggle('on',el.textContent.indexOf(t==='players'?'بازیکنان':'چت')>=0));
-  if(t==='chat'){ if(lsSnap){const rs=document.getElementById('lsChatRoom');if(rs)rs.innerHTML=lsRoomStrip(lsSnap);} lsLoadChat(); }
+function lsSetTab(t){ lsTab=t; const g=document.getElementById('lsGrid'),c=document.getElementById('lsChatWrap');
+  if(g)g.style.display=t==='players'?'':'none'; if(c)c.style.display=t==='chat'?'':'none';
+  document.querySelectorAll('#lsGame .ls-tab').forEach(el=>el.classList.toggle('on',el.getAttribute('data-tab')===t));
+  if(t==='chat') lsLoadChat();
+  try{vib(8);}catch(e){}
 }
 function lsBindChat(){ const inp=document.getElementById('lsChatInput'); if(inp)inp.addEventListener('keydown',e=>{if(e.key==='Enter')lsChatSend();}); }
 async function lsLoadChat(){ if(!lsRoomId)return; const r=await pzApi('GET','/last-survivor/rooms/'+lsRoomId+'/chat'); const list=document.getElementById('lsChatList'); if(!list)return; const msgs=(r&&r.data&&r.data.messages)||[];

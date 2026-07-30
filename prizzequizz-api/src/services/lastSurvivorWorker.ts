@@ -266,7 +266,8 @@ const scKey = (roomId: string, round: number, userId: string) => `${roomId}:${ro
 
 export async function useLifeline(roomId: string, userId: string, type: string): Promise<{ ok: boolean; reason?: string; removeIndexes?: number[]; armed?: boolean }> {
   const room = await getRoom(roomId);
-  if (!room || room.status !== 'running' || room.phase !== 'question') return { ok: false, reason: 'NOT_IN_QUESTION' };
+  // Usable during the ready gate too, so a player can plan before the timer runs.
+  if (!room || room.status !== 'running' || (room.phase !== 'question' && room.phase !== 'ready')) return { ok: false, reason: 'NOT_IN_QUESTION' };
   const p = (await listPlayers(roomId)).find((x) => x.userId === userId);
   if (!p || p.status !== 'alive') return { ok: false, reason: 'NOT_ALIVE' };
   if (p.answerRound === room.round) return { ok: false, reason: 'ALREADY_ANSWERED' };
