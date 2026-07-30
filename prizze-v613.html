@@ -3227,6 +3227,11 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
       .ls-chat-in button{background:linear-gradient(180deg,#FFE24A,var(--bolt-2));border:2px solid #000;border-radius:13px;padding:0 16px;font-weight:900;color:#141414;cursor:pointer;box-shadow:var(--hard-sm)}
       /* dashboard */
       .ls-dash{padding:12px 14px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+      .ls-dash-mini{display:flex;gap:8px;padding:10px 14px 6px}
+      .ls-dash-mini .c{flex:1;background:var(--ink-2);border:var(--stroke);border-radius:14px;box-shadow:var(--hard-sm);padding:8px 4px;text-align:center}
+      .ls-dash-mini .c b{display:block;color:var(--paper);font-size:16px;font-weight:900}
+      .ls-dash-mini .c span{color:var(--muted);font-size:9px}
+      .ls-dash-mini .c.gold b{color:var(--bolt)}
       .ls-stat{background:var(--ink-2);border:var(--stroke);border-radius:16px;padding:12px 8px;text-align:center;box-shadow:var(--hard-sm)}
       .ls-stat b{display:block;color:var(--paper);font-size:19px;font-weight:900}
       .ls-stat span{color:#c9c2b3;font-size:10px}
@@ -4539,7 +4544,7 @@ async function lsDoJoin(topic,color){
   const r=await pzApi('POST','/last-survivor/join',{topic,color});
   if(!r||r.ok===false){ toast((r&&r.error&&r.error.message)||'ورود ناموفق بود'); return; }
   const snap=r.data; if(!snap||!snap.room){ toast('خطا در ورود'); return; }
-  lsRoomId=snap.room.id; lsLastKey=''; lsDeadDismissed=false; lsChatSeen=0;
+  lsRoomId=snap.room.id; lsLastKey=''; lsDeadDismissed=false; lsChatSeen=0; lsEndShown=false; lsReadyShownRound=0;
   try{ if(typeof mTickets!=='undefined'&&mTickets[color]!=null){mTickets[color]=Math.max(0,mTickets[color]-1);renderHeaderTickets();} }catch(e){}
   showScreen('lsGame'); lsRender(snap); lsStartPoll();
 }
@@ -4592,6 +4597,9 @@ function lsRender(snap){
   const key=r.status+'|'+r.phase+'|'+r.round;
   if(key!==lsLastKey){ lsLastKey=key; lsBuild(snap); if(r.phase==='ready'||r.phase==='question'){ lsAnswered=(snap.me&&snap.me.answeredThisRound)||false; } if(r.phase==='elimination')lsDeadDismissed=false; try{if(r.phase==='elimination')sfx('found');}catch(e){} }
   lsLive(snap);
+  // A player who has cashed out is DONE — show the victory result right away
+  // instead of making them watch the rest of the match.
+  if(snap.me&&snap.me.status==='cashed_out'&&Number(snap.me.payoutCash||0)>0&&!lsEndShown){ lsFinish(snap); return; }
   lsOverlays(snap);
 }
 
@@ -4600,17 +4608,30 @@ function lsBuild(snap){
   if(r.status==='finished'){ body.innerHTML=lsEndHtml(snap); return; }
   if(r.status==='waiting'){ body.innerHTML=lsWaitHtml(snap); lsBindChat(); return; }
   // running
+  /* MOTHER SCREEN: the dashboard is the home of the match. It is always on
+     screen except while a question is up (then the question takes over), and it
+     COMPACTS to a single stats strip during elimination so the Squid-Game grid
+     sits right below it. */
   if(r.phase==='ready'){
     // Pre-render the question behind the gate, then show the SAME «آماده‌ای؟»
     // countdown modal the duel uses, with the real difficulty badge.
     body.innerHTML=lsDashStrip(snap)+lsQuestionHtml(snap,true);
     lsReadyGate(snap);
+    try{ if(typeof renderPowerups==='function')renderPowerups(); }catch(e){}
     return;
   }
-  if(r.phase==='question'){ body.innerHTML=lsDashStrip(snap)+lsQuestionHtml(snap); return; }
-  if(r.phase==='elimination'){ body.innerHTML='<div class="ls-elim-hd"><h2>مرحلهٔ حذف ☠️</h2><p>هر کس اشتباه جواب داد، حذف می‌شود</p></div>'+lsGridHtml(snap,true); return; }
-  if(r.phase==='cashout'){ body.innerHTML=lsDashHtml(snap); return; }
-  body.innerHTML=lsDashHtml(snap); // dashboard
+  if(r.phase==='question'){
+    body.innerHTML=lsDashStrip(snap)+lsQuestionHtml(snap);
+    try{ if(typeof renderPowerups==='function')renderPowerups(); }catch(e){}
+    return;
+  }
+  if(r.phase==='elimination'){
+    body.innerHTML=lsDashHtml(snap,true)+
+      '<div class="ls-elim-hd"><h2>مرحلهٔ حذف ☠️</h2><p>هر کس اشتباه جواب داد، حذف می‌شود</p></div>'+
+      lsGridHtml(snap,true);
+    return;
+  }
+  body.innerHTML=lsDashHtml(snap); // dashboard + cashout both show the full board
 }
 
 // live in-place updates that must not rebuild the DOM (timer, counts, vote)
@@ -4672,7 +4693,17 @@ function lsDashCells(snap){ const s=snap.stats;
   <div class="ls-stat"><b>${lsFa(s.grossPot)}</b><span>کل جایزه (ت)</span></div>
   <div class="ls-stat"><b>${lsFa(s.paidOut)}</b><span>پرداخت‌شده (ت)</span></div>`;
 }
-function lsDashHtml(snap){ return `<div class="ls-top" style="padding-bottom:0"><div class="ls-ttl" style="text-align:center;width:100%"><h1>داشبورد مسابقه</h1><p>مرحله ${lsFa(snap.room.round)} از ${lsFa(snap.room.totalRounds)} · <span id="lsTimer">${lsTimer(snap)}</span></p></div></div><div class="ls-dash" id="lsDashGrid">${lsDashCells(snap)}</div>`; }
+function lsDashHtml(snap,compact){
+  const s=snap.stats,r=snap.room;
+  if(compact){
+    /* Elimination view: the board shrinks to the essentials and moves up. */
+    return `<div class="ls-dash-mini"><div class="c"><b id="lsAlive">${lsFa(s.alive)}</b><span>باقی‌مانده</span></div>`+
+      `<div class="c"><b id="lsElim">${lsFa(s.eliminated)}</b><span>حذف‌شده</span></div>`+
+      `<div class="c"><b id="lsCash">${lsFa(s.cashedOut)}</b><span>برداشت</span></div>`+
+      `<div class="c gold"><b id="lsRemain">${lsFa(s.remainingPot)}</b><span>جایزه (ت)</span></div></div>`;
+  }
+  return `<div class="ls-top" style="padding-bottom:0"><div class="ls-ttl" style="text-align:center;width:100%"><h1>داشبورد مسابقه</h1><p>مرحله ${lsFa(r.round)} از ${lsFa(r.totalRounds)} · <span id="lsTimer">${lsTimer(snap)}</span></p></div></div><div class="ls-dash" id="lsDashGrid">${lsDashCells(snap)}</div>`;
+}
 
 function lsQuestionHtml(snap,locked){
   const q=snap.question||{}; const opts=q.options||[]; const alive=snap.me&&snap.me.status==='alive';
@@ -4683,7 +4714,8 @@ function lsQuestionHtml(snap,locked){
   return `<div class="ls-qwrap"><div class="ls-qtimer">⏳ <span id="lsTimer">${lsTimer(snap)}</span></div>
   ${badge?`<div style="text-align:center;margin-bottom:8px">${badge}</div>`:''}
   <div class="ls-qcard"><div class="ls-qtext">${q.text||'…'}</div>
-  <div class="answers" id="lsOpts" style="margin-top:12px">${opts.map((o,i)=>`<button class="ans" data-i="${i}"${locked?' disabled':` onclick="lsAnswer(${i})"`}><span class="k">${K[i]||''}</span><span class="dash">—</span><span class="atxt">${o}</span></button>`).join('')}</div>
+  <div class="answers" id="lsOpts" style="margin-top:12px;grid-template-columns:1fr">${opts.map((o,i)=>`<button class="ans" data-i="${i}"${locked?' disabled':` onclick="lsAnswer(${i})"`}><span class="k">${K[i]||''}</span><span class="dash">—</span><span class="atxt">${o}</span></button>`).join('')}</div>
+  <div class="powerups" data-pwslot style="margin-top:10px"></div>
   ${alive?'':'<div class="ls-ack" style="color:#ff8a8a">شما در این مرحله حضور ندارید</div>'}</div></div>`;
 }
 /* The duel's own ready gate, reused verbatim: same modal, same countdown bar,
@@ -4764,17 +4796,44 @@ function lsOverlays(snap){
     const decided=me.decisionThisRound;
     if(!cash){ cash=document.createElement('div'); cash.id='lsCashPop'; cash.className='ls-cash'; g.appendChild(cash); }
     if(decided){ cash.innerHTML=`<div class="ls-wait-decided">${decided==='cashout'?'برداشت ثبت شد ✅':'ادامه می‌دهی 💪'} — منتظر بقیه…</div>`; }
-    else { cash.innerHTML=`<h3>ادامه یا برداشت؟</h3><div class="sub">اگر الان برداشت کنی، سهمت پرداخت و از مسابقه خارج می‌شوی</div><div class="share">${lsFa(me.currentShare)} تومان</div><div class="btns"><button class="go" onclick="lsDecide('continue')">ادامه مسابقه 💪</button><button class="out" onclick="lsDecide('cashout')">برداشت جایزه 💰</button></div>`; }
+    else {
+      // Same shape as the duel's checkpoint sheet: what you've won now, what
+      // continuing could be worth, and two clear buttons.
+      const s=snap.stats, alive=Math.max(1,s.alive);
+      const potential=alive>1?Math.floor(s.remainingPot*(me.units||1)/Math.max(1,(snap.players||[]).filter(p=>p.status==='alive').reduce((a,p)=>a+(p.userId===me.userId?(me.units||1):(p.units||1)),0)/1)):s.remainingPot;
+      cash.innerHTML=`<h3>ادامه بدهی یا برداشت کنی؟ 🤔</h3>`+
+        `<div class="sub">تا اینجا برنده شده‌ای — اگر ادامه بدهی و باز هم درست جواب بدهی، سهمت بیشتر می‌شود</div>`+
+        `<div class="share">${lsFa(me.currentShare)} تومان</div>`+
+        `<div style="text-align:center;color:var(--muted);font-size:12px;margin-bottom:14px">با حذف‌شدن بقیه، این مبلغ تا <b style="color:var(--bolt)">${lsFa(Math.max(me.currentShare,s.remainingPot))} تومان</b> هم می‌تواند برسد · اما جواب اشتباه = حذف بدون جایزه</div>`+
+        `<div class="btns"><button class="go" onclick="lsDecide('continue')">ادامه می‌دهم 💪</button><button class="out" onclick="lsDecide('cashout')">برداشت ${lsFa(me.currentShare)} 💰</button></div>`;
+    }
   } else if(cash){ cash.remove(); }
 }
 async function lsDecide(d){ if(!lsRoomId||!lsSnap)return; await pzApi('POST','/last-survivor/rooms/'+lsRoomId+'/decision',{round:lsSnap.room.round,decision:d}); try{vib(20);}catch(e){} const c=document.getElementById('lsCashPop'); if(c)c.innerHTML=`<div class="ls-wait-decided">${d==='cashout'?'برداشت ثبت شد ✅':'ادامه می‌دهی 💪'} — منتظر بقیه…</div>`; }
 
-function lsEndHtml(snap){
+/* Finish → hand off to the DUEL's own result screen so a win/cash-out gets the
+   full VICTORY celebration (pzVictoryAnim + result screen), and only a real
+   loss gets the losing screen. Money is already in the wallet at this point. */
+let lsEndShown=false;
+function lsFinish(snap){
+  if(lsEndShown) return; lsEndShown=true;
   lsStopPoll();
-  const me=snap.me; const iWon=me&&me.status==='alive'&&me.payoutCash>0;
-  const mine=me?me.payoutCash:0;
-  return `<div class="ls-end"><div class="cup">${iWon?'🏆':(mine>0?'💰':'🎮')}</div><h2>${iWon?'تو آخرین بازمانده بودی!':(mine>0?'جایزه‌ات پرداخت شد':'مسابقه تمام شد')}</h2>${mine>0?`<p>${lsFa(mine)} تومان به کیف پولت اضافه شد</p>`:'<p>دفعهٔ بعد شانست رو امتحان کن</p>'}<button class="btn btn-primary" onclick="lsLeave('home')" style="margin-top:24px;max-width:280px">بازگشت به خانه</button></div>`;
+  const me=snap.me||{}; const mine=Number(me.payoutCash||0);
+  const won=mine>0;                       // cashed out OR survived with a payout
+  const cashedOut=me.status==='cashed_out';
+  const sub=won
+    ? (cashedOut?'جایزه‌ات را برداشت کردی و به کیف پولت واریز شد':'تو آخرین بازمانده بودی! جایزه به کیف پولت واریز شد')
+    : 'این بار شانس یارت نبود — دفعهٔ بعد بترکون!';
+  try{ if(typeof pzRefreshWallet==='function')pzRefreshWallet(); }catch(e){}
+  try{ if(typeof pzSyncMe==='function')pzSyncMe(); }catch(e){}
+  lsRoomId=null; lsSnap=null; lsLastKey='';
+  ['lsColorPick','lsDead','lsCashPop'].forEach(id=>{const e=document.getElementById(id);if(e)e.remove();});
+  try{
+    if(typeof endGame==='function'){ endGame(won, mine, cashedOut, sub); return; }
+  }catch(e){}
+  go('home');
 }
+function lsEndHtml(snap){ lsFinish(snap); return '<div class="ls-end"><div class="cup">🏁</div><h2>پایان مسابقه</h2></div>'; }
 
 
 /* ============ NAVIGATION (with back-button safety) ============ */

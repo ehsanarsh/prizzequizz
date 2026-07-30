@@ -23,7 +23,7 @@ async function ensureScoringSchema(pool: ReturnType<typeof getPgPool>): Promise<
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS weekly_week VARCHAR(8) NOT NULL DEFAULT ''`);
   _scoringSchemaReady = true;
 }
-async function awardScoring(userId: string, xp: number, cup: number): Promise<{ xp: number; cup: number; level: number }> {
+export async function awardScoring(userId: string, xp: number, cup: number): Promise<{ xp: number; cup: number; level: number }> {
   const week = isoWeekId();
   try {
     const pool = getPgPool();
