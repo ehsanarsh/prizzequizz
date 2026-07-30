@@ -189,7 +189,7 @@ export const ADMIN_TABS = [
   'wallet', 'withdrawals', 'rewardholds', 'tickets', 'giftcodes',
   'cfg_xp', 'cfg_level', 'cfg_cup', 'cfg_gameplay', 'leagues', 'missions', 'rewards',
   'leaderboard', 'campaign', 'events', 'banners', 'notifications',
-  'anticheat', 'suspicious', 'reports', 'logs', 'reset', 'roles', 'accounts', 'general', 'rawcfg'
+  'anticheat', 'suspicious', 'reports', 'logs', 'reset', 'roles', 'accounts', 'general', 'rawcfg', 'monitoring'
 ] as const;
 
 // Map a request path to the tab it belongs to (for backend enforcement). Only
@@ -203,6 +203,7 @@ export function tabForPath(path: string): string | null {
   if (p.includes('/admin/last-survivor')) return 'lastsurvivor';
   if (p.includes('/admin/sms')) return 'sms';
   if (p.includes('/admin/payments')) return 'payments';
+  if (p.includes('/admin/monitor')) return 'monitoring';
   if (p.includes('/admin/question-reports')) return 'qreports';
   if (p.includes('/admin/questions/ai') || p.includes('/admin/questions/draft')) return 'aistudio';
   if (p.includes('/admin/questions/pipeline')) return 'pipeline';

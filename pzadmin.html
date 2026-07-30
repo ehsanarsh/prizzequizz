@@ -152,7 +152,7 @@ const NAV=[
   ['اقتصاد',[['wallet','👛','کیف پول'],['withdrawals','💸','برداشت‌ها'],['rewardholds','⏳','جوایز در انتظار'],['tickets','🎫','بلیط‌ها'],['shop','🛒','فروشگاه'],['giftcodes','🎁','کدهای هدیه'],['payments','🏦','درگاه پرداخت']]],
   ['بالانس بازی (Data-Driven)',[['cfg_xp','✨','XP'],['cfg_level','🏅','Level'],['cfg_cup','🏆','Cup'],['cfg_gameplay','🕹️','گیم‌پلی مودها'],['leagues','🛡️','لیگ‌ها'],['missions','🎯','مأموریت‌ها'],['rewards','🎉','جوایز/چرخونه/استریک']]],
   ['رشد و تعامل',[['leaderboard','📈','لیدربرد'],['campaign','🎁','کمپین کاربر جدید'],['events','📅','رویدادها'],['banners','🖼️','بنرها'],['notifications','🔔','اعلان‌ها'],['sms','📱','پنل پیامکی']]],
-  ['سیستم',[['anticheat','🛡️','ضدتقلب'],['suspicious','🚨','کاربران مشکوک'],['reports','📑','گزارش‌ها'],['logs','📝','لاگ و Audit'],['reset','♻️','ابزار ریست'],['accounts','🔐','حساب‌ها و دسترسی'],['general','⚙️','تنظیمات عمومی'],['rawcfg','🧩','ویرایش خام Config']]]
+  ['سیستم',[['monitoring','🖥️','مانیتورینگ سرور'],['anticheat','🛡️','ضدتقلب'],['suspicious','🚨','کاربران مشکوک'],['reports','📑','گزارش‌ها'],['logs','📝','لاگ و Audit'],['reset','♻️','ابزار ریست'],['accounts','🔐','حساب‌ها و دسترسی'],['general','⚙️','تنظیمات عمومی'],['rawcfg','🧩','ویرایش خام Config']]]
 ];
 function buildNav(){
   $('#nav').innerHTML=NAV.map(g=>{
@@ -179,7 +179,7 @@ async function render(){
   try{
     if(CUR==='accounts')return renderAccounts();
     if(CONFIG_PAGES[CUR])return renderConfigSection(CONFIG_PAGES[CUR][0],CONFIG_PAGES[CUR][1]);
-    const fn={dashboard:renderDashboard,finance:renderFinance,users:renderUsers,matches:renderMatches,support:renderSupport,questions:renderQuestions,qreports:renderQReports,aistudio:renderAiStudio,pipeline:renderPipeline,categories:renderCategories,wallet:renderWallet,withdrawals:renderWithdrawals,rewardholds:renderRewardHolds,tickets:renderTickets,giftcodes:renderGiftCodes,shop:renderShopAdmin,characterbuilder:renderCharParts,lastsurvivor:renderLastSurvivor,sms:renderSms,payments:renderPayments,leaderboard:renderLeaderboard,notifications:renderNotifications,anticheat:renderAntiCheat,suspicious:renderSuspicious,reports:renderReports,logs:renderLogs,reset:renderReset,roles:renderRoles,rawcfg:renderRawCfg}[CUR];
+    const fn={dashboard:renderDashboard,finance:renderFinance,users:renderUsers,matches:renderMatches,support:renderSupport,questions:renderQuestions,qreports:renderQReports,aistudio:renderAiStudio,pipeline:renderPipeline,categories:renderCategories,wallet:renderWallet,withdrawals:renderWithdrawals,rewardholds:renderRewardHolds,tickets:renderTickets,giftcodes:renderGiftCodes,shop:renderShopAdmin,characterbuilder:renderCharParts,lastsurvivor:renderLastSurvivor,sms:renderSms,payments:renderPayments,leaderboard:renderLeaderboard,notifications:renderNotifications,anticheat:renderAntiCheat,suspicious:renderSuspicious,reports:renderReports,logs:renderLogs,reset:renderReset,roles:renderRoles,rawcfg:renderRawCfg,monitoring:renderMonitoring}[CUR];
     if(fn)return fn();
   }catch(e){$('#main').innerHTML=head('خطا')+'<div class="card empty">'+(e.message||'خطا')+'</div>';}
 }
@@ -1428,6 +1428,93 @@ async function payTx(b){
     '<span class="pill '+(i.status==='paid'?'ok':(i.status==='failed'||i.status==='expired'?'bad':''))+'">'+(PIST[i.status]||i.status)+'</span>',
     '<span class="mono" style="font-size:11px">'+esc(i.providerReference||'—')+'</span>'
   ]));
+}
+
+/* ================= SERVER MONITORING ================= */
+let MON_TIMER=null;
+function monBytes(n){ n=Number(n)||0; if(n<=0)return '۰'; const u=['B','KB','MB','GB','TB']; let i=0; while(n>=1024&&i<u.length-1){n/=1024;i++;} return fa(n.toFixed(i>=2?1:0))+' '+u[i]; }
+function monUptime(s){ s=Number(s)||0; const d=Math.floor(s/86400),h=Math.floor(s%86400/3600),m=Math.floor(s%3600/60); return (d?fa(d)+' روز ':'')+(h?fa(h)+' ساعت ':'')+(!d?fa(m)+' دقیقه':''); }
+/* SVG speedometer gauge (0–100%). */
+function monGauge(pct,label,valTxt){
+  pct=Math.max(0,Math.min(100,Number(pct)||0));
+  const cx=70,cy=66,r=52, a=Math.PI*(1-pct/100);
+  const col=pct>=85?'#F26A6A':(pct>=60?'#FFB020':'#33D97C');
+  const pt=(p)=>{const ang=Math.PI*(1-p/100);return [cx+r*Math.cos(ang),cy-r*Math.sin(ang)];};
+  const arc=(from,to,color,w)=>{const[x0,y0]=pt(from),[x1,y1]=pt(to);return `<path d="M${x0.toFixed(1)} ${y0.toFixed(1)} A ${r} ${r} 0 0 1 ${x1.toFixed(1)} ${y1.toFixed(1)}" fill="none" stroke="${color}" stroke-width="${w}" stroke-linecap="round"/>`;};
+  const nx=cx+(r-6)*Math.cos(a),ny=cy-(r-6)*Math.sin(a);
+  return `<div style="text-align:center"><svg viewBox="0 0 140 84" style="width:100%;max-width:150px">
+    ${arc(0,100,'rgba(255,255,255,.13)',9)}${arc(0,pct,col,9)}
+    <line x1="${cx}" y1="${cy}" x2="${nx.toFixed(1)}" y2="${ny.toFixed(1)}" stroke="${col}" stroke-width="3"/>
+    <circle cx="${cx}" cy="${cy}" r="4.5" fill="${col}"/>
+    <text x="${cx}" y="${cy-12}" text-anchor="middle" fill="#fff" font-size="17" font-weight="900">${fa(Math.round(pct))}٪</text>
+  </svg><div style="font-size:11px;color:var(--muted);margin-top:-4px">${label}${valTxt?' · '+valTxt:''}</div></div>`;
+}
+function monSpark(hist,pick,color){
+  const vals=(hist||[]).map(pick); if(vals.length<2)return '';
+  const max=Math.max(1,...vals),min=Math.min(...vals),w=260,h=40;
+  const pts=vals.map((v,i)=>[(i/(vals.length-1))*w,h-((v-min)/(max-min||1))*h]);
+  return `<svg viewBox="0 0 ${w} ${h}" style="width:100%;height:44px"><polyline fill="none" stroke="${color}" stroke-width="2" points="${pts.map(p=>p[0].toFixed(0)+','+p[1].toFixed(1)).join(' ')}"/></svg>`;
+}
+async function renderMonitoring(){
+  $('#main').innerHTML=head('مانیتورینگ سرور','وضعیت زندهٔ سرورها — CPU، رم، دیسک، لود و آپ‌تایم. هر ۵ ثانیه به‌روزرسانی می‌شود.',
+    '<button class="btn" onclick="monManage()">🔑 مدیریت سرورها</button> <button class="btn sm" onclick="monRefresh()">↻</button>')+
+    '<div id="monOverview"><div class="skel"></div></div>';
+  monRefresh();
+  if(MON_TIMER)clearInterval(MON_TIMER);
+  MON_TIMER=setInterval(()=>{ if(CUR==='monitoring')monRefresh(); else{clearInterval(MON_TIMER);MON_TIMER=null;} },5000);
+}
+async function monRefresh(){
+  const box=$('#monOverview'); if(!box)return;
+  let d; try{ d=await api('GET','/admin/monitor/overview'); }catch(e){ box.innerHTML='<div class="card empty">'+(e.message||'خطا')+'</div>'; return; }
+  const rows=d.rows||[];
+  if(!rows.length){ box.innerHTML='<div class="card empty">سروری ثبت نشده. با «مدیریت سرورها» سرور اضافه کن.</div>'; return; }
+  box.innerHTML=rows.map(r=>{
+    const s=r.server, m=r.latest||{};
+    const memPct=m.memTotal?100*m.memUsed/m.memTotal:0;
+    const diskPct=m.diskTotal?100*m.diskUsed/m.diskTotal:0;
+    const cores=(m.extra&&m.extra.cores)||0;
+    const seen=s.lastSeenAt?fmtDate(new Date(s.lastSeenAt).toISOString()):'—';
+    return '<div class="card"><div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">'+
+      '<div><b style="font-size:16px">'+esc(s.name)+'</b> '+(s.host?'<span class="sub mono">'+esc(s.host)+'</span>':'')+(s.tags?' <span class="pill">'+esc(s.tags)+'</span>':'')+'</div>'+
+      '<span class="pill '+(r.online?'ok':'bad')+'">'+(r.online?'آنلاین':'آفلاین')+'</span></div>'+
+      '<div class="grid g3" style="margin-top:10px">'+monGauge(m.cpuPercent||0,'پردازنده (CPU)',cores?fa(cores)+' هسته':'')+monGauge(memPct,'حافظه (RAM)',monBytes(m.memUsed)+' / '+monBytes(m.memTotal))+monGauge(diskPct,'دیسک',monBytes(m.diskUsed)+' / '+monBytes(m.diskTotal))+'</div>'+
+      '<div class="grid g4" style="margin-top:6px">'+
+        stat('Load (۱m)','',fa((m.load1||0).toFixed(2)))+
+        stat('آپ‌تایم','',monUptime(m.uptimeSec))+
+        stat('آخرین گزارش','',seen)+
+        stat('کلید API','','<span class="mono" style="font-size:11px">'+esc(s.apiKeyMask||'—')+'</span>')+
+      '</div>'+
+      '<div style="margin-top:8px"><button class="btn sm" onclick="monHistory(\''+s.id+'\')">📈 نمودار تاریخچه</button></div>'+
+      '<div id="monHist_'+s.id+'"></div></div>';
+  }).join('');
+}
+async function monHistory(sid){
+  const wrap=$('#monHist_'+sid); if(!wrap)return; if(wrap.innerHTML){wrap.innerHTML='';return;}
+  const d=await api('GET','/admin/monitor/servers/'+sid+'/history?limit=60'); const h=d.rows||[];
+  wrap.innerHTML='<div class="card" style="margin-top:8px;background:rgba(255,255,255,.03)"><div class="sub">CPU٪ (۶۰ نمونهٔ اخیر)</div>'+monSpark(h,m=>m.cpuPercent,'#5DB7EC')+
+    '<div class="sub" style="margin-top:6px">RAM٪</div>'+monSpark(h,m=>m.memTotal?100*m.memUsed/m.memTotal:0,'#33D97C')+'</div>';
+}
+async function monManage(){
+  const d=await api('GET','/admin/monitor/servers'); const rows=d.rows||[];
+  const list=rows.map(s=>'<tr><td><b>'+esc(s.name)+'</b></td><td class="mono" style="font-size:11px">'+esc(s.host||'—')+'</td><td class="mono" style="font-size:11px">'+esc(s.apiKeyMask||'—')+'</td>'+
+    '<td><span class="pill '+(s.enabled?'ok':'bad')+'">'+(s.enabled?'فعال':'غیرفعال')+'</span></td>'+
+    '<td><button class="btn sm" onclick="monRotate(\''+s.id+'\')">کلید جدید</button>'+(s.id!=='self'?' <button class="btn sm bad" onclick="monDel(\''+s.id+'\')">حذف</button>':'')+'</td></tr>').join('');
+  modal('مدیریت سرورها','<div class="note">سرورِ «اصلی (API)» به‌صورت خودکار وضعیتش را گزارش می‌کند. برای هر سرور دیگر، یک سرور اضافه کن، کلید API را بگیر و دستور Agent را روی آن اجرا کن.</div>'+
+    '<div class="tbl-wrap"><table><thead><tr><th>نام</th><th>هاست</th><th>کلید</th><th>وضعیت</th><th>عملیات</th></tr></thead><tbody>'+list+'</tbody></table></div>'+
+    '<div class="card" style="margin-top:10px"><h3>➕ افزودن سرور</h3><div class="grid g2"><div class="field"><label>نام</label><input id="mon_name" placeholder="سرور بازی ۲"></div><div class="field"><label>هاست/IP (اختیاری)</label><input id="mon_host" dir="ltr"></div></div><button class="btn pri" onclick="monAdd()">ساخت + دریافت کلید</button></div>');
+}
+async function monAdd(){
+  const name=$('#mon_name').value.trim(); if(!name)return toast('نام لازم است','bad');
+  try{ const s=await api('POST','/admin/monitor/servers',{name,host:$('#mon_host').value.trim()}); document.querySelector('.modal-bg').remove(); monShowKey(s.apiKeyFull,name); render(); }catch(e){toast(e.message,'bad');}
+}
+async function monRotate(id){ if(!confirm('کلید جدید ساخته شود؟ کلید قبلی از کار می‌افتد.'))return; try{ const r=await api('POST','/admin/monitor/servers/'+id+'/rotate'); document.querySelector('.modal-bg')&&document.querySelector('.modal-bg').remove(); monShowKey(r.apiKeyFull,''); }catch(e){toast(e.message,'bad');} }
+async function monDel(id){ if(!confirm('این سرور حذف شود؟'))return; try{ await api('DELETE','/admin/monitor/servers/'+id); toast('حذف شد','ok'); document.querySelector('.modal-bg')&&document.querySelector('.modal-bg').remove(); render(); }catch(e){toast(e.message,'bad');} }
+function monShowKey(key,name){
+  const base=(API||'').replace(/\/$/,'');
+  const cmd='API='+base+'/monitor/ingest\nKEY='+key+'\nwhile true; do\n  CPU=$(top -bn1 | awk \'/Cpu/{print 100-$8}\')\n  MT=$(free -b|awk \'/Mem/{print $2}\'); MU=$(free -b|awk \'/Mem/{print $3}\')\n  DT=$(df -B1 /|awk \'NR==2{print $2}\'); DU=$(df -B1 /|awk \'NR==2{print $3}\')\n  L1=$(awk \'{print $1}\' /proc/loadavg); UP=$(awk \'{print int($1)}\' /proc/uptime)\n  curl -s -X POST $API -H "x-monitor-key: $KEY" -H "Content-Type: application/json" -d "{\\"cpuPercent\\":$CPU,\\"memUsed\\":$MU,\\"memTotal\\":$MT,\\"diskUsed\\":$DU,\\"diskTotal\\":$DT,\\"load1\\":$L1,\\"uptimeSec\\":$UP}" >/dev/null\n  sleep 15\ndone';
+  modal('🔑 کلید API'+(name?' — '+esc(name):''),'<div class="note" style="color:var(--bad)">این کلید فقط همین یک‌بار نمایش داده می‌شود؛ کپی‌اش کن.</div>'+
+    '<div class="field"><label>کلید</label><input value="'+esc(key)+'" readonly dir="ltr" onclick="this.select()"></div>'+
+    '<div class="field"><label>دستور Agent (روی آن سرور اجرا کن)</label><textarea readonly onclick="this.select()" style="width:100%;min-height:180px;background:#0d0d10;color:#8fe;border:1px solid var(--line);border-radius:10px;padding:10px;font-family:monospace;font-size:11px;direction:ltr">'+esc(cmd)+'</textarea></div>');
 }
 
 /* ================= ADMIN ACCOUNTS + ACCESS ================= */
