@@ -3239,7 +3239,10 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
       .ls-stat.big b{color:#FFE24A;font-size:24px}
       /* question */
       .ls-qwrap{flex:1;display:flex;flex-direction:column;justify-content:flex-end;padding:14px}
-      .ls-qtimer{text-align:center;color:#FFE24A;font-weight:900;font-size:15px;margin-bottom:8px}
+      .ls-qtimer{text-align:center;color:#FFE24A;font-weight:900;font-size:15px;margin-bottom:6px}
+      .ls-qbar{height:10px;border-radius:8px;background:rgba(0,0,0,.45);border:2px solid #000;overflow:hidden;margin:0 4px 10px}
+      .ls-qbar i{display:block;height:100%;width:100%;background:linear-gradient(90deg,var(--bolt-2),var(--bolt));transition:width .25s linear}
+      .ls-qbar.low i{background:linear-gradient(90deg,#e64533,#ff8b7a)}
       .ls-qcard{background:var(--ink-2);border:var(--stroke);border-bottom:none;border-radius:24px 24px 0 0;padding:20px 16px 16px;box-shadow:0 -6px 0 #000;animation:lsSlideUp .45s cubic-bezier(.2,.9,.3,1)}
       @keyframes lsSlideUp{from{transform:translateY(80%);opacity:.4}to{transform:translateY(0);opacity:1}}
       .ls-qtext{color:var(--paper);font-size:17px;font-weight:800;text-align:center;margin-bottom:16px;line-height:1.7}
@@ -3251,6 +3254,11 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
       .ls-ack{text-align:center;color:#FFE24A;font-weight:900;font-size:16px;padding:20px;animation:lsPop .4s}
       @keyframes lsPop{from{transform:scale(.7);opacity:0}to{transform:scale(1);opacity:1}}
       /* elimination fullscreen */
+      .ls-pl.pending-out .xx{display:none}
+      .ls-pl.pending-out .av{filter:none!important}
+      .ls-verdict{margin:8px 14px;padding:12px 14px;border-radius:16px;font-weight:900;font-size:14px;text-align:center;border:var(--stroke);box-shadow:var(--hard-sm);animation:lsPop .35s}
+      .ls-verdict.ok{background:var(--ok-soft);color:var(--ok);border-color:var(--ok)}
+      .ls-verdict.bad{background:var(--bad-soft);color:var(--bad);border-color:var(--bad)}
       .ls-elim-hd{text-align:center;padding:16px 14px 4px}
       .ls-elim-hd h2{color:#ff4d4d;font-size:20px;font-weight:900;margin:0;letter-spacing:1px}
       .ls-elim-hd p{color:#c9c2b3;font-size:12px;margin:4px 0 0}
@@ -4554,12 +4562,12 @@ async function lsDoJoin(topic,color){
    transitions are INSTANT. A light fallback poll still runs (waiting-room joins
    and any missed push), and a local 1s ticker keeps the countdown smooth with
    no network. */
-let lsTickN=0;
+let lsTickN=0, lsQTotal=0, lsQRound=0;
 function lsStartPoll(){ lsStopPoll(); lsTickN=0; lsWsJoin(); lsPollNow(); lsPoller=setInterval(lsTick,1000); }
 function lsTick(){
   if(!lsRoomId || !document.getElementById('lsGame').classList.contains('active')){ lsStopPoll(); return; }
   lsTickN++;
-  if(lsSnap){ const t=document.getElementById('lsTimer'); if(t)t.textContent=lsTimer(lsSnap); } // smooth local countdown
+  if(lsSnap){ lsLive(lsSnap); } // smooth local countdown + timer bar, no network
   if(lsTickN%5===0) lsWsJoin();                       // keep the WS topic subscription alive across reconnects (idempotent)
   const waiting=lsSnap&&lsSnap.room&&lsSnap.room.status==='waiting';
   if(lsTickN%(waiting?2:4)===0) lsPollNow();          // fallback refresh (WS handles instant transitions)
@@ -4579,7 +4587,16 @@ function lsWsJoin(){
 }
 /* Called by the shared WS dispatcher (pzHandleWs) for ls:* pushes. */
 function lsOnWs(type,payload){
-  if(type==='server:ls_snapshot'||type==='ls:state'){ if(payload&&payload.room&&payload.room.id===lsRoomId) lsRender(payload); }
+  if(type==='server:ls_snapshot'||type==='ls:state'){
+    if(!payload||!payload.room||payload.room.id!==lsRoomId) return;
+    /* The room-wide ls:state broadcast is SHARED, so it has no per-user `me`
+       block. Rendering a finished/eliminated state from it would read
+       payoutCash as 0 and show a winner the losing screen — so whenever the
+       personal block is missing we re-fetch the personalised snapshot instead
+       of rendering this one. */
+    if(!payload.me){ lsPollNow(); return; }
+    lsRender(payload);
+  }
 }
 
 function lsTimer(snap){
@@ -4628,13 +4645,23 @@ function lsBuild(snap){
     lsBindPowerups();
     return;
   }
-  if(r.phase==='elimination'){
-    body.innerHTML=lsDashHtml(snap,true)+
-      '<div class="ls-elim-hd"><h2>مرحلهٔ حذف ☠️</h2><p>هر کس اشتباه جواب داد، حذف می‌شود</p></div>'+
-      lsGridHtml(snap,true);
-    return;
+  /* Elimination, dashboard and cash-out ALL share one view now: the compact
+     dashboard on top (with the prize won so far, which grows as players drop)
+     and the Squid-Game grid underneath. There is no separate dashboard screen. */
+  const me=snap.me||{};
+  const myVerdict = me.status==='eliminated' && me.eliminatedRound===r.round
+    ? 'wrong' : (me.status==='alive' ? 'right' : '');
+  let verdict='';
+  if(r.phase==='elimination'&&myVerdict==='right'){
+    verdict='<div class="ls-verdict ok">✅ جواب شما درست بود — تبریک! می‌تونی به مرحلهٔ بعد بری</div>';
+  } else if(r.phase==='elimination'&&myVerdict==='wrong'){
+    const rv=me.reveal; const correct=(rv&&rv.options&&rv.options[rv.correctIndex])||'';
+    verdict='<div class="ls-verdict bad">❌ پاسخ درست: <b>'+(correct||'—')+'</b> — شما حذف شدید</div>';
   }
-  body.innerHTML=lsDashHtml(snap); // dashboard + cashout both show the full board
+  body.innerHTML=lsDashHtml(snap,true)+verdict+
+    '<div class="ls-elim-hd"><h2>'+(r.phase==='elimination'?'مرحلهٔ حذف ☠️':'وضعیت مسابقه')+'</h2><p>'+(r.phase==='elimination'?'هر کس اشتباه جواب داد، حذف می‌شود':'جایزه با حذف هر نفر بیشتر می‌شود')+'</p></div>'+
+    lsGridHtml(snap,r.phase==='elimination');
+  if(r.phase==='elimination') lsAnimateElimination(snap);
 }
 
 // live in-place updates that must not rebuild the DOM (timer, counts, vote)
@@ -4642,6 +4669,19 @@ function lsLive(snap){
   const r=snap.room, s=snap.stats;
   const set=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=v;};
   set('lsTimer',lsTimer(snap));
+  // Duel-style depleting timer bar for the answer window.
+  try{
+    const bar=document.getElementById('lsQBar');
+    if(bar&&r.phase==='question'&&r.phaseEndsAt){
+      const off=(r.serverNow||Date.now())-Date.now();
+      const total=Math.max(1,(r.phaseEndsAt-(r.serverNow||Date.now()))+ (lsQTotal||0));
+      if(!lsQTotal||lsQRound!==r.round){ lsQRound=r.round; lsQTotal=Math.max(1,r.phaseEndsAt-(Date.now()+off)); }
+      const left=Math.max(0,r.phaseEndsAt-(Date.now()+off));
+      const pct=Math.max(0,Math.min(100,left/lsQTotal*100));
+      bar.style.width=pct+'%';
+      bar.parentElement.classList.toggle('low',pct<30);
+    }
+  }catch(e){}
   set('lsCount',lsFa(snap.players.length)); set('lsCap',lsFa(r.capacity));
   set('lsPrize',lsFa(r.grossPool)+' تومان'); set('lsRemain',lsFa(s.remainingPot));
   set('lsAlive',lsFa(s.alive)); set('lsElim',lsFa(s.eliminated)); set('lsCash',lsFa(s.cashedOut));
@@ -4684,7 +4724,24 @@ function lsPlayersCells(snap,markElim){
     return `<div class="ls-pl ${cls} ${now}"><div class="av">${lsAvatarHTML(p)}${p.status==='eliminated'?'<span class="xx">✕</span>':''}${p.status==='cashed_out'?'<span class="cashb">برداشت</span>':''}<span class="dot" style="background:${col}"></span></div><small>${(p.username||'').slice(0,8)}</small></div>`;
   }).join('');
 }
-function lsGridHtml(snap,markElim){ return `<div class="ls-grid" style="grid-template-columns:repeat(4,1fr)">${lsPlayersCells(snap,markElim)}</div>`; }
+function lsGridHtml(snap,markElim){ return `<div class="ls-grid" id="lsElimGrid" style="grid-template-columns:repeat(4,1fr)">${lsPlayersCells(snap,markElim)}</div>`; }
+/* Eliminations land ONE BY ONE with a scan + stamp + sound, not all at once. */
+function lsAnimateElimination(snap){
+  const grid=document.getElementById('lsElimGrid'); if(!grid)return;
+  const cells=[...grid.querySelectorAll('.ls-pl')];
+  const outs=[];
+  (snap.players||[]).forEach((p,i)=>{ if(p.status==='eliminated'&&p.eliminatedRound===snap.room.round&&cells[i]) outs.push(cells[i]); });
+  if(!outs.length) return;
+  // hide the marks, then reveal them one at a time
+  outs.forEach(c=>{ c.classList.add('pending-out'); });
+  outs.forEach((c,idx)=>{
+    setTimeout(()=>{
+      c.classList.remove('pending-out'); c.classList.add('ls-elim-now');
+      try{ sfx('wrong'); vib([50,30]); }catch(e){}
+      setTimeout(()=>c.classList.remove('ls-elim-now'),600);
+    }, 350+idx*420);
+  });
+}
 
 function lsDashStrip(snap){ const s=snap.stats; return `<div style="display:flex;justify-content:space-between;padding:10px 16px;background:rgba(0,0,0,.25)"><span style="color:#6be08a;font-size:12px;font-weight:800">زنده <b id="lsAlive">${lsFa(s.alive)}</b></span><span style="color:#ff8a8a;font-size:12px;font-weight:800">حذف <b id="lsElim">${lsFa(s.eliminated)}</b></span><span style="color:#FFE24A;font-size:12px;font-weight:800">جایزه <b id="lsRemain">${lsFa(s.remainingPot)}</b></span></div>`; }
 function lsDashCells(snap){ const s=snap.stats;
@@ -4715,6 +4772,7 @@ function lsQuestionHtml(snap,locked){
   /* EXACTLY the duel's answer markup: .answers > .ans with the yellow .k letter
      badge, dash and .atxt — white paper background, black text, hard shadow. */
   return `<div class="ls-qwrap"><div class="ls-qtimer">⏳ <span id="lsTimer">${lsTimer(snap)}</span></div>
+  <div class="ls-qbar"><i id="lsQBar"></i></div>
   ${badge?`<div style="text-align:center;margin-bottom:8px">${badge}</div>`:''}
   <div class="ls-qcard"><div class="ls-qtext">${q.text||'…'}</div>
   <div class="answers" id="lsOpts" style="margin-top:12px;grid-template-columns:1fr">${opts.map((o,i)=>`<button class="ans" data-i="${i}"${locked?' disabled':` onclick="lsAnswer(${i})"`}><span class="k">${K[i]||''}</span><span class="dash">—</span><span class="atxt">${o}</span></button>`).join('')}</div>
@@ -4842,7 +4900,10 @@ function lsOverlays(snap){
   /* ONE elimination screen: when you're knocked out we go straight to the LS
      result screen (the good one, with the two buttons) and print the question +
      correct answer there — instead of a separate full-screen "حذف شدی" overlay. */
-  if(me&&me.status==='eliminated'&&!lsEndShown){ lsFinish(snap); return; }
+  /* An eliminated player stays through the elimination phase so they see the
+     animation and the «پاسخ درست … شما حذف شدید» line; the result screen comes
+     right after it. */
+  if(me&&me.status==='eliminated'&&snap.room.phase!=='elimination'&&!lsEndShown){ lsFinish(snap); return; }
   // cash-out popup (only alive players, only in cashout phase)
   let cash=document.getElementById('lsCashPop');
   if(snap.room.phase==='cashout'&&me&&me.status==='alive'){
@@ -4871,7 +4932,12 @@ async function lsDecide(d){ if(!lsRoomId||!lsSnap)return; await pzApi('POST','/l
    duel with the old theme. Money is already in the wallet by this point. */
 let lsEndShown=false;
 function lsFinish(snap){
-  if(lsEndShown) return; lsEndShown=true;
+  if(lsEndShown) return;
+  /* NEVER finalize from a snapshot without the personal block — payoutCash
+     would read 0 and a winner would be shown the losing screen. Re-fetch the
+     personalised snapshot and finalize on that. */
+  if(!snap||!snap.me){ lsPollNow(); return; }
+  lsEndShown=true;
   lsStopPoll();
   const me=snap.me||{}; const mine=Number(me.payoutCash||0);
   const won=mine>0;                       // cashed out OR survived with a payout
