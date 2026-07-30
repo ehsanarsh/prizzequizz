@@ -4642,13 +4642,22 @@ function lsWaitHtml(snap){
   <div class="ls-chat" id="lsChatWrap" style="${lsTab==='chat'?'':'display:none'}"><div class="ls-chat-room" id="lsChatRoom">${lsRoomStrip(snap)}</div><div class="ls-chat-list" id="lsChatList"></div><div class="ls-chat-in"><input id="lsChatInput" placeholder="پیام…" maxlength="240"><button onclick="lsChatSend()">↑</button></div></div>
   ${r.manualStartEnabled?`<div class="ls-vote" id="lsVoteBtn" onclick="lsVote()" style="${lsTab==='chat'?'display:none':''}"><i id="lsVoteFill"></i><span id="lsVoteTxt">شروع با همین تعداد</span></div>`:''}`;
 }
+/* Real COLOURED character art for every player — the same mascotSVG the duel and
+   home header use, tinted deterministically per user so everyone is distinct. */
+const LS_AV_COLORS=['#FFCF33','#28C46A','#5DB7EC','#F2604D','#B57bff','#FF9F43','#F4C21B'];
+function lsAvatarHTML(p){
+  if(p.avatar) return `<img src="${p.avatar}" style="width:100%;height:100%;object-fit:cover">`;
+  let h=0; const s=String(p.userId||p.username||''); for(let i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))>>>0;
+  const col=LS_AV_COLORS[h%LS_AV_COLORS.length];
+  try{ if(typeof mascotSVG==='function'&&window.ART_FACE) return `<svg viewBox="0 0 120 120" style="width:100%;height:100%">${mascotSVG(col)}</svg>`; }catch(e){}
+  return '👤';
+}
 function lsPlayersCells(snap,markElim){
   return snap.players.map(p=>{
     const col=LS_COLORS[p.color]?LS_COLORS[p.color].c:'#888';
     const cls=p.status==='eliminated'?'elim':(p.status==='cashed_out'?'cash':'');
     const now=markElim&&p.status==='eliminated'&&p.eliminatedRound===snap.room.round?'ls-elim-now':'';
-    const av=p.avatar?`style="background-image:url(${p.avatar})"`:'';
-    return `<div class="ls-pl ${cls} ${now}"><div class="av" ${av}>${p.avatar?'':'👤'}${p.status==='eliminated'?'<span class="xx">✕</span>':''}${p.status==='cashed_out'?'<span class="cashb">برداشت</span>':''}<span class="dot" style="background:${col}"></span></div><small>${(p.username||'').slice(0,8)}</small></div>`;
+    return `<div class="ls-pl ${cls} ${now}"><div class="av">${lsAvatarHTML(p)}${p.status==='eliminated'?'<span class="xx">✕</span>':''}${p.status==='cashed_out'?'<span class="cashb">برداشت</span>':''}<span class="dot" style="background:${col}"></span></div><small>${(p.username||'').slice(0,8)}</small></div>`;
   }).join('');
 }
 function lsGridHtml(snap,markElim){ return `<div class="ls-grid" style="grid-template-columns:repeat(4,1fr)">${lsPlayersCells(snap,markElim)}</div>`; }
@@ -4668,10 +4677,13 @@ function lsDashHtml(snap){ return `<div class="ls-top" style="padding-bottom:0">
 function lsQuestionHtml(snap,locked){
   const q=snap.question||{}; const opts=q.options||[]; const alive=snap.me&&snap.me.status==='alive';
   const badge=(typeof pzDiffBadge==='function'&&q.difficulty)?pzDiffBadge(q.difficulty):'';
+  const K=(typeof keysFA!=='undefined')?keysFA:['الف','ب','ج','د'];
+  /* EXACTLY the duel's answer markup: .answers > .ans with the yellow .k letter
+     badge, dash and .atxt — white paper background, black text, hard shadow. */
   return `<div class="ls-qwrap"><div class="ls-qtimer">⏳ <span id="lsTimer">${lsTimer(snap)}</span></div>
   ${badge?`<div style="text-align:center;margin-bottom:8px">${badge}</div>`:''}
   <div class="ls-qcard"><div class="ls-qtext">${q.text||'…'}</div>
-  <div class="ls-opts" id="lsOpts">${opts.map((o,i)=>`<div class="ls-opt" data-i="${i}"${locked?'':` onclick="lsAnswer(${i})"`}>${o}</div>`).join('')}</div>
+  <div class="answers" id="lsOpts" style="margin-top:12px">${opts.map((o,i)=>`<button class="ans" data-i="${i}"${locked?' disabled':` onclick="lsAnswer(${i})"`}><span class="k">${K[i]||''}</span><span class="dash">—</span><span class="atxt">${o}</span></button>`).join('')}</div>
   ${alive?'':'<div class="ls-ack" style="color:#ff8a8a">شما در این مرحله حضور ندارید</div>'}</div></div>`;
 }
 /* The duel's own ready gate, reused verbatim: same modal, same countdown bar,
@@ -4703,7 +4715,8 @@ async function lsAnswer(i){
     const pick=kids.find(el=>Number(el.dataset.i)===i);
     const py=pick?pick.getBoundingClientRect().top:0;
     kids.forEach(el=>{
-      if(el===pick){ el.classList.add('sel'); return; }
+      el.disabled=true;
+      if(el===pick){ el.classList.add('selected','locked-in'); return; }
       const dy=py-el.getBoundingClientRect().top;
       el.style.transition='transform .42s cubic-bezier(.4,0,.2,1),opacity .42s ease';
       el.style.transform='translateY('+dy+'px) scale(.86)';
@@ -4717,8 +4730,8 @@ async function lsAnswer(i){
 }
 
 function lsRoomStrip(snap){
-  return (snap.players||[]).map(p=>{const av=p.avatar?`style="background-image:url(${p.avatar})"`:'';const dim=p.status==='eliminated'?'opacity:.4;filter:grayscale(1)':'';
-    return `<div class="cav"><div class="a" ${av}><span style="${dim}">${p.avatar?'':'👤'}</span></div><small>${(p.username||'').slice(0,6)}</small></div>`;}).join('');
+  return (snap.players||[]).map(p=>{const dim=p.status==='eliminated'?'opacity:.4;filter:grayscale(1)':'';
+    return `<div class="cav"><div class="a" style="${dim}">${lsAvatarHTML(p)}</div><small>${(p.username||'').slice(0,6)}</small></div>`;}).join('');
 }
 function lsSetTab(t){ lsTab=t; const g=document.getElementById('lsGrid'),c=document.getElementById('lsChatWrap'),v=document.getElementById('lsVoteBtn');
   if(g)g.style.display=t==='players'?'':'none'; if(c)c.style.display=t==='chat'?'':'none'; if(v)v.style.display=t==='chat'?'none':'';

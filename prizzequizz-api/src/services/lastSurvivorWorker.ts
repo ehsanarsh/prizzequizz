@@ -77,13 +77,42 @@ async function maybeStart(room: RoomRow, now: number): Promise<void> {
   logger.info('ls_started', { roomId: room.id, players: count, pool: room.grossPool });
 }
 
-async function pickQuestion(topic: string, roomId: string): Promise<{ id: string; correctIndex: number; text: string; options: string[]; difficulty?: string } | null> {
+/**
+ * Difficulty ladder: the match climbs easy → medium → hard → veryhard in EQUAL
+ * blocks. With the default 12 rounds that is exactly 3+3+3+3 (as specified);
+ * change totalRounds in the admin panel and the proportion is preserved
+ * (e.g. 8 rounds → 2 each, 20 → 5 each). Rounds beyond the ladder stay at the
+ * hardest tier.
+ */
+export function difficultyForRound(round: number, totalRounds: number): 'easy' | 'medium' | 'hard' | 'veryhard' {
+  const tiers: Array<'easy' | 'medium' | 'hard' | 'veryhard'> = ['easy', 'medium', 'hard', 'veryhard'];
+  const per = Math.max(1, Math.ceil(Math.max(1, totalRounds) / tiers.length));
+  const idx = Math.min(tiers.length - 1, Math.floor((Math.max(1, round) - 1) / per));
+  return tiers[idx]!;
+}
+
+async function pickQuestion(topic: string, roomId: string, round = 1, totalRounds = 12): Promise<{ id: string; correctIndex: number; text: string; options: string[]; difficulty?: string } | null> {
   const all = await repositories.questions.listApproved();
   const pool = all.filter((q) => q.category === topic);
   if (!pool.length) return null;
   let used = usedQuestions.get(roomId); if (!used) { used = new Set(); usedQuestions.set(roomId, used); }
-  let candidates = pool.filter((q) => !used!.has(q.id));
-  if (!candidates.length) { used.clear(); candidates = pool; }
+  const fresh = pool.filter((q) => !used!.has(q.id));
+  const available = fresh.length ? fresh : (used.clear(), pool);
+
+  // Prefer the tier this round should be; if the bank has none, walk outward to
+  // the nearest tier so the match never stalls on a missing difficulty.
+  const order: Array<'easy' | 'medium' | 'hard' | 'veryhard'> = ['easy', 'medium', 'hard', 'veryhard'];
+  const want = difficultyForRound(round, totalRounds);
+  const wantIdx = order.indexOf(want);
+  let candidates = available.filter((q) => q.difficulty === want);
+  if (!candidates.length) {
+    for (let d = 1; d < order.length && !candidates.length; d++) {
+      const near = [order[wantIdx - d], order[wantIdx + d]].filter(Boolean) as string[];
+      candidates = available.filter((q) => near.includes(q.difficulty));
+    }
+  }
+  if (!candidates.length) candidates = available;
+
   const q = candidates[Math.floor(Math.random() * candidates.length)]!;
   used.add(q.id);
   return { id: q.id, correctIndex: q.correctIndex, text: q.text, options: q.options, difficulty: q.difficulty };
@@ -94,7 +123,7 @@ async function pickQuestion(topic: string, roomId: string): Promise<{ id: string
  * difficulty badge, but the answer window only starts when the gate ends — so
  * the countdown never eats into answering time. */
 async function beginRound(room: RoomRow, roundNo: number, now: number): Promise<void> {
-  const q = await pickQuestion(room.topic, room.id);
+  const q = await pickQuestion(room.topic, room.id, roundNo, room.totalRounds);
   room.round = roundNo;
   room.phase = 'ready';
   room.questionId = q?.id ?? null;
