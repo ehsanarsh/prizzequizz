@@ -3625,8 +3625,8 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
           <button class="btn btn-ghost" id="reviewBtn" onclick="pzOpenReview()">🔍 مرور مسابقه — سؤال‌ها و پاسخ‌ها</button>
           <button class="btn btn-primary" id="rematchBtn" onclick="rematch()">🔁 بازی مجدد با همین حریف</button>
         </div>
-        <button class="btn btn-orange" onclick="startGame()">🆕 حریف جدید</button>
-        <button class="btn btn-primary" onclick="go('home')">🏠 بازگشت به خانه</button>
+        <button class="btn btn-orange" id="resultNewBtn" onclick="startGame()">🆕 حریف جدید</button>
+        <button class="btn btn-primary" id="resultHomeBtn" onclick="go('home')">🏠 بازگشت به خانه</button>
       </div>
     </section>
 
@@ -4491,7 +4491,7 @@ function lsHost(){ return document.getElementById('vp')||document.querySelector(
 const LS_ICONS={'فیلم و سریال':'🎬','سینما':'🎬','فیلم':'🎬','سریال':'📺','ورزش':'⚽','فوتبال':'⚽','والیبال':'🏐','بسکتبال':'🏀','تاریخ و فرهنگ':'📜','تاریخ':'📜','فرهنگ':'🏛️','موسیقی':'🎵','غذا و خوراکی':'🍔','غذا و نوشیدنی':'🍔','غذا':'🍔','علم و دانش':'🔬','علوم':'🔬','دانش':'🔬','جغرافیا':'🌍','اطلاعات عمومی':'🧠','عمومی':'🧠','هنر':'🎨','ادبیات':'📚','فناوری':'💻','تکنولوژی':'💻','دین':'🕌','مذهب':'🕌','ریاضی':'➗','حیوانات':'🐾','طبیعت':'🌿','سیاست':'🏛️','اقتصاد':'💹','بازی':'🎮','بازی و سرگرمی':'🎮','ماشین':'🚗','خودرو':'🚗','نجوم':'🔭','فضا':'🚀','کامپیوتر':'🖥️','سلامت':'🩺','پزشکی':'🩺','مشاهیر':'⭐','برند':'™️','پرچم':'🚩','کشورها':'🌐'};
 function lsIcon(name){ if(LS_ICONS[name])return LS_ICONS[name]; const n=String(name||''); for(const k in LS_ICONS){ if(n.indexOf(k)>=0)return LS_ICONS[k]; } return '🎯'; }
 
-function lsStart(){ showScreen('lsTopics'); lsLoadTopics(); }
+function lsStart(){ lsEndShown=false; showScreen('lsTopics'); lsLoadTopics(); }
 function lsLeave(to){ try{ if(pzRt&&pzRt.ws&&pzRt.ws.readyState===1&&lsRoomId) pzRt.ws.send(JSON.stringify({type:'client:leave_ls_room',payload:{roomId:lsRoomId}})); }catch(e){} lsStopPoll(); ['lsColorPick','lsDead','lsCashPop'].forEach(id=>{const e=document.getElementById(id);if(e)e.remove();}); lsRoomId=null; lsSnap=null; lsLastKey=''; go(to||'home'); }
 function lsStopPoll(){ if(lsPoller){clearInterval(lsPoller);lsPoller=null;} }
 
@@ -4621,6 +4621,9 @@ function lsBuild(snap){
     return;
   }
   if(r.phase==='question'){
+    // Already answered (or reconnected after answering) → the mother dashboard,
+    // not the question card.
+    if(snap.me&&snap.me.answeredThisRound){ body.innerHTML=lsDashHtml(snap)+'<div class="ls-ack" style="margin-top:4px">پاسخ شما ثبت شد ✅ — منتظر بقیه…</div>'; return; }
     body.innerHTML=lsDashStrip(snap)+lsQuestionHtml(snap);
     try{ if(typeof renderPowerups==='function')renderPowerups(); }catch(e){}
     return;
@@ -4756,6 +4759,15 @@ async function lsAnswer(i){
     });
     setTimeout(()=>{ if(pick){pick.style.transition='transform .2s';pick.style.transform='scale(1.04)';} },380);
     setTimeout(()=>{ opts.parentElement.innerHTML='<div class="ls-ack">پاسخ شما ثبت شد ✅</div>'; },820);
+    /* Answer locked in → go back to the MOTHER SCREEN (the dashboard) while the
+       round finishes, instead of leaving the question card and a stats strip on
+       screen at the same time. */
+    setTimeout(()=>{
+      const body=document.getElementById('lsBody');
+      if(body&&lsSnap&&lsSnap.room&&lsSnap.room.phase==='question'){
+        body.innerHTML=lsDashHtml(lsSnap)+'<div class="ls-ack" style="margin-top:4px">پاسخ شما ثبت شد ✅ — منتظر بقیه…</div>';
+      }
+    },1500);
   }
   try{sfx('select');vib(20);}catch(e){}
   await pzApi('POST','/last-survivor/rooms/'+lsRoomId+'/answer',{round:lsSnap.room.round,selectedIndex:i});
@@ -4811,9 +4823,11 @@ function lsOverlays(snap){
 }
 async function lsDecide(d){ if(!lsRoomId||!lsSnap)return; await pzApi('POST','/last-survivor/rooms/'+lsRoomId+'/decision',{round:lsSnap.room.round,decision:d}); try{vib(20);}catch(e){} const c=document.getElementById('lsCashPop'); if(c)c.innerHTML=`<div class="ls-wait-decided">${d==='cashout'?'برداشت ثبت شد ✅':'ادامه می‌دهی 💪'} — منتظر بقیه…</div>`; }
 
-/* Finish → hand off to the DUEL's own result screen so a win/cash-out gets the
-   full VICTORY celebration (pzVictoryAnim + result screen), and only a real
-   loss gets the losing screen. Money is already in the wallet at this point. */
+/* Finish → LS's OWN result screen. It reuses the app's result screen and the
+   duel's VICTORY animation, but is NOT routed through the duel's endGame(),
+   which is wired to duel/practice-plan/chest/bot-rematch state — that coupling
+   is what showed a winner the losing screen and made "بازی مجدد" start a bot
+   duel with the old theme. Money is already in the wallet by this point. */
 let lsEndShown=false;
 function lsFinish(snap){
   if(lsEndShown) return; lsEndShown=true;
@@ -4821,17 +4835,41 @@ function lsFinish(snap){
   const me=snap.me||{}; const mine=Number(me.payoutCash||0);
   const won=mine>0;                       // cashed out OR survived with a payout
   const cashedOut=me.status==='cashed_out';
-  const sub=won
-    ? (cashedOut?'جایزه‌ات را برداشت کردی و به کیف پولت واریز شد':'تو آخرین بازمانده بودی! جایزه به کیف پولت واریز شد')
-    : 'این بار شانس یارت نبود — دفعهٔ بعد بترکون!';
-  try{ if(typeof pzRefreshWallet==='function')pzRefreshWallet(); }catch(e){}
-  try{ if(typeof pzSyncMe==='function')pzSyncMe(); }catch(e){}
   lsRoomId=null; lsSnap=null; lsLastKey='';
   ['lsColorPick','lsDead','lsCashPop'].forEach(id=>{const e=document.getElementById(id);if(e)e.remove();});
-  try{
-    if(typeof endGame==='function'){ endGame(won, mine, cashedOut, sub); return; }
-  }catch(e){}
-  go('home');
+  try{ if(typeof clearInterval==='function'){ clearInterval(timer); clearInterval(dTimer); } }catch(e){}
+
+  const $id=(x)=>document.getElementById(x);
+  const title=$id('resultTitle'), sub=$id('resultSub'), amt=$id('resultAmt');
+  if(title) title.textContent = won ? (cashedOut?'جایزه‌ت رو برداشتی! 💰':'برنده شدی! 🏆') : 'حذف شدی';
+  if(sub) sub.textContent = won
+    ? (cashedOut?'سهمت پرداخت و به کیف پولت واریز شد':'تو آخرین بازمانده بودی — جایزه به کیف پولت واریز شد')
+    : 'این بار شانس یارت نبود — دفعهٔ بعد بترکون!';
+  if(amt){ amt.textContent=(won?'+':'')+lsFa(mine); amt.parentElement.style.color=won?'var(--ok)':'var(--muted)'; }
+  // win/lose character, same as the duel result
+  try{ const rc=$id('resultChar'), ms=$id('mascotResult');
+    if(rc){ rc.onerror=()=>{ rc.style.display='none'; if(ms)ms.style.display=''; };
+      rc.onload=()=>{ rc.style.display=''; if(ms)ms.style.display='none'; };
+      rc.src = won ? 'winchar.png' : 'losechar.png'; } }catch(e){}
+  // LS has no duel opponent panel / bot rematch — hide them and retarget the actions.
+  try{ const da=$id('duelActions'); if(da)da.style.display='none'; }catch(e){}
+  try{ const ds=$id('resultDuelScore'); if(ds)ds.style.display='none'; }catch(e){}
+  try{ const p=$id('duelResultPanel'); if(p)p.innerHTML=''; }catch(e){}
+  try{ const nb=$id('resultNewBtn'); if(nb){ nb.textContent='🏆 مسابقهٔ جدید'; nb.onclick=function(){ lsStart(); }; } }catch(e){}
+  try{ const hb=$id('resultHomeBtn'); if(hb){ hb.onclick=function(){ lsResetResultButtons(); go('home'); }; } }catch(e){}
+  try{ const sq=$id('stat-q'), sr=$id('stat-rank'); if(sr)sr.textContent=won?'۱':'—'; if(sq)sq.textContent=lsFa((me.eliminatedRound||snap.room.round||1)-(won?0:1)); }catch(e){}
+
+  go('result');
+  if(won){ try{ pzVictoryAnim(); }catch(e){} try{ sfx('found'); vib([40,60,120]); }catch(e){} }
+  // Pull the real wallet/level so the header shows the new balance immediately.
+  try{ if(typeof pzApplyServerTickets==='function')pzApplyServerTickets(); }catch(e){}
+  try{ if(typeof loadWallet==='function')loadWallet(); }catch(e){}
+  try{ if(typeof hydrateMe==='function')hydrateMe(); }catch(e){}
+}
+/* Put the shared result screen back the way the duel expects it. */
+function lsResetResultButtons(){
+  try{ const nb=document.getElementById('resultNewBtn'); if(nb){ nb.textContent='🆕 حریف جدید'; nb.onclick=function(){ startGame(); }; } }catch(e){}
+  try{ const hb=document.getElementById('resultHomeBtn'); if(hb){ hb.onclick=function(){ go('home'); }; } }catch(e){}
 }
 function lsEndHtml(snap){ lsFinish(snap); return '<div class="ls-end"><div class="cup">🏁</div><h2>پایان مسابقه</h2></div>'; }
 
