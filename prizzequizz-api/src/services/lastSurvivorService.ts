@@ -314,7 +314,7 @@ export async function snapshot(roomId: string, forUserId?: string): Promise<any>
       serverNow: Date.now(), chatEnabled: room.config.features.chat, animationsEnabled: room.config.features.animations
     },
     stats: { ...stats, remainingPot: netRemaining },
-    players: players.map((p) => ({ userId: p.userId, username: p.username, avatar: p.avatar, color: p.color, status: p.status, payoutCash: p.payoutCash })),
+    players: players.map((p) => ({ userId: p.userId, username: p.username, avatar: p.avatar, color: p.color, status: p.status, payoutCash: p.payoutCash, eliminatedRound: p.eliminatedRound, cashedOutRound: p.cashedOutRound })),
     votes: await countVotes(roomId)
   };
   // Current question WITHOUT the correct index (never leaked live).

@@ -3161,6 +3161,108 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
       </div>
     </section>
 
+    <!-- ============ LAST SURVIVOR ============ -->
+    <style id="lsCSS">
+      #lsTopics,#lsGame{background:#0c1310;min-height:100%;display:flex;flex-direction:column}
+      .ls-top{display:flex;align-items:center;gap:10px;padding:16px 16px 8px}
+      .ls-top .ls-back{width:38px;height:38px;border-radius:12px;background:rgba(255,255,255,.08);color:#fff;font-size:24px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex:none}
+      .ls-top h1{font-size:19px;font-weight:900;color:#fff;margin:0}
+      .ls-top p{font-size:11px;color:#8fa89a;margin:2px 0 0}
+      .ls-topics{padding:8px 14px 24px;display:grid;grid-template-columns:1fr 1fr;gap:12px}
+      .ls-tcard{position:relative;border-radius:18px;padding:16px 12px;background:linear-gradient(160deg,rgba(255,255,255,.07),rgba(255,255,255,.02));border:1.5px solid rgba(255,255,255,.06);cursor:pointer;transition:.15s;overflow:hidden;min-height:96px;display:flex;flex-direction:column;justify-content:space-between}
+      .ls-tcard.on:active{transform:scale(.97)}
+      .ls-tcard.off{opacity:.55;cursor:not-allowed}
+      .ls-tcard .ic{font-size:26px}
+      .ls-tcard b{color:#fff;font-size:14px;font-weight:900;display:block;margin-top:6px}
+      .ls-tcard small{color:#8fa89a;font-size:10px}
+      .ls-soon{position:absolute;top:8px;left:8px;background:rgba(0,0,0,.5);color:#FFD21F;font-size:9px;font-weight:900;padding:3px 7px;border-radius:8px}
+      .ls-live{position:absolute;top:8px;left:8px;background:#1a8a3a;color:#fff;font-size:9px;font-weight:900;padding:3px 7px;border-radius:8px}
+      /* waiting room */
+      .ls-hd{margin:8px 14px;padding:14px;border-radius:18px;background:linear-gradient(135deg,rgba(245,168,0,.14),rgba(255,255,255,.03));border:1px solid rgba(255,210,31,.18)}
+      .ls-hd-row{display:flex;justify-content:space-between;gap:8px;text-align:center}
+      .ls-hd-row .c b{display:block;color:#fff;font-size:18px;font-weight:900}
+      .ls-hd-row .c span{color:#9fb3a6;font-size:10px}
+      .ls-hd .pz-prize{margin-top:10px;text-align:center;color:#FFE24A;font-weight:900;font-size:15px}
+      .ls-tabs{display:flex;gap:8px;margin:6px 14px}
+      .ls-tab{flex:1;padding:9px;border-radius:12px;background:rgba(255,255,255,.05);color:#cdd8d0;font-weight:800;font-size:13px;text-align:center;cursor:pointer;border:1.5px solid transparent}
+      .ls-tab.on{background:rgba(255,210,31,.15);border-color:rgba(255,210,31,.5);color:#FFE24A}
+      .ls-grid{flex:1;overflow-y:auto;padding:10px 14px;display:grid;grid-template-columns:repeat(4,1fr);gap:10px;align-content:start}
+      .ls-pl{display:flex;flex-direction:column;align-items:center;gap:4px;position:relative;transition:.3s}
+      .ls-pl .av{width:52px;height:52px;border-radius:16px;background:#1b2620 center/cover;display:flex;align-items:center;justify-content:center;font-size:22px;border:2px solid rgba(255,255,255,.1);position:relative;overflow:hidden}
+      .ls-pl small{color:#9fb3a6;font-size:9px;max-width:56px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      .ls-pl .dot{position:absolute;bottom:16px;right:6px;width:11px;height:11px;border-radius:50%;border:2px solid #0c1310}
+      .ls-pl.elim .av{filter:grayscale(1) brightness(.5)}
+      .ls-pl.elim .xx{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:30px;color:#ff3b3b;font-weight:900;text-shadow:0 2px 6px rgba(0,0,0,.6);animation:lsStamp .4s cubic-bezier(.2,1.4,.4,1)}
+      .ls-pl.cash .av{filter:saturate(1.2)}
+      .ls-pl.cash .cashb{position:absolute;bottom:16px;left:4px;background:#1a8a3a;color:#fff;font-size:8px;font-weight:900;padding:1px 4px;border-radius:6px}
+      @keyframes lsStamp{0%{transform:scale(2.4);opacity:0}60%{transform:scale(.85);opacity:1}100%{transform:scale(1)}}
+      .ls-elim-now .av{animation:lsShake .5s}
+      @keyframes lsShake{0%,100%{transform:translateX(0)}20%{transform:translateX(-4px)}40%{transform:translateX(4px)}60%{transform:translateX(-3px)}80%{transform:translateX(3px)}}
+      .ls-vote{margin:8px 14px 16px;position:relative;height:52px;border-radius:14px;overflow:hidden;background:rgba(255,255,255,.08);cursor:pointer;border:1.5px solid rgba(255,210,31,.4)}
+      .ls-vote i{position:absolute;inset:0 auto 0 0;width:0;background:linear-gradient(90deg,#F5A800,#FFE24A);transition:width .5s ease}
+      .ls-vote span{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:900;font-size:14px;text-shadow:0 1px 3px rgba(0,0,0,.6);z-index:2}
+      .ls-chat{flex:1;display:flex;flex-direction:column;padding:0 14px}
+      .ls-chat-list{flex:1;overflow-y:auto;padding:8px 0;display:flex;flex-direction:column;gap:6px}
+      .ls-msg{background:rgba(255,255,255,.06);border-radius:12px;padding:7px 10px;font-size:12px;color:#e8f0ea;max-width:80%}
+      .ls-msg b{color:#FFD21F;font-size:10px;display:block}
+      .ls-msg.mine{align-self:flex-end;background:rgba(245,168,0,.18)}
+      .ls-chat-in{display:flex;gap:8px;padding:8px 0 14px}
+      .ls-chat-in input{flex:1;background:rgba(255,255,255,.08);border:0;border-radius:12px;padding:11px;color:#fff;font-family:inherit}
+      .ls-chat-in button{background:linear-gradient(135deg,#F5A800,#FFE24A);border:0;border-radius:12px;padding:0 16px;font-weight:900;color:#1a1000;cursor:pointer}
+      /* dashboard */
+      .ls-dash{padding:12px 14px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+      .ls-stat{background:linear-gradient(160deg,rgba(255,255,255,.06),rgba(255,255,255,.02));border-radius:14px;padding:12px 8px;text-align:center}
+      .ls-stat b{display:block;color:#fff;font-size:19px;font-weight:900}
+      .ls-stat span{color:#8fa89a;font-size:10px}
+      .ls-stat.big{grid-column:span 3;background:linear-gradient(135deg,rgba(245,168,0,.16),rgba(255,255,255,.03))}
+      .ls-stat.big b{color:#FFE24A;font-size:24px}
+      /* question */
+      .ls-qwrap{flex:1;display:flex;flex-direction:column;justify-content:flex-end;padding:14px}
+      .ls-qtimer{text-align:center;color:#FFE24A;font-weight:900;font-size:15px;margin-bottom:8px}
+      .ls-qcard{background:linear-gradient(160deg,#18231d,#0f1712);border-radius:22px 22px 0 0;padding:20px 16px 16px;box-shadow:0 -8px 30px rgba(0,0,0,.4);animation:lsSlideUp .45s cubic-bezier(.2,.9,.3,1)}
+      @keyframes lsSlideUp{from{transform:translateY(80%);opacity:.4}to{transform:translateY(0);opacity:1}}
+      .ls-qtext{color:#fff;font-size:17px;font-weight:800;text-align:center;margin-bottom:16px;line-height:1.7}
+      .ls-opts{display:grid;gap:10px}
+      .ls-opt{background:rgba(255,255,255,.06);border:1.5px solid rgba(255,255,255,.08);border-radius:14px;padding:15px;color:#fff;font-size:15px;font-weight:700;text-align:center;cursor:pointer;transition:.35s cubic-bezier(.2,.9,.3,1)}
+      .ls-opt:active{transform:scale(.97)}
+      .ls-opt.sel{background:linear-gradient(135deg,#F5A800,#FFE24A);color:#1a1000;border-color:#FFE24A}
+      .ls-opt.gone{opacity:0;transform:translateY(-40px) scale(.6)}
+      .ls-ack{text-align:center;color:#FFE24A;font-weight:900;font-size:16px;padding:20px;animation:lsPop .4s}
+      @keyframes lsPop{from{transform:scale(.7);opacity:0}to{transform:scale(1);opacity:1}}
+      /* elimination fullscreen */
+      .ls-elim-hd{text-align:center;padding:16px 14px 4px}
+      .ls-elim-hd h2{color:#ff4d4d;font-size:20px;font-weight:900;margin:0;letter-spacing:1px}
+      .ls-elim-hd p{color:#9fb3a6;font-size:12px;margin:4px 0 0}
+      /* eliminated personal panel */
+      .ls-dead{position:fixed;inset:0;z-index:900;background:rgba(6,10,8,.94);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:30px;text-align:center;animation:lsPop .4s}
+      .ls-dead .skull{font-size:60px;filter:grayscale(1)}
+      .ls-dead h2{color:#ff4d4d;font-size:24px;font-weight:900;margin:12px 0 4px}
+      .ls-dead p{color:#cdd8d0;font-size:14px;margin:2px 0}
+      .ls-dead .ans{margin-top:16px;background:rgba(26,138,58,.18);border:1px solid rgba(46,204,113,.4);border-radius:14px;padding:14px;width:100%;max-width:320px}
+      .ls-dead .ans b{color:#6be08a;font-size:13px}
+      .ls-dead .ans .q{color:#fff;font-size:14px;margin-bottom:8px;font-weight:800}
+      .ls-dead button{margin-top:20px;background:rgba(255,255,255,.1);color:#fff;border:0;border-radius:12px;padding:13px 26px;font-weight:900;cursor:pointer}
+      /* cashout popup */
+      .ls-cash{position:fixed;left:0;right:0;bottom:0;z-index:800;background:linear-gradient(160deg,#18231d,#0d1410);border-radius:24px 24px 0 0;padding:22px 18px calc(22px + env(safe-area-inset-bottom));box-shadow:0 -10px 40px rgba(0,0,0,.5);animation:lsSlideUp .4s}
+      .ls-cash h3{color:#fff;font-size:18px;font-weight:900;text-align:center;margin:0 0 4px}
+      .ls-cash .sub{color:#9fb3a6;font-size:12px;text-align:center;margin-bottom:14px}
+      .ls-cash .share{text-align:center;color:#FFE24A;font-size:26px;font-weight:900;margin-bottom:16px}
+      .ls-cash .btns{display:flex;gap:12px}
+      .ls-cash .btns button{flex:1;border:0;border-radius:14px;padding:15px;font-weight:900;font-size:15px;cursor:pointer}
+      .ls-cash .go{background:linear-gradient(135deg,#28C46A,#1a8a3a);color:#fff}
+      .ls-cash .out{background:linear-gradient(135deg,#F5A800,#FFE24A);color:#1a1000}
+      .ls-wait-decided{text-align:center;color:#9fb3a6;font-size:13px;padding:18px}
+      .ls-end{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:30px;text-align:center}
+      .ls-end .cup{font-size:64px}
+      .ls-end h2{color:#FFE24A;font-size:24px;font-weight:900;margin:10px 0 4px}
+      .ls-end p{color:#cdd8d0;font-size:15px}
+    </style>
+    <section class="screen" id="lsTopics">
+      <div class="ls-top"><div class="ls-back" onclick="lsLeave('home')">‹</div><div class="ls-ttl"><h1>آخرین بازمانده 🏆</h1><p>موضوع را انتخاب کن — بمون تا جایزه مال تو شه</p></div></div>
+      <div class="ls-topics" id="lsTopicList"><div style="grid-column:span 2;text-align:center;color:#8fa89a;padding:30px">در حال بارگذاری…</div></div>
+    </section>
+    <section class="screen" id="lsGame"><div id="lsBody"></div></section>
+
     <!-- ============ HOME ============ -->
     <section class="screen" id="home">
       <header class="pz-header">
@@ -3222,7 +3324,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
           <span class="dh-bolt">⚡</span>
         </button>
         <div class="section-title">حالت‌های دیگر</div>
-        <div class="mode-pill soon-dim" onclick="enterMode('arena')"><div class="mi">⚔️</div><div class="mt"><b>آخرین بازمانده 🏆</b><span>۱۲ سوال حذفی · بمون تا جایزه مال تو شه</span></div><span class="soon-tag">بزودی 🚧</span></div>
+        <div class="mode-pill" onclick="lsStart()"><div class="mi">⚔️</div><div class="mt"><b>آخرین بازمانده 🏆</b><span>حذفی · بمون تا جایزه مال تو شه</span></div><span class="r-arrow" style="font-size:20px;color:var(--muted)">‹</span></div>
         <div class="mode-pill soon-dim" onclick="enterMode('consensus')"><div class="mi">🤝</div><div class="mt"><b>همه یا هیچ 🤝</b><span>تیمی بازی کن · سرنوشت با رأی جمع</span></div><span class="soon-tag">بزودی 🚧</span></div>
         <div class="league-cta soon-dim" onclick="openLeagues()">
           <span class="lci">🏆</span>
@@ -4339,6 +4441,200 @@ async function cbSave(){
 var charBack='plans';
 function _ccFinish(){ try{localStorage.setItem('pz_charDone','1');}catch(e){} const b=charBack||'plans'; if(b==='plans')plansBack='home'; charBack='plans'; go(b); }
 function cbSkip(){ toast('باشه؛ هر وقت خواستی از تنظیمات کاراکترت رو بساز'); _ccFinish(); }
+
+
+/* ============ LAST SURVIVOR (آخرین بازمانده) — real-time elimination ============
+   Server-authoritative. We poll the snapshot every second (authoritative) and
+   render each phase; the WS `ls:*` topic can push the same events for lower
+   latency. All money/state lives server-side. */
+let lsRoomId=null,lsSnap=null,lsPoller=null,lsLastKey='',lsTab='players',lsTickets={},lsMyId=null,lsAnswered=false,lsDeadDismissed=false,lsChatSeen=0;
+function lsFa(n){try{return (Number(n)||0).toLocaleString('fa-IR');}catch(e){return String(n);}}
+const LS_COLORS={green:{n:'سبز',c:'#33D97C',e:'🟢'},blue:{n:'آبی',c:'#3F9BF2',e:'🔵'},red:{n:'قرمز',c:'#F2483C',e:'🔴'}};
+
+function lsStart(){ showScreen('lsTopics'); lsLoadTopics(); }
+function lsLeave(to){ lsStopPoll(); lsRoomId=null; lsSnap=null; lsLastKey=''; go(to||'home'); }
+function lsStopPoll(){ if(lsPoller){clearInterval(lsPoller);lsPoller=null;} }
+
+async function lsLoadTopics(){
+  const box=document.getElementById('lsTopicList'); if(box)box.innerHTML='<div style="grid-column:span 2;text-align:center;color:#8fa89a;padding:30px">در حال بارگذاری…</div>';
+  const r=await pzApi('GET','/last-survivor/topics'); const d=(r&&r.data)||{};
+  lsTickets=d.tickets||{};
+  const topics=d.topics||[];
+  if(!box)return;
+  box.innerHTML=topics.map(t=>{
+    const ic=(window.PZ_TOPIC_ICON&&window.PZ_TOPIC_ICON(t.name))||'🧠';
+    if(t.playable) return `<div class="ls-tcard on" onclick="lsChooseColor(${JSON.stringify(t.name).replace(/"/g,'&quot;')})"><span class="ls-live">فعال</span><div class="ic">${ic}</div><b>${t.name}</b><small>${lsFa(t.questionCount)} سوال</small></div>`;
+    return `<div class="ls-tcard off"><span class="ls-soon">به‌زودی…</span><div class="ic">${ic}</div><b>${t.name}</b><small>${lsFa(t.questionCount)} سوال</small></div>`;
+  }).join('')||'<div style="grid-column:span 2;text-align:center;color:#8fa89a;padding:30px">موضوعی نیست</div>';
+}
+
+function lsChooseColor(topic){
+  const have=(window.mTickets)||{green:0,blue:0,red:0};
+  const ov=document.createElement('div'); ov.className='ls-dead'; ov.style.zIndex=1200; ov.style.background='rgba(6,10,8,.92)';
+  ov.innerHTML='<h2 style="color:#fff">با کدام بلیط؟</h2><p>ارزش بلیط، سهم تو از جایزه را تعیین می‌کند</p>'+
+    '<div style="display:flex;flex-direction:column;gap:10px;width:100%;max-width:320px;margin-top:16px">'+
+    ['green','blue','red'].map(c=>{const t=lsTickets[c]||{value:0,units:0};const n=have[c]||0;const dis=n<1;
+      return `<button ${dis?'disabled':''} onclick="lsDoJoin(${JSON.stringify(topic).replace(/"/g,'&quot;')},'${c}')" style="display:flex;align-items:center;gap:10px;justify-content:space-between;background:${dis?'rgba(255,255,255,.05)':'rgba(255,255,255,.1)'};opacity:${dis?.5:1};border:1.5px solid ${LS_COLORS[c].c}55;border-radius:14px;padding:14px;color:#fff;font-weight:800;cursor:${dis?'not-allowed':'pointer'}"><span>${LS_COLORS[c].e} بلیط ${LS_COLORS[c].n}</span><span style="font-size:12px;color:#9fb3a6">${lsFa(t.value)} ت · ضریب ${lsFa(t.units)} · داری: ${lsFa(n)}</span></button>`;}).join('')+
+    '</div><button onclick="this.closest(\'.ls-dead\').remove()">انصراف</button>';
+  document.getElementById('lsGame').appendChild(ov);
+}
+
+async function lsDoJoin(topic,color){
+  document.querySelectorAll('#lsGame .ls-dead').forEach(e=>e.remove());
+  toast('در حال ورود…');
+  const r=await pzApi('POST','/last-survivor/join',{topic,color});
+  if(!r||r.ok===false){ toast((r&&r.error&&r.error.message)||'ورود ناموفق بود'); return; }
+  const snap=r.data; if(!snap||!snap.room){ toast('خطا در ورود'); return; }
+  lsRoomId=snap.room.id; lsLastKey=''; lsDeadDismissed=false; lsChatSeen=0;
+  try{ if(window.mTickets&&window.mTickets[color]!=null){window.mTickets[color]=Math.max(0,window.mTickets[color]-1);renderHeaderTickets();} }catch(e){}
+  showScreen('lsGame'); lsRender(snap); lsStartPoll();
+}
+
+function lsStartPoll(){ lsStopPoll(); lsPoller=setInterval(lsPoll,1000); }
+async function lsPoll(){
+  if(!lsRoomId || !document.getElementById('lsGame').classList.contains('active')){ lsStopPoll(); return; }
+  const r=await pzApi('GET','/last-survivor/rooms/'+lsRoomId);
+  if(r&&r.data) lsRender(r.data);
+}
+
+function lsTimer(snap){
+  const r=snap.room; const off=(r.serverNow||Date.now())-Date.now();
+  const dl=r.status==='waiting'?r.startsAt:r.phaseEndsAt;
+  if(!dl)return '';
+  const s=Math.max(0,Math.round((dl-(Date.now()+off))/1000));
+  const m=Math.floor(s/60), ss=s%60;
+  return lsFa(m)+':'+(ss<10?'۰':'')+lsFa(ss);
+}
+
+function lsRender(snap){
+  lsSnap=snap; if(snap.me) lsMyId=snap.me.userId;
+  const r=snap.room;
+  const key=r.status+'|'+r.phase+'|'+r.round;
+  if(key!==lsLastKey){ lsLastKey=key; lsBuild(snap); if(r.phase==='question'){ lsAnswered=(snap.me&&snap.me.answeredThisRound)||false; } if(r.phase==='elimination')lsDeadDismissed=false; try{if(r.phase==='elimination')sfx('found');}catch(e){} }
+  lsLive(snap);
+  lsOverlays(snap);
+}
+
+function lsBuild(snap){
+  const r=snap.room, body=document.getElementById('lsBody'); if(!body)return;
+  if(r.status==='finished'){ body.innerHTML=lsEndHtml(snap); return; }
+  if(r.status==='waiting'){ body.innerHTML=lsWaitHtml(snap); lsBindChat(); return; }
+  // running
+  if(r.phase==='question'){ body.innerHTML=lsDashStrip(snap)+lsQuestionHtml(snap); return; }
+  if(r.phase==='elimination'){ body.innerHTML='<div class="ls-elim-hd"><h2>مرحلهٔ حذف ☠️</h2><p>هر کس اشتباه جواب داد، حذف می‌شود</p></div>'+lsGridHtml(snap,true); return; }
+  if(r.phase==='cashout'){ body.innerHTML=lsDashHtml(snap); return; }
+  body.innerHTML=lsDashHtml(snap); // dashboard
+}
+
+// live in-place updates that must not rebuild the DOM (timer, counts, vote)
+function lsLive(snap){
+  const r=snap.room, s=snap.stats;
+  const set=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=v;};
+  set('lsTimer',lsTimer(snap));
+  set('lsCount',lsFa(snap.players.length)); set('lsCap',lsFa(r.capacity));
+  set('lsPrize',lsFa(r.grossPool)+' تومان'); set('lsRemain',lsFa(s.remainingPot));
+  set('lsAlive',lsFa(s.alive)); set('lsElim',lsFa(s.eliminated)); set('lsCash',lsFa(s.cashedOut));
+  const vf=document.getElementById('lsVoteFill'), vt=document.getElementById('lsVoteTxt');
+  if(vf&&r.status==='waiting'){ const pct=snap.players.length?Math.round(snap.votes*100/snap.players.length):0; vf.style.width=pct+'%'; if(vt)vt.textContent='شروع با همین تعداد — '+lsFa(pct)+'٪ ('+lsFa(snap.votes)+'/'+lsFa(snap.players.length)+')'; }
+  // refresh waiting grid + dashboard grids in place
+  if(r.status==='waiting'&&lsTab==='players'){ const g=document.getElementById('lsGrid'); if(g)g.innerHTML=lsPlayersCells(snap,false); }
+  if(r.status==='running'&&(r.phase==='dashboard'||r.phase==='cashout')){ const g=document.getElementById('lsDashGrid'); if(g)g.innerHTML=lsDashCells(snap); }
+}
+
+function lsWaitHtml(snap){
+  const r=snap.room;
+  return `<div class="ls-top"><div class="ls-back" onclick="lsLeave('home')">‹</div><div class="ls-ttl"><h1>اتاق انتظار</h1><p>${r.topic}</p></div></div>
+  <div class="ls-hd"><div class="ls-hd-row">
+    <div class="c"><b><span id="lsCount">${lsFa(snap.players.length)}</span>/<span id="lsCap">${lsFa(r.capacity)}</span></b><span>بازیکنان</span></div>
+    <div class="c"><b id="lsTimer">${lsTimer(snap)}</b><span>تا شروع</span></div>
+    <div class="c"><b id="lsPrize" style="color:#FFE24A">${lsFa(r.grossPool)}</b><span>مجموع جوایز (ت)</span></div>
+  </div></div>
+  <div class="ls-tabs"><div class="ls-tab ${lsTab==='players'?'on':''}" onclick="lsSetTab('players')">بازیکنان</div>${r.chatEnabled?`<div class="ls-tab ${lsTab==='chat'?'on':''}" onclick="lsSetTab('chat')">چت روم</div>`:''}</div>
+  <div class="ls-grid" id="lsGrid" style="${lsTab==='players'?'':'display:none'}">${lsPlayersCells(snap,false)}</div>
+  <div class="ls-chat" id="lsChatWrap" style="${lsTab==='chat'?'':'display:none'}"><div class="ls-chat-list" id="lsChatList"></div><div class="ls-chat-in"><input id="lsChatInput" placeholder="پیام…" maxlength="240"><button onclick="lsChatSend()">↑</button></div></div>
+  ${r.manualStartEnabled?`<div class="ls-vote" onclick="lsVote()"><i id="lsVoteFill"></i><span id="lsVoteTxt">شروع با همین تعداد</span></div>`:''}`;
+}
+function lsPlayersCells(snap,markElim){
+  return snap.players.map(p=>{
+    const col=LS_COLORS[p.color]?LS_COLORS[p.color].c:'#888';
+    const cls=p.status==='eliminated'?'elim':(p.status==='cashed_out'?'cash':'');
+    const now=markElim&&p.status==='eliminated'&&p.eliminatedRound===snap.room.round?'ls-elim-now':'';
+    const av=p.avatar?`style="background-image:url(${p.avatar})"`:'';
+    return `<div class="ls-pl ${cls} ${now}"><div class="av" ${av}>${p.avatar?'':'👤'}${p.status==='eliminated'?'<span class="xx">✕</span>':''}${p.status==='cashed_out'?'<span class="cashb">برداشت</span>':''}<span class="dot" style="background:${col}"></span></div><small>${(p.username||'').slice(0,8)}</small></div>`;
+  }).join('');
+}
+function lsGridHtml(snap,markElim){ return `<div class="ls-grid" style="grid-template-columns:repeat(4,1fr)">${lsPlayersCells(snap,markElim)}</div>`; }
+
+function lsDashStrip(snap){ const s=snap.stats; return `<div style="display:flex;justify-content:space-between;padding:10px 16px;background:rgba(0,0,0,.25)"><span style="color:#6be08a;font-size:12px;font-weight:800">زنده <b id="lsAlive">${lsFa(s.alive)}</b></span><span style="color:#ff8a8a;font-size:12px;font-weight:800">حذف <b id="lsElim">${lsFa(s.eliminated)}</b></span><span style="color:#FFE24A;font-size:12px;font-weight:800">جایزه <b id="lsRemain">${lsFa(s.remainingPot)}</b></span></div>`; }
+function lsDashCells(snap){ const s=snap.stats;
+  return `<div class="ls-stat big"><b id="lsRemain">${lsFa(s.remainingPot)}</b><span>مبلغ باقی‌ماندهٔ جایزه (ت)</span></div>
+  <div class="ls-stat"><b id="lsAlive">${lsFa(s.alive)}</b><span>باقی‌مانده</span></div>
+  <div class="ls-stat"><b id="lsElim">${lsFa(s.eliminated)}</b><span>حذف‌شده</span></div>
+  <div class="ls-stat"><b id="lsCash">${lsFa(s.cashedOut)}</b><span>برداشت‌کرده</span></div>
+  <div class="ls-stat"><b>${lsFa(s.totalPlayers)}</b><span>کل بازیکنان</span></div>
+  <div class="ls-stat"><b>${lsFa(s.grossPot)}</b><span>کل جایزه (ت)</span></div>
+  <div class="ls-stat"><b>${lsFa(s.paidOut)}</b><span>پرداخت‌شده (ت)</span></div>`;
+}
+function lsDashHtml(snap){ return `<div class="ls-top" style="padding-bottom:0"><div class="ls-ttl" style="text-align:center;width:100%"><h1>داشبورد مسابقه</h1><p>مرحله ${lsFa(snap.room.round)} از ${lsFa(snap.room.totalRounds)} · <span id="lsTimer">${lsTimer(snap)}</span></p></div></div><div class="ls-dash" id="lsDashGrid">${lsDashCells(snap)}</div>`; }
+
+function lsQuestionHtml(snap){
+  const q=snap.question||{}; const opts=q.options||[]; const alive=snap.me&&snap.me.status==='alive';
+  return `<div class="ls-qwrap"><div class="ls-qtimer">⏳ <span id="lsTimer">${lsTimer(snap)}</span></div>
+  <div class="ls-qcard"><div class="ls-qtext">${q.text||'…'}</div>
+  <div class="ls-opts" id="lsOpts">${opts.map((o,i)=>`<div class="ls-opt" data-i="${i}" onclick="lsAnswer(${i})">${o}</div>`).join('')}</div>
+  ${alive?'':'<div class="ls-ack" style="color:#ff8a8a">شما در این مرحله حضور ندارید</div>'}</div></div>`;
+}
+
+async function lsAnswer(i){
+  if(lsAnswered||!lsSnap||!lsSnap.me||lsSnap.me.status!=='alive')return;
+  lsAnswered=true;
+  const opts=document.getElementById('lsOpts'); if(opts){ [...opts.children].forEach(el=>{ if(Number(el.dataset.i)===i)el.classList.add('sel'); }); setTimeout(()=>{ [...opts.children].forEach(el=>{ if(Number(el.dataset.i)!==i)el.classList.add('gone'); }); },260); setTimeout(()=>{ opts.parentElement.innerHTML='<div class="ls-ack">پاسخ شما ثبت شد ✅</div>'; },700); }
+  try{sfx('select');vib(20);}catch(e){}
+  await pzApi('POST','/last-survivor/rooms/'+lsRoomId+'/answer',{round:lsSnap.room.round,selectedIndex:i});
+}
+
+function lsSetTab(t){ lsTab=t; const g=document.getElementById('lsGrid'),c=document.getElementById('lsChatWrap');
+  if(g)g.style.display=t==='players'?'':'none'; if(c)c.style.display=t==='chat'?'':'none';
+  document.querySelectorAll('#lsGame .ls-tab').forEach(el=>el.classList.toggle('on',el.textContent.indexOf(t==='players'?'بازیکنان':'چت')>=0));
+  if(t==='chat')lsLoadChat();
+}
+function lsBindChat(){ const inp=document.getElementById('lsChatInput'); if(inp)inp.addEventListener('keydown',e=>{if(e.key==='Enter')lsChatSend();}); }
+async function lsLoadChat(){ if(!lsRoomId)return; const r=await pzApi('GET','/last-survivor/rooms/'+lsRoomId+'/chat'); const list=document.getElementById('lsChatList'); if(!list)return; const msgs=(r&&r.data&&r.data.messages)||[];
+  list.innerHTML=msgs.map(m=>`<div class="ls-msg ${m.userId===lsMyId?'mine':''}"><b>${m.userId===lsMyId?'تو':(m.username||'بازیکن')}</b>${(m.body||'').replace(/</g,'&lt;')}</div>`).join(''); list.scrollTop=list.scrollHeight; }
+async function lsChatSend(){ const inp=document.getElementById('lsChatInput'); if(!inp||!inp.value.trim())return; const body=inp.value.trim(); inp.value=''; await pzApi('POST','/last-survivor/rooms/'+lsRoomId+'/chat',{body}); lsLoadChat(); }
+
+async function lsVote(){ if(!lsRoomId)return; const r=await pzApi('POST','/last-survivor/rooms/'+lsRoomId+'/vote-start'); if(r&&r.ok===false){toast((r.error&&r.error.message)||'ثبت نشد');return;} try{vib(15);}catch(e){} }
+
+// overlays: personal elimination page + cash-out popup
+function lsOverlays(snap){
+  const g=document.getElementById('lsGame'); if(!g)return;
+  const me=snap.me;
+  // eliminated personal reveal (only for the player, only their round)
+  let dead=document.getElementById('lsDead');
+  if(me&&me.status==='eliminated'&&me.reveal&&!lsDeadDismissed){
+    if(!dead){ dead=document.createElement('div'); dead.id='lsDead'; dead.className='ls-dead'; g.appendChild(dead);
+      const rv=me.reveal; const correct=(rv.options&&rv.options[rv.correctIndex])||'';
+      dead.innerHTML=`<div class="skull">💀</div><h2>حذف شدی</h2><p>پاسخ تو اشتباه بود</p><div class="ans"><div class="q">${rv.text||''}</div><b>پاسخ درست: ${correct}</b></div><button onclick="lsDeadDismissed=true;document.getElementById('lsDead').remove()">تماشای ادامهٔ مسابقه</button>`;
+      try{sfx('wrong');vib([60,40,60]);}catch(e){}
+    }
+  } else if(dead){ dead.remove(); }
+  // cash-out popup (only alive players, only in cashout phase)
+  let cash=document.getElementById('lsCashPop');
+  if(snap.room.phase==='cashout'&&me&&me.status==='alive'){
+    const decided=me.decisionThisRound;
+    if(!cash){ cash=document.createElement('div'); cash.id='lsCashPop'; cash.className='ls-cash'; g.appendChild(cash); }
+    if(decided){ cash.innerHTML=`<div class="ls-wait-decided">${decided==='cashout'?'برداشت ثبت شد ✅':'ادامه می‌دهی 💪'} — منتظر بقیه…</div>`; }
+    else { cash.innerHTML=`<h3>ادامه یا برداشت؟</h3><div class="sub">اگر الان برداشت کنی، سهمت پرداخت و از مسابقه خارج می‌شوی</div><div class="share">${lsFa(me.currentShare)} تومان</div><div class="btns"><button class="go" onclick="lsDecide('continue')">ادامه مسابقه 💪</button><button class="out" onclick="lsDecide('cashout')">برداشت جایزه 💰</button></div>`; }
+  } else if(cash){ cash.remove(); }
+}
+async function lsDecide(d){ if(!lsRoomId||!lsSnap)return; await pzApi('POST','/last-survivor/rooms/'+lsRoomId+'/decision',{round:lsSnap.room.round,decision:d}); try{vib(20);}catch(e){} const c=document.getElementById('lsCashPop'); if(c)c.innerHTML=`<div class="ls-wait-decided">${d==='cashout'?'برداشت ثبت شد ✅':'ادامه می‌دهی 💪'} — منتظر بقیه…</div>`; }
+
+function lsEndHtml(snap){
+  lsStopPoll();
+  const me=snap.me; const iWon=me&&me.status==='alive'&&me.payoutCash>0;
+  const mine=me?me.payoutCash:0;
+  return `<div class="ls-end"><div class="cup">${iWon?'🏆':(mine>0?'💰':'🎮')}</div><h2>${iWon?'تو آخرین بازمانده بودی!':(mine>0?'جایزه‌ات پرداخت شد':'مسابقه تمام شد')}</h2>${mine>0?`<p>${lsFa(mine)} تومان به کیف پولت اضافه شد</p>`:'<p>دفعهٔ بعد شانست رو امتحان کن</p>'}<button onclick="lsLeave('home')" style="margin-top:24px;background:linear-gradient(135deg,#F5A800,#FFE24A);color:#1a1000;border:0;border-radius:14px;padding:14px 30px;font-weight:900;cursor:pointer">بازگشت به خانه</button></div>`;
+}
 
 
 /* ============ NAVIGATION (with back-button safety) ============ */

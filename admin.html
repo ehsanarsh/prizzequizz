@@ -147,7 +147,7 @@ async function loadCfg(){ try{ CFG=await api('GET','/admin/config'); $('#cfgVer'
 
 /* ---- nav: 25 sections grouped ---- */
 const NAV=[
-  ['اصلی',[['dashboard','📊','داشبورد'],['finance','💰','داشبورد مالی'],['users','👤','کاربران'],['matches','🎮','مسابقات'],['support','🎧','پشتیبانی']]],
+  ['اصلی',[['dashboard','📊','داشبورد'],['finance','💰','داشبورد مالی'],['users','👤','کاربران'],['matches','🎮','مسابقات'],['lastsurvivor','🏆','آخرین بازمانده'],['support','🎧','پشتیبانی']]],
   ['محتوا',[['questions','❓','سوالات'],['qreports','🚩','گزارش سؤالات'],['aistudio','🤖','استودیوی سوال (AI)'],['pipeline','🔬','خط‌لولهٔ کیفیت'],['categories','🏷️','موضوعات'],['characterbuilder','🎭','قطعات کاراکتر']]],
   ['اقتصاد',[['wallet','👛','کیف پول'],['withdrawals','💸','برداشت‌ها'],['rewardholds','⏳','جوایز در انتظار'],['tickets','🎫','بلیط‌ها'],['shop','🛒','فروشگاه'],['giftcodes','🎁','کدهای هدیه']]],
   ['بالانس بازی (Data-Driven)',[['cfg_xp','✨','XP'],['cfg_level','🏅','Level'],['cfg_cup','🏆','Cup'],['cfg_gameplay','🕹️','گیم‌پلی مودها'],['leagues','🛡️','لیگ‌ها'],['missions','🎯','مأموریت‌ها'],['rewards','🎉','جوایز/چرخونه/استریک']]],
@@ -179,7 +179,7 @@ async function render(){
   try{
     if(CUR==='accounts')return renderAccounts();
     if(CONFIG_PAGES[CUR])return renderConfigSection(CONFIG_PAGES[CUR][0],CONFIG_PAGES[CUR][1]);
-    const fn={dashboard:renderDashboard,finance:renderFinance,users:renderUsers,matches:renderMatches,support:renderSupport,questions:renderQuestions,qreports:renderQReports,aistudio:renderAiStudio,pipeline:renderPipeline,categories:renderCategories,wallet:renderWallet,withdrawals:renderWithdrawals,rewardholds:renderRewardHolds,tickets:renderTickets,giftcodes:renderGiftCodes,shop:renderShopAdmin,characterbuilder:renderCharParts,leaderboard:renderLeaderboard,notifications:renderNotifications,anticheat:renderAntiCheat,suspicious:renderSuspicious,reports:renderReports,logs:renderLogs,reset:renderReset,roles:renderRoles,rawcfg:renderRawCfg}[CUR];
+    const fn={dashboard:renderDashboard,finance:renderFinance,users:renderUsers,matches:renderMatches,support:renderSupport,questions:renderQuestions,qreports:renderQReports,aistudio:renderAiStudio,pipeline:renderPipeline,categories:renderCategories,wallet:renderWallet,withdrawals:renderWithdrawals,rewardholds:renderRewardHolds,tickets:renderTickets,giftcodes:renderGiftCodes,shop:renderShopAdmin,characterbuilder:renderCharParts,lastsurvivor:renderLastSurvivor,leaderboard:renderLeaderboard,notifications:renderNotifications,anticheat:renderAntiCheat,suspicious:renderSuspicious,reports:renderReports,logs:renderLogs,reset:renderReset,roles:renderRoles,rawcfg:renderRawCfg}[CUR];
     if(fn)return fn();
   }catch(e){$('#main').innerHTML=head('خطا')+'<div class="card empty">'+(e.message||'خطا')+'</div>';}
 }
@@ -1145,6 +1145,87 @@ async function cpSave(id){
 }
 async function cpToggle(id){const it=(window._CP_ROWS||{})[id];if(!it)return;try{await api('PATCH','/admin/character-parts/'+id,{enabled:!it.enabled});toast(it.enabled?'غیرفعال شد':'فعال شد','ok');render();}catch(e){toast(e.message,'bad');}}
 async function cpDelete(id){if(!confirm('این قطعه حذف شود؟'))return;try{await api('DELETE','/admin/character-parts/'+id);toast('حذف شد','ok');render();}catch(e){toast(e.message,'bad');}}
+
+/* ================= LAST SURVIVOR ================= */
+let _LS_CFG=null;
+async function renderLastSurvivor(){
+  let cfg,rooms={rows:[]},topics={topics:[]};
+  try{ [cfg,rooms,topics]=await Promise.all([
+    api('GET','/admin/last-survivor/config'),
+    api('GET','/admin/last-survivor/rooms').catch(()=>({rows:[]})),
+    api('GET','/last-survivor/topics').catch(()=>({topics:[]}))
+  ]); }catch(e){ $('#main').innerHTML=head('آخرین بازمانده')+'<div class="card empty">'+(e.message||'خطا')+'</div>'; return; }
+  _LS_CFG=cfg;
+  const t=cfg.economy.tickets||{};
+  const num=(id,v)=>'<input id="'+id+'" type="number" value="'+(v!=null?v:'')+'" style="width:100%">';
+  const chk=(id,v)=>'<select id="'+id+'"><option value="1"'+(v?' selected':'')+'>روشن</option><option value="0"'+(!v?' selected':'')+'>خاموش</option></select>';
+  const st=stat;
+  const liveRows=(rooms.rows||[]).map(r=>[
+    '<span class="mono">'+String(r.id).slice(0,8)+'</span>', esc(r.topic),
+    '<span class="pill '+(r.status==='running'?'ok':(r.status==='finished'?'':'gold'))+'">'+esc(r.status)+'</span>',
+    esc(r.phase)+' · دور '+fa(r.round)+'/'+fa(r.totalRounds),
+    fa(r.players)+' نفر (زنده '+fa(r.alive)+' · برداشت '+fa(r.cashedOut)+')',
+    '<b style="color:var(--gold)">'+fa(r.grossPool)+' ت</b>'
+  ]);
+  $('#main').innerHTML=head('آخرین بازمانده','تمام تنظیماتِ روم، زمان‌بندی، جایزه و موضوعات — بلافاصله روی روم‌های جدید اعمال می‌شود (روم‌های در حال اجرا با تنظیماتِ لحظهٔ شروع ادامه می‌یابند).',
+    '<button class="btn pri" onclick="lsSaveConfig()">💾 ذخیرهٔ تنظیمات</button>')+
+    '<div class="grid g4" style="margin-bottom:12px">'+
+      st('روم‌های فعال','ok',fa((rooms.rows||[]).filter(r=>r.status!=='finished').length))+
+      st('در حال اجرا','gold',fa((rooms.rows||[]).filter(r=>r.status==='running').length))+
+      st('موضوعات فعال','ok',fa((topics.topics||[]).filter(t=>t.playable).length))+
+      st('مجموع موضوعات','',fa((topics.topics||[]).length))+
+    '</div>'+
+    '<div class="card"><h3>🏟️ روم</h3><div class="grid g3">'+
+      '<div class="field"><label>حداکثر ظرفیت</label>'+num('ls_capacity',cfg.room.capacity)+'</div>'+
+      '<div class="field"><label>حداقل کاربران</label>'+num('ls_minUsers',cfg.room.minUsers)+'</div>'+
+      '<div class="field"><label>زمان انتظار (ثانیه)</label>'+num('ls_wait',cfg.room.waitSeconds)+'</div>'+
+      '<div class="field"><label>شروع دستی</label>'+chk('ls_manual',cfg.room.manualStartEnabled)+'</div>'+
+      '<div class="field"><label>درصد لازم برای شروع دستی (٪)</label>'+num('ls_startPct',cfg.room.startPct)+'</div>'+
+    '</div></div>'+
+    '<div class="card"><h3>⏱️ زمانِ هر مرحله (ثانیه)</h3><div class="grid g4">'+
+      '<div class="field"><label>سوال</label>'+num('ls_tQ',cfg.timings.questionSeconds)+'</div>'+
+      '<div class="field"><label>حذف</label>'+num('ls_tE',cfg.timings.eliminationSeconds)+'</div>'+
+      '<div class="field"><label>داشبورد</label>'+num('ls_tD',cfg.timings.dashboardSeconds)+'</div>'+
+      '<div class="field"><label>برداشت</label>'+num('ls_tC',cfg.timings.cashoutSeconds)+'</div>'+
+    '</div></div>'+
+    '<div class="card"><h3>🎮 مسابقه</h3><div class="grid g4">'+
+      '<div class="field"><label>تعداد مراحل</label>'+num('ls_rounds',cfg.match.totalRounds)+'</div>'+
+      '<div class="field"><label>حداقل بازمانده برای پایان</label>'+num('ls_minSurv',cfg.match.minSurvivors)+'</div>'+
+      '<div class="field"><label>انیمیشن‌ها</label>'+chk('ls_anim',cfg.features.animations)+'</div>'+
+      '<div class="field"><label>چت روم انتظار</label>'+chk('ls_chat',cfg.features.chat)+'</div>'+
+    '</div></div>'+
+    '<div class="card"><h3>💰 جایزه و بلیط</h3>'+
+      '<div class="field" style="max-width:220px"><label>سهم خانه (rake ٪)</label>'+num('ls_rake',cfg.economy.rakePercent)+'</div>'+
+      '<div class="tbl-wrap"><table><thead><tr><th>رنگ بلیط</th><th>ارزش (تومان)</th><th>ضریب سهم (Units)</th></tr></thead><tbody>'+
+      ['green','blue','red'].map(c=>{const label={green:'🟢 سبز',blue:'🔵 آبی',red:'🔴 قرمز'}[c];const tt=t[c]||{value:0,units:0};return '<tr><td><b>'+label+'</b></td><td>'+num('ls_tv_'+c,tt.value)+'</td><td>'+num('ls_tu_'+c,tt.units)+'</td></tr>';}).join('')+
+      '</tbody></table></div><div class="note">استخر = مجموع ارزش بلیط‌ها؛ تقسیم جایزه بر اساس مجموع «ضریب سهم»‌ها (نه تعداد نفرات).</div></div>'+
+    '<div class="card"><h3>🏷️ فعال/غیرفعال موضوعات</h3><div class="note">فقط موضوعاتِ فعال قابل بازی‌اند؛ بقیه در بازی «به‌زودی» نمایش داده می‌شوند.</div>'+
+      '<div class="tbl-wrap"><table><thead><tr><th>موضوع</th><th>تعداد سوال</th><th>وضعیت</th><th>عملیات</th></tr></thead><tbody>'+
+      (topics.topics||[]).map(tp=>'<tr><td><b>'+esc(tp.name)+'</b></td><td>'+fa(tp.questionCount)+'</td>'+
+        '<td><span class="pill '+(tp.playable?'ok':'bad')+'">'+(tp.playable?'فعال':'به‌زودی')+'</span></td>'+
+        '<td><button class="btn sm '+(tp.playable?'bad':'ok')+'" onclick="lsToggleTopic('+JSON.stringify(tp.name).replace(/"/g,'&quot;')+','+(!tp.playable)+')">'+(tp.playable?'غیرفعال کن':'فعال کن')+'</button></td></tr>').join('')+
+      '</tbody></table></div></div>'+
+    '<div class="card"><h3>📡 روم‌های زنده</h3>'+tbl(['روم','موضوع','وضعیت','مرحله','بازیکنان','استخر'],liveRows)+'</div>';
+}
+async function lsSaveConfig(){
+  const n=id=>Number(($('#'+id)||{}).value||0);
+  const b=id=>($('#'+id)||{}).value==='1';
+  const patch={
+    room:{capacity:n('ls_capacity'),minUsers:n('ls_minUsers'),waitSeconds:n('ls_wait'),manualStartEnabled:b('ls_manual'),startPct:n('ls_startPct')},
+    timings:{questionSeconds:n('ls_tQ'),eliminationSeconds:n('ls_tE'),dashboardSeconds:n('ls_tD'),cashoutSeconds:n('ls_tC')},
+    match:{totalRounds:n('ls_rounds'),minSurvivors:n('ls_minSurv')},
+    features:{animations:b('ls_anim'),chat:b('ls_chat')},
+    economy:{rakePercent:n('ls_rake'),tickets:{
+      green:{value:n('ls_tv_green'),units:n('ls_tu_green')},
+      blue:{value:n('ls_tv_blue'),units:n('ls_tu_blue')},
+      red:{value:n('ls_tv_red'),units:n('ls_tu_red')}
+    }}
+  };
+  try{await api('PUT','/admin/last-survivor/config',patch);toast('تنظیمات ذخیره شد ✅','ok');render();}catch(e){toast(e.message,'bad');}
+}
+async function lsToggleTopic(name,enabled){
+  try{await api('POST','/admin/last-survivor/topics/'+encodeURIComponent(name),{enabled});toast(enabled?'فعال شد':'غیرفعال شد','ok');render();}catch(e){toast(e.message,'bad');}
+}
 
 /* ================= ADMIN ACCOUNTS + ACCESS ================= */
 function tabLabelMap(){const m={};NAV.forEach(g=>g[1].forEach(p=>{if(p[0]!=='accounts')m[p[0]]=p[1]+' '+p[2];}));return m;}
