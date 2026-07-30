@@ -3165,7 +3165,8 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
     <style id="lsCSS">
       #lsTopics,#lsGame{background:transparent;min-height:100%;display:flex;flex-direction:column;color:var(--text)}
       .ls-sheet{position:fixed;inset:0;z-index:1200;display:flex;align-items:flex-end;justify-content:center;background:rgba(10,8,5,.55);animation:lsPop .25s}
-      .ls-sheet-card{width:100%;max-width:460px;background:var(--ink-2);border:var(--stroke);border-bottom:none;border-radius:26px 26px 0 0;padding:22px 18px calc(20px + env(safe-area-inset-bottom));box-shadow:0 -6px 0 #000}
+      .ls-sheet-card{width:100%;max-width:460px;background:var(--ink-2);border:var(--stroke);border-bottom:none;border-radius:26px 26px 0 0;padding:22px 18px calc(20px + env(safe-area-inset-bottom));box-shadow:0 -6px 0 #000;animation:lsSlideUp .32s cubic-bezier(.2,.9,.3,1)}
+      .ls-sheet-card::before,.ls-cash::before{content:"";display:block;width:44px;height:5px;border-radius:6px;background:rgba(255,255,255,.25);margin:-8px auto 12px}
       .ls-sheet-card h2{color:var(--paper);font-size:18px;font-weight:900;text-align:center;margin:0 0 4px}
       .ls-sheet-card p{color:#c9c2b3;font-size:12px;text-align:center;margin:0 0 14px}
       .ls-color-list{display:flex;flex-direction:column;gap:10px}
@@ -3195,7 +3196,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
       .ls-tabs{display:flex;gap:8px;margin:6px 14px}
       .ls-tab{flex:1;padding:10px;border-radius:13px;background:var(--ink-2);color:var(--paper);font-weight:900;font-size:13px;text-align:center;cursor:pointer;border:2px solid #000;box-shadow:var(--hard-sm)}
       .ls-tab.on{background:linear-gradient(180deg,#FFE24A,var(--bolt-2));color:#141414}
-      .ls-grid{flex:1;overflow-y:auto;padding:10px 14px;display:grid;grid-template-columns:repeat(4,1fr);gap:10px;align-content:start}
+      .ls-grid{flex:1;min-height:0;overflow-y:auto;padding:10px 14px;display:grid;grid-template-columns:repeat(4,1fr);gap:10px;align-content:start}
       .ls-pl{display:flex;flex-direction:column;align-items:center;gap:4px;position:relative;transition:.3s}
       .ls-pl .av{width:52px;height:52px;border-radius:15px;background:var(--ink-3) center/cover;display:flex;align-items:center;justify-content:center;font-size:22px;border:2px solid #000;box-shadow:var(--hard-sm);position:relative;overflow:hidden}
       .ls-pl small{color:#c9c2b3;font-size:9px;max-width:56px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -3210,8 +3211,14 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
       .ls-vote{margin:10px 14px 16px;position:relative;height:54px;border-radius:16px;overflow:hidden;background:var(--ink-2);cursor:pointer;border:var(--stroke);box-shadow:var(--hard)}
       .ls-vote i{position:absolute;inset:0 auto 0 0;width:0;background:linear-gradient(90deg,#F5A800,#FFE24A);transition:width .5s ease}
       .ls-vote span{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:900;font-size:14px;text-shadow:0 1px 3px rgba(0,0,0,.6);z-index:2}
-      .ls-chat{flex:1;display:flex;flex-direction:column;padding:0 14px}
-      .ls-chat-list{flex:1;overflow-y:auto;padding:8px 0;display:flex;flex-direction:column;gap:6px}
+      #lsBody{flex:1;min-height:0;display:flex;flex-direction:column}
+      .ls-chat{flex:1;min-height:0;display:flex;flex-direction:column;padding:0 14px}
+      .ls-chat-room{display:flex;gap:8px;overflow-x:auto;padding:8px 0;border-bottom:2px solid #000;margin-bottom:4px;scrollbar-width:none}
+      .ls-chat-room::-webkit-scrollbar{display:none}
+      .ls-chat-room .cav{flex:none;display:flex;flex-direction:column;align-items:center;gap:2px;width:44px}
+      .ls-chat-room .cav .a{width:40px;height:40px;border-radius:12px;background:var(--ink-3);border:2px solid #000;box-shadow:var(--hard-sm);display:flex;align-items:center;justify-content:center;font-size:17px;overflow:hidden;background-size:cover;background-position:center}
+      .ls-chat-room .cav small{font-size:8px;color:var(--muted);max-width:44px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      .ls-chat-list{flex:1;min-height:0;overflow-y:auto;padding:8px 0;display:flex;flex-direction:column;gap:6px}
       .ls-msg{background:var(--ink-3);border:2px solid #000;border-radius:12px;padding:7px 10px;font-size:12px;color:var(--paper);max-width:80%}
       .ls-msg b{color:#FFD21F;font-size:10px;display:block}
       .ls-msg.mine{align-self:flex-end;background:linear-gradient(180deg,#FFE24A,var(--bolt-2));color:#141414}
@@ -4522,6 +4529,7 @@ function lsTick(){
   if(lsTickN%5===0) lsWsJoin();                       // keep the WS topic subscription alive across reconnects (idempotent)
   const waiting=lsSnap&&lsSnap.room&&lsSnap.room.status==='waiting';
   if(lsTickN%(waiting?2:4)===0) lsPollNow();          // fallback refresh (WS handles instant transitions)
+  if(waiting&&lsTab==='chat'&&lsTickN%2===0) lsLoadChat(); // keep chat fresh without switching tabs
 }
 async function lsPollNow(){
   if(!lsRoomId) return;
@@ -4581,6 +4589,7 @@ function lsLive(snap){
   if(vf&&r.status==='waiting'){ const pct=snap.players.length?Math.round(snap.votes*100/snap.players.length):0; vf.style.width=pct+'%'; if(vt)vt.textContent='شروع با همین تعداد — '+lsFa(pct)+'٪ ('+lsFa(snap.votes)+'/'+lsFa(snap.players.length)+')'; }
   // refresh waiting grid + dashboard grids in place
   if(r.status==='waiting'&&lsTab==='players'){ const g=document.getElementById('lsGrid'); if(g)g.innerHTML=lsPlayersCells(snap,false); }
+  if(r.status==='waiting'&&lsTab==='chat'){ const rs=document.getElementById('lsChatRoom'); if(rs)rs.innerHTML=lsRoomStrip(snap); }
   if(r.status==='running'&&(r.phase==='dashboard'||r.phase==='cashout')){ const g=document.getElementById('lsDashGrid'); if(g)g.innerHTML=lsDashCells(snap); }
 }
 
@@ -4594,8 +4603,8 @@ function lsWaitHtml(snap){
   </div></div>
   <div class="ls-tabs"><div class="ls-tab ${lsTab==='players'?'on':''}" onclick="lsSetTab('players')">بازیکنان</div>${r.chatEnabled?`<div class="ls-tab ${lsTab==='chat'?'on':''}" onclick="lsSetTab('chat')">چت روم</div>`:''}</div>
   <div class="ls-grid" id="lsGrid" style="${lsTab==='players'?'':'display:none'}">${lsPlayersCells(snap,false)}</div>
-  <div class="ls-chat" id="lsChatWrap" style="${lsTab==='chat'?'':'display:none'}"><div class="ls-chat-list" id="lsChatList"></div><div class="ls-chat-in"><input id="lsChatInput" placeholder="پیام…" maxlength="240"><button onclick="lsChatSend()">↑</button></div></div>
-  ${r.manualStartEnabled?`<div class="ls-vote" onclick="lsVote()"><i id="lsVoteFill"></i><span id="lsVoteTxt">شروع با همین تعداد</span></div>`:''}`;
+  <div class="ls-chat" id="lsChatWrap" style="${lsTab==='chat'?'':'display:none'}"><div class="ls-chat-room" id="lsChatRoom">${lsRoomStrip(snap)}</div><div class="ls-chat-list" id="lsChatList"></div><div class="ls-chat-in"><input id="lsChatInput" placeholder="پیام…" maxlength="240"><button onclick="lsChatSend()">↑</button></div></div>
+  ${r.manualStartEnabled?`<div class="ls-vote" id="lsVoteBtn" onclick="lsVote()" style="${lsTab==='chat'?'display:none':''}"><i id="lsVoteFill"></i><span id="lsVoteTxt">شروع با همین تعداد</span></div>`:''}`;
 }
 function lsPlayersCells(snap,markElim){
   return snap.players.map(p=>{
@@ -4636,10 +4645,14 @@ async function lsAnswer(i){
   await pzApi('POST','/last-survivor/rooms/'+lsRoomId+'/answer',{round:lsSnap.room.round,selectedIndex:i});
 }
 
-function lsSetTab(t){ lsTab=t; const g=document.getElementById('lsGrid'),c=document.getElementById('lsChatWrap');
-  if(g)g.style.display=t==='players'?'':'none'; if(c)c.style.display=t==='chat'?'':'none';
+function lsRoomStrip(snap){
+  return (snap.players||[]).map(p=>{const av=p.avatar?`style="background-image:url(${p.avatar})"`:'';const dim=p.status==='eliminated'?'opacity:.4;filter:grayscale(1)':'';
+    return `<div class="cav"><div class="a" ${av}><span style="${dim}">${p.avatar?'':'👤'}</span></div><small>${(p.username||'').slice(0,6)}</small></div>`;}).join('');
+}
+function lsSetTab(t){ lsTab=t; const g=document.getElementById('lsGrid'),c=document.getElementById('lsChatWrap'),v=document.getElementById('lsVoteBtn');
+  if(g)g.style.display=t==='players'?'':'none'; if(c)c.style.display=t==='chat'?'':'none'; if(v)v.style.display=t==='chat'?'none':'';
   document.querySelectorAll('#lsGame .ls-tab').forEach(el=>el.classList.toggle('on',el.textContent.indexOf(t==='players'?'بازیکنان':'چت')>=0));
-  if(t==='chat')lsLoadChat();
+  if(t==='chat'){ if(lsSnap){const rs=document.getElementById('lsChatRoom');if(rs)rs.innerHTML=lsRoomStrip(lsSnap);} lsLoadChat(); }
 }
 function lsBindChat(){ const inp=document.getElementById('lsChatInput'); if(inp)inp.addEventListener('keydown',e=>{if(e.key==='Enter')lsChatSend();}); }
 async function lsLoadChat(){ if(!lsRoomId)return; const r=await pzApi('GET','/last-survivor/rooms/'+lsRoomId+'/chat'); const list=document.getElementById('lsChatList'); if(!list)return; const msgs=(r&&r.data&&r.data.messages)||[];

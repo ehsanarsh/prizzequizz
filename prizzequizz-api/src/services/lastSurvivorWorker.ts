@@ -95,7 +95,9 @@ async function beginRound(room: RoomRow, roundNo: number, now: number): Promise<
   room.phase = 'question';
   room.questionId = q?.id ?? null;
   room.correctIndex = q?.correctIndex ?? null;
-  room.phaseEndsAt = now + room.config.timings.questionSeconds * 1000;
+  // Floor the window so a low/0 admin value can't grade the round instantly
+  // (which felt like "eliminated the moment the match starts").
+  room.phaseEndsAt = now + Math.max(8, Number(room.config.timings.questionSeconds) || 8) * 1000;
   await saveRoom(room);
   // Send the question WITHOUT the correct index.
   publish(room.id, 'ls:question', { round: roundNo, questionId: q?.id, text: q?.text, options: q?.options, endsAt: room.phaseEndsAt, serverNow: now });
@@ -105,16 +107,20 @@ async function beginRound(room: RoomRow, roundNo: number, now: number): Promise<
 async function advancePhase(room: RoomRow, now: number): Promise<void> {
   const players = await listPlayers(room.id);
   if (room.phase === 'question') {
-    // Grade: an alive player who didn't answer this round, or answered wrong, is eliminated.
+    // Grade: an alive player who didn't answer this round, or answered wrong, is
+    // eliminated — UNLESS there was no valid question (empty topic), in which
+    // case the round is void and nobody is eliminated.
     const eliminated: string[] = [];
-    for (const p of players) {
-      if (p.status !== 'alive') continue;
-      const answered = p.answerRound === room.round;
-      const correct = answered && p.answerCorrect === true;
-      if (!correct) { p.status = 'eliminated'; p.eliminatedRound = room.round; await savePlayer(p); eliminated.push(p.userId); }
+    if (room.correctIndex != null) {
+      for (const p of players) {
+        if (p.status !== 'alive') continue;
+        const answered = p.answerRound === room.round;
+        const correct = answered && p.answerCorrect === true;
+        if (!correct) { p.status = 'eliminated'; p.eliminatedRound = room.round; await savePlayer(p); eliminated.push(p.userId); }
+      }
     }
     room.phase = 'elimination';
-    room.phaseEndsAt = now + room.config.timings.eliminationSeconds * 1000;
+    room.phaseEndsAt = now + Math.max(3, Number(room.config.timings.eliminationSeconds) || 3) * 1000;
     await saveRoom(room);
     // Public: who was eliminated (for the Squid-Game animation). The correct
     // answer is delivered privately in each eliminated player's own snapshot.
@@ -124,7 +130,7 @@ async function advancePhase(room: RoomRow, now: number): Promise<void> {
   }
   if (room.phase === 'elimination') {
     room.phase = 'dashboard';
-    room.phaseEndsAt = now + room.config.timings.dashboardSeconds * 1000;
+    room.phaseEndsAt = now + Math.max(3, Number(room.config.timings.dashboardSeconds) || 3) * 1000;
     await saveRoom(room);
     await broadcastState(room.id);
     return;
@@ -133,7 +139,7 @@ async function advancePhase(room: RoomRow, now: number): Promise<void> {
     const alive = players.filter((p) => p.status === 'alive');
     if (alive.length <= room.config.match.minSurvivors || room.round >= room.totalRounds) { await finishRoom(room, now); return; }
     room.phase = 'cashout';
-    room.phaseEndsAt = now + room.config.timings.cashoutSeconds * 1000;
+    room.phaseEndsAt = now + Math.max(4, Number(room.config.timings.cashoutSeconds) || 4) * 1000;
     await saveRoom(room);
     // Offer cash-out only to players still alive (they all answered correctly).
     publish(room.id, 'ls:cashout_offer', { round: room.round, eligible: alive.map((p) => p.userId) });
