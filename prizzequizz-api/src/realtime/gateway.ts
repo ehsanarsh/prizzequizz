@@ -83,6 +83,27 @@ async function handleMessage(socket: WebSocket, clientId: string, userId: string
     }
 
 
+    // Last Survivor: subscribe to a room's realtime topic and get an initial
+    // snapshot. All `ls:*` events (state, question, elimination, cashout, ended)
+    // are pushed by the orchestrator to `ls:{roomId}`. Reconnecting just re-joins
+    // and re-snapshots — the authoritative state is always in the DB.
+    if (msg.type === 'client:join_ls_room') {
+      const roomId = String((msg.payload as any)?.roomId ?? '');
+      if (roomId) {
+        const topic = `ls:${roomId}`;
+        realtimeRooms.joinTopic(clientId, topic);
+        void realtimeRooms.subscribeTopic(topic);
+        const { snapshot } = await import('../services/lastSurvivorService.js');
+        realtimeRooms.send(clientId, { type: 'server:ls_snapshot', payload: await snapshot(roomId, userId), requestId: msg.requestId } as any);
+      }
+      return;
+    }
+    if (msg.type === 'client:leave_ls_room') {
+      const roomId = String((msg.payload as any)?.roomId ?? '');
+      if (roomId) realtimeRooms.leaveTopic(clientId, `ls:${roomId}`);
+      return;
+    }
+
     if (msg.type === 'client:subscribe_leaderboard') {
       const kind = normalizeLeaderboardKind((msg.payload as any)?.kind);
       const topic = `leaderboard:${kind}`;

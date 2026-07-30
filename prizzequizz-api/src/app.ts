@@ -20,9 +20,11 @@ import { registerFriendRoutes } from './modules/friends/routes.js';
 import { registerSupportRoutes } from './modules/support/routes.js';
 import { registerOpsRoutes } from './modules/ops/routes.js';
 import { registerShopRoutes } from './modules/shop/routes.js';
+import { registerLastSurvivorRoutes } from './modules/lastSurvivor/routes.js';
 import { registerAdminRoutes } from './modules/admin/routes.js';
 import { attachRealtimeGateway } from './realtime/gateway.js';
 import { startMatchmakingWorker } from './services/matchmakingWorker.js';
+import { startLastSurvivorWorker } from './services/lastSurvivorWorker.js';
 
 export interface ApiServerOptions {
   attachRealtime?: boolean;
@@ -54,6 +56,7 @@ export function createApiServer(options: ApiServerOptions = {}): Server {
   registerSupportRoutes(router, base);
   registerOpsRoutes(router, base);
   registerShopRoutes(router, base);
+  registerLastSurvivorRoutes(router, base);
   registerAdminRoutes(router, base);
 
   const server = createServer((req, res) => {
@@ -66,5 +69,6 @@ export function createApiServer(options: ApiServerOptions = {}): Server {
 
   if (options.attachRealtime !== false) attachRealtimeGateway(server);
   if (process.env.MATCHMAKING_WORKER !== 'false') startMatchmakingWorker();
+  if (process.env.LAST_SURVIVOR_WORKER !== 'false') startLastSurvivorWorker();
   return server;
 }

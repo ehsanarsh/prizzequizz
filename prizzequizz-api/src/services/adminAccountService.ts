@@ -185,7 +185,7 @@ export async function deleteAccount(accountId: string): Promise<boolean> {
 // The tab keys that exist in the panel (kept in sync with the admin nav).
 export const ADMIN_TABS = [
   'dashboard', 'finance', 'users', 'matches', 'support',
-  'questions', 'qreports', 'aistudio', 'pipeline', 'categories', 'shop', 'characterbuilder',
+  'questions', 'qreports', 'aistudio', 'pipeline', 'categories', 'shop', 'characterbuilder', 'lastsurvivor',
   'wallet', 'withdrawals', 'rewardholds', 'tickets', 'giftcodes',
   'cfg_xp', 'cfg_level', 'cfg_cup', 'cfg_gameplay', 'leagues', 'missions', 'rewards',
   'leaderboard', 'campaign', 'events', 'banners', 'notifications',
@@ -200,6 +200,7 @@ export function tabForPath(path: string): string | null {
   if (p.includes('/admin/accounts')) return 'accounts';
   if (p.includes('/admin/shop')) return 'shop';
   if (p.includes('/admin/character-parts')) return 'characterbuilder';
+  if (p.includes('/admin/last-survivor')) return 'lastsurvivor';
   if (p.includes('/admin/question-reports')) return 'qreports';
   if (p.includes('/admin/questions/ai') || p.includes('/admin/questions/draft')) return 'aistudio';
   if (p.includes('/admin/questions/pipeline')) return 'pipeline';

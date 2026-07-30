@@ -5,7 +5,9 @@ export type ClientRealtimeType =
   | 'client:submit_answer'
   | 'client:send_chat'
   | 'client:subscribe_leaderboard'
-  | 'client:unsubscribe_leaderboard';
+  | 'client:unsubscribe_leaderboard'
+  | 'client:join_ls_room'
+  | 'client:leave_ls_room';
 
 export type ServerRealtimeType =
   | 'server:connected'
