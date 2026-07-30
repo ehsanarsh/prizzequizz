@@ -4590,7 +4590,7 @@ function lsRender(snap){
   lsSnap=snap; if(snap.me) lsMyId=snap.me.userId;
   const r=snap.room;
   const key=r.status+'|'+r.phase+'|'+r.round;
-  if(key!==lsLastKey){ lsLastKey=key; lsBuild(snap); if(r.phase==='question'){ lsAnswered=(snap.me&&snap.me.answeredThisRound)||false; } if(r.phase==='elimination')lsDeadDismissed=false; try{if(r.phase==='elimination')sfx('found');}catch(e){} }
+  if(key!==lsLastKey){ lsLastKey=key; lsBuild(snap); if(r.phase==='ready'||r.phase==='question'){ lsAnswered=(snap.me&&snap.me.answeredThisRound)||false; } if(r.phase==='elimination')lsDeadDismissed=false; try{if(r.phase==='elimination')sfx('found');}catch(e){} }
   lsLive(snap);
   lsOverlays(snap);
 }
@@ -4600,6 +4600,13 @@ function lsBuild(snap){
   if(r.status==='finished'){ body.innerHTML=lsEndHtml(snap); return; }
   if(r.status==='waiting'){ body.innerHTML=lsWaitHtml(snap); lsBindChat(); return; }
   // running
+  if(r.phase==='ready'){
+    // Pre-render the question behind the gate, then show the SAME «آماده‌ای؟»
+    // countdown modal the duel uses, with the real difficulty badge.
+    body.innerHTML=lsDashStrip(snap)+lsQuestionHtml(snap,true);
+    lsReadyGate(snap);
+    return;
+  }
   if(r.phase==='question'){ body.innerHTML=lsDashStrip(snap)+lsQuestionHtml(snap); return; }
   if(r.phase==='elimination'){ body.innerHTML='<div class="ls-elim-hd"><h2>مرحلهٔ حذف ☠️</h2><p>هر کس اشتباه جواب داد، حذف می‌شود</p></div>'+lsGridHtml(snap,true); return; }
   if(r.phase==='cashout'){ body.innerHTML=lsDashHtml(snap); return; }
@@ -4658,18 +4665,53 @@ function lsDashCells(snap){ const s=snap.stats;
 }
 function lsDashHtml(snap){ return `<div class="ls-top" style="padding-bottom:0"><div class="ls-ttl" style="text-align:center;width:100%"><h1>داشبورد مسابقه</h1><p>مرحله ${lsFa(snap.room.round)} از ${lsFa(snap.room.totalRounds)} · <span id="lsTimer">${lsTimer(snap)}</span></p></div></div><div class="ls-dash" id="lsDashGrid">${lsDashCells(snap)}</div>`; }
 
-function lsQuestionHtml(snap){
+function lsQuestionHtml(snap,locked){
   const q=snap.question||{}; const opts=q.options||[]; const alive=snap.me&&snap.me.status==='alive';
+  const badge=(typeof pzDiffBadge==='function'&&q.difficulty)?pzDiffBadge(q.difficulty):'';
   return `<div class="ls-qwrap"><div class="ls-qtimer">⏳ <span id="lsTimer">${lsTimer(snap)}</span></div>
+  ${badge?`<div style="text-align:center;margin-bottom:8px">${badge}</div>`:''}
   <div class="ls-qcard"><div class="ls-qtext">${q.text||'…'}</div>
-  <div class="ls-opts" id="lsOpts">${opts.map((o,i)=>`<div class="ls-opt" data-i="${i}" onclick="lsAnswer(${i})">${o}</div>`).join('')}</div>
+  <div class="ls-opts" id="lsOpts">${opts.map((o,i)=>`<div class="ls-opt" data-i="${i}"${locked?'':` onclick="lsAnswer(${i})"`}>${o}</div>`).join('')}</div>
   ${alive?'':'<div class="ls-ack" style="color:#ff8a8a">شما در این مرحله حضور ندارید</div>'}</div></div>`;
+}
+/* The duel's own ready gate, reused verbatim: same modal, same countdown bar,
+   same difficulty badge — only the seconds come from the server so every
+   player's gate ends at the same moment. */
+let lsReadyShownRound=0;
+function lsReadyGate(snap){
+  const r=snap.room; if(lsReadyShownRound===r.round) return; lsReadyShownRound=r.round;
+  const off=(r.serverNow||Date.now())-Date.now();
+  const secs=Math.max(1,Math.round(((r.phaseEndsAt||0)-(Date.now()+off))/1000));
+  const diff=(snap.question&&snap.question.difficulty)||'';
+  try{
+    if(typeof showCountdownModal==='function'){
+      showCountdownModal({icon:'🎯',title:'آماده‌ای؟',sub:'سوال '+lsFa(r.round)+' از '+lsFa(r.totalRounds)+' — جواب اشتباه یعنی حذف!',
+        seconds:secs,reward:(typeof pzDiffBadge==='function'?pzDiffBadge(diff):'')},function(){});
+    }
+  }catch(e){}
 }
 
 async function lsAnswer(i){
   if(lsAnswered||!lsSnap||!lsSnap.me||lsSnap.me.status!=='alive')return;
+  if(lsSnap.room.phase!=='question')return;           // gate still closed
   lsAnswered=true;
-  const opts=document.getElementById('lsOpts'); if(opts){ [...opts.children].forEach(el=>{ if(Number(el.dataset.i)===i)el.classList.add('sel'); }); setTimeout(()=>{ [...opts.children].forEach(el=>{ if(Number(el.dataset.i)!==i)el.classList.add('gone'); }); },260); setTimeout(()=>{ opts.parentElement.innerHTML='<div class="ls-ack">پاسخ شما ثبت شد ✅</div>'; },700); }
+  /* Motion: the picked option lifts and the others slide INTO it, then the
+     "answer recorded" line pops. No green/red — the correct answer stays secret. */
+  const opts=document.getElementById('lsOpts');
+  if(opts){
+    const kids=[...opts.children];
+    const pick=kids.find(el=>Number(el.dataset.i)===i);
+    const py=pick?pick.getBoundingClientRect().top:0;
+    kids.forEach(el=>{
+      if(el===pick){ el.classList.add('sel'); return; }
+      const dy=py-el.getBoundingClientRect().top;
+      el.style.transition='transform .42s cubic-bezier(.4,0,.2,1),opacity .42s ease';
+      el.style.transform='translateY('+dy+'px) scale(.86)';
+      el.style.opacity='0';
+    });
+    setTimeout(()=>{ if(pick){pick.style.transition='transform .2s';pick.style.transform='scale(1.04)';} },380);
+    setTimeout(()=>{ opts.parentElement.innerHTML='<div class="ls-ack">پاسخ شما ثبت شد ✅</div>'; },820);
+  }
   try{sfx('select');vib(20);}catch(e){}
   await pzApi('POST','/last-survivor/rooms/'+lsRoomId+'/answer',{round:lsSnap.room.round,selectedIndex:i});
 }

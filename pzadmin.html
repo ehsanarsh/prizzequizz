@@ -1183,6 +1183,7 @@ async function renderLastSurvivor(){
       '<div class="field"><label>درصد لازم برای شروع دستی (٪)</label>'+num('ls_startPct',cfg.room.startPct)+'</div>'+
     '</div></div>'+
     '<div class="card"><h3>⏱️ زمانِ هر مرحله (ثانیه)</h3><div class="grid g4">'+
+      '<div class="field"><label>آماده‌ای؟ (قبل از سوال)</label>'+num('ls_tR',cfg.timings.readySeconds)+'</div>'+
       '<div class="field"><label>سوال</label>'+num('ls_tQ',cfg.timings.questionSeconds)+'</div>'+
       '<div class="field"><label>حذف</label>'+num('ls_tE',cfg.timings.eliminationSeconds)+'</div>'+
       '<div class="field"><label>داشبورد</label>'+num('ls_tD',cfg.timings.dashboardSeconds)+'</div>'+
@@ -1212,7 +1213,7 @@ async function lsSaveConfig(){
   const b=id=>($('#'+id)||{}).value==='1';
   const patch={
     room:{capacity:n('ls_capacity'),minUsers:n('ls_minUsers'),waitSeconds:n('ls_wait'),manualStartEnabled:b('ls_manual'),startPct:n('ls_startPct')},
-    timings:{questionSeconds:n('ls_tQ'),eliminationSeconds:n('ls_tE'),dashboardSeconds:n('ls_tD'),cashoutSeconds:n('ls_tC')},
+    timings:{readySeconds:n('ls_tR'),questionSeconds:n('ls_tQ'),eliminationSeconds:n('ls_tE'),dashboardSeconds:n('ls_tD'),cashoutSeconds:n('ls_tC')},
     match:{totalRounds:n('ls_rounds'),minSurvivors:n('ls_minSurv')},
     features:{animations:b('ls_anim'),chat:b('ls_chat')},
     economy:{rakePercent:n('ls_rake'),tickets:{

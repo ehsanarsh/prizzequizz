@@ -77,7 +77,7 @@ async function maybeStart(room: RoomRow, now: number): Promise<void> {
   logger.info('ls_started', { roomId: room.id, players: count, pool: room.grossPool });
 }
 
-async function pickQuestion(topic: string, roomId: string): Promise<{ id: string; correctIndex: number; text: string; options: string[] } | null> {
+async function pickQuestion(topic: string, roomId: string): Promise<{ id: string; correctIndex: number; text: string; options: string[]; difficulty?: string } | null> {
   const all = await repositories.questions.listApproved();
   const pool = all.filter((q) => q.category === topic);
   if (!pool.length) return null;
@@ -86,26 +86,40 @@ async function pickQuestion(topic: string, roomId: string): Promise<{ id: string
   if (!candidates.length) { used.clear(); candidates = pool; }
   const q = candidates[Math.floor(Math.random() * candidates.length)]!;
   used.add(q.id);
-  return { id: q.id, correctIndex: q.correctIndex, text: q.text, options: q.options };
+  return { id: q.id, correctIndex: q.correctIndex, text: q.text, options: q.options, difficulty: q.difficulty };
 }
 
+/* Each round opens with a READY gate (exactly like the duel's «آماده‌ای؟»
+ * countdown): the question is already picked so the client can show its
+ * difficulty badge, but the answer window only starts when the gate ends — so
+ * the countdown never eats into answering time. */
 async function beginRound(room: RoomRow, roundNo: number, now: number): Promise<void> {
   const q = await pickQuestion(room.topic, room.id);
   room.round = roundNo;
-  room.phase = 'question';
+  room.phase = 'ready';
   room.questionId = q?.id ?? null;
   room.correctIndex = q?.correctIndex ?? null;
+  room.phaseEndsAt = now + Math.max(3, Number(room.config.timings.readySeconds) || 5) * 1000;
+  await saveRoom(room);
+  publish(room.id, 'ls:ready', { round: roundNo, questionId: q?.id, difficulty: q?.difficulty, endsAt: room.phaseEndsAt, serverNow: now });
+  await broadcastState(room.id);
+}
+
+/* Ready gate finished → open the answer window with the FULL configured time. */
+async function openQuestion(room: RoomRow, now: number): Promise<void> {
+  room.phase = 'question';
   // Floor the window so a low/0 admin value can't grade the round instantly
   // (which felt like "eliminated the moment the match starts").
   room.phaseEndsAt = now + Math.max(8, Number(room.config.timings.questionSeconds) || 8) * 1000;
   await saveRoom(room);
   // Send the question WITHOUT the correct index.
-  publish(room.id, 'ls:question', { round: roundNo, questionId: q?.id, text: q?.text, options: q?.options, endsAt: room.phaseEndsAt, serverNow: now });
+  publish(room.id, 'ls:question', { round: room.round, questionId: room.questionId, endsAt: room.phaseEndsAt, serverNow: now });
   await broadcastState(room.id);
 }
 
 async function advancePhase(room: RoomRow, now: number): Promise<void> {
   const players = await listPlayers(room.id);
+  if (room.phase === 'ready') { await openQuestion(room, now); return; }
   if (room.phase === 'question') {
     // Grade: an alive player who didn't answer this round, or answered wrong, is
     // eliminated — UNLESS there was no valid question (empty topic), in which

@@ -47,10 +47,16 @@ async function forceExpire(roomId: string) { const r = (await getRoom(roomId))!;
   await advanceRoom(room, Date.now());
   room = (await getRoom(roomId))!;
   assert.equal(room.status, 'running');
-  assert.equal(room.phase, 'question');
+  // Each round opens with the «آماده‌ای؟» ready gate (like the duel); answering
+  // is refused until it ends, then the FULL question window starts.
+  assert.equal(room.phase, 'ready');
   assert.equal(room.round, 1);
   assert.ok(room.questionId);
-  ok('room fills to capacity and starts round 1 automatically');
+  assert.equal((await submitAnswer(roomId, 'lsB', 1, 0)).accepted, false); // gate closed
+  await forceExpire(roomId); await advanceRoom((await getRoom(roomId))!, Date.now());
+  room = (await getRoom(roomId))!;
+  assert.equal(room.phase, 'question');
+  ok('round 1 starts with the ready gate, then opens the answer window');
 
   // ---- answers: green wrong, blue+red correct (correctIndex is 0) ----
   assert.equal(room.correctIndex, 0);

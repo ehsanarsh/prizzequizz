@@ -17,6 +17,7 @@ export interface LastSurvivorConfig {
     startPct: number;          // % of players pressing "start now" that triggers an early start
   };
   timings: {
+    readySeconds: number;       // "آماده‌ای؟" gate before each question (like the duel)
     questionSeconds: number;
     eliminationSeconds: number;
     dashboardSeconds: number;
@@ -40,7 +41,7 @@ export interface LastSurvivorConfig {
 
 export const LS_DEFAULT_CONFIG: LastSurvivorConfig = {
   room: { capacity: 100, minUsers: 2, waitSeconds: 120, manualStartEnabled: true, startPct: 70 },
-  timings: { questionSeconds: 10, eliminationSeconds: 7, dashboardSeconds: 6, cashoutSeconds: 8 },
+  timings: { readySeconds: 5, questionSeconds: 10, eliminationSeconds: 7, dashboardSeconds: 6, cashoutSeconds: 8 },
   match: { totalRounds: 12, questionsPerRound: 1, minSurvivors: 1 },
   features: { animations: true, chat: true },
   economy: {

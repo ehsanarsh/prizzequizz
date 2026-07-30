@@ -20,7 +20,7 @@ import { getConfig, isTopicPlayable, type LastSurvivorConfig } from './lastSurvi
 import { ticketValue, ticketUnits, buildPool, computeStats, cashoutShareFor, finalSplit, type PrizePlayer } from './lastSurvivorPrize.js';
 
 export type RoomStatus = 'waiting' | 'running' | 'finished';
-export type RoomPhase = 'waiting' | 'question' | 'elimination' | 'dashboard' | 'cashout' | 'finished';
+export type RoomPhase = 'waiting' | 'ready' | 'question' | 'elimination' | 'dashboard' | 'cashout' | 'finished';
 export type PlayerStatus = 'waiting' | 'alive' | 'eliminated' | 'cashed_out';
 
 export interface RoomRow {
@@ -321,11 +321,16 @@ export async function snapshot(roomId: string, forUserId?: string): Promise<any>
   // OPTIONS must be here — a reconnecting client (or one that missed the
   // ls:question push) otherwise renders an empty question, can't answer, and
   // gets eliminated at the deadline.
-  if (room.status === 'running' && room.phase === 'question' && room.questionId) {
+  if (room.status === 'running' && (room.phase === 'question' || room.phase === 'ready') && room.questionId) {
     view.question = { id: room.questionId, round: room.round };
     try {
       const q = await repositories.questions.findById(room.questionId);
-      if (q) { view.question.text = q.text; view.question.options = q.options; }
+      if (q) {
+        // Difficulty is available during the READY gate so the client can show
+        // the same «سطح سختی» badge the duel shows before each question.
+        view.question.difficulty = q.difficulty;
+        view.question.text = q.text; view.question.options = q.options;
+      }
     } catch { /* text is best-effort; the id/round still drive the flow */ }
   }
   if (me) {
