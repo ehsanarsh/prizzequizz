@@ -255,14 +255,61 @@ async function finishRoom(room: RoomRow, now: number): Promise<void> {
 }
 
 // ---- player actions (called from HTTP/WS) ----
-export async function submitAnswer(roomId: string, userId: string, round: number, selectedIndex: number): Promise<{ accepted: boolean; reason?: string }> {
+/* LIFELINES. The correct index is a server secret, so 50:50 must be resolved
+ * here: we return two WRONG option indexes to grey out (which never reveals
+ * which of the remaining two is right). "Second chance" is armed per
+ * room+round+user in memory; submitAnswer then allows exactly one overwrite of
+ * a wrong first answer. */
+const secondChanceArmed = new Set<string>();       // `${roomId}:${round}:${userId}`
+const secondChanceUsed = new Set<string>();
+const scKey = (roomId: string, round: number, userId: string) => `${roomId}:${round}:${userId}`;
+
+export async function useLifeline(roomId: string, userId: string, type: string): Promise<{ ok: boolean; reason?: string; removeIndexes?: number[]; armed?: boolean }> {
+  const room = await getRoom(roomId);
+  if (!room || room.status !== 'running' || room.phase !== 'question') return { ok: false, reason: 'NOT_IN_QUESTION' };
+  const p = (await listPlayers(roomId)).find((x) => x.userId === userId);
+  if (!p || p.status !== 'alive') return { ok: false, reason: 'NOT_ALIVE' };
+  if (p.answerRound === room.round) return { ok: false, reason: 'ALREADY_ANSWERED' };
+
+  if (type === '5050') {
+    if (room.correctIndex == null || !room.questionId) return { ok: false, reason: 'NO_QUESTION' };
+    let optionCount = 4;
+    try { const q = await repositories.questions.findById(room.questionId); if (q?.options?.length) optionCount = q.options.length; } catch { /* default 4 */ }
+    const wrong: number[] = [];
+    for (let i = 0; i < optionCount; i++) if (i !== room.correctIndex) wrong.push(i);
+    // Remove two of the wrong ones (random), leaving the correct one + one wrong.
+    for (let i = wrong.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [wrong[i], wrong[j]] = [wrong[j]!, wrong[i]!]; }
+    return { ok: true, removeIndexes: wrong.slice(0, Math.max(0, optionCount - 2)) };
+  }
+  if (type === 'second') {
+    const k = scKey(roomId, room.round, userId);
+    if (secondChanceUsed.has(k)) return { ok: false, reason: 'ALREADY_USED' };
+    secondChanceArmed.add(k);
+    return { ok: true, armed: true };
+  }
+  if (type === 'stats') return { ok: true };          // purely cosmetic, client-side
+  return { ok: false, reason: 'UNKNOWN_LIFELINE' };
+}
+
+export async function submitAnswer(roomId: string, userId: string, round: number, selectedIndex: number): Promise<{ accepted: boolean; reason?: string; secondChance?: boolean }> {
   const room = await getRoom(roomId);
   if (!room || room.status !== 'running' || room.phase !== 'question') return { accepted: false, reason: 'NOT_IN_QUESTION' };
   if (round !== room.round) return { accepted: false, reason: 'WRONG_ROUND' };
   const players = await listPlayers(roomId);
   const p = players.find((x) => x.userId === userId);
   if (!p || p.status !== 'alive') return { accepted: false, reason: 'NOT_ALIVE' };
-  if (p.answerRound === room.round) return { accepted: true }; // idempotent — first answer stands
+  if (p.answerRound === room.round) {
+    // Second chance: one overwrite of a WRONG first answer, if it was armed.
+    const k = scKey(roomId, room.round, userId);
+    if (p.answerCorrect === false && secondChanceArmed.has(k) && !secondChanceUsed.has(k)) {
+      secondChanceArmed.delete(k); secondChanceUsed.add(k);
+      const correct2 = room.correctIndex != null && selectedIndex === room.correctIndex;
+      p.answerIndex = selectedIndex; p.answerCorrect = correct2; p.lastSeenAt = Date.now();
+      await savePlayer(p);
+      return { accepted: true, secondChance: true };
+    }
+    return { accepted: true };                        // idempotent — first answer stands
+  }
   const correct = room.correctIndex != null && selectedIndex === room.correctIndex;
   p.answerRound = room.round; p.answerIndex = selectedIndex; p.answerCorrect = correct; p.lastSeenAt = Date.now();
   await savePlayer(p);

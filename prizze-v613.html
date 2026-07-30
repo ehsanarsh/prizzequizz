@@ -4617,7 +4617,7 @@ function lsBuild(snap){
     // countdown modal the duel uses, with the real difficulty badge.
     body.innerHTML=lsDashStrip(snap)+lsQuestionHtml(snap,true);
     lsReadyGate(snap);
-    try{ if(typeof renderPowerups==='function')renderPowerups(); }catch(e){}
+    lsBindPowerups();
     return;
   }
   if(r.phase==='question'){
@@ -4625,7 +4625,7 @@ function lsBuild(snap){
     // not the question card.
     if(snap.me&&snap.me.answeredThisRound){ body.innerHTML=lsDashHtml(snap)+'<div class="ls-ack" style="margin-top:4px">پاسخ شما ثبت شد ✅ — منتظر بقیه…</div>'; return; }
     body.innerHTML=lsDashStrip(snap)+lsQuestionHtml(snap);
-    try{ if(typeof renderPowerups==='function')renderPowerups(); }catch(e){}
+    lsBindPowerups();
     return;
   }
   if(r.phase==='elimination'){
@@ -4738,6 +4738,50 @@ function lsReadyGate(snap){
   }catch(e){}
 }
 
+/* LIFELINES in Last Survivor. The duel's usePower() relies on globals it owns
+   (curBox/curCorrect/qLocked) AND on knowing the correct answer — which LS
+   deliberately keeps server-side. So we render the same buttons and rebind them
+   to a server-backed implementation. */
+let lsSecondArmed=false;
+function lsBindPowerups(){
+  try{ if(typeof renderPowerups==='function')renderPowerups(); }catch(e){}
+  document.querySelectorAll('#lsBody [data-pwslot] .pu').forEach((el,idx)=>{
+    const type=['5050','second','stats'][idx];
+    el.onclick=function(ev){ ev.stopPropagation(); lsUsePower(type,el); };
+  });
+}
+async function lsUsePower(type,el){
+  if(!lsRoomId||lsAnswered) return;
+  if(el&&el.classList.contains('disabled')) return;
+  const key={'5050':'p5050','second':'psecond','stats':'pstats'}[type];
+  try{ if(typeof _puAvail==='function'&&key&&!_puAvail(key)){ toast('این کمک تمام شده'); return; } }catch(e){}
+  const r=await pzApi('POST','/last-survivor/rooms/'+lsRoomId+'/lifeline',{type});
+  if(!r||r.ok===false){ toast((r&&r.error&&r.error.message)||'الان قابل استفاده نیست'); return; }
+  const d=r.data||{};
+  if(type==='5050'&&Array.isArray(d.removeIndexes)){
+    const opts=document.getElementById('lsOpts');
+    if(opts) d.removeIndexes.forEach(i=>{ const b=opts.querySelector('.ans[data-i="'+i+'"]'); if(b){ b.classList.add('dim'); b.disabled=true; } });
+    try{sfx('select');vib([15,10]);}catch(e){}
+  } else if(type==='second'){
+    lsSecondArmed=true;
+    toast('🔁 حق دو انتخاب فعال شد — اگر جواب اول غلط بود، یک انتخاب دیگر داری',2200);
+    try{sfx('found');vib([20,10]);}catch(e){}
+  } else if(type==='stats'){
+    // Cosmetic distribution — no knowledge of the correct answer.
+    const opts=document.getElementById('lsOpts'); if(opts){
+      const live=[...opts.querySelectorAll('.ans')].filter(b=>!b.classList.contains('dim'));
+      let w=live.map(()=>5+Math.random()*20), s=w.reduce((a,b)=>a+b,0);
+      live.forEach((b,i)=>{ const pct=Math.round(w[i]/s*100);
+        const f=document.createElement('i'); f.className='pfill'; b.appendChild(f);
+        const t=document.createElement('span'); t.className='pct'; t.textContent=fa(pct)+'٪'; b.appendChild(t);
+        requestAnimationFrame(()=>{ f.style.width=pct+'%'; });
+      });
+    }
+  }
+  try{ if(typeof _puConsume==='function'&&key)_puConsume(key); }catch(e){}
+  lsBindPowerups();
+}
+
 async function lsAnswer(i){
   if(lsAnswered||!lsSnap||!lsSnap.me||lsSnap.me.status!=='alive')return;
   if(lsSnap.room.phase!=='question')return;           // gate still closed
@@ -4770,7 +4814,9 @@ async function lsAnswer(i){
     },1500);
   }
   try{sfx('select');vib(20);}catch(e){}
-  await pzApi('POST','/last-survivor/rooms/'+lsRoomId+'/answer',{round:lsSnap.room.round,selectedIndex:i});
+  const res=await pzApi('POST','/last-survivor/rooms/'+lsRoomId+'/answer',{round:lsSnap.room.round,selectedIndex:i});
+  // Second chance: the server accepted an overwrite of a wrong first answer.
+  if(res&&res.data&&res.data.secondChance){ lsSecondArmed=false; toast('انتخاب دومت ثبت شد 🔁'); }
 }
 
 function lsRoomStrip(snap){
@@ -4793,15 +4839,10 @@ async function lsVote(){ if(!lsRoomId)return; const r=await pzApi('POST','/last-
 function lsOverlays(snap){
   const g=lsHost(); if(!g)return;
   const me=snap.me;
-  // eliminated personal reveal (only for the player, only their round)
-  let dead=document.getElementById('lsDead');
-  if(me&&me.status==='eliminated'&&me.reveal&&!lsDeadDismissed){
-    if(!dead){ dead=document.createElement('div'); dead.id='lsDead'; dead.className='ls-dead'; g.appendChild(dead);
-      const rv=me.reveal; const correct=(rv.options&&rv.options[rv.correctIndex])||'';
-      dead.innerHTML=`<div class="skull">💀</div><h2>حذف شدی</h2><p>پاسخ تو اشتباه بود</p><div class="ans"><div class="q">${rv.text||''}</div><b>پاسخ درست: ${correct}</b></div><button onclick="lsDeadDismissed=true;document.getElementById('lsDead').remove()">تماشای ادامهٔ مسابقه</button>`;
-      try{sfx('wrong');vib([60,40,60]);}catch(e){}
-    }
-  } else if(dead){ dead.remove(); }
+  /* ONE elimination screen: when you're knocked out we go straight to the LS
+     result screen (the good one, with the two buttons) and print the question +
+     correct answer there — instead of a separate full-screen "حذف شدی" overlay. */
+  if(me&&me.status==='eliminated'&&!lsEndShown){ lsFinish(snap); return; }
   // cash-out popup (only alive players, only in cashout phase)
   let cash=document.getElementById('lsCashPop');
   if(snap.room.phase==='cashout'&&me&&me.status==='alive'){
@@ -4854,13 +4895,42 @@ function lsFinish(snap){
   // LS has no duel opponent panel / bot rematch — hide them and retarget the actions.
   try{ const da=$id('duelActions'); if(da)da.style.display='none'; }catch(e){}
   try{ const ds=$id('resultDuelScore'); if(ds)ds.style.display='none'; }catch(e){}
-  try{ const p=$id('duelResultPanel'); if(p)p.innerHTML=''; }catch(e){}
+  /* The question you went out on + the CORRECT answer, shown right here so
+     there is only ONE elimination screen. */
+  try{ const p=$id('duelResultPanel');
+    if(p){
+      const rv=me.reveal;
+      if(rv&&!won){
+        const correct=(rv.options&&rv.options[rv.correctIndex])||'—';
+        const yours=(rv.options&&rv.yourIndex!=null&&rv.options[rv.yourIndex])||null;
+        p.innerHTML='<div class="card" style="text-align:right;margin-top:6px">'+
+          '<div style="font-size:12px;color:var(--muted);margin-bottom:6px">سؤالی که روی آن حذف شدی:</div>'+
+          '<div style="font-weight:900;font-size:14px;margin-bottom:10px">'+(rv.text||'')+'</div>'+
+          (yours?'<div style="background:var(--bad-soft);border:2px solid var(--bad);border-radius:12px;padding:9px 12px;margin-bottom:8px;font-weight:800">پاسخ تو: '+yours+'</div>':'')+
+          '<div style="background:var(--ok-soft);border:2px solid var(--ok);border-radius:12px;padding:9px 12px;font-weight:900">پاسخ درست: '+correct+'</div>'+
+        '</div>';
+      } else p.innerHTML='';
+    }
+  }catch(e){}
   try{ const nb=$id('resultNewBtn'); if(nb){ nb.textContent='🏆 مسابقهٔ جدید'; nb.onclick=function(){ lsStart(); }; } }catch(e){}
   try{ const hb=$id('resultHomeBtn'); if(hb){ hb.onclick=function(){ lsResetResultButtons(); go('home'); }; } }catch(e){}
   try{ const sq=$id('stat-q'), sr=$id('stat-rank'); if(sr)sr.textContent=won?'۱':'—'; if(sq)sq.textContent=lsFa((me.eliminatedRound||snap.room.round||1)-(won?0:1)); }catch(e){}
 
   go('result');
-  if(won){ try{ pzVictoryAnim(); }catch(e){} try{ sfx('found'); vib([40,60,120]); }catch(e){} }
+  if(won){
+    // VICTORY: the full-screen celebration, fired after the result screen is
+    // mounted, plus the «برنده شدی» modal so the win is unmistakable.
+    setTimeout(()=>{ try{ pzVictoryAnim(); }catch(e){} },120);
+    try{ sfx('found'); vib([40,60,120]); }catch(e){}
+    setTimeout(()=>{ try{
+      if(typeof showAaaModal==='function') showAaaModal({
+        icon:cashedOut?'💰':'🏆',
+        title:cashedOut?'جایزه‌ت رو برداشتی!':'برنده شدی! 🎉',
+        sub:lsFa(mine)+' تومان به کیف پولت اضافه شد',
+        primaryText:'عالیه',secondaryText:''
+      });
+    }catch(e){} },1900);
+  }
   // Pull the real wallet/level so the header shows the new balance immediately.
   try{ if(typeof pzApplyServerTickets==='function')pzApplyServerTickets(); }catch(e){}
   try{ if(typeof loadWallet==='function')loadWallet(); }catch(e){}

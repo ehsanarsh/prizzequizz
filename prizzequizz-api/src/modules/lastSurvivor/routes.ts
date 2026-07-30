@@ -6,7 +6,7 @@ import { repositories } from '../../repositories/index.js';
 import { bodyObject } from '../../utils/validation.js';
 import { getConfig, updateConfig, setTopicEnabled, isTopicPlayable } from '../../services/lastSurvivorConfig.js';
 import { joinTopic, snapshot, addVote, addChat, listChat, getRoom, listAllRooms, listPlayers, LastSurvivorError } from '../../services/lastSurvivorService.js';
-import { submitAnswer, submitDecision } from '../../services/lastSurvivorWorker.js';
+import { submitAnswer, submitDecision, useLifeline } from '../../services/lastSurvivorWorker.js';
 import { requireAdmin } from '../../services/adminGuard.js';
 
 export function registerLastSurvivorRoutes(router: Router, base: string): void {
@@ -84,6 +84,15 @@ export function registerLastSurvivorRoutes(router: Router, base: string): void {
     const res = await submitAnswer(ctx.params.id!, ctx.userId ?? 'u1', Number(body.round), Number(body.selectedIndex));
     if (!res.accepted) return error(ctx.res, 409, res.reason || 'ANSWER_REJECTED', 'پاسخ پذیرفته نشد.');
     json(ctx.res, 200, { accepted: true });
+  });
+
+  // Lifelines (50:50 / second chance / stats). 50:50 is resolved server-side so
+  // the correct index is never sent to the client.
+  router.add('POST', `${base}/last-survivor/rooms/:id/lifeline`, async (ctx) => {
+    const body = bodyObject(ctx.body) as any;
+    const res = await useLifeline(ctx.params.id!, ctx.userId ?? 'u1', String(body.type || ''));
+    if (!res.ok) return error(ctx.res, 409, res.reason || 'LIFELINE_REJECTED', 'این کمک الان قابل استفاده نیست.');
+    json(ctx.res, 200, res);
   });
 
   router.add('POST', `${base}/last-survivor/rooms/:id/decision`, async (ctx) => {
