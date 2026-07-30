@@ -21,6 +21,7 @@ import { registerSupportRoutes } from './modules/support/routes.js';
 import { registerOpsRoutes } from './modules/ops/routes.js';
 import { registerShopRoutes } from './modules/shop/routes.js';
 import { registerLastSurvivorRoutes } from './modules/lastSurvivor/routes.js';
+import { registerSmsRoutes } from './modules/sms/routes.js';
 import { registerAdminRoutes } from './modules/admin/routes.js';
 import { attachRealtimeGateway } from './realtime/gateway.js';
 import { startMatchmakingWorker } from './services/matchmakingWorker.js';
@@ -57,6 +58,7 @@ export function createApiServer(options: ApiServerOptions = {}): Server {
   registerOpsRoutes(router, base);
   registerShopRoutes(router, base);
   registerLastSurvivorRoutes(router, base);
+  registerSmsRoutes(router, base);
   registerAdminRoutes(router, base);
 
   const server = createServer((req, res) => {

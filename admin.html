@@ -151,7 +151,7 @@ const NAV=[
   ['محتوا',[['questions','❓','سوالات'],['qreports','🚩','گزارش سؤالات'],['aistudio','🤖','استودیوی سوال (AI)'],['pipeline','🔬','خط‌لولهٔ کیفیت'],['categories','🏷️','موضوعات'],['characterbuilder','🎭','قطعات کاراکتر']]],
   ['اقتصاد',[['wallet','👛','کیف پول'],['withdrawals','💸','برداشت‌ها'],['rewardholds','⏳','جوایز در انتظار'],['tickets','🎫','بلیط‌ها'],['shop','🛒','فروشگاه'],['giftcodes','🎁','کدهای هدیه']]],
   ['بالانس بازی (Data-Driven)',[['cfg_xp','✨','XP'],['cfg_level','🏅','Level'],['cfg_cup','🏆','Cup'],['cfg_gameplay','🕹️','گیم‌پلی مودها'],['leagues','🛡️','لیگ‌ها'],['missions','🎯','مأموریت‌ها'],['rewards','🎉','جوایز/چرخونه/استریک']]],
-  ['رشد و تعامل',[['leaderboard','📈','لیدربرد'],['campaign','🎁','کمپین کاربر جدید'],['events','📅','رویدادها'],['banners','🖼️','بنرها'],['notifications','🔔','اعلان‌ها']]],
+  ['رشد و تعامل',[['leaderboard','📈','لیدربرد'],['campaign','🎁','کمپین کاربر جدید'],['events','📅','رویدادها'],['banners','🖼️','بنرها'],['notifications','🔔','اعلان‌ها'],['sms','📱','پنل پیامکی']]],
   ['سیستم',[['anticheat','🛡️','ضدتقلب'],['suspicious','🚨','کاربران مشکوک'],['reports','📑','گزارش‌ها'],['logs','📝','لاگ و Audit'],['reset','♻️','ابزار ریست'],['accounts','🔐','حساب‌ها و دسترسی'],['general','⚙️','تنظیمات عمومی'],['rawcfg','🧩','ویرایش خام Config']]]
 ];
 function buildNav(){
@@ -179,7 +179,7 @@ async function render(){
   try{
     if(CUR==='accounts')return renderAccounts();
     if(CONFIG_PAGES[CUR])return renderConfigSection(CONFIG_PAGES[CUR][0],CONFIG_PAGES[CUR][1]);
-    const fn={dashboard:renderDashboard,finance:renderFinance,users:renderUsers,matches:renderMatches,support:renderSupport,questions:renderQuestions,qreports:renderQReports,aistudio:renderAiStudio,pipeline:renderPipeline,categories:renderCategories,wallet:renderWallet,withdrawals:renderWithdrawals,rewardholds:renderRewardHolds,tickets:renderTickets,giftcodes:renderGiftCodes,shop:renderShopAdmin,characterbuilder:renderCharParts,lastsurvivor:renderLastSurvivor,leaderboard:renderLeaderboard,notifications:renderNotifications,anticheat:renderAntiCheat,suspicious:renderSuspicious,reports:renderReports,logs:renderLogs,reset:renderReset,roles:renderRoles,rawcfg:renderRawCfg}[CUR];
+    const fn={dashboard:renderDashboard,finance:renderFinance,users:renderUsers,matches:renderMatches,support:renderSupport,questions:renderQuestions,qreports:renderQReports,aistudio:renderAiStudio,pipeline:renderPipeline,categories:renderCategories,wallet:renderWallet,withdrawals:renderWithdrawals,rewardholds:renderRewardHolds,tickets:renderTickets,giftcodes:renderGiftCodes,shop:renderShopAdmin,characterbuilder:renderCharParts,lastsurvivor:renderLastSurvivor,sms:renderSms,leaderboard:renderLeaderboard,notifications:renderNotifications,anticheat:renderAntiCheat,suspicious:renderSuspicious,reports:renderReports,logs:renderLogs,reset:renderReset,roles:renderRoles,rawcfg:renderRawCfg}[CUR];
     if(fn)return fn();
   }catch(e){$('#main').innerHTML=head('خطا')+'<div class="card empty">'+(e.message||'خطا')+'</div>';}
 }
@@ -1226,6 +1226,102 @@ async function lsSaveConfig(){
 async function lsToggleTopic(name,enabled){
   try{await api('POST','/admin/last-survivor/topics/'+encodeURIComponent(name),{enabled});toast(enabled?'فعال شد':'غیرفعال شد','ok');render();}catch(e){toast(e.message,'bad');}
 }
+
+/* ================= SMS PANEL ================= */
+let SMS_SUB='config';
+const SMS_PROVIDERS={sandbox:'حالت تست (Sandbox)',kavenegar:'کاوه‌نگار',melipayamak:'ملی‌پیامک',farazsms:'فراز اس‌ام‌اس',generic:'سفارشی (Generic)'};
+const SMS_STLABEL={sent:'ارسال شد',pending:'در انتظار',failed:'ناموفق',blocked:'مسدود',disabled:'غیرفعال'};
+async function renderSms(){
+  const subtabs='<div class="subtabs">'+[['config','⚙️ سرویس'],['templates','📝 قالب‌ها'],['log','📄 گزارش'],['stats','📊 آمار'],['blacklist','🚫 لیست سیاه']].map(s=>'<button class="'+(SMS_SUB===s[0]?'active':'')+'" onclick="SMS_SUB=\''+s[0]+'\';renderSms()">'+s[1]+'</button>').join('')+'</div>';
+  $('#main').innerHTML=head('پنل پیامکی','سرویس پیامک، قالب‌ها، گزارش ارسال، آمار و امنیت OTP')+subtabs+'<div id="smsBody"><div class="skel"></div></div>';
+  const b=$('#smsBody');
+  try{
+    if(SMS_SUB==='config') return smsRenderConfig(b);
+    if(SMS_SUB==='templates') return smsRenderTemplates(b);
+    if(SMS_SUB==='log') return smsRenderLog(b);
+    if(SMS_SUB==='stats') return smsRenderStats(b);
+    if(SMS_SUB==='blacklist') return smsRenderBlacklist(b);
+  }catch(e){ b.innerHTML='<div class="card empty">'+(e.message||'خطا')+'</div>'; }
+}
+async function smsRenderConfig(b){
+  const c=await api('GET','/admin/sms/config');
+  const provOpts=Object.keys(SMS_PROVIDERS).map(k=>'<option value="'+k+'"'+(c.provider===k?' selected':'')+'>'+esc(SMS_PROVIDERS[k])+'</option>').join('');
+  b.innerHTML='<div class="card"><h3>⚙️ تنظیمات سرویس</h3><div class="grid g2">'+
+    '<div class="field"><label>ارائه‌دهنده</label><select id="sm_prov">'+provOpts+'</select></div>'+
+    '<div class="field"><label>خط/شماره ارسال‌کننده</label><input id="sm_sender" value="'+esc(c.sender||'')+'" dir="ltr"></div>'+
+    '<div class="field"><label>API Key '+(c.apiKeySet?'(ثبت‌شده)':'')+'</label><input id="sm_apikey" dir="ltr" placeholder="'+(c.apiKeySet?esc(c.apiKey):'کلید را وارد کن')+'"></div>'+
+    '<div class="field"><label>Secret '+(c.secretSet?'(ثبت‌شده)':'')+'</label><input id="sm_secret" type="password" dir="ltr" placeholder="'+(c.secretSet?'••••':'در صورت نیاز')+'"></div>'+
+    '<div class="field"><label>آدرس سفارشی (Generic)</label><input id="sm_url" value="'+esc(c.genericUrl||'')+'" dir="ltr" placeholder="https://…"></div>'+
+    '<div class="field"><label>وضعیت سرویس</label><select id="sm_enabled"><option value="1"'+(c.enabled?' selected':'')+'>فعال</option><option value="0"'+(!c.enabled?' selected':'')+'>غیرفعال</option></select></div>'+
+    '<div class="field"><label>حالت تست (Sandbox)</label><select id="sm_sandbox"><option value="1"'+(c.sandbox?' selected':'')+'>روشن (پیامک واقعی ارسال نمی‌شود)</option><option value="0"'+(!c.sandbox?' selected':'')+'>خاموش (ارسال واقعی)</option></select></div>'+
+    '</div><div class="note">در حالت Sandbox هیچ پیامک واقعی ارسال نمی‌شود و فقط در گزارش ثبت می‌گردد.</div></div>'+
+    '<div class="card"><h3>🔐 امنیت کد یک‌بارمصرف (OTP)</h3><div class="grid g3">'+
+      '<div class="field"><label>حداکثر ارسال در ساعت</label><input id="sm_otpMax" type="number" value="'+(c.otp.maxPerHour)+'"></div>'+
+      '<div class="field"><label>انقضای کد (ثانیه)</label><input id="sm_otpExp" type="number" value="'+(c.otp.expirySeconds)+'"></div>'+
+      '<div class="field"><label>حداقل فاصلهٔ دو درخواست (ثانیه)</label><input id="sm_otpMin" type="number" value="'+(c.otp.minIntervalSeconds)+'"></div>'+
+    '</div></div>'+
+    '<button class="btn pri" onclick="smsSaveConfig()">💾 ذخیرهٔ تنظیمات</button>'+
+    '<div class="card" style="margin-top:14px"><h3>✉️ ارسال پیامک آزمایشی</h3><div class="grid g2"><div class="field"><label>شماره مقصد</label><input id="sm_testTo" dir="ltr" placeholder="09xxxxxxxxx"></div><div class="field"><label>متن</label><input id="sm_testBody" value="پیام آزمایشی پرایز کوییز ✅"></div></div><button class="btn" onclick="smsTest()">ارسال آزمایشی</button></div>';
+}
+async function smsSaveConfig(){
+  const patch={enabled:$('#sm_enabled').value==='1',sandbox:$('#sm_sandbox').value==='1',provider:$('#sm_prov').value,sender:$('#sm_sender').value.trim(),genericUrl:$('#sm_url').value.trim(),
+    apiKey:$('#sm_apikey').value.trim(),secret:$('#sm_secret').value.trim(),
+    otp:{maxPerHour:Number($('#sm_otpMax').value||5),expirySeconds:Number($('#sm_otpExp').value||120),minIntervalSeconds:Number($('#sm_otpMin').value||60)}};
+  try{await api('PUT','/admin/sms/config',patch);toast('ذخیره شد ✅','ok');renderSms();}catch(e){toast(e.message,'bad');}
+}
+async function smsTest(){
+  const to=$('#sm_testTo').value.trim(); if(!to)return toast('شماره مقصد لازم است','bad');
+  try{const r=await api('POST','/admin/sms/test',{to,body:$('#sm_testBody').value});toast('وضعیت: '+(SMS_STLABEL[r.status]||r.status),r.status==='sent'?'ok':'bad');}catch(e){toast(e.message,'bad');}
+}
+async function smsRenderTemplates(b){
+  const d=await api('GET','/admin/sms/templates'); const rows=d.rows||[];
+  window._SMS_TPL={};rows.forEach(t=>window._SMS_TPL[t.key]=t);
+  b.innerHTML=head('','',' <button class="btn pri" onclick="smsTplEdit()">➕ قالب جدید</button>').replace('<div class="head">','<div class="head" style="padding:0 0 10px">')+
+    '<div class="note">متغیرهای قابل استفاده: {name} {code} {amount} {wallet} {date}</div>'+
+    tbl(['کلید','عنوان','متن','عملیات'],rows.map(t=>['<span class="mono">'+esc(t.key)+'</span>',esc(t.title),'<div style="max-width:340px;font-size:12px;white-space:pre-wrap">'+esc(t.text)+'</div>',
+      '<button class="btn sm" onclick="smsTplEdit(\''+t.key+'\')">ویرایش</button> <button class="btn sm bad" onclick="smsTplDel(\''+t.key+'\')">حذف</button>']));
+}
+function smsTplEdit(key){
+  const t=(window._SMS_TPL||{})[key]||{};
+  modal(key?'ویرایش قالب':'قالب جدید',
+    '<div class="field"><label>کلید (انگلیسی، یکتا)</label><input id="tp_key" dir="ltr" value="'+esc(t.key||'')+'" '+(key?'readonly':'')+' placeholder="promo_offer"></div>'+
+    '<div class="field"><label>عنوان</label><input id="tp_title" value="'+esc(t.title||'')+'"></div>'+
+    '<div class="field"><label>متن پیام</label><textarea id="tp_text" style="width:100%;min-height:110px;background:var(--bg2,#111);color:inherit;border:1px solid var(--line);border-radius:10px;padding:10px" dir="rtl">'+esc(t.text||'')+'</textarea></div>'+
+    '<div class="note">متغیرها: {name} {code} {amount} {wallet} {date}</div>'+
+    '<button class="btn pri" onclick="smsTplSave()">💾 ذخیره</button>');
+}
+async function smsTplSave(){
+  const key=$('#tp_key').value.trim(); if(!key)return toast('کلید لازم است','bad');
+  try{await api('POST','/admin/sms/templates',{key,title:$('#tp_title').value.trim(),text:$('#tp_text').value});toast('ذخیره شد ✅','ok');document.querySelector('.modal-bg').remove();renderSms();}catch(e){toast(e.message,'bad');}
+}
+async function smsTplDel(key){ if(!confirm('این قالب حذف شود؟'))return; try{await api('DELETE','/admin/sms/templates/'+encodeURIComponent(key));toast('حذف شد','ok');renderSms();}catch(e){toast(e.message,'bad');} }
+let SMS_LOGST='';
+async function smsRenderLog(b){
+  const d=await api('GET','/admin/sms/log?limit=200'+(SMS_LOGST?'&status='+SMS_LOGST:'')); const rows=d.rows||[];
+  const filter='<div class="subtabs">'+[['','همه'],['sent','ارسال شد'],['failed','ناموفق'],['pending','در انتظار'],['blocked','مسدود'],['disabled','غیرفعال']].map(s=>'<button class="'+(SMS_LOGST===s[0]?'active':'')+'" onclick="SMS_LOGST=\''+s[0]+'\';renderSms()">'+s[1]+'</button>').join('')+'</div>';
+  b.innerHTML=filter+tbl(['زمان','مقصد','قالب','متن','وضعیت','کد رهگیری','هزینه','عملیات'],rows.map(r=>[
+    fmtDate(r.createdAt),'<span class="mono">'+esc(r.to)+'</span>',esc(r.templateKey||'—'),
+    '<div style="max-width:220px;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(r.body)+'</div>',
+    '<span class="pill '+(r.status==='sent'?'ok':(r.status==='failed'||r.status==='blocked'?'bad':''))+'">'+(SMS_STLABEL[r.status]||r.status)+'</span>'+(r.error?'<br><span class="sub" style="font-size:10px">'+esc(r.error)+'</span>':''),
+    '<span class="mono">'+esc(r.providerRef||'—')+'</span>',fa(r.cost),
+    '<button class="btn sm" onclick="smsResend(\''+r.id+'\')">ارسال مجدد</button>'+(r.status==='pending'?' <button class="btn sm bad" onclick="smsCancel(\''+r.id+'\')">لغو</button>':'')
+  ]));
+}
+async function smsResend(id){ try{const r=await api('POST','/admin/sms/log/'+id+'/resend');toast('وضعیت: '+(SMS_STLABEL[r.status]||r.status),r.status==='sent'?'ok':'bad');renderSms();}catch(e){toast(e.message,'bad');} }
+async function smsCancel(id){ try{await api('POST','/admin/sms/log/'+id+'/cancel');toast('لغو شد','ok');renderSms();}catch(e){toast(e.message,'bad');} }
+async function smsRenderStats(b){
+  const s=await api('GET','/admin/sms/stats');
+  b.innerHTML='<div class="grid g4">'+stat('امروز','',fa(s.today))+stat('این هفته','',fa(s.week))+stat('این ماه','',fa(s.month))+stat('نرخ موفقیت','ok',fa(s.successRate)+'٪')+'</div>'+
+    '<div class="card"><h3>هزینهٔ کل پیامک‌ها</h3><div class="stat"><div class="v gold">'+fa(s.totalCost)+'</div></div></div>'+
+    '<div class="card"><h3>تفکیک وضعیت</h3>'+tbl(['وضعیت','تعداد'],Object.keys(s.byStatus||{}).map(k=>[SMS_STLABEL[k]||k,fa(s.byStatus[k])]))+'</div>';
+}
+async function smsRenderBlacklist(b){
+  const d=await api('GET','/admin/sms/blacklist'); const rows=d.rows||[];
+  b.innerHTML='<div class="card"><h3>افزودن شماره به لیست سیاه</h3><div class="grid g2"><div class="field"><label>شماره</label><input id="bl_num" dir="ltr" placeholder="09xxxxxxxxx"></div><div class="field"><label>دلیل (اختیاری)</label><input id="bl_reason"></div></div><button class="btn pri" onclick="smsBlAdd()">افزودن</button></div>'+
+    tbl(['شماره','دلیل','تاریخ','عملیات'],rows.map(r=>['<span class="mono">'+esc(r.number)+'</span>',esc(r.reason||'—'),fmtDate(r.createdAt),'<button class="btn sm bad" onclick="smsBlDel(\''+esc(r.number)+'\')">حذف</button>']));
+}
+async function smsBlAdd(){ const n=$('#bl_num').value.trim(); if(!n)return toast('شماره لازم است','bad'); try{await api('POST','/admin/sms/blacklist',{number:n,reason:$('#bl_reason').value.trim()});toast('اضافه شد','ok');renderSms();}catch(e){toast(e.message,'bad');} }
+async function smsBlDel(n){ try{await api('DELETE','/admin/sms/blacklist/'+encodeURIComponent(n));toast('حذف شد','ok');renderSms();}catch(e){toast(e.message,'bad');} }
 
 /* ================= ADMIN ACCOUNTS + ACCESS ================= */
 function tabLabelMap(){const m={};NAV.forEach(g=>g[1].forEach(p=>{if(p[0]!=='accounts')m[p[0]]=p[1]+' '+p[2];}));return m;}
