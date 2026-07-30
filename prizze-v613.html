@@ -3883,36 +3883,47 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
     </section>
 
     <!-- ============ PLANS ============ -->
-    <section class="screen pad" id="plans">
-      <div class="topbar" style="padding:0 0 8px;background:none"><button class="iconbtn" onclick="go(plansBack)">→</button><h1>حالت بازیت رو انتخاب کن</h1></div>
-      <p style="color:var(--muted);font-size:12.5px;margin-bottom:14px">هر وقت خواستی از پروفایل یا منو عوضش کن</p>
-      <div class="plans-row">
-        <div class="plan2 free" onclick="choosePlan('free')">
-          <span class="plan-badge free" style="align-self:center">تمرین رایگان</span>
-          <div class="pchar"><img class="brand-char" alt="mascot"></div>
-          <h3>حالت تمرین</h3>
-          <div class="ptagline">بدون پول، بدون ریسک — فقط یاد بگیر و بالا برو</div>
-          <div class="pf"><span class="pi">✅</span> بدون هیچ پرداختی</div>
-          <div class="pf"><span class="pi">✅</span> کسب XP و بالا رفتن لِوِل</div>
-          <div class="pf"><span class="pi">✅</span> شرکت در لیگ‌های هفتگی + برد جایزه</div>
-          <div class="pf"><span class="pi">✅</span> همه‌ی حالت‌های بازی</div>
-          <div class="pf" style="opacity:.6"><span class="pi">➖</span> بدون جایزه‌ی نقدیِ مسابقات عادی</div>
-          <div class="pcta"><button class="pbtn">شروع تمرین 🌱</button></div>
+    <style id="planCSS">
+      /* Plan picker rebuilt to the reference: two wide stacked cards on the
+         wallpaper, the SELECTED one bright/sharp with a yellow border, the other
+         dimmed + blurred, and a single yellow confirm button at the bottom. */
+      #plans{display:flex;flex-direction:column}
+      .pl-head{text-align:center;padding:6px 18px 4px}
+      .pl-head h1{font-size:26px;font-weight:900;color:var(--paper);margin:0 0 10px;text-shadow:0 2px 0 rgba(0,0,0,.55)}
+      .pl-head p{font-size:15px;line-height:2;color:#e9e4d6;font-weight:700;text-shadow:0 1px 3px rgba(0,0,0,.6)}
+      .pl-cards{display:flex;flex-direction:column;gap:18px;padding:18px 16px 8px;flex:1;justify-content:center}
+      .pl-card{position:relative;display:flex;align-items:center;gap:10px;min-height:150px;padding:14px 16px;border-radius:22px;
+        background:rgba(28,32,26,.55);border:2px solid rgba(255,255,255,.14);cursor:pointer;overflow:hidden;
+        transition:transform .18s cubic-bezier(.2,.9,.3,1),box-shadow .18s,border-color .18s,filter .25s,opacity .25s;
+        backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px)}
+      .pl-card .pl-txt{flex:1;text-align:right}
+      .pl-card h3{font-size:30px;font-weight:900;color:#fff;margin:0 0 6px;text-shadow:0 2px 0 rgba(0,0,0,.5)}
+      .pl-card p{font-size:16px;font-weight:800;color:#f0ead9;line-height:1.7;margin:0;text-shadow:0 1px 3px rgba(0,0,0,.5)}
+      .pl-card .pl-img{width:132px;height:132px;flex:none;display:flex;align-items:flex-end;justify-content:center}
+      .pl-card .pl-img img{max-width:100%;max-height:100%;object-fit:contain;filter:drop-shadow(0 8px 14px rgba(0,0,0,.5))}
+      /* unselected → dimmed + blurred; selected → bright, sharp, yellow-framed */
+      .pl-card.off{filter:blur(1.5px) saturate(.6) brightness(.72);opacity:.72}
+      .pl-card.on{border-color:var(--bolt);background:rgba(40,44,30,.72);box-shadow:0 0 0 3px rgba(255,210,31,.28),0 12px 30px -10px rgba(0,0,0,.7);filter:none;opacity:1;transform:translateY(-2px)}
+      .pl-card:active{transform:scale(.985)}
+      .pl-confirm{padding:8px 16px calc(18px + env(safe-area-inset-bottom))}
+      .pl-confirm .btn{font-size:19px;padding:17px}
+    </style>
+    <section class="screen" id="plans">
+      <div class="pl-head">
+        <h1>انتخاب مدل بازی</h1>
+        <p>با انتخاب پلن پولی، پول واقعی وسط می‌ذاری و در نهایت پول واقعی می‌بری، ولی توی پلن رایگان همه‌چی با امتیازه</p>
+      </div>
+      <div class="pl-cards">
+        <div class="pl-card" id="planPaid" onclick="planPick('premium')">
+          <div class="pl-txt"><h3>پلن پولی</h3><p>برنده شو و پول<br>واقعی ببر</p></div>
+          <div class="pl-img"><img id="planPaidImg" alt="پلن پولی"></div>
         </div>
-        <div class="plan2 prize" onclick="choosePlan('premium')">
-          <span class="plan-badge prize" style="align-self:center">جایزه واقعی 💰</span>
-          <div class="pchar"><span class="pcrown">👑</span><span class="glasses">🕶️</span><img class="brand-char" alt="mascot" style="filter:drop-shadow(0 8px 0 rgba(0,0,0,.28)) saturate(1.2) brightness(1.08)"></div>
-          <h3>حالت جایزه</h3>
-          <div class="ptagline">پول واقعی بذار، جایزه‌ی واقعی ببر</div>
-          <div class="pf"><span class="pi">💵</span> جایزه‌ی نقدی واقعی</div>
-          <div class="pf"><span class="pi">⚡</span> XP دو تا سه برابر</div>
-          <div class="pf"><span class="pi">🏆</span> همه‌ی امکانات حالت تمرین</div>
-          <div class="pf"><span class="pi">📈</span> امکان کسب درآمد واقعی</div>
-          <div class="pf"><span class="pi">🎨</span> اسکین‌های ویژه</div>
-          <div class="pcta"><button class="pbtn">ورود به حالت جایزه 🚀</button></div>
+        <div class="pl-card" id="planFree" onclick="planPick('free')">
+          <div class="pl-txt"><h3>پلن رایگان</h3><p>اینجا تمرین کن<br>واسه اصلی</p></div>
+          <div class="pl-img"><img id="planFreeImg" alt="پلن رایگان"></div>
         </div>
       </div>
-      <div class="admin-note" style="margin-top:14px"><span>ℹ️</span><span>در حالت تمرین همه‌چیز رایگانه و فقط XP می‌گیری؛ در حالت جایزه با پرداخت ورودی، جایزه‌ی نقدی می‌بری.</span></div>
+      <div class="pl-confirm"><button class="btn btn-primary" id="planConfirmBtn" onclick="planConfirm()">تایید و ادامه</button></div>
     </section>
 
     <!-- ============ MATCHMAKING (survivor) ============ -->
@@ -4616,7 +4627,7 @@ function lsRender(snap){
   lsSnap=snap; if(snap.me) lsMyId=snap.me.userId;
   const r=snap.room;
   const key=r.status+'|'+r.phase+'|'+r.round;
-  if(key!==lsLastKey){ lsLastKey=key; lsBuild(snap); if(r.phase==='ready'){ lsPuUsed={}; lsSecondArmed=false; } if(r.phase==='ready'||r.phase==='question'){ lsAnswered=(snap.me&&snap.me.answeredThisRound)||false; } if(r.phase==='elimination')lsDeadDismissed=false; try{if(r.phase==='elimination')sfx('found');}catch(e){} }
+  if(key!==lsLastKey){ lsLastKey=key; lsBuild(snap); if(r.phase==='ready'){ lsPuUsed={}; lsSecondArmed=false; lsSecondSubmitted=false; } if(r.phase==='ready'||r.phase==='question'){ lsAnswered=(snap.me&&snap.me.answeredThisRound)||false; } if(r.phase==='elimination')lsDeadDismissed=false; try{if(r.phase==='elimination')sfx('found');}catch(e){} }
   lsLive(snap);
   // A player who has cashed out is DONE — show the victory result right away
   // instead of making them watch the rest of the match.
@@ -4803,7 +4814,7 @@ function lsReadyGate(snap){
    (curBox/curCorrect/qLocked) AND on knowing the correct answer — which LS
    deliberately keeps server-side. So we render the same buttons and rebind them
    to a server-backed implementation. */
-let lsSecondArmed=false, lsPuUsed={};
+let lsSecondArmed=false, lsPuUsed={}, lsSecondSubmitted=false;
 /* Render OUR OWN lifeline row (same .pu look as the duel) and bind it directly.
    Depending on the duel's renderPowerups()/usePower() was the reason these did
    nothing: usePower() bails on its own globals (qLocked/curBox/curCorrect) which
@@ -4860,6 +4871,23 @@ async function lsAnswer(i){
   if(lsAnswered||!lsSnap||!lsSnap.me||lsSnap.me.status!=='alive')return;
   if(lsSnap.room.phase!=='question')return;           // gate still closed
   lsAnswered=true;
+  /* SECOND CHANCE: when armed, we submit FIRST and only lock the UI if the
+     server doesn't hand back a retry — otherwise the player could never make
+     their second pick (that was the bug). */
+  if(lsSecondArmed){
+    const pre=await pzApi('POST','/last-survivor/rooms/'+lsRoomId+'/answer',{round:lsSnap.room.round,selectedIndex:i});
+    const d=(pre&&pre.data)||{};
+    if(d.retry){
+      lsAnswered=false;                       // pick again
+      const box=document.getElementById('lsOpts');
+      if(box){ const b=box.querySelector('.ans[data-i="'+i+'"]'); if(b){ b.classList.add('dim'); b.disabled=true; } }
+      toast('🔁 جواب اولت غلط بود — یک انتخاب دیگر داری',2400);
+      try{sfx('wrong');vib([40,30]);}catch(e){}
+      return;
+    }
+    lsSecondArmed=false; lsSecondSubmitted=true;   // already submitted above
+    if(d.secondChance) toast('انتخاب دومت ثبت شد 🔁');
+  }
   /* Motion: the picked option lifts and the others slide INTO it, then the
      "answer recorded" line pops. No green/red — the correct answer stays secret. */
   const opts=document.getElementById('lsOpts');
@@ -4888,9 +4916,9 @@ async function lsAnswer(i){
     },1500);
   }
   try{sfx('select');vib(20);}catch(e){}
-  const res=await pzApi('POST','/last-survivor/rooms/'+lsRoomId+'/answer',{round:lsSnap.room.round,selectedIndex:i});
-  // Second chance: the server accepted an overwrite of a wrong first answer.
-  if(res&&res.data&&res.data.secondChance){ lsSecondArmed=false; toast('انتخاب دومت ثبت شد 🔁'); }
+  // (When second chance was armed the answer was already submitted above.)
+  if(!lsSecondSubmitted) await pzApi('POST','/last-survivor/rooms/'+lsRoomId+'/answer',{round:lsSnap.room.round,selectedIndex:i});
+  lsSecondSubmitted=false;
 }
 
 function lsRoomStrip(snap){
@@ -7899,6 +7927,32 @@ function applyPlanTheme(){
   }
   try{updateWalletUI();updateModeEntryPlan();}catch(e){}
 }
+/* Plan picker: tapping a card only SELECTS it (that card turns bright/sharp,
+   the other dims + blurs). Nothing is applied until «تایید و ادامه». */
+let planSel=null;
+function planPick(p){
+  planSel=p;
+  const paid=document.getElementById('planPaid'), free=document.getElementById('planFree');
+  if(paid){ paid.classList.toggle('on',p==='premium'); paid.classList.toggle('off',p!=='premium'); }
+  if(free){ free.classList.toggle('on',p==='free'); free.classList.toggle('off',p!=='free'); }
+  try{sfx('select');vib(18);}catch(e){}
+}
+function planConfirm(){
+  if(!planSel){ toast('اول یکی از پلن‌ها رو انتخاب کن'); return; }
+  choosePlan(planSel);
+}
+/* Character art for the two cards. Drop `pooli.png` (prize monster) and
+   `raygan1.png` (study monster) in the web root next to index.html; until then
+   the brand mascot shows instead, so the screen is never blank. */
+function planPaintChars(){
+  const set=(id,file)=>{ const im=document.getElementById(id); if(!im)return;
+    im.onerror=function(){ if(window.ART_CHAR) im.src=window.ART_CHAR; im.onerror=null; };
+    im.src=file; };
+  set('planPaidImg','pooli.png');
+  set('planFreeImg','raygan1.png');
+  // default highlight so the screen never looks "nothing selected"
+  if(!planSel) planPick(typeof userPlan!=='undefined'&&userPlan==='free'?'free':'premium');
+}
 function choosePlan(p){
   userPlan=p;planExplicitlyChosen=true;try{localStorage.setItem('pq_user_plan',p);}catch(e){}
   applyPlanTheme();sfx('found');vib([30,50]);
@@ -8192,6 +8246,7 @@ go=function(id){_origGo(id);
   if(id==='profile'){setTimeout(animateProfile,120);try{populateProfileEdit();}catch(e){}try{applyMyName();}catch(e){}try{pzHydrateStats();}catch(e){}}
   if(id==='mode-entry')setTimeout(()=>{updateModeEntryPlan();try{renderTicketSelect();}catch(e){}},20);
   if(id==='character')setTimeout(ccInit,80);
+  if(id==='plans')setTimeout(function(){try{planPaintChars();}catch(e){}},40);
   if(id==='missions'){markBadgeViewed('missions');showTutorialOnce('missions','🎯','ماموریت‌ها','ماموریت‌ها را کامل کن و جایزه آماده را دریافت کن.');setTimeout(renderMissions,80);}
   if(id==='stats')setTimeout(renderStats,80);
   if(id==='shop'){markBadgeViewed('shop');showTutorialOnce('shop','🛍️','فروشگاه','اینجا می‌تونی کمک‌ها، قلب و آیتم‌های ظاهری بگیری.');}

@@ -292,7 +292,7 @@ export async function useLifeline(roomId: string, userId: string, type: string):
   return { ok: false, reason: 'UNKNOWN_LIFELINE' };
 }
 
-export async function submitAnswer(roomId: string, userId: string, round: number, selectedIndex: number): Promise<{ accepted: boolean; reason?: string; secondChance?: boolean }> {
+export async function submitAnswer(roomId: string, userId: string, round: number, selectedIndex: number): Promise<{ accepted: boolean; reason?: string; secondChance?: boolean; retry?: boolean }> {
   const room = await getRoom(roomId);
   if (!room || room.status !== 'running' || room.phase !== 'question') return { accepted: false, reason: 'NOT_IN_QUESTION' };
   if (round !== room.round) return { accepted: false, reason: 'WRONG_ROUND' };
@@ -302,6 +302,10 @@ export async function submitAnswer(roomId: string, userId: string, round: number
   if (p.answerRound === room.round) {
     // Second chance: one overwrite of a WRONG first answer, if it was armed.
     const k = scKey(roomId, room.round, userId);
+    if (p.answerCorrect === false && secondChanceArmed.has(k) && !secondChanceUsed.has(k) && p.answerIndex === selectedIndex) {
+      // Re-sending the SAME wrong pick doesn't burn the retry.
+      return { accepted: true, retry: true };
+    }
     if (p.answerCorrect === false && secondChanceArmed.has(k) && !secondChanceUsed.has(k)) {
       secondChanceArmed.delete(k); secondChanceUsed.add(k);
       const correct2 = room.correctIndex != null && selectedIndex === room.correctIndex;
@@ -314,6 +318,11 @@ export async function submitAnswer(roomId: string, userId: string, round: number
   const correct = room.correctIndex != null && selectedIndex === room.correctIndex;
   p.answerRound = room.round; p.answerIndex = selectedIndex; p.answerCorrect = correct; p.lastSeenAt = Date.now();
   await savePlayer(p);
+  // If the player armed "second chance" and this first pick is WRONG, tell them
+  // to pick again — that IS the lifeline. (It reveals only that this option was
+  // wrong, never which one is right.)
+  const k2 = scKey(roomId, room.round, userId);
+  if (!correct && secondChanceArmed.has(k2) && !secondChanceUsed.has(k2)) return { accepted: true, retry: true };
   return { accepted: true };
 }
 
