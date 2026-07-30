@@ -4452,7 +4452,7 @@ function lsFa(n){try{return (Number(n)||0).toLocaleString('fa-IR');}catch(e){ret
 const LS_COLORS={green:{n:'سبز',c:'#33D97C',e:'🟢'},blue:{n:'آبی',c:'#3F9BF2',e:'🔵'},red:{n:'قرمز',c:'#F2483C',e:'🔴'}};
 
 function lsStart(){ showScreen('lsTopics'); lsLoadTopics(); }
-function lsLeave(to){ lsStopPoll(); lsRoomId=null; lsSnap=null; lsLastKey=''; go(to||'home'); }
+function lsLeave(to){ try{ if(pzRt&&pzRt.ws&&pzRt.ws.readyState===1&&lsRoomId) pzRt.ws.send(JSON.stringify({type:'client:leave_ls_room',payload:{roomId:lsRoomId}})); }catch(e){} lsStopPoll(); lsRoomId=null; lsSnap=null; lsLastKey=''; go(to||'home'); }
 function lsStopPoll(){ if(lsPoller){clearInterval(lsPoller);lsPoller=null;} }
 
 async function lsLoadTopics(){
@@ -4490,11 +4490,36 @@ async function lsDoJoin(topic,color){
   showScreen('lsGame'); lsRender(snap); lsStartPoll();
 }
 
-function lsStartPoll(){ lsStopPoll(); lsPoller=setInterval(lsPoll,1000); }
-async function lsPoll(){
+/* Real-time model: the server pushes a full `ls:state` snapshot over WebSocket
+   the instant a phase changes (question→elimination→dashboard→cashout→…), so
+   transitions are INSTANT. A light fallback poll still runs (waiting-room joins
+   and any missed push), and a local 1s ticker keeps the countdown smooth with
+   no network. */
+let lsTickN=0;
+function lsStartPoll(){ lsStopPoll(); lsTickN=0; lsWsJoin(); lsPollNow(); lsPoller=setInterval(lsTick,1000); }
+function lsTick(){
   if(!lsRoomId || !document.getElementById('lsGame').classList.contains('active')){ lsStopPoll(); return; }
+  lsTickN++;
+  if(lsSnap){ const t=document.getElementById('lsTimer'); if(t)t.textContent=lsTimer(lsSnap); } // smooth local countdown
+  if(lsTickN%5===0) lsWsJoin();                       // keep the WS topic subscription alive across reconnects (idempotent)
+  const waiting=lsSnap&&lsSnap.room&&lsSnap.room.status==='waiting';
+  if(lsTickN%(waiting?2:4)===0) lsPollNow();          // fallback refresh (WS handles instant transitions)
+}
+async function lsPollNow(){
+  if(!lsRoomId) return;
   const r=await pzApi('GET','/last-survivor/rooms/'+lsRoomId);
   if(r&&r.data) lsRender(r.data);
+}
+function lsWsJoin(){
+  try{
+    if(typeof pzWsConnect==='function') pzWsConnect();
+    const send=()=>{ try{ if(pzRt&&pzRt.ws&&pzRt.ws.readyState===1&&lsRoomId){ pzRt.ws.send(JSON.stringify({type:'client:join_ls_room',payload:{roomId:lsRoomId}})); } else if(lsRoomId){ setTimeout(send,400); } }catch(e){} };
+    send();
+  }catch(e){}
+}
+/* Called by the shared WS dispatcher (pzHandleWs) for ls:* pushes. */
+function lsOnWs(type,payload){
+  if(type==='server:ls_snapshot'||type==='ls:state'){ if(payload&&payload.room&&payload.room.id===lsRoomId) lsRender(payload); }
 }
 
 function lsTimer(snap){
@@ -8695,6 +8720,8 @@ function pzHandleWs(m){
   if(!m||!m.type) return; const p=m.payload||{};
   if(m.type==='server:connected'){ if(p.userId){ pzWsMyId=p.userId; pzRt.myId=p.userId; try{ console.log('[PZ-WSID]',{wsUserId:p.userId,localUsrId:(_usr&&_usr.id)}); }catch(_){} } pzConn.lastPongAt=Date.now(); if(pzRt.active&&!pzRt.finished) pzConnEvalMine(); return; }   /* WS id is authoritative for answer attribution */
   if(m.type==='server:pong'){ pzConn.lastPongAt=Date.now(); pzConn.rtt=Math.max(0,Date.now()-(pzConn.lastPingAt||Date.now())); if(pzRt.active&&!pzRt.finished) pzConnEvalMine(); return; }   /* real round-trip latency for MY connection */
+  /* Last Survivor pushes: full snapshot on every phase transition → instant. */
+  if(m.type==='server:ls_snapshot'||(typeof m.type==='string'&&m.type.indexOf('ls:')===0)){ try{ if(typeof lsOnWs==='function') lsOnWs(m.type,p); }catch(_){} return; }
   /* CROSS-MATCH GUARD: after a rematch, late/buffered events from the FINISHED
      match 1 must never touch match 2. Every match-scoped event carries a
      top-level matchId — drop it if it isn't the match we're currently in.
