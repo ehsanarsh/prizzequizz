@@ -317,9 +317,16 @@ export async function snapshot(roomId: string, forUserId?: string): Promise<any>
     players: players.map((p) => ({ userId: p.userId, username: p.username, avatar: p.avatar, color: p.color, status: p.status, payoutCash: p.payoutCash, eliminatedRound: p.eliminatedRound, cashedOutRound: p.cashedOutRound })),
     votes: await countVotes(roomId)
   };
-  // Current question WITHOUT the correct index (never leaked live).
+  // Current question WITHOUT the correct index (never leaked live). The TEXT and
+  // OPTIONS must be here — a reconnecting client (or one that missed the
+  // ls:question push) otherwise renders an empty question, can't answer, and
+  // gets eliminated at the deadline.
   if (room.status === 'running' && room.phase === 'question' && room.questionId) {
     view.question = { id: room.questionId, round: room.round };
+    try {
+      const q = await repositories.questions.findById(room.questionId);
+      if (q) { view.question.text = q.text; view.question.options = q.options; }
+    } catch { /* text is best-effort; the id/round still drive the flow */ }
   }
   if (me) {
     const myShare = me.status === 'alive' ? cashoutShareFor(toPrizePlayers(players).find((x) => x.userId === me.userId)!, prize, netRemaining) : 0;

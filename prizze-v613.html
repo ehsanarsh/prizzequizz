@@ -3277,6 +3277,17 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
       <div class="ls-top"><div class="ls-back" onclick="lsLeave('home')">‹</div><div class="ls-ttl"><h1>آخرین بازمانده 🏆</h1><p>موضوع را انتخاب کن — بمون تا جایزه مال تو شه</p></div></div>
       <div class="ls-topics" id="lsTopicList"><div style="grid-column:span 2;text-align:center;color:#8fa89a;padding:30px">در حال بارگذاری…</div></div>
     </section>
+    <section class="screen pad" id="lsEntry">
+      <div class="topbar" style="padding:0 0 14px;background:none"><button class="iconbtn" onclick="go('lsTopics')">→</button><h1>ورود به مسابقه 🏆</h1></div>
+      <div class="card" style="text-align:center;margin-bottom:14px">
+        <div style="font-size:34px" id="lsEntryIcon">🎯</div>
+        <b style="display:block;font-size:18px;margin-top:6px" id="lsEntryTopic">موضوع</b>
+        <span style="font-size:12px;color:var(--muted)">آخرین بازمانده · حذفی</span>
+      </div>
+      <div class="card" id="lsEntryCard"></div>
+      <button class="btn btn-primary" style="margin-top:14px" id="lsEntryBtn" onclick="lsEntryStart()">ورود با بلیط 🎫</button>
+      <div style="font-size:11px;color:var(--muted2);text-align:center;margin-top:10px">ارزش بلیط، سهم تو از جایزه را تعیین می‌کند · جایزه بر اساس مجموع سهم‌ها تقسیم می‌شود</div>
+    </section>
     <section class="screen" id="lsGame"><div id="lsBody"></div></section>
 
     <!-- ============ HOME ============ -->
@@ -4492,20 +4503,38 @@ async function lsLoadTopics(){
   }).join('')||'<div style="grid-column:span 2;text-align:center;color:#8fa89a;padding:30px">موضوعی نیست</div>';
 }
 
-function lsChooseColor(topic){
+/* Ticket selection is a full SCREEN (identical pattern to the paid-duel entry):
+   the same TICKET_DEFS, the same .tab chips, and a primary button whose label
+   reflects whether you own that ticket. No popup. */
+let lsEntryTopic=null, lsEntryColor='green';
+function lsChooseColor(topic){ lsEntryTopic=topic; lsEntryColor='green'; go('lsEntry'); lsRenderEntry(); }
+function lsRenderEntry(){
+  const ic=document.getElementById('lsEntryIcon'), tp=document.getElementById('lsEntryTopic');
+  if(ic)ic.textContent=lsIcon(lsEntryTopic); if(tp)tp.textContent=lsEntryTopic||'موضوع';
+  const card=document.getElementById('lsEntryCard'); if(!card)return;
+  card.innerHTML='<div class="section-title" style="margin-top:0">انتخاب بلیط ورود</div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px" id="lsTkGrid"></div>';
+  const g=document.getElementById('lsTkGrid');
   const have=(typeof mTickets!=='undefined'&&mTickets)||{green:0,blue:0,red:0};
-  document.getElementById('lsColorPick')&&document.getElementById('lsColorPick').remove();
-  const ov=document.createElement('div'); ov.className='ls-sheet'; ov.id='lsColorPick';
-  ov.innerHTML='<div class="ls-sheet-card"><h2>با کدام بلیط بازی کنی؟</h2><p>ارزش بلیط، سهم تو از جایزه را تعیین می‌کند</p>'+
-    '<div class="ls-color-list">'+
-    ['green','blue','red'].map(c=>{const t=lsTickets[c]||{value:0,units:0};const n=have[c]||0;const dis=n<1;
-      return `<button ${dis?'disabled':''} onclick="lsDoJoin(${JSON.stringify(topic).replace(/"/g,'&quot;')},'${c}')" class="ls-color-btn" style="border-color:${LS_COLORS[c].c}66;opacity:${dis?.45:1};cursor:${dis?'not-allowed':'pointer'}"><span>${LS_COLORS[c].e} بلیط ${LS_COLORS[c].n}</span><span class="ls-color-meta">${lsFa(t.value)} ت · ضریب ${lsFa(t.units)} · داری: ${lsFa(n)}</span></button>`;}).join('')+
-    '</div><button class="ls-sheet-x" onclick="document.getElementById(\'lsColorPick\').remove()">انصراف</button></div>';
-  lsHost().appendChild(ov);
+  (typeof TICKET_DEFS!=='undefined'?TICKET_DEFS:[]).forEach(t=>{
+    const units=(lsTickets[t.key]&&lsTickets[t.key].units)||0;
+    const b=document.createElement('button'); b.className='tab'+(lsEntryColor===t.key?' active':'');
+    b.style.cssText='border:2px solid '+t.color+(lsEntryColor===t.key?';background:'+t.grad+';color:#fff':'');
+    b.innerHTML=t.icon+' '+t.name.replace('بلیط ','')+'<br><small style="font-size:10px;opacity:.85">'+lsFa(t.value)+' ت · '+lsFa(have[t.key]||0)+' تا</small>'+(units?'<br><small style="font-size:9px;opacity:.75">ضریب '+lsFa(units)+'</small>':'');
+    b.onclick=()=>{ lsEntryColor=t.key; lsRenderEntry(); };
+    g.appendChild(b);
+  });
+  const btn=document.getElementById('lsEntryBtn');
+  if(btn){ const n=have[lsEntryColor]||0; const nm=(typeof tDef==='function'?tDef(lsEntryColor).name:'بلیط');
+    btn.textContent=n>0?('ورود با '+nm+' 🎫'):('خرید '+nm+' 🎫'); }
+}
+function lsEntryStart(){
+  const have=(typeof mTickets!=='undefined'&&mTickets)||{};
+  if((have[lsEntryColor]||0)<1){ try{ goShopTickets(); }catch(e){ toast('بلیط کافی نداری'); } return; }
+  lsDoJoin(lsEntryTopic,lsEntryColor);
 }
 
 async function lsDoJoin(topic,color){
-  document.getElementById('lsColorPick')&&document.getElementById('lsColorPick').remove();
   toast('در حال ورود…');
   const r=await pzApi('POST','/last-survivor/join',{topic,color});
   if(!r||r.ok===false){ toast((r&&r.error&&r.error.message)||'ورود ناموفق بود'); return; }
