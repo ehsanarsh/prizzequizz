@@ -241,13 +241,20 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
 .mini-lb{background:var(--ink-2);border:var(--stroke);border-radius:17px;padding:12px 14px;box-shadow:var(--hard-sm)}
 .mini-lb .lb-row{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:800;padding:4px 0}
 .mini-lb .lb-row .rk{width:20px;height:20px;border-radius:7px;background:var(--bolt);border:2px solid #000;color:#141414;display:grid;place-items:center;font-size:11px;font-weight:900;flex-shrink:0}
-/* Admin-owned banner on the three ticket screens — identical everywhere. */
-.tk-promo{display:flex;align-items:center;gap:11px;margin:-4px -2px 12px;padding:10px 12px;border:2.5px solid #000;border-radius:18px;background:linear-gradient(150deg,rgba(255,210,31,.16),rgba(255,255,255,.05));box-shadow:0 4px 0 #000;overflow:hidden}
-.tk-promo-img{flex:0 0 auto;width:58px;height:58px;border-radius:14px;border:2px solid #000;overflow:hidden;background:var(--ink-3)}
+/* Admin-owned banner on the three ticket screens — one big block that owns the
+   space above the tickets, identical on all three. */
+.tk-promo-host:empty{display:none}
+.tk-promo{position:relative;display:block;width:100%;min-height:172px;margin-bottom:12px;border:2.5px solid #000;border-radius:22px;overflow:hidden;box-shadow:0 5px 0 #000;background:linear-gradient(152deg,#243546,#141d28)}
+.tk-promo-img{position:absolute;inset:0;z-index:1}
 .tk-promo-img img{width:100%;height:100%;object-fit:cover;display:block}
-.tk-promo-txt{flex:1;min-width:0;text-align:right}
-.tk-promo-txt b{display:block;font-size:14px;font-weight:900;color:var(--paper);line-height:1.4}
-.tk-promo-txt span{display:block;font-size:11.5px;font-weight:800;color:var(--muted);line-height:1.7;margin-top:2px}
+.tk-promo-txt{position:relative;z-index:2;min-height:172px;padding:18px 20px;display:flex;flex-direction:column;justify-content:flex-end;text-align:right}
+.tk-promo.has-img .tk-promo-txt{background:linear-gradient(180deg,rgba(0,0,0,.06) 34%,rgba(0,0,0,.55) 72%,rgba(0,0,0,.82))}
+.tk-promo-txt b{display:block;font-size:20px;font-weight:900;color:#fff;line-height:1.4;text-shadow:0 2px 5px rgba(0,0,0,.85)}
+.tk-promo-txt span{display:block;font-size:13px;font-weight:800;color:rgba(255,255,255,.92);line-height:1.85;margin-top:5px;text-shadow:0 1px 4px rgba(0,0,0,.9)}
+/* No artwork → the same block reads as a text panel rather than an empty box. */
+.tk-promo:not(.has-img) .tk-promo-txt{justify-content:center;text-align:center;padding:22px 24px}
+.tk-promo:not(.has-img) .tk-promo-txt b{color:var(--bolt);font-size:22px;text-shadow:0 2px 0 rgba(0,0,0,.5)}
+.tk-promo:not(.has-img) .tk-promo-txt span{color:var(--muted);text-shadow:none}
 /* Ticket picker: the prize is the headline; the commission is never mentioned. */
 .tk-prize{text-align:center;padding:4px 6px 14px}
 .tk-prize-lbl{display:block;font-size:11.5px;font-weight:900;color:var(--muted);letter-spacing:.02em}
@@ -3368,6 +3375,8 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
         <b style="display:block;font-size:18px;margin-top:6px" id="lsEntryTopic">موضوع</b>
         <span style="font-size:12px;color:var(--muted)">آخرین بازمانده · حذفی</span>
       </div>
+      <div class="tk-promo-host" id="promoLs"></div>
+      <div class="grow"></div>
       <div class="card" id="lsEntryCard"></div>
       <button class="btn btn-primary" style="margin-top:14px" id="lsEntryBtn" onclick="lsEntryStart()">ورود با بلیط 🎫</button>
 
@@ -3485,6 +3494,8 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
         <div style="width:84px;height:84px;border-radius:26px;display:grid;place-items:center;font-size:42px" id="me-ico">⚔️</div>
         <p style="color:var(--muted);font-size:13px;margin-top:10px;text-align:center;line-height:1.7" id="me-desc"></p>
       </div>
+      <!-- Promo owns the space above; the ticket card is pushed to the bottom. -->
+      <div class="tk-promo-host" id="promoDuel"></div>
       <div class="card" id="modeStakeCard">
         <div class="section-title" style="margin-top:0">مبلغ ورودی</div>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px" id="stakeGrid">
@@ -3497,14 +3508,11 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
         <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:7px"><span style="color:var(--muted)">موجودی شما</span><b class="mono" style="color:var(--ok)"><span id="meBalance">۹۰۰٬۰۰۰</span> تومان</b></div>
 
       </div>
-      <div class="card" id="ticketSelectCard" style="display:none;margin-bottom:12px"></div>
       <div class="card practice-cost-card" style="gap:10px;align-items:center;margin-bottom:12px;padding:12px 14px">
         <span class="heart-big">❤️</span><div style="font-size:12px;font-weight:800;flex:1;line-height:1.6">حالت تمرینی: ورود به هر بازی با <b style="color:#ff7aa8">۱ قلب</b> انجام می‌شود، بدون پول و بدون مبلغ ورودی.</div><span class="heart-recharge" id="meHeartInfo">شارژ هر ۱ ساعت</span></div>
       <div class="card practice-coin-card" style="margin-bottom:12px;padding:13px 14px"><div class="section-title" style="margin-top:0">ورودی تمرینی با سکه</div><div style="font-size:12px;color:var(--muted);font-weight:800;line-height:1.6">برای مسابقات تمرینی، به‌جای پول از سکه تمرینی استفاده می‌کنی.</div><div class="coin-stake-grid" id="coinStakeGrid"><button class="tab" onclick="selCoinStake(this,10)">۱۰ 🪙</button><button class="tab active" onclick="selCoinStake(this,25)">۲۵ 🪙</button><button class="tab" onclick="selCoinStake(this,50)">۵۰ 🪙</button></div></div>
       <div class="grow"></div>
-      <div class="card free-ticket-card" style="display:flex;gap:10px;align-items:center;margin-bottom:12px;padding:12px 14px">
-        <span style="font-size:20px">🎟️</span><div style="font-size:12px;font-weight:600;flex:1;line-height:1.5">۱ ژتون رایگان داری! می‌تونی این بازی رو رایگان تجربه کنی</div>
-        <button class="btn btn-ghost btn-sm">رایگان</button></div>
+      <div class="card" id="ticketSelectCard" style="display:none;margin-bottom:12px"></div>
       <div id="mePlanNote" style="text-align:center;font-size:11px;font-weight:800;margin-bottom:8px"></div><button class="btn btn-primary" id="meStartBtn" onclick="startGame()">پرداخت و ورود</button>
     </section>
 
@@ -4638,7 +4646,8 @@ function lsRenderEntry(){
   const ic=document.getElementById('lsEntryIcon'), tp=document.getElementById('lsEntryTopic');
   if(ic)ic.textContent=lsIcon(lsEntryTopic); if(tp)tp.textContent=lsEntryTopic||'موضوع';
   const card=document.getElementById('lsEntryCard'); if(!card)return;
-  card.innerHTML=pzPromoHTML('lastSurvivor')+'<div class="tk-prize"><span class="tk-prize-lbl">سهم تو از جایزه</span>'+
+  pzPromoRender('lastSurvivor','promoLs');
+  card.innerHTML='<div class="tk-prize"><span class="tk-prize-lbl">سهم تو از جایزه</span>'+
       '<b class="tk-prize-val" id="lsPrizeVal">'+(pzPrizeFor(lsEntryColor)==null?'…':lsFa(pzPrizeFor(lsEntryColor))+' تومان')+'</b>'+
       '<span class="tk-prize-tag">هرچه بیشتر بمانی، سهمت بیشتر 🏆</span></div>'+
     '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px" id="lsTkGrid"></div>';
@@ -4657,7 +4666,7 @@ function lsRenderEntry(){
   if(btn){ const n=have[lsEntryColor]||0; const nm=(typeof tDef==='function'?tDef(lsEntryColor).name:'بلیط');
     btn.textContent=n>0?('ورود با '+nm+' 🎫'):('خرید '+nm+' 🎫'); }
   if(pzPrizeFor(lsEntryColor)==null) pzLoadPrizes().then(()=>{ const el=document.getElementById('lsPrizeVal'); const p=pzPrizeFor(lsEntryColor); if(el&&p!=null) el.textContent=lsFa(p)+' تومان'; });
-  pzPromoFill('lastSurvivor','lsEntryCard');
+
 }
 function lsEntryStart(){
   const have=(typeof mTickets!=='undefined'&&mTickets)||{};
@@ -7625,17 +7634,22 @@ function renderHeaderTickets(){
 function goShopTickets(){ go('shop'); setTimeout(()=>{ const tab=document.getElementById('shopTabTickets'); if(tab)shopTab(tab,'tickets'); },50); }
 function renderTicketShop(){
   const c=document.getElementById('shopContent');
-  c.innerHTML=pzPromoHTML('shop')+'<div class="shop-grid" id="ticketGrid"></div>';
-  pzPromoFill('shop','shopContent');
+  c.innerHTML='<div class="tk-promo-host" id="promoShop"></div><div class="shop-grid" id="ticketGrid"></div>';
+  pzPromoRender('shop','promoShop');
   const g=document.getElementById('ticketGrid');
   TICKET_DEFS.forEach(t=>{
     const d=document.createElement('div'); d.className='item'; d.style.cssText='background:'+t.grad+';color:#fff;border:2px solid #000;text-align:center';
     d.innerHTML='<div class="it-ico" style="font-size:34px;filter:drop-shadow(0 3px 0 rgba(0,0,0,.35));animation:tkFloat 2.4s ease-in-out infinite">🎫</div>'+
       '<b style="font-size:15px">'+t.name+'</b>'+
-      '<p style="color:rgba(255,255,255,.9);font-size:12px;line-height:1.6">ورودی مسابقه<br>جایزهٔ برد: <b>'+fa(t.value*2)+' تومان</b></p>'+
+      '<p style="color:rgba(255,255,255,.9);font-size:12px;line-height:1.6">ورودی مسابقه<br>جایزهٔ برد: <b class="tk-shop-prize" data-tier="'+t.key+'">'+(pzPrizeFor(t.key)==null?'…':fa(pzPrizeFor(t.key))+' تومان')+'</b></p>'+
       '<div class="price" style="background:rgba(0,0,0,.28);color:#fff">'+fa(t.value)+' ت · تعداد تو: '+fa(mTickets[t.key]||0)+'</div>';
     d.onclick=()=>buyTicket(t,d);
     g.appendChild(d);
+  });
+  if(!PZ_PRIZES) pzLoadPrizes().then(()=>{
+    document.querySelectorAll('.tk-shop-prize').forEach(el=>{
+      const v=pzPrizeFor(el.dataset.tier); if(v!=null) el.textContent=fa(v)+' تومان';
+    });
   });
 }
 async function buyTicket(t,el){
@@ -7720,20 +7734,18 @@ function pzPromoHTML(slot){
   const p=PZ_PROMOS&&PZ_PROMOS[slot];
   if(!p||!p.enabled||(!p.title&&!p.text&&!p.image)) return '';
   const tap=p.link?(' onclick="go(\''+jsStr(p.link)+'\')" style="cursor:pointer"'):'';
-  return '<div class="tk-promo" data-promo="'+slot+'"'+tap+'>'+
-    (p.image?'<div class="tk-promo-img"><img src="'+frEsc(p.image)+'" alt="" onerror="this.parentNode.remove()"></div>':'')+
+  /* With artwork the text sits over the picture; without it the same block
+     becomes a text-only panel, so the space is never left blank. */
+  return '<div class="tk-promo'+(p.image?' has-img':'')+'" data-promo="'+slot+'"'+tap+'>'+
+    (p.image?'<div class="tk-promo-img"><img src="'+frEsc(p.image)+'" alt="" onerror="this.parentNode.parentNode.classList.remove(\'has-img\');this.parentNode.remove()"></div>':'')+
     '<div class="tk-promo-txt">'+(p.title?'<b>'+frEsc(p.title)+'</b>':'')+(p.text?'<span>'+frEsc(p.text)+'</span>':'')+'</div>'+
   '</div>';
 }
-/* Paint the banner in as soon as the server answers, without a full re-render. */
-function pzPromoFill(slot,hostId){
-  pzLoadPromos().then(()=>{
-    const host=document.getElementById(hostId); if(!host) return;
-    const cur=host.querySelector('[data-promo="'+slot+'"]');
-    const html=pzPromoHTML(slot);
-    if(cur){ cur.outerHTML=html; }
-    else if(html){ host.insertAdjacentHTML('afterbegin',html); }
-  });
+/** Paint a slot into its own host element, above (and separate from) the tickets. */
+function pzPromoRender(slot,hostId){
+  const paint=()=>{ const host=document.getElementById(hostId); if(host) host.innerHTML=pzPromoHTML(slot); };
+  paint();
+  if(!PZ_PROMOS) pzLoadPromos().then(paint);
 }
 
 /* Ticket-tier selector on the paid-duel entry screen. */
@@ -7744,7 +7756,8 @@ function renderTicketSelect(){
   if(stake&&isDuelPaid) stake.style.display='none';
   if(!isDuelPaid||!card) return;
   const prize=pzPrizeFor(selectedTicket);
-  card.innerHTML=pzPromoHTML('duel')+
+  pzPromoRender('duel','promoDuel');
+  card.innerHTML=
     '<div class="tk-prize"><span class="tk-prize-lbl">جایزه این مسابقه</span>'+
       '<b class="tk-prize-val" id="tkPrizeVal">'+(prize==null?'…':fa(prize)+' تومان')+'</b>'+
       '<span class="tk-prize-tag">برنده همه‌اش را می‌برد 🏆</span></div>'+
@@ -7762,7 +7775,7 @@ function renderTicketSelect(){
   if(btn) btn.textContent=(mTickets[selectedTicket]||0)>0?('ورود با '+tDef(selectedTicket).name+' 🎫'):('خرید '+tDef(selectedTicket).name+' 🎫');
   /* First paint may land before the server figure does — fill it in on arrival. */
   if(prize==null) pzLoadPrizes().then(()=>{ const el=document.getElementById('tkPrizeVal'); const p=pzPrizeFor(selectedTicket); if(el&&p!=null) el.textContent=fa(p)+' تومان'; });
-  pzPromoFill('duel','ticketSelectCard');
+
 }
 /* Weekly-league tickets (gold/silver/bronze) are NOT purchasable — awarded by
    weekly ranking. Show their counts wherever leagues are displayed. */
