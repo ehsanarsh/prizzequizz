@@ -3244,6 +3244,12 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
       /* question */
       .ls-qwrap{flex:1;display:flex;flex-direction:column;justify-content:flex-end;padding:14px}
       .ls-qtimer{text-align:center;color:#FFE24A;font-weight:900;font-size:15px;margin-bottom:6px}
+      /* A 50:50-removed option fades COMPLETELY — text, letter badge and all. */
+      .ans.ls-gone{opacity:.18!important;filter:grayscale(1) blur(1px)!important;pointer-events:none!important}
+      .ans.ls-gone .k{background:#555!important;color:#999!important;border-color:#333!important}
+      .ans.ls-gone .atxt,.ans.ls-gone .dash{opacity:.5}
+      /* Duel-identical timer ring for the question */
+      .ls-ring-wrap{display:flex;justify-content:center;margin-bottom:8px}
       .ls-qbar{height:10px;border-radius:8px;background:rgba(0,0,0,.45);border:2px solid #000;overflow:hidden;margin:0 4px 10px}
       .ls-qbar i{display:block;height:100%;width:100%;background:linear-gradient(90deg,var(--bolt-2),var(--bolt));transition:width .25s linear}
       .ls-qbar.low i{background:linear-gradient(90deg,#e64533,#ff8b7a)}
@@ -4683,20 +4689,19 @@ function lsBuild(snap){
 function lsLive(snap){
   const r=snap.room, s=snap.stats;
   const set=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=v;};
-  set('lsTimer',lsTimer(snap));
-  // Duel-style depleting timer bar for the answer window.
+  /* Duel-identical ring: seconds in the middle, arc drains, danger shake under
+     3s — driven by the SERVER deadline so every player's ring matches. */
   try{
-    const bar=document.getElementById('lsQBar');
-    if(bar&&r.phase==='question'&&r.phaseEndsAt){
+    const arc=document.getElementById('lsTimerArc'), ring=document.getElementById('lsRing'), C=151;
+    if(arc&&r.phase==='question'&&r.phaseEndsAt){
       const off=(r.serverNow||Date.now())-Date.now();
-      const total=Math.max(1,(r.phaseEndsAt-(r.serverNow||Date.now()))+ (lsQTotal||0));
-      if(!lsQTotal||lsQRound!==r.round){ lsQRound=r.round; lsQTotal=Math.max(1,r.phaseEndsAt-(Date.now()+off)); }
-      const left=Math.max(0,r.phaseEndsAt-(Date.now()+off));
-      const pct=Math.max(0,Math.min(100,left/lsQTotal*100));
-      bar.style.width=pct+'%';
-      bar.parentElement.classList.toggle('low',pct<30);
-    }
-  }catch(e){}
+      if(lsQRound!==r.round||!lsQTotal){ lsQRound=r.round; lsQTotal=Math.max(1,Math.round((r.phaseEndsAt-(Date.now()+off))/1000)); }
+      const secs=Math.max(0,Math.ceil((r.phaseEndsAt-(Date.now()+off))/1000));
+      const num=document.getElementById('lsTimer'); if(num)num.textContent=lsFa(secs);
+      arc.style.strokeDashoffset=C*(1-secs/lsQTotal);
+      if(typeof updateRingDanger==='function') updateRingDanger(ring,arc,secs,3);
+    } else set('lsTimer',lsTimer(snap));
+  }catch(e){ set('lsTimer',lsTimer(snap)); }
   set('lsCount',lsFa(snap.players.length)); set('lsCap',lsFa(r.capacity));
   set('lsPrize',lsFa(r.grossPool)+' تومان'); set('lsRemain',lsFa(s.remainingPot));
   set('lsAlive',lsFa(s.alive)); set('lsElim',lsFa(s.eliminated)); set('lsCash',lsFa(s.cashedOut));
@@ -4785,12 +4790,14 @@ function lsQuestionHtml(snap,locked){
   const K=(typeof keysFA!=='undefined')?keysFA:['الف','ب','ج','د'];
   /* EXACTLY the duel's answer markup: .answers > .ans with the yellow .k letter
      badge, dash and .atxt — white paper background, black text, hard shadow. */
-  return `<div class="ls-qwrap"><div class="ls-qtimer">⏳ <span id="lsTimer">${lsTimer(snap)}</span></div>
-  <div class="ls-qbar"><i id="lsQBar"></i></div>
+  /* EXACTLY the duel's timer: the same .timer-ring SVG arc + danger state. */
+  return `<div class="ls-qwrap"><div class="ls-ring-wrap">
+    <div class="timer-ring" id="lsRing"><svg width="54" height="54"><circle cx="27" cy="27" r="23" fill="none" stroke="rgba(255,255,255,.14)" stroke-width="5"/><circle id="lsTimerArc" cx="27" cy="27" r="23" fill="none" stroke="#FFD23F" stroke-width="5" stroke-linecap="round" stroke-dasharray="145"/></svg><div class="timer-num" id="lsTimer">${lsTimer(snap)}</div></div>
+  </div>
   ${badge?`<div style="text-align:center;margin-bottom:8px">${badge}</div>`:''}
   <div class="ls-qcard"><div class="ls-qtext">${q.text||'…'}</div>
   <div class="answers" id="lsOpts" style="margin-top:12px;grid-template-columns:1fr">${opts.map((o,i)=>`<button class="ans" data-i="${i}"${locked?' disabled':` onclick="lsAnswer(${i})"`}><span class="k">${K[i]||''}</span><span class="dash">—</span><span class="atxt">${o}</span></button>`).join('')}</div>
-  <div class="powerups" data-pwslot style="margin-top:10px"></div>
+  <div class="powerups" data-ls-pwslot style="margin-top:10px"></div>
   ${alive?'':'<div class="ls-ack" style="color:#ff8a8a">شما در این مرحله حضور ندارید</div>'}</div></div>`;
 }
 /* The duel's own ready gate, reused verbatim: same modal, same countdown bar,
@@ -4820,7 +4827,7 @@ let lsSecondArmed=false, lsPuUsed={}, lsSecondSubmitted=false;
    nothing: usePower() bails on its own globals (qLocked/curBox/curCorrect) which
    Last Survivor never sets. */
 function lsBindPowerups(){
-  const slot=document.querySelector('#lsBody [data-pwslot]'); if(!slot) return;
+  const slot=document.querySelector('#lsBody [data-ls-pwslot]'); if(!slot) return;
   const defs=[['5050','✂️','۵۰:۵۰','p5050'],['second','🔁','انتخاب دوم','psecond'],['stats','📊','درصد بقیه','pstats']];
   const have=(typeof powerups!=='undefined'&&powerups)||{p5050:0,psecond:0,pstats:0};
   slot.innerHTML=defs.map(d=>{
@@ -4844,22 +4851,25 @@ async function lsUsePower(type,el){
   const d=r.data||{};
   if(type==='5050'&&Array.isArray(d.removeIndexes)){
     const opts=document.getElementById('lsOpts');
-    if(opts) d.removeIndexes.forEach(i=>{ const b=opts.querySelector('.ans[data-i="'+i+'"]'); if(b){ b.classList.add('dim'); b.disabled=true; } });
+    if(opts) d.removeIndexes.forEach(i=>{ const b=opts.querySelector('.ans[data-i="'+i+'"]'); if(b){ b.classList.add('dim','pz-removed','ls-gone'); b.disabled=true; } });
     try{sfx('select');vib([15,10]);}catch(e){}
   } else if(type==='second'){
     lsSecondArmed=true;
     toast('🔁 حق دو انتخاب فعال شد — اگر جواب اول غلط بود، یک انتخاب دیگر داری',2200);
     try{sfx('found');vib([20,10]);}catch(e){}
   } else if(type==='stats'){
-    // Cosmetic distribution — no knowledge of the correct answer.
-    const opts=document.getElementById('lsOpts'); if(opts){
-      const live=[...opts.querySelectorAll('.ans')].filter(b=>!b.classList.contains('dim'));
-      let w=live.map(()=>5+Math.random()*20), s=w.reduce((a,b)=>a+b,0);
-      live.forEach((b,i)=>{ const pct=Math.round(w[i]/s*100);
+    /* REAL distribution from the server: how the other players in THIS room
+       actually answered this round. */
+    const opts=document.getElementById('lsOpts');
+    const pcts=Array.isArray(d.percents)?d.percents:null;
+    if(opts&&pcts){
+      [...opts.querySelectorAll('.ans')].forEach(b=>{
+        const idx=Number(b.dataset.i); const pct=Number(pcts[idx]||0);
         const f=document.createElement('i'); f.className='pfill'; b.appendChild(f);
-        const t=document.createElement('span'); t.className='pct'; t.textContent=fa(pct)+'٪'; b.appendChild(t);
+        const t=document.createElement('span'); t.className='pct'; t.textContent=lsFa(pct)+'٪'; b.appendChild(t);
         requestAnimationFrame(()=>{ f.style.width=pct+'%'; });
       });
+      toast(d.sample>0?('درصد واقعی از '+lsFa(d.sample)+' نفر که تا الان جواب داده‌اند'):'هنوز کسی جواب نداده — همه صفر',2400);
     }
   }
   lsPuUsed[type]=true;
@@ -4880,7 +4890,7 @@ async function lsAnswer(i){
     if(d.retry){
       lsAnswered=false;                       // pick again
       const box=document.getElementById('lsOpts');
-      if(box){ const b=box.querySelector('.ans[data-i="'+i+'"]'); if(b){ b.classList.add('dim'); b.disabled=true; } }
+      if(box){ const b=box.querySelector('.ans[data-i="'+i+'"]'); if(b){ b.classList.add('dim','pz-removed','ls-gone'); b.disabled=true; } }
       toast('🔁 جواب اولت غلط بود — یک انتخاب دیگر داری',2400);
       try{sfx('wrong');vib([40,30]);}catch(e){}
       return;

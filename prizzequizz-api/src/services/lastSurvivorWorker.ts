@@ -264,7 +264,7 @@ const secondChanceArmed = new Set<string>();       // `${roomId}:${round}:${user
 const secondChanceUsed = new Set<string>();
 const scKey = (roomId: string, round: number, userId: string) => `${roomId}:${round}:${userId}`;
 
-export async function useLifeline(roomId: string, userId: string, type: string): Promise<{ ok: boolean; reason?: string; removeIndexes?: number[]; armed?: boolean }> {
+export async function useLifeline(roomId: string, userId: string, type: string): Promise<{ ok: boolean; reason?: string; removeIndexes?: number[]; armed?: boolean; percents?: number[]; sample?: number }> {
   const room = await getRoom(roomId);
   // Usable during the ready gate too, so a player can plan before the timer runs.
   if (!room || room.status !== 'running' || (room.phase !== 'question' && room.phase !== 'ready')) return { ok: false, reason: 'NOT_IN_QUESTION' };
@@ -288,7 +288,23 @@ export async function useLifeline(roomId: string, userId: string, type: string):
     secondChanceArmed.add(k);
     return { ok: true, armed: true };
   }
-  if (type === 'stats') return { ok: true };          // purely cosmetic, client-side
+  if (type === 'stats') {
+    // REAL distribution: how the other players in this room actually answered
+    // this round. Percentages only — it never says which option is correct.
+    if (!room.questionId) return { ok: false, reason: 'NO_QUESTION' };
+    let optionCount = 4;
+    try { const q = await repositories.questions.findById(room.questionId); if (q?.options?.length) optionCount = q.options.length; } catch { /* default 4 */ }
+    const counts = new Array(optionCount).fill(0);
+    let total = 0;
+    for (const other of await listPlayers(roomId)) {
+      if (other.userId === userId) continue;                 // exclude me
+      if (other.answerRound !== room.round) continue;        // hasn't answered yet
+      const idx = Number(other.answerIndex);
+      if (Number.isInteger(idx) && idx >= 0 && idx < optionCount) { counts[idx]++; total++; }
+    }
+    const percents = counts.map((c) => (total > 0 ? Math.round((c / total) * 100) : 0));
+    return { ok: true, percents, sample: total };
+  }
   return { ok: false, reason: 'UNKNOWN_LIFELINE' };
 }
 
