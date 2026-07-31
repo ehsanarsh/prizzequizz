@@ -16,6 +16,7 @@ import {
 import { buildPool, activeUnits, finalSplit } from './lastSurvivorPrize.js';
 import { awardScoring } from './matchEngine.js';
 import { PZ_SCORING } from './scoringConfig.js';
+import { getQuestionDistribution, recordQuestionAnswer } from './questionStatsService.js';
 
 // Per-room set of already-served question ids (best-effort; avoids repeats within
 // a match). Lost on restart, which at worst allows a repeat — never a crash.
@@ -289,21 +290,14 @@ export async function useLifeline(roomId: string, userId: string, type: string):
     return { ok: true, armed: true };
   }
   if (type === 'stats') {
-    // REAL distribution: how the other players in this room actually answered
-    // this round. Percentages only — it never says which option is correct.
+    // GLOBAL distribution: how EVERY player who has ever answered this question
+    // — in any mode, any match — chose. Percentages only; never reveals which
+    // option is correct.
     if (!room.questionId) return { ok: false, reason: 'NO_QUESTION' };
     let optionCount = 4;
     try { const q = await repositories.questions.findById(room.questionId); if (q?.options?.length) optionCount = q.options.length; } catch { /* default 4 */ }
-    const counts = new Array(optionCount).fill(0);
-    let total = 0;
-    for (const other of await listPlayers(roomId)) {
-      if (other.userId === userId) continue;                 // exclude me
-      if (other.answerRound !== room.round) continue;        // hasn't answered yet
-      const idx = Number(other.answerIndex);
-      if (Number.isInteger(idx) && idx >= 0 && idx < optionCount) { counts[idx]++; total++; }
-    }
-    const percents = counts.map((c) => (total > 0 ? Math.round((c / total) * 100) : 0));
-    return { ok: true, percents, sample: total };
+    const { percents, sample } = await getQuestionDistribution(room.questionId, optionCount);
+    return { ok: true, percents, sample };
   }
   return { ok: false, reason: 'UNKNOWN_LIFELINE' };
 }
@@ -334,6 +328,7 @@ export async function submitAnswer(roomId: string, userId: string, round: number
   const correct = room.correctIndex != null && selectedIndex === room.correctIndex;
   p.answerRound = room.round; p.answerIndex = selectedIndex; p.answerCorrect = correct; p.lastSeenAt = Date.now();
   await savePlayer(p);
+  void recordQuestionAnswer(room.questionId ?? '', selectedIndex);   // global per-question tally
   // If the player armed "second chance" and this first pick is WRONG, tell them
   // to pick again — that IS the lifeline. (It reveals only that this option was
   // wrong, never which one is right.)

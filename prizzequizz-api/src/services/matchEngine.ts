@@ -10,6 +10,7 @@ import { leaderboards } from './leaderboardService.js';
 import { PZ_SCORING, getResultBonus, isoWeekId, levelForXp } from './scoringConfig.js';
 import { getPgPool } from '../database/postgres.js';
 import { logger } from './logger.js';
+import { recordQuestionAnswer } from './questionStatsService.js';
 import type { GameModeId, Match, MatchEvent, MatchPlayer, PlanType } from '../types/domain.js';
 import { id } from '../utils/id.js';
 
@@ -189,6 +190,9 @@ async function submitAnswerLocked(input: SubmitAnswerInput): Promise<{ match: Ma
   }
 
   await repositories.answers.save({ id: id(), matchId: input.matchId, userId: input.userId, questionId: input.questionId, selectedIndex: input.selectedIndex, correct: input.correct, answerTimeMs: input.answerTimeMs, idempotencyKey: input.idempotencyKey, createdAt: new Date().toISOString() });
+  // Feed the GLOBAL per-question tally that powers the «درصد بقیه» lifeline
+  // (every mode contributes, so the stat is lifetime-wide, not per-room).
+  void recordQuestionAnswer(input.questionId, input.selectedIndex);
 
   // Completion is decided only when every player has answered the SAME number of
   // rounds (lockstep) and that number has reached the base length: the leader wins.

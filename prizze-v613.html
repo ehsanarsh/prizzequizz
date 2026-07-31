@@ -4869,7 +4869,7 @@ async function lsUsePower(type,el){
         const t=document.createElement('span'); t.className='pct'; t.textContent=lsFa(pct)+'٪'; b.appendChild(t);
         requestAnimationFrame(()=>{ f.style.width=pct+'%'; });
       });
-      toast(d.sample>0?('درصد واقعی از '+lsFa(d.sample)+' نفر که تا الان جواب داده‌اند'):'هنوز کسی جواب نداده — همه صفر',2400);
+      toast(d.sample>0?('آمار کل: '+lsFa(d.sample)+' نفر تا امروز به این سؤال جواب داده‌اند'):'هنوز کسی به این سؤال جواب نداده',2400);
     }
   }
   lsPuUsed[type]=true;
