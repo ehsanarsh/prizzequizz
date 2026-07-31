@@ -1,8 +1,18 @@
 import type { Router } from '../../http/router.js';
 import { json } from '../../http/response.js';
 import { listItems } from '../../services/shopService.js';
+import { ticketPrizeTable } from '../../services/prizeService.js';
 
 export function registerShopRoutes(router: Router, base: string): void {
+  /* PUBLIC PRIZE TABLE — what a winner takes home at each ticket tier.
+   * The server does the maths and sends the final figure only: no percentage,
+   * no fee amount, nothing for a client to recompute. Because it reads the live
+   * admin Game Config, changing the commission in the panel changes every quote
+   * in the app on the next request. */
+  router.add('GET', `${base}/economy/prizes`, async (ctx) => {
+    json(ctx.res, 200, { tickets: ticketPrizeTable() });
+  });
+
   // Public catalog the in-game shop reads. Only ENABLED items, grouped by
   // category in display order.
   router.add('GET', `${base}/shop/items`, async (ctx) => {

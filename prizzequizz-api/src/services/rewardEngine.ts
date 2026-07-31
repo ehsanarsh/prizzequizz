@@ -5,6 +5,7 @@ import { leaderboards } from './leaderboardService.js';
 import { notifications } from './notificationService.js';
 import { createRewardHold, shouldHoldReward } from './rewardReviewService.js';
 import { getRakePercent, getRewardHoldConfig } from './economyConfig.js';
+import { feeFor, netPrize } from './prizeService.js';
 import { getAccount, postEntry } from './walletLedgerService.js';
 
 /* Stake of a paid duel: the value tier is encoded in economyType ('v25000' →
@@ -46,8 +47,8 @@ export async function applyReward(user: User, reward: Reward, matchId: string): 
     // reward transaction row so old screens keep working.)
     const gross = reward.amount;
     const rakePercent = getRakePercent();
-    const fee = Math.round((gross * rakePercent) / 100);
-    const net = gross - fee;
+    const fee = feeFor(gross);          // shared calculator — see prizeService
+    const net = netPrize(gross);
     const posted = await postEntry({
       userId: user.id, entryType: 'match_reward', kind: 'credit', amount: gross,
       idempotencyKey: `reward:${idempotencyKey}`, refType: 'match', refId: matchId,

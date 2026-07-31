@@ -6,6 +6,7 @@ import { leaderboards } from './leaderboardService.js';
 import { logger } from './logger.js';
 import { notifications } from './notificationService.js';
 import { getRakePercent, getRewardHoldConfig } from './economyConfig.js';
+import { feeFor } from './prizeService.js';
 import { getAccount, postEntry } from './walletLedgerService.js';
 
 export interface RewardHoldDiagnostics {
@@ -108,7 +109,7 @@ export async function releaseRewardHold(id: string, reviewedBy = 'system'): Prom
       // take the same platform rake as a normal win so a held win nets the same.
       const gross = hold.amount;
       const rakePercent = getRakePercent();
-      const fee = Math.round((gross * rakePercent) / 100);
+      const fee = feeFor(gross);        // shared calculator — see prizeService
       await postEntry({ userId: hold.userId, entryType: 'match_reward', kind: 'credit', amount: gross, idempotencyKey: `hold_release:${hold.id}`, refType: 'match', refId: hold.matchId, description: 'جایزه آزادشده پس از بررسی', metadata: { gross, rakePercent, fee } });
       if (fee > 0) await postEntry({ userId: hold.userId, entryType: 'fee', kind: 'debit', amount: fee, idempotencyKey: `hold_release_fee:${hold.id}`, refType: 'match', refId: hold.matchId, description: `کارمزد پلتفرم ${rakePercent}٪` });
       if (user) { try { user.wallet = (await getAccount(hold.userId)).available; } catch { /* mirror only */ } }

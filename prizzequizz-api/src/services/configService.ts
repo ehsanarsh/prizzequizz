@@ -154,8 +154,9 @@ export function getPublicConfig(): any {
     .map((c: any) => ({ name: String(c.name), icon: String(c.icon || '❓') }));
   return {
     version: (gameConfig as any).version,
-    rakePercent: e.paid?.rakePercent ?? 5,
-    withdrawFeePercent: e.paid?.withdrawFeePercent ?? 5,
+    // The platform commission is deliberately NOT published. Prize figures are
+    // computed server-side (see prizeService / GET /economy/prizes) and sent as
+    // final take-home amounts, so no client can display or recompute a fee.
     wallet: e.wallet ?? {},
     free: e.free ?? {},
     categories,

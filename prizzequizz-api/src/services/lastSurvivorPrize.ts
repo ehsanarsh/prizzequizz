@@ -18,6 +18,7 @@
  *  - Sum of all cash-outs + final split == net pot, exactly (integer tomans,
  *    remainder handled deterministically). */
 import type { LastSurvivorConfig, TicketTier } from './lastSurvivorConfig.js';
+import { netPrize } from './prizeService.js';
 
 export type TicketColor = string; // 'green' | 'blue' | 'red' | admin-defined
 export type PlayerStatus = 'waiting' | 'alive' | 'eliminated' | 'cashed_out';
@@ -41,12 +42,13 @@ export function ticketUnits(cfg: LastSurvivorConfig, color: TicketColor): number
   return Math.max(0, Math.round(tier(cfg, color).units));
 }
 
-/** Gross pot (sum of ticket values), the house rake, and the net pot players split. */
+/** Gross pot (sum of ticket values), the house commission, and the net pot
+ *  players split. The commission comes from the SAME shared calculator every
+ *  other mode uses, so no two screens can ever quote different prizes. */
 export function buildPool(cfg: LastSurvivorConfig, colors: TicketColor[]): { gross: number; rake: number; net: number } {
   const gross = colors.reduce((s, c) => s + ticketValue(cfg, c), 0);
-  const rakePercent = Math.max(0, Math.min(100, Number(cfg.economy.rakePercent) || 0));
-  const rake = Math.round((gross * rakePercent) / 100);
-  return { gross, rake, net: gross - rake };
+  const net = netPrize(gross);
+  return { gross, rake: gross - net, net };
 }
 
 /** Sum of units of players still in the running (alive). */

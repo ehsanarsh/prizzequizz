@@ -240,7 +240,13 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
 .mode-pill .mt span{font-size:11px;opacity:.72;font-weight:800}
 .mini-lb{background:var(--ink-2);border:var(--stroke);border-radius:17px;padding:12px 14px;box-shadow:var(--hard-sm)}
 .mini-lb .lb-row{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:800;padding:4px 0}
-.mini-lb .lb-row .rk{width:20px;height:20px;border-radius:7px;background:var(--bolt);border:2px solid #000;color:#141414;display:grid;place-items:center;font-size:11px;font-weight:900}
+.mini-lb .lb-row .rk{width:20px;height:20px;border-radius:7px;background:var(--bolt);border:2px solid #000;color:#141414;display:grid;place-items:center;font-size:11px;font-weight:900;flex-shrink:0}
+/* Ticket picker: the prize is the headline; the commission is never mentioned. */
+.tk-prize{text-align:center;padding:4px 6px 14px}
+.tk-prize-lbl{display:block;font-size:11.5px;font-weight:900;color:var(--muted);letter-spacing:.02em}
+.tk-prize-val{display:block;font-size:30px;font-weight:900;color:var(--bolt);line-height:1.25;margin-top:3px;text-shadow:0 2px 0 rgba(0,0,0,.45)}
+.tk-prize-tag{display:inline-block;margin-top:7px;font-size:11px;font-weight:900;color:var(--paper);background:rgba(255,210,31,.16);border:2px solid #000;border-radius:999px;padding:4px 11px;box-shadow:0 2.5px 0 #000}
+.lb-row .lb-av{width:24px;height:24px;border-radius:8px;border:2px solid #000;background:var(--ink-3);display:grid;place-items:center;font-size:13px;overflow:hidden;flex-shrink:0}
 
 /* ===== BOTTOM NAV ===== */
 .bottomnav{display:flex;gap:10px;justify-content:center;padding:12px 16px calc(12px + env(safe-area-inset-bottom));flex-shrink:0;position:relative;z-index:3}
@@ -2890,7 +2896,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
 #duel .q-body{padding-left:12px!important;padding-right:12px!important;box-sizing:border-box;max-width:100%;overflow-x:hidden}#duel .q-text{max-width:100%;box-sizing:border-box;overflow-wrap:anywhere}
 @media(max-width:370px){.duel-score-row{padding-left:7px!important;padding-right:7px!important;gap:3px!important}.duel-player-box{max-width:96px!important;flex-basis:96px!important}.duel-mini-av{width:33px!important;height:33px!important;flex-basis:33px!important}.duel-player-meta{max-width:58px!important}.duel-player-meta b{max-width:35px;font-size:10.5px!important}.duel-side-score{min-width:20px;height:18px;font-size:10px}.pen-slot{width:11px!important;height:11px!important}.pen-slots{gap:2px!important}#duelScore{min-width:64px!important;max-width:68px!important;flex-basis:66px!important;font-size:14px!important;gap:3px!important}}
 /* ===== PREMIUM DUEL HERO BUTTON (primary action) ===== */
-.duel-hero{position:relative;width:100%;display:flex;align-items:center;gap:14px;padding:15px 18px;margin:2px 0 14px;border:2.5px solid #000;border-radius:22px;background:linear-gradient(120deg,#FF7A3D 0%,#FF3D6E 55%,#B24BFF 100%);box-shadow:0 6px 0 #000,0 12px 30px rgba(255,61,110,.5);overflow:hidden;cursor:pointer;transition:transform .12s ease,box-shadow .12s ease;animation:duelHeroPulse 2.4s ease-in-out infinite}
+.duel-hero{position:relative;width:100%;display:flex;align-items:center;gap:14px;padding:15px 18px;margin:2px 0 14px;border:2.5px solid #000;border-radius:22px;background:linear-gradient(122deg,#3CF08F 0%,#12C57E 46%,#0B8F7A 100%);box-shadow:0 6px 0 #000,0 12px 30px rgba(18,197,126,.45);overflow:hidden;cursor:pointer;transition:transform .12s ease,box-shadow .12s ease;animation:duelHeroPulse 2.4s ease-in-out infinite}
 .duel-hero:active{transform:translateY(4px);box-shadow:0 2px 0 #000,0 6px 18px rgba(255,61,110,.4)}
 @keyframes duelHeroPulse{0%,100%{box-shadow:0 6px 0 #000,0 12px 30px rgba(255,61,110,.42)}50%{box-shadow:0 6px 0 #000,0 14px 44px rgba(255,61,110,.72)}}
 .duel-hero .dh-glow{position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.3),transparent);transform:translateX(-120%);pointer-events:none;animation:dhShine 2.9s ease-in-out infinite}
@@ -3086,18 +3092,11 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
     <div id="veil"></div>
 
     <!-- ============ SPLASH ============ -->
-    <!-- INTRO SCREEN -->
-    <section class="screen active" id="introScreen" style="padding:0;background:#0a0a0c">
-      <img class="splash-art" alt="PrizzeQuizz" id="introArt" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">
-      <div style="position:absolute;inset:0;background:linear-gradient(to bottom,transparent 50%,rgba(0,0,0,.85))"></div>
-      <div style="position:absolute;left:0;right:0;bottom:0;padding:0 24px 52px;display:flex;flex-direction:column;align-items:center;gap:14px;z-index:2">
-        <button onclick="startIntroFlow()" style="width:100%;max-width:320px;height:58px;border-radius:18px;border:none;background:linear-gradient(135deg,#f0c000,#ffe033);color:#000;font-size:18px;font-weight:900;cursor:pointer;font-family:inherit;box-shadow:0 4px 0 #9a7a00,0 8px 24px rgba(255,210,31,.4)">
-          شروع بازی 🎮
-        </button>
-      </div>
-    </section>
-
-    <section class="screen" id="splash" style="padding:0">
+    <!-- The separate intro / tap-to-start screen is gone: the app boots straight
+         into this one loading screen. The 10-second brand video will play HERE, in
+         place of the still art — drop the file in and swap the <img> below for a
+         muted autoplay <video> carrying the same id. -->
+    <section class="screen active" id="splash" style="padding:0">
       <img class="splash-art" alt="PrizzeQuizz" id="splashArt">
       <div style="position:absolute;left:0;right:0;bottom:0;z-index:2;padding:0 36px 52px;display:flex;flex-direction:column;align-items:center;gap:10px">
         <div style="font-size:11px;font-weight:800;color:rgba(255,255,255,.5);letter-spacing:.08em" id="splashLoadTxt">در حال بارگذاری...</div>
@@ -3364,7 +3363,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
       </div>
       <div class="card" id="lsEntryCard"></div>
       <button class="btn btn-primary" style="margin-top:14px" id="lsEntryBtn" onclick="lsEntryStart()">ورود با بلیط 🎫</button>
-      <div style="font-size:11px;color:var(--muted2);text-align:center;margin-top:10px">ارزش بلیط، سهم تو از جایزه را تعیین می‌کند · جایزه بر اساس مجموع سهم‌ها تقسیم می‌شود</div>
+
     </section>
     <section class="screen" id="lsGame"><div id="lsBody"></div></section>
 
@@ -3425,7 +3424,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
         <button class="duel-hero" onclick="enterMode('survivor')" aria-label="شروع دوئل">
           <span class="dh-glow"></span>
           <span class="dh-play"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></span>
-          <span class="dh-txt"><b>دوئل ۱به‌۱</b><small>شروع سریع مسابقه · شاخ‌به‌شاخ، برنده پول رو دوبرابر می‌کنه</small></span>
+          <span class="dh-txt"><b>دوئل یک‌به‌یک</b><small>شروع مسابقه سریع</small></span>
           <span class="dh-bolt">⚡</span>
         </button>
         <div class="section-title">حالت‌های دیگر</div>
@@ -3438,7 +3437,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
         </div>
 
         <div class="mini-lb" style="margin-top:8px">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><b style="font-size:13px">برترین‌های برد هفته 💰</b><span style="font-size:11px;color:var(--gold);font-weight:700" onclick="go('rankings');setTimeout(function(){try{rankTab(document.querySelector('#rankTabs .tab:nth-child(3)'),'wins')}catch(e){}},120)">دیدن همه</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><b style="font-size:13px">برترین‌های این هفته 🏆</b><span style="font-size:11px;color:var(--gold);font-weight:700" onclick="go('rankings')">رتبه‌بندی کلی ‹</span></div>
           <div id="homeMiniLbRows"><div style="text-align:center;color:var(--muted);font-size:11.5px;font-weight:800;padding:10px">در حال بارگذاری…</div></div>
         </div>
       </div>
@@ -3489,7 +3488,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
         <div class="hr"></div>
         <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:7px"><span style="color:var(--muted)">ورودی</span><b class="mono"><span id="stakeVal">۶۰٬۰۰۰</span> تومان</b></div>
         <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:7px"><span style="color:var(--muted)">موجودی شما</span><b class="mono" style="color:var(--ok)"><span id="meBalance">۹۰۰٬۰۰۰</span> تومان</b></div>
-        <div style="font-size:11px;color:var(--muted2);text-align:center">پس از پرداخت مبلغ ورودی، وارد روم می‌شوی</div>
+
       </div>
       <div class="card" id="ticketSelectCard" style="display:none;margin-bottom:12px"></div>
       <div class="card practice-cost-card" style="gap:10px;align-items:center;margin-bottom:12px;padding:12px 14px">
@@ -3720,8 +3719,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
     <section class="screen" id="rankings">
       <div class="topbar"><h1>رنکینگ 🏅</h1></div>
       <div class="tabs" id="rankTabs">
-        <button class="tab active" onclick="rankTab(this,'weekly')">هفتگی<small>امتیاز و XP</small></button>
-        <button class="tab" onclick="rankTab(this,'overall')">کلی<small>امتیاز و XP</small></button>
+        <button class="tab active" onclick="rankTab(this,'overall')">رتبه‌بندی کلی<small>مجموع XP</small></button>
         <button class="tab" onclick="rankTab(this,'wins')">بیشترین برد<small>مبلغ برنده</small></button>
       </div>
       <div class="pad" style="padding-top:8px" id="rankContent"></div>
@@ -3940,9 +3938,9 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
     <!-- ============ RULES ============ -->
     <section class="screen pad" id="rules">
       <div class="topbar" style="padding:0 0 14px;background:none"><button class="iconbtn" onclick="menuBack('home')">→</button><h1>قوانین و مقررات 📜</h1></div>
-      <div class="card" style="margin-bottom:12px"><b style="font-size:14px">۱. مبلغ ورودی و کارمزد</b><p style="color:var(--muted);font-size:13px;margin-top:6px;line-height:1.8">درصدی از کل ورودی‌ها به‌عنوان کارمزد پلتفرم برداشت می‌شود.</p></div>
+      <div class="card" style="margin-bottom:12px"><b style="font-size:14px">۱. مبلغ ورودی و جایزه</b><p style="color:var(--muted);font-size:13px;margin-top:6px;line-height:1.8">مبلغ جایزه‌ای که پیش از شروع هر مسابقه می‌بینی، دقیقاً همان مبلغی است که در صورت برد به کیف پولت واریز می‌شود.</p></div>
       <div class="card" style="margin-bottom:12px"><b style="font-size:14px">۲. حذف و تقسیم جایزه</b><p style="color:var(--muted);font-size:13px;margin-top:6px;line-height:1.8">با هر پاسخ اشتباه، بازیکن حذف و مبلغش بین بازماندگان تقسیم می‌شود.</p></div>
-      <div class="card"><b style="font-size:14px">۳. برداشت جایزه</b><p style="color:var(--muted);font-size:13px;margin-top:6px;line-height:1.8">بعد از هر سوال می‌توانی با پرداخت کارمزد، جایزه‌ات را برداشت کنی.</p></div>
+      <div class="card"><b style="font-size:14px">۳. برداشت جایزه</b><p style="color:var(--muted);font-size:13px;margin-top:6px;line-height:1.8">بعد از هر سوال می‌توانی جایزه‌ات را برداشت کنی؛ مبلغی که نمایش داده می‌شود همان مبلغ واریزی است.</p></div>
     </section>
 
     <!-- ============ STATS ============ -->
@@ -4018,7 +4016,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
         <div style="display:flex;gap:20px;margin-top:26px">
           <div style="text-align:center"><div style="font-size:22px;font-weight:900;color:var(--gold)" id="mmTime">۰:۰۰</div><div style="font-size:11px;color:var(--muted)">زمان جستجو</div></div>
           <div style="width:1px;background:var(--line)"></div>
-          <div style="text-align:center"><div style="font-size:22px;font-weight:900;color:var(--green)" id="mmSearching">۱٬۲۴۸</div><div style="font-size:11px;color:var(--muted)">در حال جستجو</div></div>
+          <div style="text-align:center"><div style="font-size:22px;font-weight:900;color:var(--green)" id="mmSearching">—</div><div style="font-size:11px;color:var(--muted)">در حال جستجو</div></div>
         </div>
       </div>
       <button class="btn btn-red" onclick="cancelMatchmaking()">لغو جستجو</button>
@@ -4605,7 +4603,7 @@ function lsHost(){ return document.getElementById('vp')||document.querySelector(
 const LS_ICONS={'فیلم و سریال':'🎬','سینما':'🎬','فیلم':'🎬','سریال':'📺','ورزش':'⚽','فوتبال':'⚽','والیبال':'🏐','بسکتبال':'🏀','تاریخ و فرهنگ':'📜','تاریخ':'📜','فرهنگ':'🏛️','موسیقی':'🎵','غذا و خوراکی':'🍔','غذا و نوشیدنی':'🍔','غذا':'🍔','علم و دانش':'🔬','علوم':'🔬','دانش':'🔬','جغرافیا':'🌍','اطلاعات عمومی':'🧠','عمومی':'🧠','هنر':'🎨','ادبیات':'📚','فناوری':'💻','تکنولوژی':'💻','دین':'🕌','مذهب':'🕌','ریاضی':'➗','حیوانات':'🐾','طبیعت':'🌿','سیاست':'🏛️','اقتصاد':'💹','بازی':'🎮','بازی و سرگرمی':'🎮','ماشین':'🚗','خودرو':'🚗','نجوم':'🔭','فضا':'🚀','کامپیوتر':'🖥️','سلامت':'🩺','پزشکی':'🩺','مشاهیر':'⭐','برند':'™️','پرچم':'🚩','کشورها':'🌐'};
 function lsIcon(name){ if(LS_ICONS[name])return LS_ICONS[name]; const n=String(name||''); for(const k in LS_ICONS){ if(n.indexOf(k)>=0)return LS_ICONS[k]; } return '🎯'; }
 
-function lsStart(){ lsEndShown=false; showScreen('lsTopics'); lsLoadTopics(); }
+function lsStart(){ showRules('lastSurvivor',()=>{ lsEndShown=false; showScreen('lsTopics'); lsLoadTopics(); }); }
 function lsLeave(to){ try{ if(pzRt&&pzRt.ws&&pzRt.ws.readyState===1&&lsRoomId) pzRt.ws.send(JSON.stringify({type:'client:leave_ls_room',payload:{roomId:lsRoomId}})); }catch(e){} lsStopPoll(); ['lsColorPick','lsDead','lsCashPop'].forEach(id=>{const e=document.getElementById(id);if(e)e.remove();}); lsRoomId=null; lsSnap=null; lsLastKey=''; go(to||'home'); }
 function lsStopPoll(){ if(lsPoller){clearInterval(lsPoller);lsPoller=null;} }
 
@@ -4631,7 +4629,9 @@ function lsRenderEntry(){
   const ic=document.getElementById('lsEntryIcon'), tp=document.getElementById('lsEntryTopic');
   if(ic)ic.textContent=lsIcon(lsEntryTopic); if(tp)tp.textContent=lsEntryTopic||'موضوع';
   const card=document.getElementById('lsEntryCard'); if(!card)return;
-  card.innerHTML='<div class="section-title" style="margin-top:0">انتخاب بلیط ورود</div>'+
+  card.innerHTML='<div class="tk-prize"><span class="tk-prize-lbl">سهم تو از جایزه</span>'+
+      '<b class="tk-prize-val" id="lsPrizeVal">'+(pzPrizeFor(lsEntryColor)==null?'…':lsFa(pzPrizeFor(lsEntryColor))+' تومان')+'</b>'+
+      '<span class="tk-prize-tag">هرچه بیشتر بمانی، سهمت بیشتر 🏆</span></div>'+
     '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px" id="lsTkGrid"></div>';
   const g=document.getElementById('lsTkGrid');
   const have=(typeof mTickets!=='undefined'&&mTickets)||{green:0,blue:0,red:0};
@@ -4639,13 +4639,15 @@ function lsRenderEntry(){
     const units=(lsTickets[t.key]&&lsTickets[t.key].units)||0;
     const b=document.createElement('button'); b.className='tab'+(lsEntryColor===t.key?' active':'');
     b.style.cssText='border:2px solid '+t.color+(lsEntryColor===t.key?';background:'+t.grad+';color:#fff':'');
-    b.innerHTML=t.icon+' '+t.name.replace('بلیط ','')+'<br><small style="font-size:10px;opacity:.85">'+lsFa(t.value)+' ت · '+lsFa(have[t.key]||0)+' تا</small>'+(units?'<br><small style="font-size:9px;opacity:.75">ضریب '+lsFa(units)+'</small>':'');
+    /* Count only — no price printed on the ticket. */
+    b.innerHTML=t.icon+' '+t.name.replace('بلیط ','')+'<br><small style="font-size:10.5px;opacity:.9">'+lsFa(have[t.key]||0)+' عدد</small>'+(units?'<br><small style="font-size:9px;opacity:.75">ضریب '+lsFa(units)+'</small>':'');
     b.onclick=()=>{ lsEntryColor=t.key; lsRenderEntry(); };
     g.appendChild(b);
   });
   const btn=document.getElementById('lsEntryBtn');
   if(btn){ const n=have[lsEntryColor]||0; const nm=(typeof tDef==='function'?tDef(lsEntryColor).name:'بلیط');
     btn.textContent=n>0?('ورود با '+nm+' 🎫'):('خرید '+nm+' 🎫'); }
+  if(pzPrizeFor(lsEntryColor)==null) pzLoadPrizes().then(()=>{ const el=document.getElementById('lsPrizeVal'); const p=pzPrizeFor(lsEntryColor); if(el&&p!=null) el.textContent=lsFa(p)+' تومان'; });
 }
 function lsEntryStart(){
   const have=(typeof mTickets!=='undefined'&&mTickets)||{};
@@ -5250,8 +5252,17 @@ function enterMode(m){
   document.getElementById('me-desc').textContent=cfg.desc;
   showRules(m,()=>go('mode-entry'));
 }
-/* ===== per-mode RULES GATE ===== */
-let rgSkip={},rgCb=null,rgMode=null,rgSkipChecked=false;
+/* ===== per-mode RULES GATE =====
+   Each mode has its own rules card and its own «دیگر نمایش نده» switch, stored
+   under its own localStorage key — so hiding the duel rules never hides the Last
+   Survivor ones, and the choice survives a reload (it used to live in a plain
+   object that reset on every refresh). */
+const RG_KEY='pz_rules_skip_';
+function rgIsSkipped(m){ try{ return localStorage.getItem(RG_KEY+m)==='1'; }catch(e){ return false; } }
+function rgSetSkipped(m,on){ try{ on?localStorage.setItem(RG_KEY+m,'1'):localStorage.removeItem(RG_KEY+m); }catch(e){} }
+/** Show every mode's rules again (settings → «داده‌ها و راهنماها»). */
+function rgResetAll(){ Object.keys(RULES||{}).forEach(m=>rgSetSkipped(m,false)); }
+let rgCb=null,rgMode=null,rgSkipChecked=false;
 const RULES={
   arena:{ico:'🏆',color:'#28C46A',sub:'۱۲ سوال · حذفی',items:[
     ['🎯','هدف','آخرین بازمانده باش یا تا سوال ۱۲ دووم بیار.'],
@@ -5268,18 +5279,25 @@ const RULES={
     ['🎬','قانون ویژه','سوال سرعتی اول، موضوع رو تعیین می‌کنه.'],
     ['🏆','برد','ببری، می‌تونی پولتو دو برابر کنی و ادامه بدی.'],
     ['⏱️','زمان','هر سوال ۱۰ ثانیه. مساوی = مرگ ناگهانی.']]},
-  wta:{ico:'🎯',color:'#B57bff',sub:'۱۵ نفره · ۳ جان',items:[
+  lastSurvivor:{ico:'🏆',color:'#FFD21F',title:'آخرین بازمانده',sub:'حذفی · چند نفره',items:[
+    ['🎯','هدف','تا آخر دووم بیار — آخرین بازمانده بیشترین سهم را می‌برد.'],
+    ['🎫','ورود','با بلیط وارد می‌شوی؛ ارزش بلیطت سهم تو از جایزه را تعیین می‌کند.'],
+    ['❌','حذف','هر پاسخ غلط یعنی حذف؛ سهمت بین بازمانده‌ها تقسیم می‌شود.'],
+    ['💰','برداشت','بعد از هر سوال می‌توانی سهم فعلی‌ات را برداری یا ادامه بدهی.'],
+    ['🧩','کمکی','۵۰:۵۰، انتخاب دوم و آمار پاسخ دیگران در دسترس است.']]},
+  wta:{ico:'🎯',color:'#B57bff',title:'از کی بپرسم',sub:'۱۵ نفره · ۳ جان',items:[
     ['🎯','هدف','آخرین بازمانده‌ی استودیو باش.'],
     ['❤️','جان','هر کس ۳ جان داره؛ جواب غلط = یک جان کمتر.'],
     ['👆','قانون ویژه','جواب درست بدی، خودت نفر بعدی رو انتخاب می‌کنی.'],
     ['⏱️','زمان','هر سوال ۱۵ ثانیه. آخرین نفر، کل جایزه رو می‌بره.']]},
 };
 function showRules(m,cb){
-  if(rgSkip[m]){cb();return;}
-  rgMode=m;rgCb=cb;rgSkipChecked=false;
+  cb=cb||function(){};
   const r=RULES[m];
+  if(!r||rgIsSkipped(m)){cb();return;}
+  rgMode=m;rgCb=cb;rgSkipChecked=false;
   const ico=document.getElementById('rgIco');ico.textContent=r.ico;ico.style.background=r.color+'33';
-  document.getElementById('rgTitle').textContent='قوانین: '+MODES[m].name;
+  document.getElementById('rgTitle').textContent='قوانین: '+((MODES[m]&&MODES[m].name)||r.title||'بازی');
   document.getElementById('rgSub').textContent=r.sub;
   document.getElementById('rgBody').innerHTML=r.items.map(it=>
     '<div class="rg-item"><span class="ri">'+it[0]+'</span><div><b>'+it[1]+':</b> '+it[2]+'</div></div>').join('');
@@ -5288,7 +5306,7 @@ function showRules(m,cb){
 }
 function toggleRgSkip(){rgSkipChecked=!rgSkipChecked;document.getElementById('rgBox').classList.toggle('on',rgSkipChecked);}
 function rulesGo(){
-  if(rgSkipChecked)rgSkip[rgMode]=true;
+  if(rgSkipChecked&&rgMode) rgSetSkipped(rgMode,true);
   document.getElementById('rulesGate').classList.remove('show');
   if(rgCb){const c=rgCb;rgCb=null;c();}
 }
@@ -6153,7 +6171,9 @@ function continueGame(){
   if(gameType==='duel')return duelContinue();
   askArena();
 }
-function withdraw(){clearInterval(cpTimer);const fee=Math.round(prize*pzRakeFrac());endGame(true,prize-fee,true);}
+/* The server applies the commission when it credits the win; the screen just
+   shows what the wallet actually receives. */
+function withdraw(){clearInterval(cpTimer);endGame(true,prize,true);}
 
 /* ============ RIPPLE MICRO-INTERACTION ============ */
 document.addEventListener('pointerdown',e=>{
@@ -6889,18 +6909,20 @@ const RANK_WINS=[
    (weekly = 🏆cup, overall = XP, wins = تومان). The podium needs ≥3 entries, so it
    is only shown when there are enough real players; a mock fallback keeps the
    screen from ever being empty if the request fails. */
+/* This screen shows the ALL-TIME standings only. The weekly board lives on the
+   home screen, and the two read different server boards (users.xp / cash won vs
+   users.weekly_score) so neither can shadow the other. */
 const _rankMeta={
-  weekly:{kind:'weekly',unit:'🏆',title:'🔄 رنکینگ هفتگی',crit:'معیار: کاپِ (🏆) هفتهٔ جاری',note:'هر هفته ریست می‌شود · نفرات برتر به لیگ‌ها صعود می‌کنن',mock:'RANK_W'},
   overall:{kind:'overall',unit:'XP',title:'🏆 رنکینگ کلی',crit:'معیار: مجموع XP',note:'مجموع XP از ابتدای فعالیت کاربر (دائمی)',mock:'RANK_O'},
   wins:{kind:'winnings',unit:'تومان',title:'💰 بیشترین برد',crit:'معیار: مبلغ برنده‌شده',note:'بیشترین جایزهٔ نقدی کسب‌شده از ابتدا',mock:'RANK_WINS'}
 };
-let _rankTab='weekly';
+let _rankTab='overall';
 function _rankHeader(m){ return '<div class="card" style="text-align:center;margin-bottom:12px;padding:12px"><b style="font-size:13px">'+m.title+'</b><div class="rank-criteria">'+m.crit+'</div><div style="font-size:12px;color:var(--muted);margin-top:7px">'+m.note+'</div></div>'; }
 async function rankTab(el,tab){
   if(el){document.querySelectorAll('#rankTabs .tab').forEach(t=>t.classList.remove('active'));el.classList.add('active');}
   const c=document.getElementById('rankContent'); if(!c) return;
   _rankTab=tab;
-  const m=_rankMeta[tab]||_rankMeta.weekly;
+  const m=_rankMeta[tab]||_rankMeta.overall;
   const token=(c.dataset.rankToken=String(Date.now()));   /* ignore a stale response if the user switched tabs */
   c.innerHTML=_rankHeader(m)+'<div style="text-align:center;color:var(--muted);padding:22px;font-weight:800">در حال بارگذاری رتبه‌بندی…</div>';
   let list=null;
@@ -6926,7 +6948,7 @@ function claimTicket(){
   sfx('found');vib([30,50,30]);
   const t=document.createElement('div');t.className='ticket-fly';t.textContent='🎫';
   document.querySelector('.phone').appendChild(t);setTimeout(()=>t.remove(),1150);
-  setTimeout(()=>{toast('🎫 بلیت لیگ برنزی دریافت شد!');updateWalletUI();rankTab(null,'weekly');},700);
+  setTimeout(()=>{toast('🎫 بلیت لیگ برنزی دریافت شد!');updateWalletUI();rankTab(null,'overall');},700);
 }
 function confettiBurst(colors){
   const ph=document.querySelector('.phone');
@@ -7057,9 +7079,9 @@ function startLeagueMatch(){
   tickets[curLeague]--;updateWalletUI();renderLeagueHub();
   if(userPlan!=='free')earn(LL_NAMES[curLeague][2],'جایزه ورود به '+LL_NAMES[curLeague][0],'🎫');
   curMode='wta';curStake=(userPlan==='free'?0:30000);leagueWtaActive=true;leagueDuelActive=false;recordMissionEvent('play',1);recordMissionEvent('leaguePlay',1);
-  setTimeout(beginWTA,800);
+  setTimeout(()=>showRules('wta',beginWTA),800);
 }
-rankTab(null,'weekly');
+rankTab(null,'overall');
 
 /* ============ FEEDBACK + QUICK QUESTION SUBMIT ============ */
 let currentFeedbackType='idea',currentRating=5;
@@ -7403,7 +7425,7 @@ function renderCardsTab(c){
 function bankCardHTML(c){const mask=c.mask||pzMaskCard(c.num||'');return '<div class="bank-card"><div class="bank-top"><b>'+esc0(c.bank||'کارت بانکی')+'</b>'+(c.def?'<span class="ticket-badge answered">پیش‌فرض</span>':'')+'</div><div class="num" dir="ltr">'+esc0(mask)+'</div>'+(c.holder?'<div class="iban">'+esc0(c.holder)+'</div>':'')+(c.iban?'<div class="iban" dir="ltr">'+esc0(c.iban)+'</div>':'')+'<div class="bank-actions"><button class="btn '+(c.def?'btn-green':'btn-ghost')+' btn-sm" onclick="setDefaultCard(\''+c.id+'\')">'+(c.def?'پیش‌فرض ✓':'پیش‌فرض کن')+'</button><button class="btn btn-red btn-sm" onclick="removeBankCard(\''+c.id+'\')">حذف</button></div></div>';}
 function esc0(s){return String(s==null?'':s).replace(/[&<>"']/g,x=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[x]));}
 function renderWalletSecurity(c){
-  c.innerHTML='<div class="kyc-status"><div class="ks">✓</div><div><b>سطح احراز: تأیید اولیه</b><br><span>برداشت، شارژ و بازی‌های جایزه‌دار فعال هستند.</span></div></div><div class="wallet-card"><h3>محدودیت‌ها و کارمزد</h3><div class="fee-row"><span>حداقل برداشت</span><b>'+fa(50000)+' تومان</b></div><div class="fee-row"><span>حداکثر برداشت روزانه</span><b>'+fa(5000000)+' تومان</b></div><div class="fee-row"><span>کارمزد برداشت</span><b>۵٪ جایزه</b></div><div class="fee-row"><span>کارمزد شارژ</span><b>۰ تومان</b></div></div><div class="wallet-card"><h3>عملیات امنیتی</h3><div class="sup-actions"><button class="btn btn-primary" onclick="openKyc()">به‌روزرسانی اطلاعات مالی</button><button class="btn btn-ghost" onclick="exportWalletStatement()">خروجی گردش حساب</button><button class="btn btn-orange" onclick="showAaaModal({icon:\'🛡️\',title:\'گزارش امنیتی\',sub:\'هیچ ورود مشکوکی برای کیف پول ثبت نشده است.\',primaryText:\'باشه\',secondaryText:\'\'})">گزارش امنیتی</button></div></div>';
+  c.innerHTML='<div class="kyc-status"><div class="ks">✓</div><div><b>سطح احراز: تأیید اولیه</b><br><span>برداشت، شارژ و بازی‌های جایزه‌دار فعال هستند.</span></div></div><div class="wallet-card"><h3>محدودیت‌ها و کارمزد</h3><div class="fee-row"><span>حداقل برداشت</span><b>'+fa(50000)+' تومان</b></div><div class="fee-row"><span>حداکثر برداشت روزانه</span><b>'+fa(5000000)+' تومان</b></div></div><div class="wallet-card"><h3>عملیات امنیتی</h3><div class="sup-actions"><button class="btn btn-primary" onclick="openKyc()">به‌روزرسانی اطلاعات مالی</button><button class="btn btn-ghost" onclick="exportWalletStatement()">خروجی گردش حساب</button><button class="btn btn-orange" onclick="showAaaModal({icon:\'🛡️\',title:\'گزارش امنیتی\',sub:\'هیچ ورود مشکوکی برای کیف پول ثبت نشده است.\',primaryText:\'باشه\',secondaryText:\'\'})">گزارش امنیتی</button></div></div>';
 }
 function addTxn(i,n,amt,pos,st,type){TXNS.unshift({id:Date.now(),i,n,t:'همین حالا',amt,pos,st:st||'ok',type:type||(pos?'reward':'game'),ref:'PQ-'+Math.floor(Math.random()*90000+10000)});renderTxns();renderWalletStats();}
 renderWallet();updateWalletUI();
@@ -7643,6 +7665,28 @@ function ticketAwardPrize(){
   try{ earn(amount,'برد دوئل ('+t.name+')','🏆'); }catch(e){ wallet+=amount; try{updateWalletUI();}catch(_){} }
   toast('🏆 بردی! '+fa(amount)+' تومان به کیف پولت اضافه شد');
 }
+/* PRIZE TABLE — the server is the only thing that knows the commission, and it
+   sends back the take-home figure per tier already worked out. The client does
+   no fee maths at all, so a panel change lands here on the next fetch and every
+   screen quotes the same number. */
+let PZ_PRIZES=null, _pzPrizeReq=null;
+async function pzLoadPrizes(force){
+  if(PZ_PRIZES&&!force) return PZ_PRIZES;
+  if(_pzPrizeReq) return _pzPrizeReq;
+  _pzPrizeReq=(async()=>{
+    try{
+      const r=await pzApi('GET','/economy/prizes');
+      if(r&&r.ok&&r.data&&Array.isArray(r.data.tickets)){
+        PZ_PRIZES={}; r.data.tickets.forEach(t=>{ PZ_PRIZES[t.key]={value:t.ticketValue,prize:t.duelPrize}; });
+      }
+    }catch(e){}
+    _pzPrizeReq=null; return PZ_PRIZES;
+  })();
+  return _pzPrizeReq;
+}
+/** Take-home prize for a tier, or null while the server figure is still loading. */
+function pzPrizeFor(key){ return (PZ_PRIZES&&PZ_PRIZES[key])?PZ_PRIZES[key].prize:null; }
+
 /* Ticket-tier selector on the paid-duel entry screen. */
 function renderTicketSelect(){
   const card=document.getElementById('ticketSelectCard'), stake=document.getElementById('modeStakeCard');
@@ -7650,19 +7694,25 @@ function renderTicketSelect(){
   if(card) card.style.display=isDuelPaid?'block':'none';
   if(stake&&isDuelPaid) stake.style.display='none';
   if(!isDuelPaid||!card) return;
-  card.innerHTML='<div class="section-title" style="margin-top:0">انتخاب بلیط ورود</div>'+
-    '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px" id="tkSelGrid"></div>'+
-    '<div style="font-size:11px;color:var(--muted2);text-align:center;margin-top:9px">در مرحلهٔ اول فقط با همین نوع بلیط رقابت می‌کنی · برندهٔ دوئل مجموع ورودی هر دو بلیط را می‌برد</div>';
+  const prize=pzPrizeFor(selectedTicket);
+  card.innerHTML=
+    '<div class="tk-prize"><span class="tk-prize-lbl">جایزه این مسابقه</span>'+
+      '<b class="tk-prize-val" id="tkPrizeVal">'+(prize==null?'…':fa(prize)+' تومان')+'</b>'+
+      '<span class="tk-prize-tag">برنده همه‌اش را می‌برد 🏆</span></div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px" id="tkSelGrid"></div>';
   const g=document.getElementById('tkSelGrid');
   TICKET_DEFS.forEach(t=>{
     const b=document.createElement('button'); b.className='tab'+(selectedTicket===t.key?' active':'');
     b.style.cssText='border:2px solid '+t.color+(selectedTicket===t.key?';background:'+t.grad+';color:#fff':'');
-    b.innerHTML=t.icon+' '+t.name.replace('بلیط ','')+'<br><small style="font-size:10px;opacity:.85">'+fa(t.value)+' ت · '+fa(mTickets[t.key]||0)+' تا</small>';
+    /* Only the count — the tier price is not shown on the ticket itself. */
+    b.innerHTML=t.icon+' '+t.name.replace('بلیط ','')+'<br><small style="font-size:10.5px;opacity:.9">'+fa(mTickets[t.key]||0)+' عدد</small>';
     b.onclick=()=>{ selectedTicket=t.key; renderTicketSelect(); };
     g.appendChild(b);
   });
   const btn=document.getElementById('meStartBtn');
   if(btn) btn.textContent=(mTickets[selectedTicket]||0)>0?('ورود با '+tDef(selectedTicket).name+' 🎫'):('خرید '+tDef(selectedTicket).name+' 🎫');
+  /* First paint may land before the server figure does — fill it in on arrival. */
+  if(prize==null) pzLoadPrizes().then(()=>{ const el=document.getElementById('tkPrizeVal'); const p=pzPrizeFor(selectedTicket); if(el&&p!=null) el.textContent=fa(p)+' تومان'; });
 }
 /* Weekly-league tickets (gold/silver/bronze) are NOT purchasable — awarded by
    weekly ranking. Show their counts wherever leagues are displayed. */
@@ -8259,15 +8309,18 @@ async function pzHydrateBoards(){
       if(rk) rk.textContent='رتبه هفته: '+(mine?fa(mine.rank):'—');
     }
   }catch(e){}
-  /* Home "برترین‌های برد هفته": real top-3 by cash winnings (تومان) from the
-     winnings board — the money each player has actually won. */
+  /* Home board is the WEEKLY ranking and nothing else — it reads the weekly
+     board (this week's 🏆 cup), which the server derives from users.weekly_score.
+     The rankings screen owns the all-time boards; the two never share a source. */
   try{
-    const r=await pzApi('GET','/leaderboards/winnings');
+    const r=await pzApi('GET','/leaderboards/weekly');
     const rows=document.getElementById('homeMiniLbRows');
     if(rows){
       const list=(r&&r.ok&&r.data&&Array.isArray(r.data.entries))?r.data.entries.slice(0,3):[];
-      if(!list.length){ rows.innerHTML='<div style="text-align:center;color:var(--muted);font-size:11.5px;font-weight:800;padding:10px">هنوز بردی ثبت نشده — اولین برنده باش!</div>'; }
-      else rows.innerHTML=list.map((e,i)=>'<div class="lb-row"><span class="rk"'+(i===1?' style="background:#c8c8c8"':i===2?' style="background:#cd7f32"':'')+'>'+fa(i+1)+'</span><span style="flex:1">'+(e.avatar||'🦊')+' '+(e.username||'بازیکن')+(e.highlighted?' (تو)':'')+'</span><span style="color:var(--ok);font-weight:900">'+fa(Number(e.score)||0)+' ت</span></div>').join('');
+      if(!list.length){ rows.innerHTML='<div style="text-align:center;color:var(--muted);font-size:11.5px;font-weight:800;padding:10px">هنوز رتبه‌ای برای این هفته ثبت نشده — اولین نفر باش!</div>'; }
+      /* The avatar is a real photo URL for players who uploaded one, so it goes
+         through pzAvHTML — a raw value here printed the file path on screen. */
+      else rows.innerHTML=list.map((e,i)=>'<div class="lb-row" style="cursor:pointer" onclick="showOpponentProfileByData(\''+jsStr(e.userId||'')+'\',\''+jsStr(e.username||'بازیکن')+'\',\''+jsStr(e.avatar||'')+'\',\'رتبه‌بندی هفتگی\')"><span class="rk"'+(i===1?' style="background:#c8c8c8"':i===2?' style="background:#cd7f32"':'')+'>'+fa(i+1)+'</span><span style="flex:1;display:flex;align-items:center;gap:7px;min-width:0"><span class="lb-av">'+pzAvHTML(e.avatar,'🦊')+'</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+frEsc(e.username||'بازیکن')+(e.highlighted?' (تو)':'')+'</span></span><span style="color:var(--bolt);font-weight:900;flex-shrink:0">'+fa(Number(e.score)||0)+' 🏆</span></div>').join('');
     }
   }catch(e){}
 }
@@ -8425,7 +8478,7 @@ go=function(id){_origGo(id);
   if(id==='stats')setTimeout(renderStats,80);
   if(id==='shop'){markBadgeViewed('shop');showTutorialOnce('shop','🛍️','فروشگاه','اینجا می‌تونی کمک‌ها، قلب و آیتم‌های ظاهری بگیری.');}
   if(id==='friends')markBadgeViewed('friends');
-  if(id==='rankings'){markBadgeViewed('rankings');showTutorialOnce('leaderboard','🏅','رنکینگ','رتبه هفتگی با XP و امتیاز محاسبه می‌شود.');try{ rankTab(null,_rankTab); }catch(e){}}
+  if(id==='rankings'){markBadgeViewed('rankings');showTutorialOnce('leaderboard','🏅','رنکینگ کلی','رتبه‌بندی کلی از مجموع XP از ابتدای فعالیت محاسبه می‌شود. رتبه‌بندی هفتگی در صفحهٔ اصلی است.');try{ rankTab(null,_rankTab); }catch(e){}}
   if(id==='stats'){ try{ pzHydrateStats(); }catch(e){} }
   if(id==='wallet'){recordMissionEvent('walletVisit',1);setTimeout(()=>{try{renderWallet();}catch(e){}},80);}
   if(id==='support')recordMissionEvent('supportVisit',1);
@@ -8440,7 +8493,27 @@ go=function(id){_origGo(id);
 setTimeout(animateXP,200);
 
 /* ============ MATCHMAKING (survivor) ============ */
-let mmTimer,mmElapsed=0,mmSearchCount=1248,mmPingT,mmMsgT;
+let mmTimer,mmElapsed=0,mmPingT,mmMsgT,mmQueueT=null;
+/* REAL number of players currently queued, straight from the server's
+   matchmaking queue (GET /matchmaking/stats). Polled while the radar is up; it
+   shows «—» rather than inventing a number if the request fails. */
+async function pzPollQueueCount(){
+  const el=document.getElementById('mmSearching'); if(!el) return;
+  try{
+    const r=await pzApi('GET','/matchmaking/stats');
+    const q=(r&&r.ok&&r.data)?Number(r.data.queued):NaN;
+    el.textContent=Number.isFinite(q)?fa(q):'—';
+  }catch(e){ el.textContent='—'; }
+}
+function pzStartQueueCount(){
+  pzPollQueueCount();
+  clearInterval(mmQueueT);
+  mmQueueT=setInterval(()=>{
+    if(!document.getElementById('matchmaking').classList.contains('active')){ clearInterval(mmQueueT); mmQueueT=null; return; }
+    pzPollQueueCount();
+  },2500);
+}
+function pzStopQueueCount(){ clearInterval(mmQueueT); mmQueueT=null; }
 function startMatchmaking(){
   leagueDuelActive=false;leagueWtaActive=false;
   gameType='duel';go('matchmaking');mmElapsed=0;
@@ -8466,14 +8539,15 @@ function startMatchmaking(){
   mmMsgT=setInterval(()=>{if(!document.getElementById('matchmaking').classList.contains('active')){clearInterval(mmMsgT);return;}msgIdx=(msgIdx+1)%scanMsgs.length;document.getElementById('mmScanSub').textContent=scanMsgs[msgIdx];},1150);
   mmTimer=setInterval(()=>{
     mmElapsed++;document.getElementById('mmTime').textContent='۰:'+fa(String(mmElapsed).padStart(2,'0'));
-    mmSearchCount+=Math.floor(Math.random()*7-3);document.getElementById('mmSearching').textContent=fa(mmSearchCount);
   },1000);
+  pzStartQueueCount();
   setTimeout(()=>{
     if(!document.getElementById('matchmaking').classList.contains('active'))return;
     clearInterval(mmPingT);clearInterval(mmTimer);clearInterval(mmMsgT);foundOpponent();
   },3600+Math.random()*2200);
 }
 function foundOpponent(){
+  pzStopQueueCount();
   document.getElementById('mmStatus').textContent='✅ حریف پیدا شد!';
   const radar=document.getElementById('radar');radar.classList.remove('searching');radar.classList.add('found');
   document.getElementById('mmScanTitle').textContent='حریف آماده شد ✅';
@@ -8570,7 +8644,7 @@ function castVote(myVote){
     sfx(goOn?'found':'correct');
     setTimeout(()=>{
       if(goOn){askArena();}
-      else{const fee=Math.round(prize*pzRakeFrac());endGame(true,prize-fee,true);}
+      else{endGame(true,prize,true);}
     },1600);
   },1300);
 }
@@ -8910,8 +8984,10 @@ function _pzAuthLost(){
 /* Live economy config (rake %, ticket prices, wallet limits) pulled from the
    server so admin-panel edits reach players without a redeploy. Cached; the
    rake defaults to 5% until it loads. */
-let PZ_CFG={ rakePercent:5, wallet:{}, modes:{} };
-function pzRakeFrac(){ const r=Number(PZ_CFG&&PZ_CFG.rakePercent); return (Number.isFinite(r)&&r>=0)?r/100:0.05; }
+let PZ_CFG={ wallet:{}, modes:{} };
+/* The client no longer knows the platform commission and never computes one:
+   the server sends final take-home prizes (GET /economy/prizes) and credits the
+   wallet with the net amount itself. Anything shown here is already net. */
 async function pzLoadConfig(){
   try{ const r=await pzApi('GET','/config/public',null,false); if(r&&r.ok!==false&&(r.rakePercent!=null||r.data)){ PZ_CFG=r.data||r;
     // Rebuild the in-game topic list from admin-enabled categories (if any).
@@ -10536,7 +10612,8 @@ function pzWinModal(){
   showAaaModal({
     iconHTML:'<span style="font-size:52px;display:inline-block;animation:pzPop .5s cubic-bezier(.2,1.5,.4,1)">🏆</span>',
     title:'🎉 بردی! 🎉',
-    sub:(function(){ const rp=Math.round(pzRakeFrac()*100); const feeC=Math.round(cur*pzRakeFrac()); const netC=cur-feeC; return 'مبلغِ برد: <b style="color:var(--ok)">'+fa(cur)+' تومان</b>'+(rp>0?'<br>کارمزد پلتفرم ('+fa(rp)+'٪): <b style="color:var(--bad)">−'+fa(feeC)+'</b><br>خالصِ واریزی: <b style="color:var(--ok)">'+fa(netC)+' تومان</b>':'')+'<br>جایزهٔ مرحلهٔ بعد در صورت ادامه: <b style="color:var(--bolt)">'+fa(next)+' تومان</b>'; })()+pzAwardHTML(),
+    /* Only the take-home figure — never a fee line, never a percentage. */
+    sub:(function(){ return 'جایزهٔ تو: <b style="color:var(--ok)">'+fa(cur)+' تومان</b><br>جایزهٔ مرحلهٔ بعد در صورت ادامه: <b style="color:var(--bolt)">'+fa(next)+' تومان</b>'; })()+pzAwardHTML(),
     primaryText:'✅ ادامه می‌دهم', primaryClass:'btn-green',
     secondaryText:'💰 برداشت و خروج', secondaryClass:'btn-red',
     dismissible:false,
@@ -10703,8 +10780,9 @@ async function requestFriend(name){
   }catch(e){ try{ showFriendRequestSnackbar(name); }catch(_){} }
 }
 
-/* Intro + Splash Loading Bar */
+/* Boot loading bar — runs by itself on start-up; there is no tap-to-start step. */
 function startIntroFlow(){
+  if(startIntroFlow._ran) return; startIntroFlow._ran=true;
   go('splash');
   const bar=document.getElementById('splashBar');
   const txt=document.getElementById('splashLoadTxt');
@@ -11025,10 +11103,11 @@ async function pzRedeemGift(code){
   try{ await pzHydrateAll(); }catch(e){}
 }
 document.addEventListener('DOMContentLoaded',()=>{
-  const introArt=document.getElementById('introArt');
-  if(introArt&&window.ART_FULL) introArt.src=window.ART_FULL;
+  /* (the tap-to-start intro screen was removed — splashArt is the only boot visual) */
   const splashArt=document.getElementById('splashArt');
   if(splashArt&&window.ART_FULL) splashArt.src=window.ART_FULL;
+  /* Straight into the one loading screen — nothing to tap first. */
+  try{ startIntroFlow(); }catch(e){}
 });
 
 /* ============ QUESTION REPORT + POST-MATCH REVIEW ============ */
@@ -11263,7 +11342,7 @@ function pzBuildParticles(){
   field.innerHTML=html;
 }
 try{ pzBuildParticles(); }catch(e){}
-document.addEventListener('DOMContentLoaded', function(){ try{ pzBuildParticles(); var a=document.querySelector('.screen.active'); pzApplyWall(a?a.id:'introScreen'); }catch(e){} });
+document.addEventListener('DOMContentLoaded', function(){ try{ pzBuildParticles(); var a=document.querySelector('.screen.active'); pzApplyWall(a?a.id:'splash'); }catch(e){} });
 
 
 /* Loading screen (image 02) with the horns progress bar. Runs once on first
