@@ -4,6 +4,7 @@ import type { Reward, User } from '../types/domain.js';
 import { id } from '../utils/id.js';
 import { logger } from './logger.js';
 import { realtimePubSub } from '../realtime/pubSub.js';
+import { avatarUrlsFor } from './avatarService.js';
 
 export type LeaderboardKind = 'weekly' | 'overall' | 'winnings';
 
@@ -270,6 +271,8 @@ export class LeaderboardService {
   private async enrich(kind: LeaderboardKind, rows: RawScoreRow[], viewerUserId?: string): Promise<LeaderboardEntry[]> {
     const entries: LeaderboardEntry[] = [];
     const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    // One batched lookup so a 50-row board costs a single avatar query.
+    const photos = await avatarUrlsFor(rows.map((r) => String(r.userId)).filter((u) => UUID_RE.test(u)));
     for (const row of rows) {
       const uid = String(row.userId);
       if (!UUID_RE.test(uid)) continue; // defensively skip any corrupt id — never 500 the board
@@ -281,7 +284,7 @@ export class LeaderboardService {
         userId: uid,
         username: user?.username ?? uid,
         displayName: user?.displayName ?? user?.username ?? uid,
-        avatar: avatarFor(rank - 1, uid),
+        avatar: photos.get(uid) ?? avatarFor(rank - 1, uid),
         level: user?.level ?? 1,
         score: Math.round(Number(row.score ?? 0)),
         metric: kind,

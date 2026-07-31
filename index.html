@@ -1948,33 +1948,6 @@ body,button,input,select,textarea,.tab,#rankTabs .tab,#rankTabs .tab small,.rank
 
 
 /* ===== UNIVERSAL OPPONENT PROFILE v29 ===== */
-/* Profile card: real photo in the modal icon, tappable to enlarge, plus the
-   real-stat blocks (last-5, per-mode, top topics) and the honest empty state. */
-.aaa-icon img{width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block}
-.opp-loading{padding:26px 10px;color:var(--muted);font-weight:800;font-size:13px}
-.opp-empty{padding:20px 12px;color:var(--muted);font-weight:800;font-size:12.5px;line-height:1.9;border:2px dashed rgba(255,255,255,.14);border-radius:16px;margin-top:10px}
-.opp-empty .big{display:block;font-size:36px;margin-bottom:4px}
-.opp-src{font-size:10.5px;color:var(--muted);font-weight:800;margin-top:10px}
-.opp-sec{font-size:11.5px;font-weight:900;color:var(--bolt);text-align:right;margin:12px 2px 6px}
-.opp-last5{display:flex;align-items:center;gap:5px;justify-content:center;flex-wrap:wrap;margin-top:10px}
-.opp-last5 .lbl{font-size:10.5px;color:var(--muted);font-weight:800}
-.opp-last5 i{font-style:normal;font-size:10px;font-weight:900;border:2px solid #000;border-radius:999px;padding:3px 8px;box-shadow:0 2px 0 #000}
-.opp-last5 i.w{background:var(--ok);color:#04240f}
-.opp-last5 i.l{background:var(--red);color:#fff}
-.opp-last5 i.d{background:var(--ink-3);color:var(--paper)}
-.opp-mode{display:flex;align-items:center;gap:8px;border:2px solid #000;border-radius:13px;background:var(--ink-3);padding:8px 10px;margin-bottom:6px;box-shadow:0 3px 0 #000}
-.opp-mode b{font-size:12px;font-weight:900;flex:0 0 auto}
-.opp-mode span{flex:1;text-align:right;font-size:10.5px;color:var(--muted);font-weight:800}
-.opp-mode i{font-style:normal;font-size:13px;font-weight:900;color:var(--bolt)}
-.opp-topic{display:flex;align-items:center;gap:8px;margin-bottom:7px}
-.opp-topic span{flex:0 0 84px;text-align:right;font-size:11px;font-weight:800;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.opp-topic i{flex:1;height:10px;border:2px solid #000;border-radius:999px;background:var(--ink-3);overflow:hidden;display:block}
-.opp-topic i u{display:block;height:100%;background:linear-gradient(90deg,var(--bolt),#FFE24A);text-decoration:none}
-.opp-topic b{flex:0 0 auto;font-size:11px;font-weight:900;color:var(--bolt)}
-.pz-lightbox{position:absolute;inset:0;z-index:9999;background:rgba(0,0,0,.86);display:grid;place-items:center;opacity:0;transition:opacity .2s ease;backdrop-filter:blur(3px)}
-.pz-lightbox.on{opacity:1}
-.pz-lightbox img{width:min(78vw,300px);height:min(78vw,300px);object-fit:cover;border-radius:32px;border:var(--stroke);box-shadow:0 10px 0 #000,0 0 44px rgba(255,210,31,.28);animation:pzPop .28s cubic-bezier(.2,1.4,.4,1)}
-.pz-lb-x{position:absolute;top:16px;left:16px;width:42px;height:42px;border-radius:14px;background:var(--bolt);border:var(--stroke);font-size:18px;font-weight:900;color:#000;box-shadow:0 4px 0 #000;cursor:pointer}
 .opp-profile{margin-top:4px;text-align:center}.opp-avatar{width:86px;height:86px;margin:0 auto 10px;border-radius:26px;border:var(--stroke);background:var(--paper);display:grid;place-items:center;font-size:48px;box-shadow:var(--hard-sm),0 0 24px rgba(255,210,31,.22)}.opp-user{font-size:12px;color:var(--muted);font-weight:900;margin-top:-4px}.opp-tags{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin:10px 0}.opp-tag{font-size:10.5px;font-weight:900;border:2px solid #000;border-radius:999px;padding:4px 8px;background:var(--ink-3);color:var(--paper)}.opp-tag.y{background:rgba(255,210,31,.14);color:var(--bolt)}.opp-kpis{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0}.opp-kpi{border:2px solid #000;border-radius:14px;background:var(--ink-3);padding:9px 6px;box-shadow:0 3px 0 #000}.opp-kpi b{display:block;color:var(--bolt);font-size:15px;font-weight:900}.opp-kpi span{display:block;color:var(--muted);font-size:10px;font-weight:800;margin-top:2px}.opp-strength{font-size:11px;color:var(--muted);font-weight:800;line-height:1.7;margin-top:8px}.rankrow,.friend-card .fav,.friend-card .info,.wta-seat .wav,.player .pav,#duelOppAv,#duelOppAv2{cursor:pointer}.rankrow:hover,.friend-card:hover{filter:brightness(1.04)}.profile-btn{white-space:nowrap}
 
 
@@ -4797,8 +4770,7 @@ function lsPlayersCells(snap,markElim){
     const col=LS_COLORS[p.color]?LS_COLORS[p.color].c:'#888';
     const cls=p.status==='eliminated'?'elim':(p.status==='cashed_out'?'cash':'');
     const now=markElim&&p.status==='eliminated'&&p.eliminatedRound===snap.room.round?'ls-elim-now':'';
-    const tap=`onclick="showOpponentProfileByData('${jsStr(p.userId||'')}','${jsStr(p.username||'بازیکن')}','${jsStr(p.avatar||'')}','روم آخرین بازمانده')"`;
-    return `<div class="ls-pl ${cls} ${now}" style="cursor:pointer" ${tap}><div class="av">${lsAvatarHTML(p)}${p.status==='eliminated'?'<span class="xx">✕</span>':''}${p.status==='cashed_out'?'<span class="cashb">برداشت</span>':''}<span class="dot" style="background:${col}"></span></div><small>${(p.username||'').slice(0,8)}</small></div>`;
+    return `<div class="ls-pl ${cls} ${now}"><div class="av">${lsAvatarHTML(p)}${p.status==='eliminated'?'<span class="xx">✕</span>':''}${p.status==='cashed_out'?'<span class="cashb">برداشت</span>':''}<span class="dot" style="background:${col}"></span></div><small>${(p.username||'').slice(0,8)}</small></div>`;
   }).join('');
 }
 function lsGridHtml(snap,markElim){ return `<div class="ls-grid" id="lsElimGrid" style="grid-template-columns:repeat(4,1fr)">${lsPlayersCells(snap,markElim)}</div>`; }
@@ -6202,7 +6174,7 @@ function renderDuelResultPanel(won){
   const score=fa(oppScore)+' - '+fa(myScore),wrong=myResults.filter(x=>x==='no').length;
   const coins=won?(lastPracticeCoinsEarned||Math.max(0,duelStage*45+80)):0,xp=duelStage*80;
   if(userPlan==='free'){
-    box.innerHTML='<div class="duel-summary-aaa"><div class="duel-summary-card"><div class="duel-summary-top"><div class="duel-side me"><div class="av">'+pzMyAvHTML('🦁')+'</div><b>'+(window.myUserId||window.myName||'من')+'</b><span>بازیکن</span></div><div class="duel-final"><div class="state '+(won?'':'lose')+'">'+(won?'پیروزی':'پایان دوئل')+'</div><div class="score">'+score+'</div></div><div class="duel-side"><div class="av" onclick="showCurrentOpponentProfile()">'+pzAvHTML(oppAv,'🦊')+'</div><b>'+(oppName||'حریف')+'</b><span>حریف</span></div></div><div class="duel-summary-kpis"><div class="duel-kpi"><b>'+fa(myScore)+'</b><span>پاسخ درست</span></div><div class="duel-kpi"><b>'+fa(wrong)+'</b><span>پاسخ اشتباه</span></div><div class="duel-kpi"><b>'+fa(xp)+'</b><span>XP</span></div><div class="duel-kpi"><b>'+fa(duelStage)+'</b><span>مرحله</span></div><div class="duel-kpi"><b>~'+fa(duelStage*52)+'ث</b><span>مدت مسابقه</span></div><div class="duel-kpi"><b>'+fa(coins)+'</b><span>سکه برده</span></div></div><div class="duel-reward-strip"><span class="bigcoin">🪙</span><b>+'+fa(coins)+' سکه</b><small>اگر پلن پولی بود، جایزه نقدی واقعی می‌گرفتی.</small></div><div class="duel-social-actions"><button onclick="requestFriend(oppName||\'حریف\')"><span class="ico">➕</span>دوستی</button><button onclick="showCurrentOpponentProfile()"><span class="ico">👤</span>پروفایل</button><button onclick="reportOpponent()"><span class="ico">🚩</span>گزارش</button><button onclick="blockOpponent()"><span class="ico">🚫</span>بلاک</button></div><div class="duel-bottom-actions"><button class="btn btn-primary" onclick="collectPracticeCoinsExit()">خروج بعد از دریافت سکه</button><button class="btn btn-blue" onclick="continueDoublePracticeCoins()">ادامه و دوبرابر کردن سکه</button></div></div></div>';
+    box.innerHTML='<div class="duel-summary-aaa"><div class="duel-summary-card"><div class="duel-summary-top"><div class="duel-side me"><div class="av">🦁</div><b>'+(window.myUserId||window.myName||'من')+'</b><span>بازیکن</span></div><div class="duel-final"><div class="state '+(won?'':'lose')+'">'+(won?'پیروزی':'پایان دوئل')+'</div><div class="score">'+score+'</div></div><div class="duel-side"><div class="av" onclick="showCurrentOpponentProfile()">'+(oppAv||'🦊')+'</div><b>'+(oppName||'حریف')+'</b><span>حریف</span></div></div><div class="duel-summary-kpis"><div class="duel-kpi"><b>'+fa(myScore)+'</b><span>پاسخ درست</span></div><div class="duel-kpi"><b>'+fa(wrong)+'</b><span>پاسخ اشتباه</span></div><div class="duel-kpi"><b>'+fa(xp)+'</b><span>XP</span></div><div class="duel-kpi"><b>'+fa(duelStage)+'</b><span>مرحله</span></div><div class="duel-kpi"><b>~'+fa(duelStage*52)+'ث</b><span>مدت مسابقه</span></div><div class="duel-kpi"><b>'+fa(coins)+'</b><span>سکه برده</span></div></div><div class="duel-reward-strip"><span class="bigcoin">🪙</span><b>+'+fa(coins)+' سکه</b><small>اگر پلن پولی بود، جایزه نقدی واقعی می‌گرفتی.</small></div><div class="duel-social-actions"><button onclick="requestFriend(oppName||\'حریف\')"><span class="ico">➕</span>دوستی</button><button onclick="showCurrentOpponentProfile()"><span class="ico">👤</span>پروفایل</button><button onclick="reportOpponent()"><span class="ico">🚩</span>گزارش</button><button onclick="blockOpponent()"><span class="ico">🚫</span>بلاک</button></div><div class="duel-bottom-actions"><button class="btn btn-primary" onclick="collectPracticeCoinsExit()">خروج بعد از دریافت سکه</button><button class="btn btn-blue" onclick="continueDoublePracticeCoins()">ادامه و دوبرابر کردن سکه</button></div></div></div>';
   }else{
     /* The result is already shown big at the top (resultDuelScore) — so no center
        result card here. Just compact, side-by-side profile / friend buttons. */
@@ -6721,112 +6693,37 @@ loadSettings();applySettings();renderSettingsSummary();
 /* ============ SHOP ============ */
 function shopTab(el,tab){document.querySelectorAll('#shopTabs .tab').forEach(t=>t.classList.remove('active'));el.classList.add('active');renderShop(tab);}
 
-/* ============ UNIVERSAL PLAYER PROFILE (REAL DATA ONLY) ============ */
+/* ============ UNIVERSAL OPPONENT PROFILE ============ */
 function jsStr(s){return String(s||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");}
-
-/* Every figure on this card comes from GET /users/:id/profile — matches actually
-   played, money actually won from the ledger, real answer accuracy. A player
-   with no history gets an honest empty state instead of invented numbers. */
-let _pzProfileSeq=0;
-const PZ_MODE_FA={duel:'دوئل',lastSurvivor:'آخرین بازمانده',allOrNothing:'همه یا هیچ',weeklyLeague:'لیگ هفتگی'};
-
-/* The modal icon is a real photo when the player has one — tap it to enlarge. */
-function pzProfileIcon(av){
-  const url=pzAvIsUrl(av)?pzAvatarAbs(av):'';
-  return url
-    ? '<img src="'+frEsc(url)+'" alt="" onclick="pzOpenPhoto(\''+jsStr(url)+'\')" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block;cursor:zoom-in">'
-    : (av||'🦊');
+function normalizeProfile(o){
+  o=o||{};const seed=(o.n||o.name||'Player').length+(o.a||o.av||'').codePointAt(0)||7;
+  return {a:o.a||o.av||'🦊',n:o.n||o.name||'بازیکن ناشناس',u:o.u||('@'+String(o.n||o.name||'player').replace(/\s+/g,'_')),league:o.league||['🥉 برنزی','🥈 نقره‌ای','🥇 طلایی'][seed%3],lvl:o.lvl||((seed%8)+2),xp:o.xp||o.p||fa(4200+seed*370),winRate:o.winRate||fa(48+seed%38)+'٪',prize:o.prize||((o.unit==='تومان'||String(o.p||'').includes('٬'))?o.p:fa((seed+3)*350000)),status:o.status||o.s||'آماده رقابت',source:o.source||'بازیکن'};
 }
-function pzOpenPhoto(url){
-  if(!url) return;
-  const host=document.querySelector('.phone')||document.body;
-  let el=document.getElementById('pzLightbox');
-  if(!el){ el=document.createElement('div'); el.id='pzLightbox'; el.className='pz-lightbox'; el.onclick=(e)=>{ if(e.target===el) pzClosePhoto(); }; host.appendChild(el); }
-  el.innerHTML='<img src="'+frEsc(url)+'" alt=""><button class="pz-lb-x" onclick="pzClosePhoto()" aria-label="بستن">✕</button>';
-  requestAnimationFrame(()=>el.classList.add('on'));
-  try{ sfx('blip'); }catch(e){}
+function showOpponentProfile(data){
+  const p=normalizeProfile(data);
+  const sub='<div class="opp-profile"><div class="opp-user">'+p.u+' · '+p.status+'</div><div class="opp-tags"><span class="opp-tag y">'+p.league+'</span><span class="opp-tag">لول '+fa(p.lvl)+'</span><span class="opp-tag">'+p.source+'</span></div><div class="opp-kpis"><div class="opp-kpi"><b>'+p.xp+'</b><span>XP / امتیاز</span></div><div class="opp-kpi"><b>'+p.winRate+'</b><span>نرخ موفقیت</span></div><div class="opp-kpi"><b>'+p.prize+'</b><span>جایزه کسب‌شده</span></div><div class="opp-kpi"><b>'+fa((p.lvl*3)+7)+'</b><span>بردهای ثبت‌شده</span></div></div><div class="opp-strength">نقاط قوت: سرعت پاسخ بالا · موضوعات قوی: فیلم، جغرافیا و ورزش</div></div>';
+  showAaaModal({icon:p.a,title:p.n,sub,primaryText:'ارسال درخواست دوستی',secondaryText:'دعوت به بازی',onPrimary:()=>{closeAaaModal(false);if(typeof showFriendRequestSnackbar==='function')showFriendRequestSnackbar(p.n);else showAaaModal({icon:'🤝',title:'درخواست دوستی ارسال شد',sub:'درخواست برای '+p.n+' ارسال شد.',primaryText:'باشه',secondaryText:''});},onSecondary:()=>{closeAaaModal(false);showAaaModal({icon:'🎮',title:'دعوت ارسال شد',sub:'دعوت بازی برای '+p.n+' ارسال شد. اگر قبول کند وارد مسابقه می‌شوید.',primaryText:'باشه',secondaryText:''});}});
 }
-function pzClosePhoto(){ const el=document.getElementById('pzLightbox'); if(!el) return; el.classList.remove('on'); setTimeout(()=>{ if(el.parentNode) el.parentNode.removeChild(el); },200); }
-
-function pzProfileBody(d,note){
-  const num=n=>fa(Number(n)||0);
-  const money=n=>fa(Number(n)||0)+' تومان';
-  const head='<div class="opp-user">@'+frEsc(d.username||'player')+'</div>'+
-    '<div class="opp-tags"><span class="opp-tag y">'+frEsc(d.league||'🎯 بدون لیگ')+'</span>'+
-    '<span class="opp-tag">لول '+num(d.level)+'</span>'+
-    '<span class="opp-tag">'+num(d.xp)+' XP</span>'+
-    '<span class="opp-tag">🏆 '+num(d.weeklyScore)+'</span></div>';
-  if(!d.hasHistory){
-    return '<div class="opp-profile">'+head+
-      '<div class="opp-empty"><span class="big">📭</span>هنوز مسابقه‌ای تمام نکرده — آماری برای نمایش نیست.</div>'+(note||'')+'</div>';
-  }
-  const kpis='<div class="opp-kpis">'+
-    '<div class="opp-kpi"><b>'+num(d.matches)+'</b><span>مسابقه</span></div>'+
-    '<div class="opp-kpi"><b>'+num(d.wins)+'</b><span>برد</span></div>'+
-    '<div class="opp-kpi"><b>'+num(d.winRate)+'٪</b><span>نرخ برد</span></div>'+
-    '<div class="opp-kpi"><b>'+num(d.accuracy)+'٪</b><span>دقت پاسخ</span></div>'+
-    '<div class="opp-kpi"><b>'+money(d.totalPrize)+'</b><span>جایزه کل</span></div>'+
-    '<div class="opp-kpi"><b>'+money(d.bestPrize)+'</b><span>بهترین جایزه</span></div></div>';
-  const last5=(d.last5&&d.last5.length)
-    ? '<div class="opp-last5"><span class="lbl">اخیر</span>'+d.last5.map(x=>'<i class="'+(x==='W'?'w':(x==='L'?'l':'d'))+'">'+(x==='W'?'برد':(x==='L'?'باخت':'مساوی'))+'</i>').join('')+'</div>' : '';
-  const modes=(d.perMode&&d.perMode.length)
-    ? '<div class="opp-sec">به تفکیک بازی</div>'+d.perMode.map(m=>'<div class="opp-mode"><b>'+frEsc(PZ_MODE_FA[m.modeId]||m.modeId)+'</b><span>'+num(m.played)+' بازی · '+num(m.wins)+' برد</span><i>'+num(m.winRate)+'٪</i></div>').join('') : '';
-  const topics=(d.topTopics&&d.topTopics.length)
-    ? '<div class="opp-sec">قوی‌ترین موضوعات</div>'+d.topTopics.map(t=>'<div class="opp-topic"><span>'+frEsc(t.category)+'</span><i><u style="width:'+Math.max(4,Math.min(100,Number(t.pct)||0))+'%"></u></i><b>'+num(t.pct)+'٪</b></div>').join('') : '';
-  return '<div class="opp-profile">'+head+kpis+last5+modes+topics+(note||'')+'</div>';
-}
-
-/* Opens instantly with the avatar we already have, then fills in real stats. */
-async function showPlayerProfile(userId,fb){
-  fb=fb||{};
-  const seq=++_pzProfileSeq;
-  const title=fb.n||'بازیکن';
-  showAaaModal({
-    iconHTML:pzProfileIcon(fb.a||'🦊'),
-    title:title,
-    sub:'<div class="opp-profile"><div class="opp-loading">در حال دریافت آمار…</div></div>',
-    primaryText:userId?'ارسال درخواست دوستی':'بستن',
-    secondaryText:userId?'بستن':'',
-    onPrimary:()=>{ if(userId) pzSendFriendRequest(userId,title); else closeAaaModal(false); },
-    onSecondary:()=>closeAaaModal(false)
-  });
-  const paint=(html)=>{ if(seq!==_pzProfileSeq) return; const el=document.getElementById('aaaSub'); if(el) el.innerHTML=html; };
-  if(!userId){ paint('<div class="opp-profile"><div class="opp-empty"><span class="big">🔒</span>آمار این بازیکن در دسترس نیست.</div></div>'); return; }
-  const r=await pzApi('GET','/users/'+encodeURIComponent(userId)+'/profile');
-  if(seq!==_pzProfileSeq) return;
-  if(r&&r.ok&&r.data){
-    const d=r.data;
-    const t=document.getElementById('aaaTitle'); if(t) t.textContent=d.username||title;
-    const ic=document.getElementById('aaaIcon'); if(ic) ic.innerHTML=pzProfileIcon(d.avatar||fb.a||'🦊');
-    paint(pzProfileBody(d,fb.source?'<div class="opp-src">'+frEsc(fb.source)+'</div>':''));
-  } else {
-    paint('<div class="opp-profile"><div class="opp-empty"><span class="big">📡</span>آمار دریافت نشد — اتصالت را بررسی کن.</div></div>');
-  }
-}
-/* Real friend request (POST /friends/requests) — no fake confirmation. */
-async function pzSendFriendRequest(userId,name){
-  const r=await pzApi('POST','/friends/requests',{userId:userId});
-  closeAaaModal(false);
-  if(r&&r.ok){
-    const st=r.data&&r.data.status;
-    toast(st==='accepted'?('حالا با '+name+' دوست شدید ✅'):(st==='pending'?('درخواست دوستی برای '+name+' ثبت است'):('درخواست دوستی برای '+name+' ارسال شد ✅')));
-    try{ friendsLoad(); }catch(e){}
-  } else toast((r&&r.error&&r.error.message)||'درخواست ارسال نشد');
-}
-/* Call sites that only know a name/avatar (local screens) still open the card —
-   they just get the honest "no stats" state instead of made-up numbers. */
-function showOpponentProfile(data){ data=data||{}; showPlayerProfile(data.userId||data.uid||null,{n:data.n||data.name,a:data.a||data.av,source:data.source}); }
-function showOpponentProfileByData(userId,n,a,source){ showPlayerProfile(userId||null,{n:n,a:a,source:source}); }
+function showOpponentProfileByData(n,a,unit,p){showOpponentProfile({n:n,a:a,unit:unit,p:p,source:unit==='تومان'?'رنکینگ مبلغ':'رنکینگ XP'});}
 async function showCurrentOpponentProfile(){
-  const nm=(typeof pzRt!=='undefined'&&pzRt&&pzRt.oppName)||oppName||document.getElementById('duelOppName')?.textContent||'حریف';
-  const av=(typeof pzRt!=='undefined'&&pzRt&&pzRt.oppAv)||oppAv||'🦊';
+  const nm=oppName||document.getElementById('duelOppName')?.textContent||'حریف';
+  const av=oppAv||document.getElementById('duelOppAv')?.textContent||'🦊';
   const oppId=(typeof pzRt!=='undefined'&&pzRt&&pzRt.oppId)?pzRt.oppId:null;
-  showPlayerProfile(oppId,{n:nm,a:av,source:'حریف فعلی'});
+  let data={n:nm,a:av,source:'حریف فعلی',status:'در حال Duel',league:'🥉 برنزی',lvl:5};
+  if(oppId){
+    try{ const r=await pzApi('GET','/users/'+encodeURIComponent(oppId)+'/profile');
+      if(r&&r.ok&&r.data){ const d=r.data;
+        data={ n:d.username||nm, a:av, u:'@'+(d.username||'player'), source:'حریف فعلی', status:'در حال Duel',
+          league:d.league||'🥉 برنزی', lvl:d.level||5,
+          winRate:(d.winRate!=null?fa(d.winRate)+'٪':undefined),
+          prize:(d.totalPrize!=null?fa(d.totalPrize):undefined),
+          xp:(d.xp!=null?fa(d.xp):undefined) };
+      }
+    }catch(e){}
+  }
+  showOpponentProfile(data);
 }
-function showFriendProfile(id){
-  const f=(typeof FRIENDS_DATA!=='undefined'?FRIENDS_DATA.find(x=>x.id===id):null)||{};
-  showPlayerProfile(id||null,{n:f.n||f.u,a:f.a,source:'دوستان'});
-}
+function showFriendProfile(id){const f=(typeof FRIENDS_DATA!=='undefined'?FRIENDS_DATA.find(x=>x.id===id):null)||{};showOpponentProfile({...f,source:'دوستان'});}
 /* ============ RANKINGS + LEAGUES ============ */
 const RANK_W=[
   {a:'👾',n:'NimaX77',p:'۱۲٬۸۵۰'},{a:'🐙',n:'SanaGamer01',p:'۱۱٬۹۲۰'},
@@ -6842,14 +6739,13 @@ const RANK_O=[
 function podium(list){
   const p=list.slice(0,3);
   return '<div class="podium">'+
-   '<div class="pod p2" onclick="showOpponentProfileByData(\''+jsStr(p[1].uid||'')+'\',\''+jsStr(p[1].n)+'\',\''+jsStr(p[1].a)+'\',\'سکوی رتبه‌بندی\')"><div class="pav">'+pzAvHTML(p[1].a,'🦊')+'</div><div class="base"><div class="rk">۲</div><b>'+p[1].n.split(' ')[0]+'</b></div></div>'+
-   '<div class="pod p1" onclick="showOpponentProfileByData(\''+jsStr(p[0].uid||'')+'\',\''+jsStr(p[0].n)+'\',\''+jsStr(p[0].a)+'\',\'سکوی رتبه‌بندی\')"><div class="pav">'+pzAvHTML(p[0].a,'🦊')+'</div><div class="base"><div class="rk">۱</div><b>'+p[0].n.split(' ')[0]+'</b></div></div>'+
-   '<div class="pod p3" onclick="showOpponentProfileByData(\''+jsStr(p[2].uid||'')+'\',\''+jsStr(p[2].n)+'\',\''+jsStr(p[2].a)+'\',\'سکوی رتبه‌بندی\')"><div class="pav">'+pzAvHTML(p[2].a,'🦊')+'</div><div class="base"><div class="rk">۳</div><b>'+p[2].n.split(' ')[0]+'</b></div></div></div>';
+   '<div class="pod p2"><div class="pav">'+p[1].a+'</div><div class="base"><div class="rk">۲</div><b>'+p[1].n.split(' ')[0]+'</b></div></div>'+
+   '<div class="pod p1"><div class="pav">'+p[0].a+'</div><div class="base"><div class="rk">۱</div><b>'+p[0].n.split(' ')[0]+'</b></div></div>'+
+   '<div class="pod p3"><div class="pav">'+p[2].a+'</div><div class="base"><div class="rk">۳</div><b>'+p[2].n.split(' ')[0]+'</b></div></div></div>';
 }
 function rankRows(list,unit){
   unit=unit||'XP';
-  const src=unit==='تومان'?'رنکینگ مبلغ':(unit==='XP'?'رنکینگ XP':'رنکینگ هفتگی');
-  return list.map((r,i)=>'<div class="rankrow'+(r.me?' me':'')+'" '+(r.me?'onclick="go(\'profile\')"':'onclick="showOpponentProfileByData(\''+jsStr(r.uid||'')+'\',\''+jsStr(r.n)+'\',\''+jsStr(r.a)+'\',\''+jsStr(src)+'\')"')+'><span class="num">'+fa(i+1)+'</span><div class="rav">'+pzAvHTML(r.a,'🦊')+'</div><div class="rn">'+r.n+'</div><div class="rp">'+r.p+' <small style="font-size:9px;color:var(--muted)">'+unit+'</small></div></div>').join('');
+  return list.map((r,i)=>'<div class="rankrow'+(r.me?' me':'')+'" '+(r.me?'onclick="go(\'profile\')"':'onclick="showOpponentProfileByData(\''+jsStr(r.n)+'\',\''+jsStr(r.a)+'\',\''+jsStr(unit)+'\',\''+jsStr(r.p)+'\')"')+'><span class="num">'+fa(i+1)+'</span><div class="rav">'+r.a+'</div><div class="rn">'+r.n+'</div><div class="rp">'+r.p+' <small style="font-size:9px;color:var(--muted)">'+unit+'</small></div></div>').join('');
 }
 const RANK_WINS=[
   {a:'🐯',n:'ProMaster',p:'۴۸٬۰۰۰٬۰۰۰'},{a:'👾',n:'NimaX77',p:'۳۲٬۵۰۰٬۰۰۰'},
@@ -6880,7 +6776,7 @@ async function rankTab(el,tab){
     const r=await pzApi('GET','/leaderboards/'+m.kind);
     if(c.dataset.rankToken!==token) return;   /* superseded */
     if(r&&r.ok&&r.data&&Array.isArray(r.data.entries)&&r.data.entries.length){
-      list=r.data.entries.map(e=>({uid:e.userId,a:e.avatar||'🦊',n:(e.username||'بازیکن')+(e.highlighted?' (تو)':''),p:fa(Number(e.score)||0),me:!!e.highlighted}));
+      list=r.data.entries.map(e=>({a:e.avatar||'🦊',n:(e.username||'بازیکن')+(e.highlighted?' (تو)':''),p:fa(Number(e.score)||0),me:!!e.highlighted}));
     }
   }catch(e){}
   if(c.dataset.rankToken!==token) return;
@@ -7232,7 +7128,7 @@ function friendCard(f,mode){
   else if(isChat)actions=unread;
   const cardClick=isChat?'onclick="openFriendChat(\''+f.id+'\')"':'';
   const profileClick=isChat?'':'onclick="event.stopPropagation();showFriendProfile(\''+f.id+'\')"';
-  return '<div class="friend-card '+(f.on?'online':'')+'" '+cardClick+'><div class="fav" '+profileClick+'>'+pzAvHTML(f.a,'🦊')+star+(f.on?'<span class="on"></span>':'')+'</div><div class="info" '+profileClick+'><b>'+f.n+'</b><span>@'+f.u+' · '+f.s+'</span><div class="meta"><span class="mini-badge ok">لول '+fa(f.lvl)+'</span><span class="mini-badge y">'+f.league+'</span></div></div><div class="fr-actions">'+actions+'</div></div>';
+  return '<div class="friend-card '+(f.on?'online':'')+'" '+cardClick+'><div class="fav" '+profileClick+'>'+f.a+star+(f.on?'<span class="on"></span>':'')+'</div><div class="info" '+profileClick+'><b>'+f.n+'</b><span>@'+f.u+' · '+f.s+'</span><div class="meta"><span class="mini-badge ok">لول '+fa(f.lvl)+'</span><span class="mini-badge y">'+f.league+'</span></div></div><div class="fr-actions">'+actions+'</div></div>';
 }
 function renderFriendsList(c,q){
   const list=FRIENDS_DATA.filter(f=>friendMatch(f,q)).sort((a,b)=>(b.fav-a.fav)||(b.on-a.on));
@@ -7245,11 +7141,11 @@ function renderChatsList(c,q){
 }
 function renderRequests(c,q){
   const list=FRIEND_REQUESTS.filter(f=>friendMatch(f,q));
-  c.innerHTML=list.length?list.map(r=>'<div class="friend-card request-card"><div class="fav">'+pzAvHTML(r.a,'🦊')+'</div><div class="info"><b>'+frEsc(r.n)+'</b><span>@'+frEsc(r.u)+' · لول '+fa(r.lvl)+'</span><div class="meta"><span class="mini-badge y">'+r.msg+'</span></div></div><div class="fr-actions"><button class="btn btn-ghost btn-sm" onclick="showOpponentProfileByData(\''+jsStr(r.userId||'')+'\',\''+jsStr(r.n)+'\',\''+jsStr(r.a)+'\',\'درخواست دوستی\')">پروفایل</button><button class="btn btn-green btn-sm" onclick="acceptFriendRequest(\''+r.id+'\')">قبول</button><button class="btn btn-red btn-sm" onclick="declineFriendRequest(\''+r.id+'\')">رد</button></div></div>').join(''):'<div class="fr-empty"><span class="big">📭</span>درخواست جدیدی نداری.</div>';
+  c.innerHTML=list.length?list.map(r=>'<div class="friend-card request-card"><div class="fav">'+r.a+'</div><div class="info"><b>'+frEsc(r.n)+'</b><span>@'+frEsc(r.u)+' · لول '+fa(r.lvl)+'</span><div class="meta"><span class="mini-badge y">'+r.msg+'</span></div></div><div class="fr-actions"><button class="btn btn-ghost btn-sm" onclick="showOpponentProfile({n:\''+jsStr(r.n)+'\',a:\''+jsStr(r.a)+'\',u:\''+jsStr(r.u)+'\',lvl:'+r.lvl+',source:\'درخواست دوستی\'})">پروفایل</button><button class="btn btn-green btn-sm" onclick="acceptFriendRequest(\''+r.id+'\')">قبول</button><button class="btn btn-red btn-sm" onclick="declineFriendRequest(\''+r.id+'\')">رد</button></div></div>').join(''):'<div class="fr-empty"><span class="big">📭</span>درخواست جدیدی نداری.</div>';
 }
 function renderAddFriend(c,q){
   const out=(_frOutgoing||[]);
-  const outHtml=out.length?('<div class="section-title" style="margin-top:4px">درخواست‌های ارسالی (در انتظار پاسخ)</div>'+out.map(s=>'<div class="friend-card"><div class="fav">'+pzAvHTML(s.a,'🦊')+'</div><div class="info"><b>'+frEsc(s.n)+'</b><span>@'+frEsc(s.u)+' · لول '+fa(s.lvl)+'</span><div class="meta"><span class="mini-badge y">در انتظار پاسخ ⏳</span></div></div></div>').join('')):'';
+  const outHtml=out.length?('<div class="section-title" style="margin-top:4px">درخواست‌های ارسالی (در انتظار پاسخ)</div>'+out.map(s=>'<div class="friend-card"><div class="fav">'+s.a+'</div><div class="info"><b>'+frEsc(s.n)+'</b><span>@'+frEsc(s.u)+' · لول '+fa(s.lvl)+'</span><div class="meta"><span class="mini-badge y">در انتظار پاسخ ⏳</span></div></div></div>').join('')):'';
   c.innerHTML='<div class="add-panel"><h3>افزودن دوست با یوزرنیم</h3><p>یوزرنیم دقیق دوستت رو وارد کن تا درخواست دوستی براش بره.</p><div style="display:flex;gap:8px"><input class="input" id="friendAddInput" placeholder="مثلاً Sara_1452" dir="ltr" onkeydown="if(event.key===\'Enter\')sendFriendRequest()"><button class="btn btn-primary btn-sm" style="height:48px" onclick="sendFriendRequest()">ارسال</button></div><div class="qr-card"><div class="qr-box"></div><div style="flex:1"><b style="font-size:13px">لینک دعوت تو</b><div style="font-size:12px;color:var(--bolt);font-weight:900;margin-top:4px" dir="ltr">'+frEsc(((typeof _usr!=='undefined'&&_usr&&_usr.username)||'PRIZZE'))+'</div></div><button class="btn btn-ghost btn-sm" onclick="copyInviteLink()">کپی</button></div></div>'+outHtml;
 }
 async function openFriendChat(id){frActiveChat=id;frActiveTab='chats';document.querySelectorAll('#frTabs .fr-tab').forEach(b=>b.classList.toggle('active',b.dataset.tab==='chats'));const f=FRIENDS_DATA.find(x=>x.id===id);if(f)f.unread=0;renderFriendsHub();await frLoadMessages(id);if(frActiveChat===id)renderChatView(id);frStartChatPoll(id);}

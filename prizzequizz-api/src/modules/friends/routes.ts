@@ -1,6 +1,7 @@
 import type { Router } from '../../http/router.js';
 import { json, error } from '../../http/response.js';
 import { getPgPool } from '../../database/postgres.js';
+import { avatarUrlsFor } from '../../services/avatarService.js';
 
 // Real, DB-backed friends system: send request → accept/reject → friends list →
 // 1:1 chat. All state lives in the `friendships` and `friend_messages` tables.
@@ -27,8 +28,10 @@ export function registerFriendRoutes(router: Router, base: string): void {
          ORDER BY last_at DESC NULLS LAST, u.username`,
         [me]
       );
+      // Real profile photos where uploaded; the deterministic emoji otherwise.
+      const photos = await avatarUrlsFor(rows.map((r) => String(r.id)));
       json(ctx.res, 200, rows.map((r) => ({
-        id: r.id, username: r.username, displayName: r.display_name || r.username, avatar: avatarFor(r.username),
+        id: r.id, username: r.username, displayName: r.display_name || r.username, avatar: photos.get(String(r.id)) ?? avatarFor(r.username),
         level: r.level, online: false, unread: Number(r.unread || 0),
         lastMessage: r.last_body || '', lastAt: r.last_at?.toISOString?.() ?? r.last_at ?? null
       })));
@@ -47,7 +50,8 @@ export function registerFriendRoutes(router: Router, base: string): void {
         `SELECT f.id, u.id AS user_id, u.username, u.display_name, u.level, f.created_at
          FROM friendships f JOIN users u ON u.id = f.addressee_id
          WHERE f.requester_id = $1 AND f.status = 'pending' ORDER BY f.created_at DESC`, [me]);
-      const map = (r: any) => ({ id: r.id, userId: r.user_id, username: r.username, displayName: r.display_name || r.username, avatar: avatarFor(r.username), level: r.level, at: r.created_at?.toISOString?.() ?? r.created_at });
+      const photos = await avatarUrlsFor([...inc.rows, ...out.rows].map((r: any) => String(r.user_id)));
+      const map = (r: any) => ({ id: r.id, userId: r.user_id, username: r.username, displayName: r.display_name || r.username, avatar: photos.get(String(r.user_id)) ?? avatarFor(r.username), level: r.level, at: r.created_at?.toISOString?.() ?? r.created_at });
       json(ctx.res, 200, { incoming: inc.rows.map(map), outgoing: out.rows.map(map) });
     } catch { json(ctx.res, 200, { incoming: [], outgoing: [] }); }
   });
