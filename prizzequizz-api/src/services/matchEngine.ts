@@ -11,6 +11,7 @@ import { PZ_SCORING, getResultBonus, isoWeekId, levelForXp } from './scoringConf
 import { getPgPool } from '../database/postgres.js';
 import { logger } from './logger.js';
 import { recordQuestionAnswer } from './questionStatsService.js';
+import { avatarUrlsFor } from './avatarService.js';
 import type { GameModeId, Match, MatchEvent, MatchPlayer, PlanType } from '../types/domain.js';
 import { id } from '../utils/id.js';
 
@@ -73,8 +74,10 @@ export async function createMatchForPlayers(userId: string, opponentUserId: stri
 
   // Privacy: a player's PUBLIC handle (username) is what the other side sees —
   // never the real display name. Each client shows its own full name locally.
-  const opponent: MatchPlayer = { userId: opponentUser.id, username: opponentIsBot ? (botProfile?.username || opponentUser.username) : opponentUser.username, avatar: opponentIsBot ? (botProfile?.avatar ?? '🤖') : '🦊', score: 0, correctAnswers: 0, wrongAnswers: 0 };
-  const player: MatchPlayer = { userId: user.id, username: user.username, avatar: '🦁', score: 0, correctAnswers: 0, wrongAnswers: 0 };
+  // Real profile photos win over the placeholder emoji when a player uploaded one.
+  const photos = await avatarUrlsFor(opponentIsBot ? [user.id] : [user.id, opponentUser.id]);
+  const opponent: MatchPlayer = { userId: opponentUser.id, username: opponentIsBot ? (botProfile?.username || opponentUser.username) : opponentUser.username, avatar: opponentIsBot ? (botProfile?.avatar ?? '🤖') : (photos.get(opponentUser.id) ?? '🦊'), score: 0, correctAnswers: 0, wrongAnswers: 0 };
+  const player: MatchPlayer = { userId: user.id, username: user.username, avatar: photos.get(user.id) ?? '🦁', score: 0, correctAnswers: 0, wrongAnswers: 0 };
   const now = new Date().toISOString();
   const match: Match = { id: id(), modeId, economyType, phase: 'matchmaking', round: 0, configVersion: gameConfig.version, players: [player, opponent], createdAt: now, updatedAt: now };
   await repositories.matches.save(match);

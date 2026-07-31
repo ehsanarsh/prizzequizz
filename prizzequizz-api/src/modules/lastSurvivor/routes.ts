@@ -8,6 +8,7 @@ import { getConfig, updateConfig, setTopicEnabled, isTopicPlayable } from '../..
 import { joinTopic, snapshot, addVote, addChat, listChat, getRoom, listAllRooms, listPlayers, LastSurvivorError } from '../../services/lastSurvivorService.js';
 import { submitAnswer, submitDecision, useLifeline } from '../../services/lastSurvivorWorker.js';
 import { requireAdmin } from '../../services/adminGuard.js';
+import { avatarUrlFor } from '../../services/avatarService.js';
 
 export function registerLastSurvivorRoutes(router: Router, base: string): void {
   // ---------------- ADMIN: config + topic gating + live rooms ----------------
@@ -65,7 +66,7 @@ export function registerLastSurvivorRoutes(router: Router, base: string): void {
     const userId = ctx.userId ?? 'u1';
     let user: any = null; try { user = await repositories.users.findById(userId); } catch { /* fallback below */ }
     try {
-      const { room } = await joinTopic({ id: userId, username: user?.username || user?.displayName || 'بازیکن', avatar: user?.avatarUrl ?? null }, topic, color);
+      const { room } = await joinTopic({ id: userId, username: user?.username || user?.displayName || 'بازیکن', avatar: await avatarUrlFor(userId) }, topic, color);
       json(ctx.res, 201, await snapshot(room.id, userId));
     } catch (e) {
       if (e instanceof LastSurvivorError) return error(ctx.res, 409, e.code, e.message);

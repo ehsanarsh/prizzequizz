@@ -3774,14 +3774,33 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
     </section>
 
     <!-- ============ PROFILE ============ -->
+    <style id="avatarCSS">
+      /* Profile photo frame — same sticker look as the mascot tile it replaces. */
+      .pz-avbox{position:relative;width:98px;height:98px;border-radius:28px;background:var(--ink-2);border:var(--stroke);display:grid;place-items:center;box-shadow:var(--hard-sm),0 0 26px var(--bolt-glow);cursor:pointer;overflow:hidden}
+      .pz-avbox:active{transform:translateY(2px)}
+      .pz-avbox>svg,.pz-avbox>img{display:block}
+      .pz-avcam{position:absolute;bottom:-2px;left:-2px;width:32px;height:32px;border-radius:12px;background:var(--bolt);border:2.5px solid #000;display:grid;place-items:center;font-size:15px;box-shadow:0 3px 0 #000}
+      .pz-avspin{position:absolute;inset:0;background:rgba(0,0,0,.55);display:none;place-items:center}
+      .pz-avspin.on{display:grid}
+      .pz-avspin.on::after{content:'';width:26px;height:26px;border-radius:50%;border:3px solid rgba(255,255,255,.25);border-top-color:var(--bolt);animation:pzAvSpin .7s linear infinite}
+      @keyframes pzAvSpin{to{transform:rotate(360deg)}}
+    </style>
     <section class="screen" id="profile">
       <div class="topbar"><button class="iconbtn" onclick="menuBack('home')">→</button><h1>پروفایل کاربر</h1><button class="iconbtn" onclick="go('settings')">⚙️</button></div>
       <div style="display:flex;flex-direction:column;align-items:center;gap:4px;margin:16px 0 4px">
-        <div style="width:98px;height:98px;border-radius:28px;background:var(--ink-2);border:var(--stroke);display:grid;place-items:center;box-shadow:var(--hard-sm),0 0 26px var(--bolt-glow)">
+        <div class="pz-avbox" id="profAvBox" onclick="pzPickAvatar()" title="تغییر عکس پروفایل">
           <svg class="mascot" width="72" height="72" viewBox="0 0 120 120" id="mascotProfile"></svg>
+          <span class="pz-avcam">📷</span>
+          <span class="pz-avspin" id="profAvSpin"></span>
         </div>
+        <input type="file" id="profAvFile" accept="image/*" style="display:none" onchange="pzOnAvatarPicked(this)">
         <b id="profName" style="font-size:19px;font-weight:900;margin-top:8px">بازیکن</b>
         <span id="profUser" style="font-size:12px;color:var(--muted);font-weight:800" dir="ltr">@player</span>
+        <div style="display:flex;gap:8px;margin-top:6px">
+          <button class="btn btn-ghost btn-sm" style="padding:6px 14px" onclick="pzPickAvatar()">📷 انتخاب عکس</button>
+          <button class="btn btn-ghost btn-sm" id="profAvDel" style="padding:6px 14px;display:none;color:var(--bad)" onclick="pzRemoveAvatar()">🗑 حذف عکس</button>
+        </div>
+        <small id="profAvHint" style="font-size:11px;color:var(--muted);font-weight:800;margin-top:2px">عکس روی گوشی خودت فشرده می‌شود و سبک آپلود می‌شود</small>
       </div>
       <div class="pad" style="padding-top:0">
         <button class="btn btn-ghost btn-sm soon-dim" style="width:100%;margin-bottom:14px" onclick="charBack='profile';go('character')">🎭 ویرایش کاراکتر <span class="soon-tag">بزودی 🚧</span></button>
@@ -4375,7 +4394,18 @@ function mascotSVG(color){
    '<rect x="4" y="4" width="112" height="112" rx="28" fill="none" stroke="#000" stroke-width="5"/>';
 }
 let mColor='#FFCF33';
-function paintMascots(){document.querySelectorAll('.mascot').forEach(m=>m.innerHTML=mascotSVG(m.id==='mascotChar'?mColor:mColor));}
+/* When the player uploaded a real photo it replaces the mascot art EVERYWHERE
+   their own avatar is drawn (header, lobby, duel, result, profile, side menu).
+   Same rounded-square frame, so nothing else in the layout moves. */
+window.PZ_MY_AVATAR='';
+function pzPhotoSVG(url){
+  pzPhotoSVG._n=(pzPhotoSVG._n||0)+1;const u=pzPhotoSVG._n;
+  return '<defs><clipPath id="pcp'+u+'"><rect x="4" y="4" width="112" height="112" rx="28"/></clipPath></defs>'+
+   '<rect x="4" y="4" width="112" height="112" rx="28" fill="#F7F4EC" clip-path="url(#pcp'+u+')"/>'+
+   '<image href="'+url+'" x="4" y="4" width="112" height="112" preserveAspectRatio="xMidYMid slice" clip-path="url(#pcp'+u+')"/>'+
+   '<rect x="4" y="4" width="112" height="112" rx="28" fill="none" stroke="#000" stroke-width="5"/>';
+}
+function paintMascots(){const ph=window.PZ_MY_AVATAR;document.querySelectorAll('.mascot').forEach(m=>m.innerHTML=ph?pzPhotoSVG(ph):mascotSVG(m.id==='mascotChar'?mColor:mColor));}
 paintMascots();
 
 /* ============ CHARACTER CREATOR (AAA) ============ */
@@ -4729,7 +4759,7 @@ function lsWaitHtml(snap){
    home header use, tinted deterministically per user so everyone is distinct. */
 const LS_AV_COLORS=['#FFCF33','#28C46A','#5DB7EC','#F2604D','#B57bff','#FF9F43','#F4C21B'];
 function lsAvatarHTML(p){
-  if(p.avatar) return `<img src="${p.avatar}" style="width:100%;height:100%;object-fit:cover">`;
+  if(p.avatar) return `<img src="${(typeof pzAvatarAbs==='function'?pzAvatarAbs(p.avatar):p.avatar)}" style="width:100%;height:100%;object-fit:cover" onerror="this.style.display='none'">`;
   let h=0; const s=String(p.userId||p.username||''); for(let i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))>>>0;
   const col=LS_AV_COLORS[h%LS_AV_COLORS.length];
   try{ if(typeof mascotSVG==='function'&&window.ART_FACE) return `<svg viewBox="0 0 120 120" style="width:100%;height:100%">${mascotSVG(col)}</svg>`; }catch(e){}
@@ -8073,6 +8103,7 @@ async function pzHydrateAll(){
     const r=await pzApi('GET','/users/me');
     if(r&&r.ok&&r.data){
       const u=r.data; _usr=u; try{ localStorage.setItem('pz_usr',JSON.stringify(u)); }catch(e){}
+      try{ pzApplyMyAvatar(u.avatar||''); }catch(e){}   /* real profile photo, if uploaded */
       try{ pzLoadNotifPrefs(); }catch(e){}   /* reflect server notification prefs in settings */
       if(typeof u.weeklyScore==='number'){ try{ weeklyScore=u.weeklyScore; }catch(e){} }
       try{ pzUpdateXpBar(u.xp||0); }catch(e){}
@@ -8710,7 +8741,7 @@ let _tok = localStorage.getItem('pz_tok') || null;
 let _usr = JSON.parse(localStorage.getItem('pz_usr') || 'null');
 let _rid = null, _mid = null, _mmt = null, _mmi = null;
 
-if(_tok && _usr) setTimeout(()=>{ wallet = _usr.balances?.wallet||0; updateWalletUI(); try{applyMyName();}catch(e){} try{pzHydrateAll();}catch(e){} },300);
+if(_tok && _usr) setTimeout(()=>{ wallet = _usr.balances?.wallet||0; updateWalletUI(); try{applyMyName();}catch(e){} try{pzApplyMyAvatar(_usr.avatar||'');}catch(e){} try{pzHydrateAll();}catch(e){} },300);
 
 let _pzRefreshing=null; // shared in-flight refresh so parallel 401s refresh once
 async function pzApi(m,p,b,a=true){
@@ -8879,6 +8910,7 @@ async function submitRegister(){
 function populateProfileEdit(){
   const nEl=document.getElementById('profEditName'); if(nEl) nEl.value=(_usr&&_usr.displayName&&_usr.displayName!=='بازیکن جدید')?_usr.displayName:'';
   const uEl=document.getElementById('profEditUsername'); if(uEl) uEl.value=(_usr&&_usr.username&&!/^user_\d+$/.test(_usr.username))?_usr.username:'';
+  try{ pzApplyMyAvatar((_usr&&_usr.avatar)||''); }catch(e){}
 }
 async function submitProfileEdit(){
   const full=(document.getElementById('profEditName')?.value||'').trim();
@@ -8890,6 +8922,139 @@ async function submitProfileEdit(){
   const r=await pzApi('PATCH','/users/me',body);
   if(r.ok){ _usr=r.data; try{localStorage.setItem('pz_usr',JSON.stringify(_usr));}catch(e){} applyMyName(); toast('تغییرات ذخیره شد ✅'); }
   else { toast(r.error?.message||'ذخیره نشد — شاید نام کاربری تکراری است'); }
+}
+
+/* ================= PROFILE PHOTO =================================
+   The picture is shrunk ON THE DEVICE before it ever touches the network: it is
+   centre-cropped to a square, scaled down, then encoded in EVERY format the
+   browser can actually produce (AVIF → WebP → JPEG → PNG) at descending quality.
+   Whichever encoder yields the FEWEST BYTES wins — so the stored file is the
+   smallest possible version of the photo, never the multi-megabyte original the
+   camera produced. The server re-validates format + size and stores only that. */
+const PZ_AV_TARGET_BYTES = 40*1024;    /* good enough → stop searching */
+const PZ_AV_HARD_BYTES   = 115*1024;   /* server rejects above 120KB */
+const PZ_AV_SIZES        = [256,224,192,160,128];
+const PZ_AV_TYPES        = ['image/avif','image/webp','image/jpeg'];
+const PZ_AV_QUALITIES    = [0.80,0.70,0.60,0.50,0.40];
+
+function pzAvatarAbs(u){
+  if(!u) return '';
+  if(/^(https?:|data:|blob:)/i.test(u)) return u;
+  return String(_A).replace(/\/v1\/?$/,'')+u;
+}
+/* A player's «avatar» from the server is EITHER a placeholder emoji or a real
+   photo URL — these three helpers let every avatar slot handle both. */
+function pzAvIsUrl(a){ return typeof a==='string' && /^(https?:|\/|data:)/i.test(a); }
+function pzAvHTML(a,fallback){
+  const v=a||fallback||'👤';
+  return pzAvIsUrl(v) ? '<img src="'+pzAvatarAbs(v)+'" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block">' : v;
+}
+function pzSetAv(el,a,fallback){
+  if(!el) return; const v=a||fallback||'👤';
+  if(pzAvIsUrl(v)) el.innerHTML=pzAvHTML(v); else el.textContent=v;
+}
+function pzMyAvHTML(fallback){ return window.PZ_MY_AVATAR ? pzAvHTML(window.PZ_MY_AVATAR) : (fallback||'🦁'); }
+/* Decode any file the OS hands us (JPEG/PNG/HEIC/WebP), honouring EXIF rotation. */
+async function pzDecodeImage(file){
+  if(typeof createImageBitmap==='function'){
+    try{ return await createImageBitmap(file,{imageOrientation:'from-image'}); }catch(e){}
+    try{ return await createImageBitmap(file); }catch(e){}
+  }
+  return await new Promise((res,rej)=>{
+    const url=URL.createObjectURL(file); const im=new Image();
+    im.onload=()=>{ URL.revokeObjectURL(url); res(im); };
+    im.onerror=()=>{ URL.revokeObjectURL(url); rej(new Error('decode')); };
+    im.src=url;
+  });
+}
+/* Canvas silently falls back to PNG for formats it cannot encode, so we always
+   check the blob's real type before trusting it. */
+function pzCanvasBlob(canvas,type,quality){
+  return new Promise((res)=>{
+    try{
+      if(canvas.convertToBlob) { canvas.convertToBlob({type,quality}).then(b=>res(b&&b.type===type?b:null),()=>res(null)); return; }
+      canvas.toBlob(b=>res(b&&b.type===type?b:null),type,quality);
+    }catch(e){ res(null); }
+  });
+}
+function pzSquareCanvas(img,size){
+  const w=img.width||img.naturalWidth, h=img.height||img.naturalHeight;
+  const side=Math.min(w,h), sx=(w-side)/2, sy=(h-side)/2;
+  const c = (typeof OffscreenCanvas==='function') ? new OffscreenCanvas(size,size) : Object.assign(document.createElement('canvas'),{width:size,height:size});
+  const g=c.getContext('2d');
+  g.imageSmoothingEnabled=true; try{ g.imageSmoothingQuality='high'; }catch(e){}
+  g.drawImage(img,sx,sy,side,side,0,0,size,size);
+  return c;
+}
+/** → {blob, mime, bytes, size} — the smallest encoding found, or throws. */
+async function pzShrinkImage(file){
+  const img=await pzDecodeImage(file);
+  let best=null;
+  for(const size of PZ_AV_SIZES){
+    const canvas=pzSquareCanvas(img,size);
+    for(const type of PZ_AV_TYPES){
+      for(const q of PZ_AV_QUALITIES){
+        const b=await pzCanvasBlob(canvas,type,q);
+        if(!b) break;                                   /* browser can't encode this format at all */
+        if(!best||b.size<best.bytes) best={blob:b,mime:type,bytes:b.size,size};
+        if(b.size<=PZ_AV_TARGET_BYTES) break;           /* small enough for this format */
+      }
+    }
+    /* Flat / low-detail pictures can compress better losslessly than lossy. */
+    const png=await pzCanvasBlob(canvas,'image/png');
+    if(png&&(!best||png.size<best.bytes)) best={blob:png,mime:'image/png',bytes:png.size,size};
+    if(best&&best.bytes<=PZ_AV_TARGET_BYTES) break;     /* done — no need to shrink further */
+  }
+  try{ img.close&&img.close(); }catch(e){}
+  if(!best) throw new Error('این عکس قابل پردازش نیست');
+  if(best.bytes>PZ_AV_HARD_BYTES) throw new Error('عکس خیلی سنگین است، عکس دیگری انتخاب کن');
+  return best;
+}
+function pzBlobToDataUri(blob){
+  return new Promise((res,rej)=>{ const fr=new FileReader(); fr.onload=()=>res(String(fr.result)); fr.onerror=()=>rej(new Error('read')); fr.readAsDataURL(blob); });
+}
+function pzAvBusy(on){ const s=document.getElementById('profAvSpin'); if(s) s.classList.toggle('on',!!on); }
+/* Paint the photo everywhere and keep the delete button in sync. */
+function pzApplyMyAvatar(url){
+  window.PZ_MY_AVATAR = url ? pzAvatarAbs(url) : '';
+  try{ paintMascots(); }catch(e){}
+  const del=document.getElementById('profAvDel'); if(del) del.style.display = url ? '' : 'none';
+  if(_usr){ _usr.avatar = url || null; try{ localStorage.setItem('pz_usr',JSON.stringify(_usr)); }catch(e){} }
+}
+function pzPickAvatar(){ const i=document.getElementById('profAvFile'); if(i){ i.value=''; i.click(); } }
+async function pzOnAvatarPicked(input){
+  const file=input&&input.files&&input.files[0]; if(!file) return;
+  if(!/^image\//.test(file.type||'')&&!/\.(jpe?g|png|webp|heic|heif|avif|gif|bmp)$/i.test(file.name||'')){ toast('فقط فایل تصویری'); return; }
+  pzAvBusy(true);
+  const hint=document.getElementById('profAvHint'); if(hint) hint.textContent='در حال فشرده‌سازی...';
+  try{
+    const shrunk=await pzShrinkImage(file);
+    const dataUri=await pzBlobToDataUri(shrunk.blob);
+    if(hint) hint.textContent='در حال آپلود...';
+    const r=await pzApi('POST','/users/me/avatar',{image:dataUri});
+    if(r&&r.ok&&r.data&&r.data.avatar){
+      pzApplyMyAvatar(r.data.avatar);
+      const kb=Math.max(1,Math.round(shrunk.bytes/1024));
+      const before=Math.max(1,Math.round(file.size/1024));
+      const ext=(shrunk.mime.split('/')[1]||'').toUpperCase();
+      if(hint) hint.textContent='ذخیره شد: '+fa(kb)+' کیلوبایت '+ext+' (از '+fa(before)+' کیلوبایت)';
+      toast('عکس پروفایل ثبت شد ✅');
+      try{ sfx('win'); }catch(e){}
+    } else {
+      if(hint) hint.textContent='عکس روی گوشی خودت فشرده می‌شود و سبک آپلود می‌شود';
+      toast((r&&r.error&&r.error.message)||'آپلود نشد، دوباره تلاش کن');
+    }
+  }catch(e){
+    if(hint) hint.textContent='عکس روی گوشی خودت فشرده می‌شود و سبک آپلود می‌شود';
+    toast(e&&e.message?e.message:'پردازش عکس ناموفق بود');
+  }finally{ pzAvBusy(false); input.value=''; }
+}
+async function pzRemoveAvatar(){
+  pzAvBusy(true);
+  const r=await pzApi('DELETE','/users/me/avatar');
+  pzAvBusy(false);
+  if(r&&r.ok){ pzApplyMyAvatar(''); toast('عکس حذف شد'); const h=document.getElementById('profAvHint'); if(h) h.textContent='عکس روی گوشی خودت فشرده می‌شود و سبک آپلود می‌شود'; }
+  else toast('حذف نشد، دوباره تلاش کن');
 }
 /* Refund the entry fee (paid in startGame BEFORE matchmaking) when no opponent
    is found or the search is cancelled — so a search that finds nobody never
@@ -9250,7 +9415,7 @@ function pzApplyDuelNames(){
   const oa=(pzRt&&pzRt.oppAv)||oppAv||'🦊';
   ['duelMeName','duelMeName2'].forEach(id=>{const el=document.getElementById(id); if(el)el.textContent=me;});
   ['duelOppName','duelOppName2','vsOppName'].forEach(id=>{const el=document.getElementById(id); if(el)el.textContent=op;});
-  ['duelOppAv','duelOppAv2','vsOppAv'].forEach(id=>{const el=document.getElementById(id); if(el)el.textContent=oa;});
+  ['duelOppAv','duelOppAv2','vsOppAv'].forEach(id=>{const el=document.getElementById(id); if(el)pzSetAv(el,oa,'🦊');});
 }
 function pzCleanupRt(){
   pzRt.active=false; pzHeartbeat(false); try{ pzConnStop(); }catch(_){}
@@ -9788,7 +9953,7 @@ function pzRenderWaitPanel(half){
     '<div class="pzm-status-title">حریف خود را بیشتر بشناس</div>'+
     '<div class="pzm-status-sub">حریف در حال انتخاب موضوع است...'+(half===1?'<br><b style="color:var(--bolt)">در نیمهٔ دوم انتخاب موضوع با توست.</b>':'')+'</div>'+
     '<div class="pzm-oppcard">'+
-      '<div class="pzm-oppav">'+av+'</div>'+
+      '<div class="pzm-oppav">'+pzAvHTML(av,'🦊')+'</div>'+
       '<div class="pzm-oppname">@'+frEsc(nm)+'</div>'+
       '<div class="pzm-oppmeta" id="pzOppMeta">در حال دریافت آمار...</div>'+
       '<div class="pzm-oppstats" id="pzOppStats"></div>'+
@@ -9906,7 +10071,7 @@ function pzResultGate(myRight,oppRight,cb,label){
      finished are already on the server, so the difficulty is final. */
   try{ if(typeof pzPrepRound==='function'&&typeof dQ==='number') pzPrepRound(dQ); }catch(e){}
   const meId=((pzRt&&pzRt.myName)||window.myName||'تو'), opId=((pzRt&&pzRt.oppName)||'حریف');
-  const meAv='🦁', opAv=(pzRt&&pzRt.oppAv)||oppAv||'🦊';
+  const meAv=pzMyAvHTML('🦁'), opAv=pzAvHTML((pzRt&&pzRt.oppAv)||oppAv,'🦊');
   const meCol=myScore>oppScore?'var(--ok)':(myScore<oppScore?'var(--red)':'var(--text)');
   const opCol=oppScore>myScore?'var(--ok)':(oppScore<myScore?'var(--red)':'var(--text)');
   const prevMy=myScore-(myRight?1:0), prevOpp=oppScore-(oppRight?1:0);

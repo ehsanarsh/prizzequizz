@@ -2,11 +2,12 @@ import type { Router } from '../../http/router.js';
 import { error, json } from '../../http/response.js';
 import { repositories } from '../../repositories/index.js';
 import { getPgPool } from '../../database/postgres.js';
+import { AvatarError, AVATAR_MAX_BYTES, avatarUrlFor, getAvatar, removeAvatar, saveAvatar } from '../../services/avatarService.js';
 
 export function registerUserRoutes(router: Router, base: string): void {
   router.add('GET', `${base}/users/me`, async (ctx) => {
     const user = (await repositories.users.findById(ctx.userId ?? 'u1')) ?? (await repositories.users.findById('u1'))!;
-    json(ctx.res, 200, toDto(user));
+    json(ctx.res, 200, { ...toDto(user), avatar: await avatarUrlFor(user.id) });
   });
 
   // Complete/update the player's own profile (display name + unique username).
@@ -22,8 +23,49 @@ export function registerUserRoutes(router: Router, base: string): void {
     } catch {
       return error(ctx.res, 409, 'USERNAME_TAKEN', 'این نام کاربری قبلاً گرفته شده است');
     }
-    json(ctx.res, 200, toDto(user));
+    json(ctx.res, 200, { ...toDto(user), avatar: await avatarUrlFor(user.id) });
   });
+  /* ---- Profile photo ----
+   * The client uploads an ALREADY-SHRUNK square thumbnail (WebP when the device
+   * supports it, otherwise JPEG). We validate type + magic bytes, hard-cap the
+   * size, store the bytes in their own table, and point the user's avatar at a
+   * cacheable URL. The original camera file is never stored. */
+  router.add('POST', `${base}/users/me/avatar`, async (ctx) => {
+    if (!ctx.userId) return error(ctx.res, 401, 'UNAUTHORIZED', 'ابتدا وارد شو.');
+    const user = await repositories.users.findById(ctx.userId);
+    if (!user) return error(ctx.res, 404, 'USER_NOT_FOUND', 'User not found');
+    const body = (ctx.body ?? {}) as Record<string, unknown>;
+    try {
+      const saved = await saveAvatar(user.id, String(body.image ?? ''));
+      json(ctx.res, 200, { avatar: saved.url, bytes: saved.bytes, mime: saved.mime, maxBytes: AVATAR_MAX_BYTES });
+    } catch (e) {
+      if (e instanceof AvatarError) return error(ctx.res, 422, e.code, e.message);
+      throw e;
+    }
+  });
+
+  router.add('DELETE', `${base}/users/me/avatar`, async (ctx) => {
+    if (!ctx.userId) return error(ctx.res, 401, 'UNAUTHORIZED', 'ابتدا وارد شو.');
+    const user = await repositories.users.findById(ctx.userId);
+    if (!user) return error(ctx.res, 404, 'USER_NOT_FOUND', 'User not found');
+    await removeAvatar(user.id);           // back to the character/mascot
+    json(ctx.res, 200, { removed: true, avatar: null });
+  });
+
+  // Public image endpoint — long cache + ETag so it costs one request, once.
+  router.add('GET', `${base}/users/:id/avatar`, async (ctx) => {
+    const av = await getAvatar(ctx.params.id!);
+    if (!av) return error(ctx.res, 404, 'AVATAR_NOT_FOUND', 'Avatar not found');
+    const inm = ctx.req.headers['if-none-match'];
+    if (inm && String(inm).replace(/"/g, '') === av.etag) { ctx.res.statusCode = 304; ctx.res.end(); return; }
+    ctx.res.statusCode = 200;
+    ctx.res.setHeader('content-type', av.mime);
+    ctx.res.setHeader('content-length', String(av.data.length));
+    ctx.res.setHeader('etag', `"${av.etag}"`);
+    ctx.res.setHeader('cache-control', 'public, max-age=31536000, immutable');
+    ctx.res.end(av.data);
+  });
+
   // Persist the player's lifeline inventory (decremented on use, server-side).
   router.add('PATCH', `${base}/users/me/lifelines`, async (ctx) => {
     const user = await repositories.users.findById(ctx.userId ?? 'u1');
@@ -38,7 +80,7 @@ export function registerUserRoutes(router: Router, base: string): void {
   // Never the real name / phone (privacy).
   router.add('GET', `${base}/users/:id/profile`, async (ctx) => {
     const u = await repositories.users.findById(ctx.params.id!);
-    json(ctx.res, 200, { id: ctx.params.id, username: u?.username ?? 'player', avatar: '🦊', level: u?.level ?? 1, league: 'Bronze', winRate: 62, totalPrize: 0 });
+    json(ctx.res, 200, { id: ctx.params.id, username: u?.username ?? 'player', avatar: (await avatarUrlFor(ctx.params.id!)) ?? '🦊', level: u?.level ?? 1, league: 'Bronze', winRate: 62, totalPrize: 0 });
   });
 
   // REAL aggregated stats for a user (opponent panel): matches / wins / losses /
