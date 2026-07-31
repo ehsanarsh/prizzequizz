@@ -2,6 +2,9 @@ import type { Router } from '../../http/router.js';
 import { json } from '../../http/response.js';
 import { listItems } from '../../services/shopService.js';
 import { ticketPrizeTable } from '../../services/prizeService.js';
+import { getPromos, updatePromos, PromoError, PROMO_IMAGE_MAX_BYTES } from '../../services/ticketPromoService.js';
+import { requireAdmin } from '../../services/adminGuard.js';
+import { error } from '../../http/response.js';
 
 export function registerShopRoutes(router: Router, base: string): void {
   /* PUBLIC PRIZE TABLE — what a winner takes home at each ticket tier.
@@ -11,6 +14,26 @@ export function registerShopRoutes(router: Router, base: string): void {
    * in the app on the next request. */
   router.add('GET', `${base}/economy/prizes`, async (ctx) => {
     json(ctx.res, 200, { tickets: ticketPrizeTable() });
+  });
+
+  /* The admin-owned banner shown on each of the three ticket screens. */
+  router.add('GET', `${base}/economy/ticket-promos`, async (ctx) => {
+    json(ctx.res, 200, await getPromos());
+  });
+
+  router.add('GET', `${base}/admin/ticket-promos`, async (ctx) => {
+    if (!requireAdmin(ctx, { tab: 'shop' })) return;
+    json(ctx.res, 200, { promos: await getPromos(), maxImageBytes: PROMO_IMAGE_MAX_BYTES });
+  });
+
+  router.add('PUT', `${base}/admin/ticket-promos`, async (ctx) => {
+    if (!requireAdmin(ctx, { tab: 'shop' })) return;
+    try {
+      json(ctx.res, 200, { promos: await updatePromos(ctx.body ?? {}) });
+    } catch (e) {
+      if (e instanceof PromoError) return error(ctx.res, 422, e.code, e.message);
+      throw e;
+    }
   });
 
   // Public catalog the in-game shop reads. Only ENABLED items, grouped by

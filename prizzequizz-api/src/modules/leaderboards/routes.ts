@@ -2,7 +2,7 @@ import type { Router } from '../../http/router.js';
 import { error, json } from '../../http/response.js';
 import { leaderboards, type LeaderboardKind } from '../../services/leaderboardService.js';
 
-const kinds: LeaderboardKind[] = ['weekly', 'overall', 'winnings'];
+const kinds: LeaderboardKind[] = ['weekly', 'overall', 'winnings', 'weeklyWinnings'];
 
 export function registerLeaderboardRoutes(router: Router, base: string): void {
   router.add('GET', `${base}/leaderboards/weekly`, async (ctx) => {
@@ -15,6 +15,11 @@ export function registerLeaderboardRoutes(router: Router, base: string): void {
 
   router.add('GET', `${base}/leaderboards/winnings`, async (ctx) => {
     json(ctx.res, 200, await leaderboards.get('winnings', readLimit(ctx.query), ctx.userId));
+  });
+
+  // Prize money won this week — resets on the same boundary as the cup.
+  router.add('GET', `${base}/leaderboards/weekly-winnings`, async (ctx) => {
+    json(ctx.res, 200, await leaderboards.get('weeklyWinnings', readLimit(ctx.query), ctx.userId));
   });
 
   router.add('GET', `${base}/leaderboards/:kind`, async (ctx) => {

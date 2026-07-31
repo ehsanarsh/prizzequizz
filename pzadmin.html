@@ -1082,6 +1082,10 @@ async function renderShopAdmin(){
     cats.map(c=>{const n=rows.filter(i=>i.category===c).length;return '<button class="'+(SHOP_CAT===c?'active':'')+'" onclick="SHOP_CAT='+JSON.stringify(c).replace(/"/g,'&quot;')+';render()">'+esc(SHOP_CATS[c]||c)+' ('+fa(n)+')</button>';}).join('')+'</div>';
   const list=rows.filter(i=>!SHOP_CAT||i.category===SHOP_CAT).sort((a,b)=>a.category===b.category?a.sortOrder-b.sortOrder:(a.category<b.category?-1:1));
   $('#main').innerHTML=head('مدیریت فروشگاه','آیتم اضافه کن، قیمت و اثر بگذار، فعال/غیرفعال و مرتب کن — بلافاصله در بازی اعمال می‌شود','<button class="btn pri" onclick="shopEdit()">➕ افزودن آیتم</button>')+
+    '<div class="card" style="margin-bottom:14px"><b style="display:block;margin-bottom:4px">تبلیغ صفحه‌های بلیط</b>'+
+      '<div class="sub" style="margin-bottom:12px">هر سه صفحه‌ای که بلیط دارند یک بنر یکسان نشان می‌دهند؛ متن و تصویر هرکدام را جدا تنظیم کن.</div>'+
+      PROMO_SLOTS.map(function(sl){return promoCard(sl[0],sl[1],(_PROMOS||{})[sl[0]]);}).join('')+
+      '<button class="btn ok" onclick="promoSave()">ذخیره تبلیغ‌ها</button></div>'+
     catTabs+
     '<div class="tbl-wrap"><table><thead><tr>'+['','نام','دسته','قیمت','ارز','اثر','ترتیب','وضعیت','عملیات'].map(c=>'<th>'+c+'</th>').join('')+'</tr></thead><tbody>'+
     (list.length?list.map(it=>'<tr>'+

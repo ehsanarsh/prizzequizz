@@ -118,6 +118,8 @@ export interface TransactionRepository {
   list(filter?: TransactionFilter): Promise<Transaction[]>;
   listByUser(userId: string): Promise<Transaction[]>;
   listWinnings(limit?: number): Promise<LeaderboardScoreRow[]>;
+  /** Cash/coins won since the start of the current ISO week — resets with the cup. */
+  listWeeklyWinnings(limit?: number): Promise<LeaderboardScoreRow[]>;
   save(transaction: Transaction): Promise<void>;
   updateStatus(id: string, status: Transaction['status'], reference?: string): Promise<Transaction | null>;
 }

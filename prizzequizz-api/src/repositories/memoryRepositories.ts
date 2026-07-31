@@ -90,6 +90,21 @@ export const memoryRepositories: RepositoryBundle = {
       }
       return [...totals.entries()].map(([userId, score]) => ({ userId, score })).sort((a,b)=>b.score-a.score).slice(0, limit);
     },
+    async listWeeklyWinnings(limit = 100): Promise<{ userId: string; score: number }[]> {
+      // Monday 00:00 of the current week — the same boundary the cup resets on.
+      const now = new Date();
+      const day = (now.getUTCDay() + 6) % 7;                 // Mon=0 … Sun=6
+      const weekStart = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - day);
+      const totals = new Map<string, number>();
+      for (const t of db.transactions.values()) {
+        if (t.direction !== 'in' || t.status === 'failed') continue;
+        if (!['reward', 'win'].includes(t.type)) continue;
+        if (!['cash', 'coins'].includes(t.currency)) continue;
+        if (new Date(t.createdAt).getTime() < weekStart) continue;
+        totals.set(t.userId, (totals.get(t.userId) ?? 0) + Number(t.amount));
+      }
+      return [...totals.entries()].map(([userId, score]) => ({ userId, score })).sort((a,b)=>b.score-a.score).slice(0, limit);
+    },
     async save(transaction: Transaction): Promise<void> { db.transactions.set(transaction.id, transaction); },
     async updateStatus(id: string, status: Transaction['status'], reference?: string): Promise<Transaction | null> { const txn = db.transactions.get(id); if (!txn) return null; txn.status = status; if (reference) txn.reference = reference; db.transactions.set(id, txn); return txn; }
   },

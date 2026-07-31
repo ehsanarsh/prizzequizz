@@ -6,7 +6,13 @@ import { logger } from './logger.js';
 import { realtimePubSub } from '../realtime/pubSub.js';
 import { avatarUrlsFor } from './avatarService.js';
 
-export type LeaderboardKind = 'weekly' | 'overall' | 'winnings';
+/* Four independent boards:
+ *   weekly        — this week's 🏆 cup (resets weekly)
+ *   overall       — lifetime XP
+ *   winnings      — lifetime prize money
+ *   weeklyWinnings— prize money won this week, resetting on the SAME Monday
+ *                   boundary as the cup so the two always turn over together. */
+export type LeaderboardKind = 'weekly' | 'overall' | 'winnings' | 'weeklyWinnings';
 
 export interface LeaderboardEntry {
   rank: number;
@@ -51,6 +57,8 @@ interface LeaderboardAdapter {
 class MemoryLeaderboardAdapter implements LeaderboardAdapter {
   readonly name = 'memory' as const;
   private boards: Record<LeaderboardKind, Map<string, number>> = {
+    // weeklyWinnings is derived from the ledger on every read, so its cache stays empty.
+    weeklyWinnings: new Map(),
     weekly: new Map(),
     overall: new Map(),
     winnings: new Map()
@@ -80,6 +88,7 @@ class MemoryLeaderboardAdapter implements LeaderboardAdapter {
     return {
       adapter: this.name,
       boardSizes: {
+        weeklyWinnings: this.boards.weeklyWinnings.size,
         weekly: this.boards.weekly.size,
         overall: this.boards.overall.size,
         winnings: this.boards.winnings.size
@@ -140,7 +149,7 @@ class RedisLeaderboardAdapter implements LeaderboardAdapter {
     return {
       adapter: this.name,
       redisUrl: this.redactedUrl(),
-      boardSizes: { weekly: Number(weekly), overall: Number(overall), winnings: Number(winnings) },
+      boardSizes: { weekly: Number(weekly), overall: Number(overall), winnings: Number(winnings), weeklyWinnings: 0 },
       lastUpdatedAt: this.lastUpdatedAt
     };
   }
@@ -184,6 +193,8 @@ export class LeaderboardService {
       rows = await this.safeAdapterTop(kind, safeLimit);
       if (!rows.length) rows = await this.deriveRows(kind, safeLimit);
     } else {
+      // The weekly money board has no adapter mirror — it is always derived from
+      // the ledger so the window is exact and cannot go stale across a reset.
       rows = await this.deriveRows(kind, safeLimit);
     }
     const entries = await this.enrich(kind, rows, viewerUserId);
@@ -218,7 +229,7 @@ export class LeaderboardService {
     } catch (error) {
       const message = error instanceof Error ? error.message : 'diagnostics failed';
       logger.warn('leaderboard_diagnostics_failed', { message });
-      return { adapter: this.adapter.name, boardSizes: { weekly: 0, overall: 0, winnings: 0 }, fallbackAvailable: true };
+      return { adapter: this.adapter.name, boardSizes: { weekly: 0, overall: 0, winnings: 0, weeklyWinnings: 0 }, fallbackAvailable: true };
     }
   }
 
@@ -259,6 +270,7 @@ export class LeaderboardService {
 
   private async deriveRows(kind: LeaderboardKind, limit: number): Promise<RawScoreRow[]> {
     if (kind === 'winnings') return repositories.transactions.listWinnings(limit);
+    if (kind === 'weeklyWinnings') return repositories.transactions.listWeeklyWinnings(limit);
     const users = await repositories.users.list(1000);
     return users
       .filter((user) => !user.id.startsWith('bot_'))
@@ -301,14 +313,16 @@ function clampLimit(limit: number): number {
 }
 
 function titleFor(kind: LeaderboardKind): string {
-  if (kind === 'weekly') return 'Weekly XP League';
+  if (kind === 'weekly') return 'Weekly Cup';
   if (kind === 'overall') return 'Overall XP';
+  if (kind === 'weeklyWinnings') return 'Weekly Winnings';
   return 'Highest Winnings';
 }
 
 function metricLabelFor(kind: LeaderboardKind): string {
   if (kind === 'weekly') return 'weeklyScore';
   if (kind === 'overall') return 'xp';
+  if (kind === 'weeklyWinnings') return 'weeklyWinnings';
   return 'winnings';
 }
 
