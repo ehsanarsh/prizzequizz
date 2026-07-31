@@ -9,6 +9,7 @@ import { ensureBetaAccess } from '../../services/betaService.js';
 import { observeRequestDevice } from '../../services/deviceRiskService.js';
 import { id } from '../../utils/id.js';
 import { bodyObject, requiredString } from '../../utils/validation.js';
+import { effectiveWeeklyScore } from '../../services/scoringConfig.js';
 
 export function registerAuthRoutes(router: Router, base: string): void {
   router.add('POST', `${base}/auth/login`, async (ctx) => {
@@ -60,5 +61,5 @@ export function registerAuthRoutes(router: Router, base: string): void {
 }
 
 function toDto(user: any) {
-  return { id: user.id, username: user.username, displayName: user.displayName, plan: user.plan, level: user.level, xp: user.xp, weeklyScore: user.weeklyScore, balances: { wallet: user.wallet, coins: user.coins, hearts: user.hearts, tickets: user.tickets } };
+  return { id: user.id, username: user.username, displayName: user.displayName, plan: user.plan, level: user.level, xp: user.xp, weeklyScore: effectiveWeeklyScore(user), balances: { wallet: user.wallet, coins: user.coins, hearts: user.hearts, tickets: user.tickets } };
 }

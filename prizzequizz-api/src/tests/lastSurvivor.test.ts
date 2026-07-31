@@ -9,6 +9,13 @@ import { getAccount } from '../services/walletLedgerService.js';
 import { updateConfig } from '../services/lastSurvivorConfig.js';
 import { joinTopic, getRoom, saveRoom, snapshot } from '../services/lastSurvivorService.js';
 import { advanceRoom, submitAnswer, submitDecision } from '../services/lastSurvivorWorker.js';
+import { gameConfig } from '../core/config.js';
+import { netPrize } from '../services/prizeService.js';
+
+/* Last Survivor takes the platform-wide commission from Game Config, so this
+ * walk-through sets it to zero to keep the conservation arithmetic exact. */
+(gameConfig as any).economy = (gameConfig as any).economy ?? {};
+(gameConfig as any).economy.paid = { ...((gameConfig as any).economy.paid ?? {}), rakePercent: 0 };
 
 const TOPIC = 'اطلاعات عمومی';
 let passed = 0; const ok = (n: string) => { console.log('✔', n); passed++; };
@@ -98,6 +105,7 @@ async function forceExpire(roomId: string) { const r = (await getRoom(roomId))!;
   const blue = (await getAccount('lsB')).available;
   const red = (await getAccount('lsR')).available;
   const green = (await getAccount('lsG')).available;
+  assert.equal(netPrize(87500), 87500);   // commission is 0 for this walk-through
   assert.equal(green, 0);                 // eliminated → nothing
   assert.equal(blue, 29166);              // floor(87500 * 2/6)
   assert.equal(red, 87500 - 29166);       // last survivor takes the rest

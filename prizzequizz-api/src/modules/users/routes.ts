@@ -3,16 +3,25 @@ import { error, json } from '../../http/response.js';
 import { repositories } from '../../repositories/index.js';
 import { AvatarError, AVATAR_MAX_BYTES, avatarUrlFor, getAvatar, removeAvatar, saveAvatar } from '../../services/avatarService.js';
 import { buildUserStats } from '../../services/userStatsService.js';
+import { effectiveWeeklyScore } from '../../services/scoringConfig.js';
 
 export function registerUserRoutes(router: Router, base: string): void {
+  /* "Me" is whoever the token says it is — and nobody otherwise. This used to
+   * fall back to the seeded demo account when the token was missing or stale,
+   * which handed the caller ANOTHER user's XP, cup and wallet. That is exactly
+   * how the header could disagree with the leaderboards: the header was showing
+   * the demo user while the boards showed the real one. */
   router.add('GET', `${base}/users/me`, async (ctx) => {
-    const user = (await repositories.users.findById(ctx.userId ?? 'u1')) ?? (await repositories.users.findById('u1'))!;
+    if (!ctx.userId) return error(ctx.res, 401, 'UNAUTHORIZED', 'ابتدا وارد شو.');
+    const user = await repositories.users.findById(ctx.userId);
+    if (!user) return error(ctx.res, 404, 'USER_NOT_FOUND', 'User not found');
     json(ctx.res, 200, { ...toDto(user), avatar: await avatarUrlFor(user.id) });
   });
 
   // Complete/update the player's own profile (display name + unique username).
   router.add('PATCH', `${base}/users/me`, async (ctx) => {
-    const user = await repositories.users.findById(ctx.userId ?? 'u1');
+    if (!ctx.userId) return error(ctx.res, 401, 'UNAUTHORIZED', 'ابتدا وارد شو.');
+    const user = await repositories.users.findById(ctx.userId);
     if (!user) return error(ctx.res, 404, 'USER_NOT_FOUND', 'User not found');
     const body = (ctx.body ?? {}) as Record<string, unknown>;
     if (typeof body.displayName === 'string' && body.displayName.trim()) user.displayName = body.displayName.trim().slice(0, 120);
@@ -68,7 +77,8 @@ export function registerUserRoutes(router: Router, base: string): void {
 
   // Persist the player's lifeline inventory (decremented on use, server-side).
   router.add('PATCH', `${base}/users/me/lifelines`, async (ctx) => {
-    const user = await repositories.users.findById(ctx.userId ?? 'u1');
+    if (!ctx.userId) return error(ctx.res, 401, 'UNAUTHORIZED', 'ابتدا وارد شو.');
+    const user = await repositories.users.findById(ctx.userId);
     if (!user) return error(ctx.res, 404, 'USER_NOT_FOUND', 'User not found');
     const l = ((ctx.body ?? {}) as any).lifelines ?? {};
     const clamp = (n: unknown) => Math.max(0, Math.min(999, Math.floor(Number(n)) || 0));
@@ -89,5 +99,5 @@ export function registerUserRoutes(router: Router, base: string): void {
 }
 
 function toDto(user: any) {
-  return { id: user.id, username: user.username, displayName: user.displayName, plan: user.plan, level: user.level, xp: user.xp, weeklyScore: user.weeklyScore, lifelines: user.lifelines ?? { p5050: 2, psecond: 1, pstats: 5 }, balances: { wallet: user.wallet, coins: user.coins, hearts: user.hearts, tickets: user.tickets } };
+  return { id: user.id, username: user.username, displayName: user.displayName, plan: user.plan, level: user.level, xp: user.xp, weeklyScore: effectiveWeeklyScore(user), lifelines: user.lifelines ?? { p5050: 2, psecond: 1, pstats: 5 }, balances: { wallet: user.wallet, coins: user.coins, hearts: user.hearts, tickets: user.tickets } };
 }

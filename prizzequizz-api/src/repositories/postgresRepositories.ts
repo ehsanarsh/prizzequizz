@@ -13,7 +13,7 @@ function uuidOrNull(v: unknown): string | null {
 }
 
 function userFromRow(r: any): User {
-  return { id: r.id, phone: r.phone, username: r.username, displayName: r.display_name, plan: r.plan, role: r.role ?? 'user', status: r.status ?? 'active', banReason: r.ban_reason ?? undefined, bannedAt: r.banned_at?.toISOString?.() ?? r.banned_at ?? undefined, level: r.level, xp: Number(r.xp), weeklyScore: Number(r.weekly_score ?? 0), wallet: Number(r.wallet_balance), coins: Number(r.coins), hearts: Number(r.hearts), tickets: r.tickets ?? { bronze: 0, silver: 0, gold: 0 }, lifelines: r.lifelines ?? { p5050: 2, psecond: 1, pstats: 5 } };
+  return { id: r.id, phone: r.phone, username: r.username, displayName: r.display_name, plan: r.plan, role: r.role ?? 'user', status: r.status ?? 'active', banReason: r.ban_reason ?? undefined, bannedAt: r.banned_at?.toISOString?.() ?? r.banned_at ?? undefined, level: r.level, xp: Number(r.xp), weeklyScore: Number(r.weekly_score ?? 0), weeklyWeek: r.weekly_week ?? undefined, wallet: Number(r.wallet_balance), coins: Number(r.coins), hearts: Number(r.hearts), tickets: r.tickets ?? { bronze: 0, silver: 0, gold: 0 }, lifelines: r.lifelines ?? { p5050: 2, psecond: 1, pstats: 5 } };
 }
 
 function questionFromRow(r: any): Question {

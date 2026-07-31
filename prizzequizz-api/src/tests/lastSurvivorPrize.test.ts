@@ -1,7 +1,18 @@
 /* LAST SURVIVOR prize-engine tests — the money math must be exact and
  * conservation-safe. Run: npx tsx src/tests/lastSurvivorPrize.test.ts */
 import assert from 'node:assert';
-import { LS_DEFAULT_CONFIG, withDefaults } from '../services/lastSurvivorConfig.js';
+import { LS_DEFAULT_CONFIG } from '../services/lastSurvivorConfig.js';
+import { gameConfig } from '../core/config.js';
+import { netPrize } from '../services/prizeService.js';
+
+/* The commission is the platform-wide one from the admin Game Config — Last
+ * Survivor no longer carries a rake of its own, so these tests drive the same
+ * setting every other mode reads. */
+function setCommission(pct: number): void {
+  (gameConfig as any).economy = (gameConfig as any).economy ?? {};
+  (gameConfig as any).economy.paid = { ...((gameConfig as any).economy.paid ?? {}), rakePercent: pct };
+}
+setCommission(0);
 import { buildPool, ticketUnits, ticketValue, activeUnits, cashoutShareFor, finalSplit, computeStats, type PrizePlayer } from '../services/lastSurvivorPrize.js';
 
 const cfg = LS_DEFAULT_CONFIG;
@@ -18,7 +29,7 @@ assert.equal(ticketUnits(cfg, 'red'), 4);
 ok('ticket values & units match spec (green/blue/red = 1/2/4)');
 
 // ---- the exact spec example: 1 green + 1 blue + 1 red ----
-// 3 players, 7 units, pool = 12500+25000+50000 = 87500; no rake.
+// 3 players, 7 units, pool = 12500+25000+50000 = 87500; commission 0.
 {
   const players: PrizePlayer[] = [
     { userId: 'g', color: 'green', units: 1, status: 'alive' },
@@ -102,20 +113,31 @@ ok('ticket values & units match spec (green/blue/red = 1/2/4)');
   ok('cash-out pays current share, shrinks remaining pot, conserves the pot');
 }
 
-// ---- rake is applied to the gross pool when the admin sets it ----
+// ---- the platform commission from Game Config reduces the pool ----
 {
-  const c = withDefaults({ economy: { rakePercent: 10 } });
-  const pool = buildPool(c, ['green', 'blue', 'red']); // gross 87500
+  setCommission(10);
+  const pool = buildPool(cfg, ['green', 'blue', 'red']); // gross 87500
   assert.equal(pool.gross, 87500);
   assert.equal(pool.rake, 8750);
   assert.equal(pool.net, 78750);
+  assert.equal(pool.net, netPrize(pool.gross));   // same calculator as every other mode
   const split = finalSplit([
     { userId: 'g', color: 'green', units: 1, status: 'alive' },
     { userId: 'b', color: 'blue', units: 2, status: 'alive' },
     { userId: 'r', color: 'red', units: 4, status: 'alive' }
   ], pool.net);
   assert.equal((split.g ?? 0) + (split.b ?? 0) + (split.r ?? 0), 78750); // players split the NET pot exactly
-  ok('admin rake reduces the pot; players split the net exactly');
+  ok('the shared commission reduces the pot; players split the net exactly');
+}
+
+// ---- changing it in the panel moves Last Survivor too ----
+{
+  setCommission(20);
+  assert.equal(buildPool(cfg, ['red', 'red']).net, netPrize(100000));
+  assert.equal(buildPool(cfg, ['red', 'red']).net, 80000);
+  setCommission(0);
+  assert.equal(buildPool(cfg, ['red', 'red']).net, 100000);
+  ok('Last Survivor follows the platform commission, with no rake of its own');
 }
 
 // ---- large field: many units, conservation still exact with dust ----

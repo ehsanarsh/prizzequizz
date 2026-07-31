@@ -94,6 +94,18 @@ export function isoWeekId(date: Date = new Date()): string {
 }
 
 // Gentle level curve from TOTAL xp: level 1 at 0 xp, then ~sqrt growth.
+/* The cup a user holds RIGHT NOW. weekly_score is only meaningful for the week
+ * it was earned in, and it is rewritten lazily — the next time that player
+ * scores. Someone who played last week and not this one still carries last
+ * week's number in the column, so every read goes through here and sees 0 once
+ * the week has rolled over. */
+export function effectiveWeeklyScore(user: { weeklyScore?: number; weeklyWeek?: string } | null | undefined): number {
+  if (!user) return 0;
+  // No stored week at all → memory driver / legacy row; trust the value.
+  if (user.weeklyWeek === undefined || user.weeklyWeek === null || user.weeklyWeek === '') return Number(user.weeklyScore ?? 0);
+  return user.weeklyWeek === isoWeekId() ? Number(user.weeklyScore ?? 0) : 0;
+}
+
 export function levelForXp(xp: number): number {
   return Math.max(1, Math.floor(Math.sqrt(Math.max(0, xp) / 100)) + 1);
 }

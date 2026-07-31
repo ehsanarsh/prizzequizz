@@ -7347,9 +7347,9 @@ function removeFriend(id){const f=FRIENDS_DATA.find(x=>x.id===id);if(!f)return;s
 renderFriendStats();renderFriendsHub();
 
 /* ============ ECONOMY: wallet / txns / withdraw ============ */
-let wallet=900000;
+let wallet=0;        /* real balance arrives from /wallet — never seed a figure */
 let walletReserved=0,walletCashback=42000,walletActiveTab='overview',txnFilter='all',selectedTopup=200000;
-let hearts=3;
+let hearts=0;        /* real hearts arrive from the server */
 const HEART_MAX_RECHARGE=5, HEART_RECHARGE_MS=60*60*1000;
 let heartLast=Date.now();
 try{const hs=JSON.parse(localStorage.getItem('pq_hearts')||'{}');if(typeof hs.hearts==='number')hearts=hs.hearts;if(hs.last)heartLast=hs.last;}catch(e){}
@@ -7366,7 +7366,7 @@ function spendHeart(){syncHearts();if(hearts<=0){showSmartSnackbar({icon:'❤️
 function addHearts(n){hearts+=n;saveHearts();updateWalletUI();}
 function showHeartInfo(){syncHearts();showAaaModal({icon:'❤️',title:'قلب‌های تمرینی',sub:'قلب فعلی: '+fa(hearts)+'<br>هر بازی تمرینی ۱ قلب مصرف می‌کند.<br>هر ۱ ساعت ۱ قلب شارژ می‌شود؛ سقف شارژ رایگان ۵ قلب است، اما قلب خریداری‌شده می‌تواند بیشتر شود.',primaryText:'باشه',secondaryText:''});}
 setInterval(()=>{if(userPlan==='free')updateWalletUI();},60000);
-let practiceCoins=350,practiceCoinStake=25;try{const pc=localStorage.getItem('pq_practice_coins');if(pc!==null)practiceCoins=Number(pc)||practiceCoins;}catch(e){}
+let practiceCoins=0,practiceCoinStake=25;try{const pc=localStorage.getItem('pq_practice_coins');if(pc!==null)practiceCoins=Number(pc)||practiceCoins;}catch(e){}
 function savePracticeCoins(){try{localStorage.setItem('pq_practice_coins',practiceCoins);}catch(e){}}
 function showPracticeCoinInfo(){showAaaModal({icon:'🪙',title:'سکه‌های تمرینی',sub:'سکه فعلی: '+fa(practiceCoins)+'<br>در حالت دوستانه، جوایز و ورودی‌ها با سکه انجام می‌شود.',primaryText:'باشه',secondaryText:''});}
 function selCoinStake(el,v){document.querySelectorAll('#coinStakeGrid .tab').forEach(t=>t.classList.remove('active'));if(el)el.classList.add('active');practiceCoinStake=v;updateModeEntryPlan();}
@@ -8292,11 +8292,11 @@ function animateXP(){
   /* Animate from 0 to the REAL level progress (no hardcoded %). */
   requestAnimationFrame(()=>requestAnimationFrame(()=>{ try{ pzUpdateXpBar((_usr&&_usr.xp)||0); }catch(e){} }));
   const mb=document.getElementById('misBar');
-  if(mb){mb.style.width='0';requestAnimationFrame(()=>requestAnimationFrame(()=>{mb.style.width='66%';}));}
+  /* mission bar: left at 0 until a real mission figure exists */
 }
 
 /* ============ AAA UX SPEC HELPERS v48 ============ */
-let weeklyScore=820;
+let weeklyScore=0;   /* real cup arrives from /users/me — never seed a figure */
 const leagueTargets={bronze:500,silver:940,gold:1680};
 function renderWeeklyProgress(){
   const fill=document.getElementById('wpFill'),marker=document.getElementById('wpMarker');if(!fill||!marker)return;
@@ -8328,7 +8328,10 @@ function pzUpdateXpBar(x){
   const pct=Math.max(3,Math.min(100,((x-cur)/Math.max(1,next-cur))*100));
   const lv=document.getElementById('hdrLvl'); if(lv)lv.textContent=fa(L);
   const bar=document.getElementById('hdrXp'); if(bar)bar.style.width=pct+'%';
-  const txt=document.getElementById('hdrXpN'); if(txt)txt.textContent=fa(x-cur)+' / '+fa(next-cur)+' XP';
+  /* The TOTAL — the same number the ranking screen shows for this player. The
+     bar still fills by level progress, and the tail says how much is left. */
+  const txt=document.getElementById('hdrXpN');
+  if(txt) txt.textContent=fa(x)+' XP  ·  تا سطح بعد '+fa(Math.max(0,next-x));
   /* REAL level-up: fire the motion only when the level actually increased (never
      on the first paint). */
   if(_pzLastLevel!=null && L>_pzLastLevel){ try{ setTimeout(()=>showLevelUp(L),400); }catch(e){} }

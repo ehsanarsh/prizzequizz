@@ -12,6 +12,7 @@
 import { getPgPool } from '../database/postgres.js';
 import { repositories } from '../repositories/index.js';
 import { avatarUrlFor } from './avatarService.js';
+import { effectiveWeeklyScore } from './scoringConfig.js';
 
 /** Weekly-cup thresholds. Must stay in step with the client's `leagueTargets`. */
 export const LEAGUE_TIERS = { bronze: 500, silver: 940, gold: 1680 } as const;
@@ -47,7 +48,7 @@ export interface PublicUserStats {
 export async function buildUserStats(uid: string): Promise<PublicUserStats> {
   let user = null;
   try { user = await repositories.users.findById(uid); } catch { user = null; }
-  const weeklyScore = Number(user?.weeklyScore ?? 0);
+  const weeklyScore = effectiveWeeklyScore(user);   // 0 once the week has rolled over
   const lg = leagueForCup(weeklyScore);
   const base: PublicUserStats = {
     id: uid,
@@ -94,12 +95,25 @@ export async function buildUserStats(uid: string): Promise<PublicUserStats> {
     const accTotal = Number(acc.rows[0]?.total ?? 0);
     const accuracy = accTotal > 0 ? Math.round((Number(acc.rows[0].ok) / accTotal) * 100) : 0;
 
+    /* Prize money straight from the ledger, net of the commission taken on the
+     * same match — the figure that actually reached the wallet, and the same one
+     * the leaderboards use. `best` is the biggest single match net, so it can
+     * never exceed the total, and `weekly` uses the cup's Monday boundary so it
+     * can never exceed the lifetime figure. */
     const pz = await pool.query(
-      `SELECT coalesce(sum(amount),0) AS total, coalesce(max(amount),0) AS best,
-              coalesce(sum(amount) FILTER (WHERE created_at >= date_trunc('week', now())),0) AS weekly
-         FROM transactions
-        WHERE user_id = $1 AND direction='in' AND status <> 'failed'
-          AND type IN ('reward','win') AND currency = 'cash'`, [uid]);
+      `WITH per_match AS (
+         SELECT coalesce(ref_id, id::text) AS m,
+                min(created_at) AS at,
+                sum(CASE WHEN entry_type IN ('match_reward','league_reward') AND kind='credit' THEN amount
+                         WHEN entry_type='fee' AND ref_type='match' THEN -amount ELSE 0 END) AS net
+           FROM wallet_ledger
+          WHERE user_id = $1
+            AND (entry_type IN ('match_reward','league_reward') OR (entry_type='fee' AND ref_type='match'))
+          GROUP BY 1)
+       SELECT coalesce(sum(net) FILTER (WHERE net > 0),0) AS total,
+              coalesce(max(net),0) AS best,
+              coalesce(sum(net) FILTER (WHERE net > 0 AND at >= date_trunc('week', now())),0) AS weekly
+         FROM per_match`, [uid]);
     const pzr = pz.rows[0] || {};
 
     const t = await pool.query(

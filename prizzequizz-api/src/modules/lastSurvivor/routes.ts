@@ -63,7 +63,8 @@ export function registerLastSurvivorRoutes(router: Router, base: string): void {
     const topic = String(body.topic || '').trim();
     const color = String(body.color || '').trim();
     if (!topic || !color) return error(ctx.res, 422, 'FIELDS_REQUIRED', 'موضوع و رنگ بلیط لازم است.');
-    const userId = ctx.userId ?? 'u1';
+    const userId = ctx.userId;
+    if (!userId) return error(ctx.res, 401, 'UNAUTHORIZED', 'ابتدا وارد شو.');
     let user: any = null; try { user = await repositories.users.findById(userId); } catch { /* fallback below */ }
     try {
       const { room } = await joinTopic({ id: userId, username: user?.username || user?.displayName || 'بازیکن', avatar: await avatarUrlFor(userId) }, topic, color);
@@ -75,14 +76,16 @@ export function registerLastSurvivorRoutes(router: Router, base: string): void {
   });
 
   router.add('GET', `${base}/last-survivor/rooms/:id`, async (ctx) => {
-    const snap = await snapshot(ctx.params.id!, ctx.userId ?? 'u1');
+    if (!ctx.userId) return error(ctx.res, 401, 'UNAUTHORIZED', 'ابتدا وارد شو.');
+    const snap = await snapshot(ctx.params.id!, ctx.userId);
     if (!snap) return error(ctx.res, 404, 'ROOM_NOT_FOUND', 'روم یافت نشد.');
     json(ctx.res, 200, snap);
   });
 
   router.add('POST', `${base}/last-survivor/rooms/:id/answer`, async (ctx) => {
     const body = bodyObject(ctx.body) as any;
-    const res = await submitAnswer(ctx.params.id!, ctx.userId ?? 'u1', Number(body.round), Number(body.selectedIndex));
+    if (!ctx.userId) return error(ctx.res, 401, 'UNAUTHORIZED', 'ابتدا وارد شو.');
+    const res = await submitAnswer(ctx.params.id!, ctx.userId, Number(body.round), Number(body.selectedIndex));
     if (!res.accepted) return error(ctx.res, 409, res.reason || 'ANSWER_REJECTED', 'پاسخ پذیرفته نشد.');
     json(ctx.res, 200, { accepted: true });
   });
@@ -91,7 +94,8 @@ export function registerLastSurvivorRoutes(router: Router, base: string): void {
   // the correct index is never sent to the client.
   router.add('POST', `${base}/last-survivor/rooms/:id/lifeline`, async (ctx) => {
     const body = bodyObject(ctx.body) as any;
-    const res = await useLifeline(ctx.params.id!, ctx.userId ?? 'u1', String(body.type || ''));
+    if (!ctx.userId) return error(ctx.res, 401, 'UNAUTHORIZED', 'ابتدا وارد شو.');
+    const res = await useLifeline(ctx.params.id!, ctx.userId, String(body.type || ''));
     if (!res.ok) return error(ctx.res, 409, res.reason || 'LIFELINE_REJECTED', 'این کمک الان قابل استفاده نیست.');
     json(ctx.res, 200, res);
   });
@@ -99,7 +103,8 @@ export function registerLastSurvivorRoutes(router: Router, base: string): void {
   router.add('POST', `${base}/last-survivor/rooms/:id/decision`, async (ctx) => {
     const body = bodyObject(ctx.body) as any;
     const decision = body.decision === 'cashout' ? 'cashout' : 'continue';
-    const res = await submitDecision(ctx.params.id!, ctx.userId ?? 'u1', Number(body.round), decision);
+    if (!ctx.userId) return error(ctx.res, 401, 'UNAUTHORIZED', 'ابتدا وارد شو.');
+    const res = await submitDecision(ctx.params.id!, ctx.userId, Number(body.round), decision);
     if (!res.accepted) return error(ctx.res, 409, res.reason || 'DECISION_REJECTED', 'ثبت نشد.');
     json(ctx.res, 200, { accepted: true, decision });
   });
@@ -108,7 +113,8 @@ export function registerLastSurvivorRoutes(router: Router, base: string): void {
     const room = await getRoom(ctx.params.id!);
     if (!room || room.status !== 'waiting') return error(ctx.res, 409, 'NOT_WAITING', 'روم در حالت انتظار نیست.');
     if (!room.manualStartEnabled) return error(ctx.res, 409, 'MANUAL_START_OFF', 'شروع دستی غیرفعال است.');
-    const votes = await addVote(ctx.params.id!, ctx.userId ?? 'u1');
+    if (!ctx.userId) return error(ctx.res, 401, 'UNAUTHORIZED', 'ابتدا وارد شو.');
+    const votes = await addVote(ctx.params.id!, ctx.userId);
     json(ctx.res, 200, { votes });
   });
 
@@ -121,7 +127,8 @@ export function registerLastSurvivorRoutes(router: Router, base: string): void {
     if (!room) return error(ctx.res, 404, 'ROOM_NOT_FOUND', 'روم یافت نشد.');
     if (!room.config.features.chat || room.status !== 'waiting') return error(ctx.res, 409, 'CHAT_CLOSED', 'چت فقط در اتاق انتظار باز است.');
     const body = bodyObject(ctx.body) as any;
-    const userId = ctx.userId ?? 'u1';
+    const userId = ctx.userId;
+    if (!userId) return error(ctx.res, 401, 'UNAUTHORIZED', 'ابتدا وارد شو.');
     let user: any = null; try { user = await repositories.users.findById(userId); } catch { /* ignore */ }
     await addChat(ctx.params.id!, userId, user?.username || user?.displayName || 'بازیکن', String(body.body || ''));
     json(ctx.res, 201, { sent: true });

@@ -5,6 +5,9 @@ import { id } from '../utils/id.js';
 import { logger } from './logger.js';
 import { realtimePubSub } from '../realtime/pubSub.js';
 import { avatarUrlsFor } from './avatarService.js';
+import { prizeMoneyBoard, weekStartIso } from './walletLedgerService.js';
+import { effectiveWeeklyScore, isoWeekId } from './scoringConfig.js';
+import { getPgPool } from '../database/postgres.js';
 
 /* Four independent boards:
  *   weekly        — this week's 🏆 cup (resets weekly)
@@ -188,15 +191,12 @@ export class LeaderboardService {
     // board always reflects the real, current scores — the in-memory/redis adapter
     // is only a cache and could be stale/empty (which showed an empty leaderboard
     // even though users had real xp/cup). 'winnings' still uses the adapter/txns.
-    let rows: RawScoreRow[];
-    if (kind === 'winnings') {
-      rows = await this.safeAdapterTop(kind, safeLimit);
-      if (!rows.length) rows = await this.deriveRows(kind, safeLimit);
-    } else {
-      // The weekly money board has no adapter mirror — it is always derived from
-      // the ledger so the window is exact and cannot go stale across a reset.
-      rows = await this.deriveRows(kind, safeLimit);
-    }
+    // EVERY board is derived from its real source on read. The adapter used to
+    // serve 'winnings' whenever it was non-empty, but it is an in-process cache
+    // that starts empty after a restart — so it could report a lifetime total
+    // BELOW the weekly one. Nothing reads it now; it stays only as a mirror for
+    // realtime pushes.
+    const rows: RawScoreRow[] = await this.deriveRows(kind, safeLimit);
     const entries = await this.enrich(kind, rows, viewerUserId);
     return {
       kind,
@@ -269,15 +269,45 @@ export class LeaderboardService {
   }
 
   private async deriveRows(kind: LeaderboardKind, limit: number): Promise<RawScoreRow[]> {
-    if (kind === 'winnings') return repositories.transactions.listWinnings(limit);
-    if (kind === 'weeklyWinnings') return repositories.transactions.listWeeklyWinnings(limit);
+    // Both money boards: one ledger query, two windows. Lifetime is the same sum
+    // over all time, so it can never come out below the weekly one.
+    if (kind === 'winnings') return prizeMoneyBoard(limit);
+    if (kind === 'weeklyWinnings') return prizeMoneyBoard(limit, weekStartIso());
+
+    if (kind === 'weekly') {
+      // Only cup earned in the CURRENT week counts. weekly_score is rewritten
+      // lazily (the next time that player scores), so someone who has not played
+      // since last week still carries last week's number in the column.
+      const pool = this.pgOrNull();
+      if (pool) {
+        try {
+          const { rows } = await pool.query(
+            `SELECT id AS user_id, weekly_score AS score FROM users
+              WHERE weekly_week = $1 AND weekly_score > 0
+              ORDER BY score DESC, id LIMIT $2`, [isoWeekId(), limit]);
+          return rows.map((r: any) => ({ userId: String(r.user_id), score: Number(r.score) }));
+        } catch { /* fall through to the repository */ }
+      }
+      const users = await repositories.users.list(1000);
+      return users
+        .filter((user) => !user.id.startsWith('bot_'))
+        .map((user) => ({ userId: user.id, score: effectiveWeeklyScore(user) }))
+        .filter((row) => row.score > 0)
+        .sort((a, b) => b.score - a.score || a.userId.localeCompare(b.userId))
+        .slice(0, limit);
+    }
+
     const users = await repositories.users.list(1000);
     return users
       .filter((user) => !user.id.startsWith('bot_'))
-      .map((user) => ({ userId: user.id, score: kind === 'weekly' ? Number(user.weeklyScore ?? 0) : Number(user.xp ?? 0) }))
+      .map((user) => ({ userId: user.id, score: Number(user.xp ?? 0) }))
       .filter((row) => row.score > 0)
       .sort((a, b) => b.score - a.score || a.userId.localeCompare(b.userId))
       .slice(0, limit);
+  }
+
+  private pgOrNull(): ReturnType<typeof getPgPool> | null {
+    try { return process.env.DATABASE_URL ? getPgPool() : null; } catch { return null; }
   }
 
   private async enrich(kind: LeaderboardKind, rows: RawScoreRow[], viewerUserId?: string): Promise<LeaderboardEntry[]> {

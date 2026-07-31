@@ -18,7 +18,10 @@ export interface User {
   bannedAt?: string;
   level: number;
   xp: number;
+  /** Cup earned in `weeklyWeek`. Stale once the ISO week rolls over — always read
+   *  it through effectiveWeeklyScore(), never raw. */
   weeklyScore: number;
+  weeklyWeek?: string;
   wallet: number;
   coins: number;
   hearts: number;

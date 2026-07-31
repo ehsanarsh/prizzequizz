@@ -272,6 +272,66 @@ async function postEntryMem(input: PostInput): Promise<PostResult> {
   return { entry, account: { ...a }, duplicate: false };
 }
 
+/* ---------------------------------------------------------------------------
+ * PRIZE-MONEY BOARDS
+ *
+ * Both money leaderboards come from HERE, from the ledger, using one query with
+ * a different time window — which is what makes "this week" mathematically
+ * incapable of exceeding "ever". They previously read different sources: the
+ * lifetime board preferred an in-process cache that starts empty on every
+ * restart, so after a redeploy it could report less than the weekly board.
+ *
+ * The figure is what the player actually KEEPS: prize credits minus the
+ * commission taken on the same match. That matches the amount quoted before the
+ * match and the amount that lands in the wallet.
+ * ------------------------------------------------------------------------- */
+const PRIZE_TYPES = ['match_reward', 'league_reward'];
+
+/** Monday 00:00 UTC of the current week — the boundary the cup resets on. */
+export function weekStartIso(): string {
+  const n = new Date();
+  const day = (n.getUTCDay() + 6) % 7;                       // Mon=0 … Sun=6
+  return new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate() - day)).toISOString();
+}
+
+export async function prizeMoneyBoard(limit = 100, sinceIso?: string): Promise<Array<{ userId: string; score: number }>> {
+  const pool = pgAvailable();
+  if (pool) {
+    await ensureSchema(pool);
+    const params: any[] = [PRIZE_TYPES, limit];
+    let since = '';
+    if (sinceIso) { params.push(sinceIso); since = ` AND created_at >= $${params.length}`; }
+    const { rows } = await pool.query(
+      `SELECT user_id,
+              sum(CASE WHEN entry_type = ANY($1) AND kind='credit' THEN amount
+                       WHEN entry_type='fee' AND ref_type='match'  THEN -amount
+                       ELSE 0 END) AS score
+         FROM wallet_ledger
+        WHERE (entry_type = ANY($1) OR (entry_type='fee' AND ref_type='match'))${since}
+        GROUP BY user_id
+       HAVING sum(CASE WHEN entry_type = ANY($1) AND kind='credit' THEN amount
+                       WHEN entry_type='fee' AND ref_type='match'  THEN -amount
+                       ELSE 0 END) > 0
+        ORDER BY score DESC
+        LIMIT $2`, params);
+    return rows.map((r: any) => ({ userId: String(r.user_id), score: Number(r.score) }));
+  }
+  const cut = sinceIso ? Date.parse(sinceIso) : -Infinity;
+  const totals = new Map<string, number>();
+  for (const e of memLedger) {
+    if (Date.parse(e.createdAt) < cut) continue;
+    let delta = 0;
+    if (PRIZE_TYPES.includes(e.entryType) && e.kind === 'credit') delta = e.amount;
+    else if (e.entryType === 'fee' && e.refType === 'match') delta = -e.amount;
+    if (delta) totals.set(e.userId, (totals.get(e.userId) ?? 0) + delta);
+  }
+  return [...totals.entries()]
+    .map(([userId, score]) => ({ userId, score }))
+    .filter((r) => r.score > 0)
+    .sort((a, b) => b.score - a.score || a.userId.localeCompare(b.userId))
+    .slice(0, limit);
+}
+
 function entryFromRow(r: any): LedgerEntry {
   return {
     id: r.id, userId: r.user_id, entryType: r.entry_type, kind: r.kind, amount: Number(r.amount),
