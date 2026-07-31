@@ -449,6 +449,41 @@ async function supStatus(id,status){try{await api('PATCH','/admin/support/ticket
 /* ================= QUESTIONS ================= */
 let Q_ST='';
 let Q_CAT='', Q_SEARCH='';
+/* Real lifetime answer statistics per question — fed by EVERY game mode
+   (duel, arena, all-or-nothing, last survivor). */
+let _QSTATS={}, _QSTATS_AT=0;
+async function qLoadStats(force){
+  if(!force && Date.now()-_QSTATS_AT<30000 && Object.keys(_QSTATS).length) return;
+  try{
+    const d=await api('GET','/admin/questions/stats?limit=500');
+    const m={}; (d.rows||[]).forEach(r=>m[r.id]=r);
+    _QSTATS=m; _QSTATS_AT=Date.now();
+    if(CUR==='questions') renderQuestions();
+  }catch(e){ /* stats are additive — never block the table */ }
+}
+async function qStats(id){
+  let s; try{ s=await api('GET','/admin/questions/'+id+'/stats'); }catch(e){ return toast(e.message,'bad'); }
+  const opts=s.options||[]; const total=s.sample||0;
+  const bars=opts.map((o,i)=>{
+    const pct=Number((s.percents||[])[i]||0), n=Number((s.counts||[])[i]||0), right=(i===s.correctIndex);
+    return '<div style="margin-bottom:10px">'+
+      '<div style="display:flex;justify-content:space-between;font-size:12.5px;font-weight:800;margin-bottom:4px">'+
+        '<span>'+(right?'✅ ':'')+esc(o)+'</span><span>'+fa(pct)+'٪ · '+fa(n)+' نفر</span></div>'+
+      '<div style="height:12px;border-radius:8px;background:rgba(255,255,255,.08);overflow:hidden">'+
+        '<i style="display:block;height:100%;width:'+pct+'%;background:'+(right?'var(--ok)':'var(--gold)')+'"></i></div></div>';
+  }).join('');
+  modal('📊 آمار پاسخ‌ها',
+    '<div class="note">آمار همهٔ کاربران در <b>تمام مودها</b> (دوئل، آخرین بازمانده، همه یا هیچ، لیگ) از ابتدا تا امروز.</div>'+
+    '<div style="font-weight:900;font-size:14px;margin:10px 0 12px">'+esc(s.text||'')+'</div>'+
+    (total>0?bars:'<div class="empty">هنوز کسی به این سؤال جواب نداده است.</div>')+
+    '<div class="grid g3" style="margin-top:12px">'+
+      stat('کل پاسخ‌ها','',fa(total))+
+      stat('٪ پاسخ صحیح',(s.correctPercent!=null&&s.correctPercent>=60?'ok':(s.correctPercent!=null&&s.correctPercent<35?'bad':'gold')),s.correctPercent!=null?fa(s.correctPercent)+'٪':'—')+
+      stat('سختی','',esc(({easy:'آسان',medium:'متوسط',hard:'سخت',veryhard:'بسیار سخت'})[s.difficulty]||s.difficulty||'—'))+
+    '</div>'+
+    (s.correctPercent!=null&&s.correctPercent<20&&total>=20?'<div class="note" style="color:var(--bad);margin-top:8px">⚠️ کمتر از ۲۰٪ درست جواب داده‌اند — احتمالاً سؤال یا گزینهٔ درست مشکل دارد.</div>':'')+
+    (s.correctPercent!=null&&s.correctPercent>90&&total>=20?'<div class="note" style="margin-top:8px">این سؤال برای اکثر کاربران خیلی آسان است.</div>':''));
+}
 async function renderQuestions(){
   const all=await api('GET','/admin/questions').catch(()=>[]);
   const list=(Array.isArray(all)?all:(all.rows||[]));
@@ -474,13 +509,15 @@ async function renderQuestions(){
         '<td>'+esc(String(q.text||'').slice(0,55))+'</td><td>'+esc(q.category||'—')+'</td>'+
         '<td>'+esc(({easy:'آسان',medium:'متوسط',hard:'سخت'})[q.difficulty]||q.difficulty||'—')+'</td>'+
         '<td>'+esc(String((q.options||[])[q.correctIndex]||('#'+((q.correctIndex||0)+1))).slice(0,22))+'</td>'+
-        '<td>'+fa(q.usageCount||q.timesUsed||0)+'</td><td>'+(q.correctRate!=null?fa(Math.round(q.correctRate))+'٪':'—')+'</td>'+
+        '<td>'+fa((_QSTATS[q.id]&&_QSTATS[q.id].sample)||q.usageCount||q.timesUsed||0)+'</td>'+
+        '<td>'+(_QSTATS[q.id]&&_QSTATS[q.id].correctPercent!=null?'<b style="color:'+(_QSTATS[q.id].correctPercent>=60?'var(--ok)':(_QSTATS[q.id].correctPercent>=35?'var(--gold)':'var(--bad)'))+'">'+fa(_QSTATS[q.id].correctPercent)+'٪</b>':(q.correctRate!=null?fa(Math.round(q.correctRate))+'٪':'—'))+'</td>'+
         '<td><span class="pill '+(q.status==='approved'?'ok':q.status==='archived'||q.status==='rejected'?'bad':'pend')+'">'+esc(q.status)+'</span></td>'+
-        '<td>'+(q.status!=='approved'?'<button class="btn sm ok" onclick="qStatus(\''+q.id+'\',\'approved\')">تأیید</button> ':'')+'<button class="btn sm" onclick="qEdit(\''+q.id+'\')">ویرایش</button> <button class="btn sm bad" onclick="qDelete(\''+q.id+'\')">حذف</button></td>'+
+        '<td>'+(q.status!=='approved'?'<button class="btn sm ok" onclick="qStatus(\''+q.id+'\',\'approved\')">تأیید</button> ':'')+'<button class="btn sm" onclick="qStats(\''+q.id+'\')">📊 آمار</button> <button class="btn sm" onclick="qEdit(\''+q.id+'\')">ویرایش</button> <button class="btn sm bad" onclick="qDelete(\''+q.id+'\')">حذف</button></td>'+
       '</tr>').join(''):'<tr><td colspan="9" class="empty">سوالی نیست</td></tr>')+
     '</tbody></table></div>';
   window._QALL=list; window._QFILT=filtered.slice(0,300).map(q=>q.id);
   qBulkBar();
+  qLoadStats();   // fill the real «استفاده» / «٪ صحیح» columns in the background
   const qi=$('#qsearch'); if(qi&&Q_SEARCH){qi.focus();qi.setSelectionRange(qi.value.length,qi.value.length);}
 }
 let _QSEL=new Set();
