@@ -9,7 +9,7 @@ import { getPgPool } from '../database/postgres.js';
 import { id } from '../utils/id.js';
 import { randomBytes } from 'node:crypto';
 
-export interface MonitorServer { id: string; name: string; host: string; apiKey: string; tags: string; enabled: boolean; lastSeenAt: number | null; createdAt: string; }
+export interface MonitorServer { id: string; name: string; host: string; apiKey: string; tags: string; enabled: boolean; lastSeenAt: number | null; createdAt: string; /** Price per hour, used by the accounting tab to accrue the bill. */ hourlyCost: number; }
 export interface Metric {
   serverId: string; cpuPercent: number; memUsed: number; memTotal: number; diskUsed: number; diskTotal: number;
   load1: number; load5: number; load15: number; uptimeSec: number; netRx: number; netTx: number;
@@ -38,7 +38,7 @@ async function ensureSchema(pool: ReturnType<typeof getPgPool>): Promise<void> {
 const memServers = new Map<string, MonitorServer>();
 const memMetrics: Metric[] = [];
 
-function srvRow(r: any): MonitorServer { return { id: r.id, name: r.name, host: r.host ?? '', apiKey: r.api_key, tags: r.tags ?? '', enabled: r.enabled !== false, lastSeenAt: r.last_seen_at != null ? Number(r.last_seen_at) : null, createdAt: r.created_at?.toISOString?.() ?? String(r.created_at) }; }
+function srvRow(r: any): MonitorServer { return { id: r.id, name: r.name, host: r.host ?? '', apiKey: r.api_key, tags: r.tags ?? '', enabled: r.enabled !== false, lastSeenAt: r.last_seen_at != null ? Number(r.last_seen_at) : null, createdAt: r.created_at?.toISOString?.() ?? String(r.created_at), hourlyCost: Number(r.hourly_cost ?? 0) || 0 }; }
 function metricRow(r: any): Metric { return { serverId: r.server_id, cpuPercent: Number(r.cpu_percent || 0), memUsed: Number(r.mem_used || 0), memTotal: Number(r.mem_total || 0), diskUsed: Number(r.disk_used || 0), diskTotal: Number(r.disk_total || 0), load1: Number(r.load1 || 0), load5: Number(r.load5 || 0), load15: Number(r.load15 || 0), uptimeSec: Number(r.uptime_sec || 0), netRx: Number(r.net_rx || 0), netTx: Number(r.net_tx || 0), extra: r.extra ?? undefined, createdAt: Number(r.created_at) }; }
 
 export async function listServers(): Promise<MonitorServer[]> {
@@ -54,7 +54,7 @@ async function findByKey(key: string): Promise<MonitorServer | null> {
 }
 
 export async function createServer(input: { name: string; host?: string; tags?: string; id?: string; apiKey?: string }): Promise<MonitorServer> {
-  const s: MonitorServer = { id: input.id || id(), name: String(input.name).slice(0, 80), host: input.host || '', apiKey: input.apiKey || newKey(), tags: input.tags || '', enabled: true, lastSeenAt: null, createdAt: new Date().toISOString() };
+  const s: MonitorServer = { id: input.id || id(), name: String(input.name).slice(0, 80), host: input.host || '', apiKey: input.apiKey || newKey(), tags: input.tags || '', enabled: true, lastSeenAt: null, createdAt: new Date().toISOString(), hourlyCost: 0 };
   const pool = pg();
   if (pool) { await ensureSchema(pool); await pool.query(`INSERT INTO monitor_servers(id,name,host,api_key,tags,enabled,created_at) VALUES($1,$2,$3,$4,$5,true,now()) ON CONFLICT (id) DO NOTHING`, [s.id, s.name, s.host, s.apiKey, s.tags]); }
   else memServers.set(s.id, s);
@@ -138,7 +138,7 @@ export async function overview(): Promise<Array<{ server: Omit<MonitorServer, 'a
   for (const s of servers) {
     const latest = await latestFor(s.id);
     const seen = s.lastSeenAt ?? (latest?.createdAt ?? null);
-    out.push({ server: { id: s.id, name: s.name, host: s.host, tags: s.tags, enabled: s.enabled, lastSeenAt: seen, createdAt: s.createdAt, apiKeyMask: s.apiKey ? '••••' + s.apiKey.slice(-6) : '' }, online: seen != null && (now - seen) < MONITOR_STALE_MS, latest });
+    out.push({ server: { id: s.id, name: s.name, host: s.host, tags: s.tags, enabled: s.enabled, lastSeenAt: seen, createdAt: s.createdAt, hourlyCost: s.hourlyCost, apiKeyMask: s.apiKey ? '••••' + s.apiKey.slice(-6) : '' }, online: seen != null && (now - seen) < MONITOR_STALE_MS, latest });
   }
   return out;
 }

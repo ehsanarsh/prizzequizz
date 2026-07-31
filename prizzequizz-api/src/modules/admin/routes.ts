@@ -31,6 +31,9 @@ import { integrity } from '../../services/integrityService.js';
 import { calculateUserRisk, deviceDiagnostics, listCurrentUserDevices, updateDeviceBindingStatus } from '../../services/deviceRiskService.js';
 import type { DeviceTrustStatus, IntegritySeverity, IntegrityStatus, NotificationType, RewardHoldStatus } from '../../types/domain.js';
 import type { Question } from '../../types/domain.js';
+import { financeReport, listExpenses, saveExpense, deleteExpense, setServerHourlyCost, reportToCsv, reportToPdf, EXPENSE_CATEGORIES } from '../../services/accountingService.js';
+import { securityAlerts } from '../../services/securityAlertService.js';
+import { buildBackup, backupFilename, BACKUP_TABLES } from '../../services/backupService.js';
 
 export function registerAdminRoutes(router: Router, base: string): void {
   // ===== Admin auth + accounts (per-tab access control) =====
@@ -455,6 +458,83 @@ export function registerAdminRoutes(router: Router, base: string): void {
     json(ctx.res, 200, await getAdminAnalytics());
   });
 
+
+  /* ---------------- ACCOUNTING / FINANCIAL REPORTS ---------------- */
+  router.add('GET', `${base}/admin/accounting/report`, async (ctx) => {
+    if (!requireAdmin(ctx, { tab: 'accounting' })) return;
+    json(ctx.res, 200, await financeReport({
+      from: ctx.query.get('from') ?? undefined,
+      to: ctx.query.get('to') ?? undefined,
+      granularity: (ctx.query.get('granularity') as any) ?? undefined
+    }));
+  });
+
+  // Excel-friendly CSV (BOM'd so Persian opens correctly) and a real PDF.
+  router.add('GET', `${base}/admin/accounting/export.csv`, async (ctx) => {
+    if (!requireAdmin(ctx, { tab: 'accounting' })) return;
+    const r = await financeReport({ from: ctx.query.get('from') ?? undefined, to: ctx.query.get('to') ?? undefined, granularity: (ctx.query.get('granularity') as any) ?? undefined });
+    const body = Buffer.from(reportToCsv(r), 'utf8');
+    ctx.res.statusCode = 200;
+    ctx.res.setHeader('content-type', 'text/csv; charset=utf-8');
+    ctx.res.setHeader('content-disposition', `attachment; filename="finance-${r.from}_${r.to}.csv"`);
+    ctx.res.setHeader('content-length', String(body.length));
+    ctx.res.end(body);
+  });
+
+  router.add('GET', `${base}/admin/accounting/export.pdf`, async (ctx) => {
+    if (!requireAdmin(ctx, { tab: 'accounting' })) return;
+    const r = await financeReport({ from: ctx.query.get('from') ?? undefined, to: ctx.query.get('to') ?? undefined, granularity: (ctx.query.get('granularity') as any) ?? undefined });
+    const body = reportToPdf(r);
+    ctx.res.statusCode = 200;
+    ctx.res.setHeader('content-type', 'application/pdf');
+    ctx.res.setHeader('content-disposition', `attachment; filename="finance-${r.from}_${r.to}.pdf"`);
+    ctx.res.setHeader('content-length', String(body.length));
+    ctx.res.end(body);
+  });
+
+  /* ---------------- COMPANY EXPENSES ---------------- */
+  router.add('GET', `${base}/admin/expenses`, async (ctx) => {
+    if (!requireAdmin(ctx, { tab: 'expenses' })) return;
+    json(ctx.res, 200, { rows: await listExpenses(ctx.query.get('from') ?? undefined, ctx.query.get('to') ?? undefined), categories: EXPENSE_CATEGORIES });
+  });
+  router.add('POST', `${base}/admin/expenses`, async (ctx) => {
+    if (!requireAdmin(ctx, { tab: 'expenses' })) return;
+    json(ctx.res, 201, await saveExpense((ctx.body ?? {}) as any));
+  });
+  router.add('DELETE', `${base}/admin/expenses/:id`, async (ctx) => {
+    if (!requireAdmin(ctx, { tab: 'expenses' })) return;
+    json(ctx.res, 200, { removed: await deleteExpense(ctx.params.id!) });
+  });
+  // Price per hour for one machine; the accrual is worked out from it.
+  router.add('PUT', `${base}/admin/expenses/server-cost/:id`, async (ctx) => {
+    if (!requireAdmin(ctx, { tab: 'expenses' })) return;
+    await setServerHourlyCost(ctx.params.id!, Number((ctx.body as any)?.hourly ?? 0));
+    json(ctx.res, 200, { ok: true });
+  });
+
+  /* ---------------- SECURITY ALERTS ---------------- */
+  router.add('GET', `${base}/admin/security-alerts`, async (ctx) => {
+    if (!requireAdmin(ctx, { tab: 'security' })) return;
+    json(ctx.res, 200, await securityAlerts());
+  });
+
+  /* ---------------- BACKUP ----------------
+   * Owner-only by default. `backup` is a real permission, so the owner can hand
+   * it to one trusted account from the roles tab without opening anything else. */
+  router.add('GET', `${base}/admin/backup/export`, async (ctx) => {
+    if (!requireAdmin(ctx, { tab: 'backup' })) return;
+    const dump = await buildBackup();
+    const body = Buffer.from(JSON.stringify(dump), 'utf8');
+    ctx.res.statusCode = 200;
+    ctx.res.setHeader('content-type', 'application/json; charset=utf-8');
+    ctx.res.setHeader('content-disposition', `attachment; filename="${backupFilename()}"`);
+    ctx.res.setHeader('content-length', String(body.length));
+    ctx.res.end(body);
+  });
+  router.add('GET', `${base}/admin/backup/status`, async (ctx) => {
+    if (!requireAdmin(ctx, { tab: 'backup' })) return;
+    json(ctx.res, 200, { tables: BACKUP_TABLES.length, filename: backupFilename() });
+  });
 
   router.add('GET', `${base}/admin/finance/diagnostics`, async (ctx) => {
     if (!requireAdmin(ctx)) return;

@@ -147,12 +147,12 @@ async function loadCfg(){ try{ CFG=await api('GET','/admin/config'); $('#cfgVer'
 
 /* ---- nav: 25 sections grouped ---- */
 const NAV=[
-  ['اصلی',[['dashboard','📊','داشبورد'],['finance','💰','داشبورد مالی'],['users','👤','کاربران'],['matches','🎮','مسابقات'],['lastsurvivor','🏆','آخرین بازمانده'],['support','🎧','پشتیبانی']]],
+  ['اصلی',[['dashboard','📊','داشبورد'],['finance','💰','داشبورد مالی'],['accounting','🧾','حسابداری و گزارش'],['expenses','🧮','هزینه‌های شرکت'],['users','👤','کاربران'],['matches','🎮','مسابقات'],['lastsurvivor','🏆','آخرین بازمانده'],['support','🎧','پشتیبانی']]],
   ['محتوا',[['questions','❓','سوالات'],['qreports','🚩','گزارش سؤالات'],['aistudio','🤖','استودیوی سوال (AI)'],['pipeline','🔬','خط‌لولهٔ کیفیت'],['categories','🏷️','موضوعات'],['characterbuilder','🎭','قطعات کاراکتر']]],
   ['اقتصاد',[['wallet','👛','کیف پول'],['withdrawals','💸','برداشت‌ها'],['rewardholds','⏳','جوایز در انتظار'],['tickets','🎫','بلیط‌ها'],['shop','🛒','فروشگاه'],['giftcodes','🎁','کدهای هدیه'],['payments','🏦','درگاه پرداخت']]],
   ['بالانس بازی (Data-Driven)',[['cfg_xp','✨','XP'],['cfg_level','🏅','Level'],['cfg_cup','🏆','Cup'],['cfg_gameplay','🕹️','گیم‌پلی مودها'],['leagues','🛡️','لیگ‌ها'],['missions','🎯','مأموریت‌ها'],['rewards','🎉','جوایز/چرخونه/استریک']]],
   ['رشد و تعامل',[['leaderboard','📈','لیدربرد'],['campaign','🎁','کمپین کاربر جدید'],['events','📅','رویدادها'],['banners','🖼️','بنرها'],['notifications','🔔','اعلان‌ها'],['sms','📱','پنل پیامکی']]],
-  ['سیستم',[['monitoring','🖥️','مانیتورینگ سرور'],['anticheat','🛡️','ضدتقلب'],['suspicious','🚨','کاربران مشکوک'],['reports','📑','گزارش‌ها'],['logs','📝','لاگ و Audit'],['reset','♻️','ابزار ریست'],['accounts','🔐','حساب‌ها و دسترسی'],['general','⚙️','تنظیمات عمومی'],['rawcfg','🧩','ویرایش خام Config']]]
+  ['سیستم',[['monitoring','🖥️','مانیتورینگ سرور'],['anticheat','🛡️','ضدتقلب'],['suspicious','🚨','کاربران مشکوک'],['reports','📑','گزارش‌ها'],['logs','📝','لاگ و Audit'],['reset','♻️','ابزار ریست'],['accounts','🔐','حساب‌ها و دسترسی'],['backup','💾','پشتیبان‌گیری'],['general','⚙️','تنظیمات عمومی'],['rawcfg','🧩','ویرایش خام Config']]]
 ];
 function buildNav(){
   $('#nav').innerHTML=NAV.map(g=>{
@@ -179,7 +179,7 @@ async function render(){
   try{
     if(CUR==='accounts')return renderAccounts();
     if(CONFIG_PAGES[CUR])return renderConfigSection(CONFIG_PAGES[CUR][0],CONFIG_PAGES[CUR][1]);
-    const fn={dashboard:renderDashboard,finance:renderFinance,users:renderUsers,matches:renderMatches,support:renderSupport,questions:renderQuestions,qreports:renderQReports,aistudio:renderAiStudio,pipeline:renderPipeline,categories:renderCategories,wallet:renderWallet,withdrawals:renderWithdrawals,rewardholds:renderRewardHolds,tickets:renderTickets,giftcodes:renderGiftCodes,shop:renderShopAdmin,characterbuilder:renderCharParts,lastsurvivor:renderLastSurvivor,sms:renderSms,payments:renderPayments,leaderboard:renderLeaderboard,notifications:renderNotifications,anticheat:renderAntiCheat,suspicious:renderSuspicious,reports:renderReports,logs:renderLogs,reset:renderReset,roles:renderRoles,rawcfg:renderRawCfg,monitoring:renderMonitoring}[CUR];
+    const fn={dashboard:renderDashboard,finance:renderFinance,accounting:renderAccounting,expenses:renderExpenses,backup:renderBackup,users:renderUsers,matches:renderMatches,support:renderSupport,questions:renderQuestions,qreports:renderQReports,aistudio:renderAiStudio,pipeline:renderPipeline,categories:renderCategories,wallet:renderWallet,withdrawals:renderWithdrawals,rewardholds:renderRewardHolds,tickets:renderTickets,giftcodes:renderGiftCodes,shop:renderShopAdmin,characterbuilder:renderCharParts,lastsurvivor:renderLastSurvivor,sms:renderSms,payments:renderPayments,leaderboard:renderLeaderboard,notifications:renderNotifications,anticheat:renderAntiCheat,suspicious:renderSuspicious,reports:renderReports,logs:renderLogs,reset:renderReset,roles:renderRoles,rawcfg:renderRawCfg,monitoring:renderMonitoring}[CUR];
     if(fn)return fn();
   }catch(e){$('#main').innerHTML=head('خطا')+'<div class="card empty">'+(e.message||'خطا')+'</div>';}
 }
@@ -215,9 +215,11 @@ async function renderDashboard(){
     '<div class="grid g4" style="margin-bottom:13px">'+
       stat('برداشتِ در انتظار','bad',fa(d.pendingWithdrawals)+' ('+money(d.pendingWithdrawAmount)+')')+
       stat('تیکتِ پشتیبانیِ باز','pend',fa(d.openTickets))+
-      stat('RAM سرور (پروسه)',(d.system&&d.system.ramUsedMB>800?'bad':'ok'),fa(d.system?d.system.ramUsedMB:0)+' MB')+
-      stat('آپ‌تایم','',(d.system?d.system.uptimeH:0)+' ساعت')+
+      stat('آپ‌تایم سرویس','',(d.system?d.system.uptimeH:0)+' ساعت')+
+      stat('مسابقاتِ در جریان','info',fa(d.runningMatches))+
     '</div>'+
+    '<div id="dashAlerts"></div>'+
+    '<div id="dashServers"></div>'+
     '<div class="grid g2">'+
       '<div class="card"><h3>📈 کاربرانِ جدید — ۳۰ روزِ اخیر</h3>'+miniBars(d.usersSeries,'#5db7ec','کاربر جدید')+'</div>'+
       '<div class="card"><h3>🎮 مسابقات — ۳۰ روزِ اخیر</h3>'+miniBars(d.matchesSeries,'#7b8bff','مسابقه')+'</div>'+
@@ -225,10 +227,269 @@ async function renderDashboard(){
     '<div class="card" style="margin-top:13px"><h3>🔴 فعالیتِ لحظه‌ای (Live Feed)</h3>'+
       tbl(['زمان','رویداد'],(d.liveFeed||[]).map(f=>[fmtDate(f.at),'<span class="pill '+(f.kind==='signup'?'ok':f.kind==='withdraw'?'pend':'info')+'">'+({signup:'ثبت‌نام',match:'مسابقه',withdraw:'برداشت'}[f.kind]||f.kind)+'</span> '+esc(f.text)]))+
     '</div>'+
-    '<div class="note" style="margin-top:12px">CPU و RAMِ کلِ هاست (نه فقط پروسه) نیازمندِ نصبِ یک agent است؛ فعلاً RAMِ پروسهٔ Node و آپ‌تایم نمایش داده می‌شود. بقیهٔ اعداد کاملاً واقعی و زنده‌اند.</div>';
+    '';
+  /* Both panels fill themselves in so a slow query never blocks the dashboard. */
+  dashLoadAlerts(); dashLoadServers();
+}
+
+/* Live security alerts — every entry comes from a rule that actually fired. */
+async function dashLoadAlerts(){
+  const box=document.getElementById('dashAlerts'); if(!box) return;
+  let r; try{ r=await api('GET','/admin/security-alerts'); }catch(e){ box.innerHTML=''; return; }
+  const list=r.alerts||[];
+  const tone={critical:'bad',warn:'pend',info:'info'};
+  const icon={critical:'⛔',warn:'⚠️',info:'ℹ️'};
+  box.innerHTML='<div class="card" style="margin-bottom:13px">'+
+    '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px"><h3 style="margin:0">\u{1F6E1}️ هشدارهای امنیتی</h3>'+
+      '<span class="sub">'+(r.hasDatabase?fa(r.checked)+' قانون بررسی شد':'دیتابیس متصل نیست')+'</span>'+
+      '<span style="flex:1"></span><button class="btn sm" onclick="dashLoadAlerts()">↻</button></div>'+
+    (list.length
+      ? list.map(function(a){ return '<div style="display:flex;gap:10px;align-items:flex-start;padding:9px 0;border-top:1px solid var(--line)">'+
+          '<span style="font-size:17px">'+(icon[a.level]||'')+'</span>'+
+          '<div style="flex:1"><b>'+esc(a.title)+'</b><div class="sub">'+esc(a.detail)+'</div></div>'+
+          '<span class="pill '+(tone[a.level]||'')+'">'+fa(a.count)+'</span>'+
+          (a.tab?'<button class="btn sm" onclick="go(\''+esc(a.tab)+'\')">بررسی</button>':'')+
+        '</div>'; }).join('')
+      : '<div class="empty" style="padding:14px">هیچ هشدار فعالی نیست — همهٔ قوانین بررسی شد و چیزی از آستانه رد نشده.</div>')+
+  '</div>';
+}
+
+/* Server monitor, read-only: always on the dashboard, nothing to click. */
+async function dashLoadServers(){
+  const box=document.getElementById('dashServers'); if(!box) return;
+  let r; try{ r=await api('GET','/admin/monitor/overview'); }catch(e){ box.innerHTML=''; return; }
+  const rows=r.rows||[];
+  if(!rows.length){ box.innerHTML='<div class="card" style="margin-bottom:13px"><h3>\u{1F5A5}️ وضعیت سرورها</h3><div class="empty">سروری ثبت نشده — از تب مانیتورینگ اضافه کن</div></div>'; return; }
+  const g=function(label,val,unit,pct,color){
+    const p=Math.max(0,Math.min(100,Number(pct)||0));
+    const C=Math.PI*34, dash=(p/100)*C;
+    return '<div style="text-align:center;flex:1;min-width:96px">'+
+      '<svg viewBox="0 0 90 56" style="width:92px;height:58px">'+
+        '<path d="M11 48 A34 34 0 0 1 79 48" fill="none" stroke="rgba(255,255,255,.12)" stroke-width="9" stroke-linecap="round"/>'+
+        '<path d="M11 48 A34 34 0 0 1 79 48" fill="none" stroke="'+color+'" stroke-width="9" stroke-linecap="round" stroke-dasharray="'+dash+' '+C+'"/>'+
+        '<text x="45" y="45" text-anchor="middle" font-size="15" font-weight="700" fill="currentColor">'+fa(Math.round(p))+'٪</text>'+
+      '</svg>'+
+      '<div class="sub" style="font-size:11px">'+label+(val!=null?' · '+val+(unit||''):'')+'</div></div>';
+  };
+  box.innerHTML='<div class="card" style="margin-bottom:13px">'+
+    '<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px"><h3 style="margin:0">\u{1F5A5}️ وضعیت سرورها</h3>'+
+      '<span class="sub">فقط نمایش — همیشه جلوی چشم</span><span style="flex:1"></span>'+
+      '<button class="btn sm" onclick="dashLoadServers()">↻</button></div>'+
+    rows.map(function(x){
+      const m=x.latest||{}; const on=x.online;
+      const memPct=m.memTotalMB?Math.round((m.memUsedMB/m.memTotalMB)*100):0;
+      const dskPct=m.diskTotalGB?Math.round((m.diskUsedGB/m.diskTotalGB)*100):0;
+      return '<div style="border-top:1px solid var(--line);padding:10px 0">'+
+        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">'+
+          '<span class="pill '+(on?'ok':'bad')+'">'+(on?'آنلاین':'آفلاین')+'</span>'+
+          '<b>'+esc(x.server.name)+'</b><span class="sub">'+esc(x.server.host||'')+'</span></div>'+
+        (on?'<div style="display:flex;flex-wrap:wrap;gap:6px">'+
+            g('CPU',null,null,m.cpuPercent,'#5db7ec')+
+            g('RAM',fa(Math.round(m.memUsedMB||0)),' MB',memPct,'#2ecc71')+
+            g('دیسک',fa(Math.round(m.diskUsedGB||0)),' GB',dskPct,'#f39c12')+
+          '</div>'
+          :'<div class="sub">داده‌ای دریافت نشده</div>')+
+      '</div>';
+    }).join('')+'</div>';
 }
 
 /* ================= FINANCE DASHBOARD (transparent, formula-visible) ================= */
+/* ================= ACCOUNTING / FINANCIAL REPORTS ================= */
+const ACC_MODE={duel:'دوئل',lastSurvivor:'آخرین بازمانده',allOrNothing:'همه یا هیچ',weeklyLeague:'لیگ هفتگی',other:'سایر'};
+const ACC_CAT={server:'سرور',salary:'حقوق',marketing:'بازاریابی',sms:'پیامک',gateway:'درگاه پرداخت',tax:'مالیات',other:'سایر'};
+let ACC_FROM='', ACC_TO='', ACC_GRAN='day';
+function accDefaults(){
+  if(ACC_FROM&&ACC_TO)return;
+  const d=new Date(); ACC_TO=d.toISOString().slice(0,10);
+  ACC_FROM=new Date(Date.now()-29*86400000).toISOString().slice(0,10);
+}
+/** Jump the range to today / this week / this month without typing dates. */
+function accPreset(kind){
+  const now=new Date(), iso=x=>x.toISOString().slice(0,10);
+  if(kind==='day'){ ACC_FROM=ACC_TO=iso(now); ACC_GRAN='day'; }
+  else if(kind==='week'){ const d=(now.getUTCDay()+6)%7; ACC_FROM=iso(new Date(Date.now()-d*86400000)); ACC_TO=iso(now); ACC_GRAN='day'; }
+  else { ACC_FROM=iso(new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),1))); ACC_TO=iso(now); ACC_GRAN='day'; }
+  render();
+}
+function accApply(){
+  ACC_FROM=document.getElementById('acc_from').value||ACC_FROM;
+  ACC_TO=document.getElementById('acc_to').value||ACC_TO;
+  ACC_GRAN=document.getElementById('acc_gran').value||'day';
+  render();
+}
+function accQuery(){ return 'from='+encodeURIComponent(ACC_FROM)+'&to='+encodeURIComponent(ACC_TO)+'&granularity='+encodeURIComponent(ACC_GRAN); }
+/** Downloads go through fetch so the admin key travels in the header. */
+async function accDownload(fmt){
+  try{
+    const res=await fetch(API+'/admin/accounting/export.'+fmt+'?'+accQuery(),{headers:{'x-admin-key':KEY}});
+    if(!res.ok){ toast('خروجی گرفته نشد ('+res.status+')'); return; }
+    const blob=await res.blob(), url=URL.createObjectURL(blob), a=document.createElement('a');
+    a.href=url; a.download='finance-'+ACC_FROM+'_'+ACC_TO+'.'+fmt; document.body.appendChild(a); a.click();
+    a.remove(); setTimeout(()=>URL.revokeObjectURL(url),1500);
+    toast('خروجی '+fmt.toUpperCase()+' دانلود شد ✅');
+  }catch(e){ toast('خروجی گرفته نشد'); }
+}
+/* A plain read-only bar chart: income / payouts / expenses per bucket. */
+function accChart(series){
+  if(!series||!series.length) return '<div class="card empty">در این بازه تراکنشی ثبت نشده</div>';
+  const max=Math.max(1,...series.map(s=>Math.max(s.income,s.payouts+s.expenses)));
+  const w=Math.max(10,Math.floor(680/series.length)-6);
+  const bars=series.map(s=>{
+    const h=v=>Math.round((v/max)*120);
+    return '<div style="display:inline-flex;flex-direction:column-reverse;align-items:center;gap:2px;margin-left:4px;vertical-align:bottom" title="'+esc(s.bucket)+'">'+
+      '<div style="font-size:9px;color:var(--sub);white-space:nowrap;transform:rotate(-45deg);transform-origin:top left;height:26px">'+esc(s.bucket.slice(-5))+'</div>'+
+      '<div style="display:flex;align-items:flex-end;gap:2px">'+
+        '<div style="width:'+w+'px;height:'+h(s.income)+'px;background:#2ecc71;border-radius:3px 3px 0 0"></div>'+
+        '<div style="width:'+w+'px;height:'+h(s.payouts)+'px;background:#e74c3c;border-radius:3px 3px 0 0"></div>'+
+        '<div style="width:'+w+'px;height:'+h(s.expenses)+'px;background:#f39c12;border-radius:3px 3px 0 0"></div>'+
+      '</div></div>';
+  }).join('');
+  return '<div style="overflow-x:auto;direction:ltr;text-align:left;padding:8px 0 30px">'+bars+'</div>'+
+    '<div style="font-size:11px;color:var(--sub);display:flex;gap:14px;justify-content:center">'+
+      '<span><i style="display:inline-block;width:10px;height:10px;background:#2ecc71;border-radius:2px"></i> درآمد</span>'+
+      '<span><i style="display:inline-block;width:10px;height:10px;background:#e74c3c;border-radius:2px"></i> پرداختی به بازیکن</span>'+
+      '<span><i style="display:inline-block;width:10px;height:10px;background:#f39c12;border-radius:2px"></i> هزینه</span></div>';
+}
+async function renderAccounting(){
+  accDefaults();
+  const r=await api('GET','/admin/accounting/report?'+accQuery()).catch(e=>({error:e.message}));
+  if(r.error){ $('#main').innerHTML=head('حسابداری')+'<div class="card empty">خطا: '+esc(r.error)+'</div>'; return; }
+  const money=v=>fa(Math.round(Number(v)||0))+' ت';
+  const filters='<div class="card" style="margin-bottom:13px">'+
+    '<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end">'+
+      '<div class="field" style="margin:0"><label>از تاریخ</label><input type="date" id="acc_from" value="'+esc(r.from)+'"></div>'+
+      '<div class="field" style="margin:0"><label>تا تاریخ</label><input type="date" id="acc_to" value="'+esc(r.to)+'"></div>'+
+      '<div class="field" style="margin:0"><label>بازه</label><select id="acc_gran">'+
+        ['day|روزانه','week|هفتگی','month|ماهانه'].map(o=>{const [v,l]=o.split('|');return '<option value="'+v+'"'+(r.granularity===v?' selected':'')+'>'+l+'</option>';}).join('')+
+      '</select></div>'+
+      '<button class="btn pri" onclick="accApply()">اعمال فیلتر</button>'+
+      '<button class="btn sm" onclick="accPreset(\'day\')">امروز</button>'+
+      '<button class="btn sm" onclick="accPreset(\'week\')">این هفته</button>'+
+      '<button class="btn sm" onclick="accPreset(\'month\')">این ماه</button>'+
+      '<span style="flex:1"></span>'+
+      '<button class="btn ok" onclick="accDownload(\'csv\')">⬇ خروجی اکسل</button>'+
+      '<button class="btn" onclick="accDownload(\'pdf\')">⬇ خروجی PDF</button>'+
+    '</div></div>';
+  const modeRows=(r.commissionByMode||[]).length
+    ? r.commissionByMode.map(m=>'<tr><td><b>'+esc(ACC_MODE[m.modeId]||m.modeId)+'</b></td><td>'+money(m.commission)+'</td><td>'+fa(m.matches)+'</td></tr>').join('')
+    : '<tr><td colspan="3" class="empty">در این بازه کارمزدی ثبت نشده</td></tr>';
+  const expRows=(r.expenses.byCategory||[]).length
+    ? r.expenses.byCategory.map(e=>'<tr><td>'+esc(ACC_CAT[e.category]||e.category)+'</td><td>'+money(e.amount)+'</td></tr>').join('')
+    : '<tr><td colspan="2" class="empty">هزینه‌ای ثبت نشده</td></tr>';
+  const srvRows=(r.serverCost.machines||[]).length
+    ? r.serverCost.machines.map(m=>'<tr><td>'+esc(m.name)+'</td><td>'+money(m.hourly)+'/ساعت</td><td>'+fa(Math.round(m.hours))+' ساعت</td><td><b>'+money(m.cost)+'</b></td></tr>').join('')
+    : '<tr><td colspan="4" class="empty">هزینهٔ ساعتی برای هیچ سروری ثبت نشده — در تب «هزینه‌های شرکت» وارد کن</td></tr>';
+
+  $('#main').innerHTML=head('حسابداری و گزارش مالی','هر عدد از دفترکل محاسبه می‌شود؛ فیلتر تاریخ و خروجی اکسل/PDF','<button class="btn sm" onclick="render()">↻</button>')+
+    (r.hasDatabase?'':'<div class="note">⚠️ دیتابیس متصل نیست — اعداد صفر است، ساختگی نیست.</div>')+
+    filters+
+    '<div class="grid g4" style="margin-bottom:13px">'+
+      stat('کارمزد مسابقات','ok',money(r.income.commission))+
+      stat('فروش بلیط','info',money(r.income.tickets))+
+      stat('فروش آیتم فروشگاه','',r.shopSalesTracked?money(r.income.shop):'—')+
+      stat('جمع درآمد','gold',money(r.income.total))+
+    '</div>'+
+    (r.shopSalesTracked?'':'<div class="note">فروش آیتم هنوز اندازه‌گیری نمی‌شود: فروشگاه فعلاً فقط کاتالوگ است و مسیر خرید آیتم ساخته نشده. جدول ثبت فروش آماده است و به‌محض ساخت خرید، این عدد پر می‌شود.</div>')+
+    '<div class="grid g4" style="margin-bottom:13px">'+
+      stat('پرداختی به بازیکنان','bad',money(r.payouts.total))+
+      stat('هزینه‌های شرکت','bad',money(r.expenses.total))+
+      stat('سود ناخالص',r.grossProfit>=0?'ok':'bad',money(r.grossProfit))+
+      stat('سود خالص',r.netProfit>=0?'ok':'bad',money(r.netProfit))+
+    '</div>'+
+    '<div class="card" style="margin-bottom:13px"><b>روند مالی</b><div class="sub" style="margin-bottom:6px">'+esc(r.from)+' تا '+esc(r.to)+'</div>'+accChart(r.series)+'</div>'+
+    '<div class="grid g2">'+
+      '<div class="card"><b>کارمزد به تفکیک بازی</b><div class="tbl-wrap" style="margin-top:8px"><table><thead><tr><th>بازی</th><th>کارمزد</th><th>مسابقه</th></tr></thead><tbody>'+modeRows+'</tbody></table></div></div>'+
+      '<div class="card"><b>هزینه به تفکیک دسته</b><div class="tbl-wrap" style="margin-top:8px"><table><thead><tr><th>دسته</th><th>مبلغ</th></tr></thead><tbody>'+expRows+'</tbody></table></div></div>'+
+    '</div>'+
+    '<div class="card" style="margin-top:13px"><b>هزینهٔ سرور (محاسبهٔ خودکار)</b>'+
+      '<div class="sub" style="margin-bottom:8px">مبلغ ساعتی هر سرور را یک‌بار وارد می‌کنی؛ سیستم بر اساس مدت فعال بودن، هزینه را خودش حساب می‌کند.</div>'+
+      '<div class="tbl-wrap"><table><thead><tr><th>سرور</th><th>نرخ</th><th>مدت در این بازه</th><th>هزینه</th></tr></thead><tbody>'+srvRows+'</tbody></table></div></div>';
+}
+
+/* ================= COMPANY EXPENSES ================= */
+async function renderExpenses(){
+  accDefaults();
+  const [r,mon]=await Promise.all([
+    api('GET','/admin/expenses?from='+encodeURIComponent(ACC_FROM)+'&to='+encodeURIComponent(ACC_TO)).catch(()=>({rows:[]})),
+    api('GET','/admin/monitor/servers').catch(()=>({rows:[]}))
+  ]);
+  const rows=r.rows||[];
+  const money=v=>fa(Math.round(Number(v)||0))+' ت';
+  const total=rows.reduce((s,e)=>s+(Number(e.amount)||0),0);
+  const catOpts=Object.keys(ACC_CAT).map(k=>'<option value="'+k+'">'+ACC_CAT[k]+'</option>').join('');
+  const srv=(mon.rows||mon.servers||[]);
+  $('#main').innerHTML=head('هزینه‌های شرکت','هزینه‌های واقعی را اینجا ثبت کن؛ در گزارش مالی از سود کم می‌شود','<button class="btn sm" onclick="render()">↻</button>')+
+    '<div class="card" style="margin-bottom:13px"><b>ثبت هزینه جدید</b>'+
+      '<div class="grid g3" style="margin-top:8px">'+
+        '<div class="field"><label>عنوان</label><input id="ex_title" placeholder="مثلاً اجارهٔ سرور تیر"></div>'+
+        '<div class="field"><label>دسته</label><select id="ex_cat">'+catOpts+'</select></div>'+
+        '<div class="field"><label>مبلغ (تومان)</label><input id="ex_amt" type="number" min="0" value="0"></div>'+
+      '</div>'+
+      '<div class="grid g2">'+
+        '<div class="field"><label>تاریخ</label><input id="ex_date" type="date" value="'+esc(ACC_TO)+'"></div>'+
+        '<div class="field"><label>توضیح (اختیاری)</label><input id="ex_note"></div>'+
+      '</div>'+
+      '<button class="btn ok" onclick="expenseSave()">ثبت هزینه</button></div>'+
+    '<div class="card" style="margin-bottom:13px"><b>هزینهٔ ساعتی سرورها</b>'+
+      '<div class="sub" style="margin-bottom:8px">مبلغ هر ساعت را وارد کن — هزینهٔ انباشته خودکار در گزارش مالی می‌آید.</div>'+
+      (srv.length?srv.map(sv=>'<div style="display:flex;gap:10px;align-items:center;margin-bottom:8px">'+
+        '<b style="flex:1">'+esc(sv.name||sv.id)+'</b>'+
+        '<input type="number" min="0" id="hc_'+esc(sv.id)+'" value="'+(Number(sv.hourlyCost)||0)+'" style="width:150px">'+
+        '<span class="sub">تومان/ساعت</span>'+
+        '<button class="btn sm ok" onclick="serverCostSave(\''+esc(sv.id)+'\')">ذخیره</button></div>').join('')
+        :'<div class="empty">سروری ثبت نشده — از تب مانیتورینگ اضافه کن</div>')+'</div>'+
+    '<div class="card"><div style="display:flex;align-items:center;gap:10px;margin-bottom:8px"><b>هزینه‌های ثبت‌شده</b>'+
+      '<span class="sub">'+esc(ACC_FROM)+' تا '+esc(ACC_TO)+'</span><span style="flex:1"></span><b>جمع: '+money(total)+'</b></div>'+
+      '<div class="tbl-wrap"><table><thead><tr><th>تاریخ</th><th>عنوان</th><th>دسته</th><th>مبلغ</th><th></th></tr></thead><tbody>'+
+      (rows.length?rows.map(e=>'<tr><td>'+esc(e.spentAt)+'</td><td><b>'+esc(e.title)+'</b>'+(e.note?'<br><span class="sub">'+esc(e.note)+'</span>':'')+'</td><td>'+esc(ACC_CAT[e.category]||e.category)+'</td><td>'+money(e.amount)+'</td>'+
+        '<td><button class="btn sm bad" onclick="expenseDel(\''+esc(e.id)+'\')">حذف</button></td></tr>').join('')
+        :'<tr><td colspan="5" class="empty">هزینه‌ای ثبت نشده</td></tr>')+'</tbody></table></div></div>';
+}
+async function expenseSave(){
+  const body={title:document.getElementById('ex_title').value,category:document.getElementById('ex_cat').value,
+    amount:Number(document.getElementById('ex_amt').value)||0,spentAt:document.getElementById('ex_date').value,
+    note:document.getElementById('ex_note').value};
+  if(!body.title.trim()){ toast('عنوان را وارد کن'); return; }
+  try{ await api('POST','/admin/expenses',body); toast('هزینه ثبت شد ✅'); render(); }catch(e){ toast(e.message||'ثبت نشد'); }
+}
+async function expenseDel(id){
+  if(!confirm('این هزینه حذف شود؟'))return;
+  try{ await api('DELETE','/admin/expenses/'+id); toast('حذف شد'); render(); }catch(e){ toast(e.message||'حذف نشد'); }
+}
+async function serverCostSave(id){
+  const v=Number(document.getElementById('hc_'+id).value)||0;
+  try{ await api('PUT','/admin/expenses/server-cost/'+id,{hourly:v}); toast('نرخ ساعتی ذخیره شد ✅'); }catch(e){ toast(e.message||'ذخیره نشد'); }
+}
+
+/* ================= BACKUP ================= */
+async function renderBackup(){
+  const st=await api('GET','/admin/backup/status').catch(e=>({error:e.message}));
+  if(st.error){ $('#main').innerHTML=head('پشتیبان‌گیری')+'<div class="card empty">'+esc(st.error)+'</div>'; return; }
+  $('#main').innerHTML=head('پشتیبان‌گیری از سرور','یک فایل کامل از همهٔ داده‌ها روی کامپیوتر خودت ذخیره کن')+
+    '<div class="card">'+
+      '<b>خروجی کامل دیتابیس</b>'+
+      '<div class="sub" style="margin:6px 0 12px">شامل '+fa(st.tables)+' جدول: کاربران، مسابقات، دفترکل مالی، سوالات، تنظیمات و بقیه. '+
+        'فایل JSON است و مستقیم روی کامپیوتر تو دانلود می‌شود — جایی روی سرور نگه داشته نمی‌شود.</div>'+
+      '<button class="btn pri" id="bk_btn" onclick="backupDownload()">💾 گرفتن پشتیبان و دانلود</button>'+
+      '<div class="sub" style="margin-top:10px">دسترسی این بخش فقط برای مدیر کل باز است؛ از تب «حساب‌ها و دسترسی» می‌توانی آن را به یک حساب مشخص هم بدهی.</div>'+
+    '</div>';
+}
+async function backupDownload(){
+  const btn=document.getElementById('bk_btn'); const t=btn?btn.textContent:'';
+  if(btn){ btn.disabled=true; btn.textContent='در حال آماده‌سازی…'; }
+  try{
+    const res=await fetch(API+'/admin/backup/export',{headers:{'x-admin-key':KEY}});
+    if(!res.ok){ toast('پشتیبان گرفته نشد ('+res.status+')'); return; }
+    const blob=await res.blob(), url=URL.createObjectURL(blob), a=document.createElement('a');
+    const cd=res.headers.get('content-disposition')||'';
+    const m=cd.match(/filename="([^"]+)"/);
+    a.href=url; a.download=m?m[1]:'prizzequizz-backup.json'; document.body.appendChild(a); a.click();
+    a.remove(); setTimeout(()=>URL.revokeObjectURL(url),2000);
+    toast('پشتیبان دانلود شد ✅ ('+Math.round(blob.size/1024)+' کیلوبایت)');
+  }catch(e){ toast('پشتیبان گرفته نشد'); }
+  finally{ if(btn){ btn.disabled=false; btn.textContent=t; } }
+}
+
 async function renderFinance(){
   const f=await api('GET','/admin/wallet/finance');
   const money=v=>fa(v)+' ت';
@@ -1073,7 +1334,73 @@ let SHOP_CAT='';
 const SHOP_CATS={tickets:'🎫 بلیط مسابقات',util:'🧰 کاربردی',cosmetic:'✨ تزئینی',gift:'🎁 هدیه'};
 const SHOP_EFFECTS={p5050:'کمکی: حذف دو گزینه',psecond:'کمکی: حق دو انتخاب',pstats:'کمکی: درصد پاسخ',heart:'جان اضافی (❤️)',xp:'شتاب‌دهنده XP',coins:'سکه هدیه',
   'ticket-bronze':'بلیط برنز','ticket-silver':'بلیط نقره','ticket-gold':'بلیط طلا','skin-gold':'اسکین طلایی','skin-neon':'اسکین نئون','skin-rainbow':'اسکین رنگین‌کمان',gift:'هدیه به دوست'};
+/* ---- Banners on the three ticket screens ----
+   The duel entry, the Last Survivor entry and the shop's ticket tab each carry
+   one admin-owned banner: image + headline + a line of text. They render through
+   the same component in the game, so all three look identical. */
+const PROMO_SLOTS=[['duel','ورود به دوئل'],['lastSurvivor','ورود آخرین بازمانده'],['shop','فروشگاه بلیط']];
+let _PROMOS=null, _PROMO_MAX=400*1024;
+function promoCard(id,label,p){
+  p=p||{};
+  return '<div class="card" style="margin-bottom:12px">'+
+    '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px"><b>'+esc(label)+'</b>'+
+      '<label style="margin-inline-start:auto;display:flex;align-items:center;gap:6px;font-size:12px"><input type="checkbox" id="pm_en_'+id+'"'+(p.enabled!==false?' checked':'')+'> نمایش داده شود</label></div>'+
+    '<div class="grid g2">'+
+      '<div class="field"><label>عنوان</label><input id="pm_t_'+id+'" maxlength="80" value="'+esc(p.title||'')+'"></div>'+
+      '<div class="field"><label>رفتن به صفحه (اختیاری)</label><input id="pm_l_'+id+'" placeholder="مثلاً shop" value="'+esc(p.link||'')+'"></div>'+
+    '</div>'+
+    '<div class="field"><label>متن</label><input id="pm_x_'+id+'" maxlength="240" value="'+esc(p.text||'')+'"></div>'+
+    '<div class="field"><label>تصویر تبلیغ (اختیاری · حداکثر '+fa(Math.round(_PROMO_MAX/1024))+' کیلوبایت)</label>'+
+      '<div style="display:flex;align-items:center;gap:10px">'+
+        '<div id="pm_prev_'+id+'" style="width:72px;height:72px;border-radius:12px;border:1px solid var(--line);overflow:hidden;background:#0e1218;display:grid;place-items:center;font-size:11px;color:var(--sub)">'+
+          (p.image?'<img src="'+esc(p.image)+'" style="width:100%;height:100%;object-fit:cover">':'بدون تصویر')+'</div>'+
+        '<input type="file" accept="image/*" id="pm_f_'+id+'" onchange="promoPickImage(\''+id+'\',this)" style="flex:1">'+
+        '<button class="btn sm" onclick="promoClearImage(\''+id+'\')">حذف تصویر</button>'+
+      '</div><input type="hidden" id="pm_i_'+id+'" value="'+esc(p.image||'')+'"></div>'+
+  '</div>';
+}
+/* Shrink on the way in so a big upload can never blow the size cap. */
+function promoPickImage(id,input){
+  const f=input&&input.files&&input.files[0]; if(!f) return;
+  const img=new Image(); const url=URL.createObjectURL(f);
+  img.onload=()=>{
+    URL.revokeObjectURL(url);
+    const maxW=900, sc=Math.min(1,maxW/img.width);
+    const c=document.createElement('canvas'); c.width=Math.round(img.width*sc); c.height=Math.round(img.height*sc);
+    c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+    let out='';
+    for(const q of [0.85,0.7,0.55,0.42]){
+      const d=c.toDataURL('image/webp',q);
+      out=(d.indexOf('data:image/webp')===0)?d:c.toDataURL('image/jpeg',q);
+      if(Math.floor((out.length-out.indexOf(',')-1)*3/4)<=_PROMO_MAX) break;
+    }
+    if(Math.floor((out.length-out.indexOf(',')-1)*3/4)>_PROMO_MAX){ toast('تصویر خیلی بزرگ است — عکس کوچک‌تری انتخاب کن'); return; }
+    document.getElementById('pm_i_'+id).value=out;
+    document.getElementById('pm_prev_'+id).innerHTML='<img src="'+out+'" style="width:100%;height:100%;object-fit:cover">';
+  };
+  img.onerror=()=>{ URL.revokeObjectURL(url); toast('این فایل تصویر نیست'); };
+  img.src=url;
+}
+function promoClearImage(id){
+  document.getElementById('pm_i_'+id).value='';
+  document.getElementById('pm_f_'+id).value='';
+  document.getElementById('pm_prev_'+id).textContent='بدون تصویر';
+}
+async function promoSave(){
+  const body={};
+  PROMO_SLOTS.forEach(function(sl){ const id=sl[0]; body[id]={
+    enabled:document.getElementById('pm_en_'+id).checked,
+    title:document.getElementById('pm_t_'+id).value,
+    text:document.getElementById('pm_x_'+id).value,
+    link:document.getElementById('pm_l_'+id).value.trim(),
+    image:document.getElementById('pm_i_'+id).value
+  };});
+  try{ const r=await api('PUT','/admin/ticket-promos',body); _PROMOS=r.promos; toast('تبلیغ‌های صفحهٔ بلیط ذخیره شد ✅'); }
+  catch(e){ toast(e&&e.message?e.message:'ذخیره نشد'); }
+}
+
 async function renderShopAdmin(){
+  try{ const pr=await api('GET','/admin/ticket-promos'); _PROMOS=pr.promos; if(pr.maxImageBytes) _PROMO_MAX=pr.maxImageBytes; }catch(e){ _PROMOS=_PROMOS||{}; }
   let rows=[];try{const r=await api('GET','/admin/shop/items');rows=r.rows||[];}catch(e){}
   window._SHOP_ROWS={};rows.forEach(it=>window._SHOP_ROWS[it.id]=it);
   const cats=[...new Set(rows.map(i=>i.category))];
