@@ -238,7 +238,12 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
 .mode-pill .mt{flex:1;position:relative;z-index:1}
 .mode-pill .mt b{font-size:17px;display:block}
 .mode-pill .mt span{font-size:11px;opacity:.72;font-weight:800}
-.mini-lb{background:var(--ink-2);border:var(--stroke);border-radius:17px;padding:12px 14px;box-shadow:var(--hard-sm)}
+/* The three home cards wear the SAME surface as the two plan-picker cards:
+   identical tint, identical hairline border, identical backdrop blur. Defined
+   once here so the four can never drift apart. */
+.pz-glass{background:rgba(28,32,26,.55);border:2px solid rgba(255,255,255,.14);
+  backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);overflow:hidden}
+.mini-lb{border-radius:22px;padding:12px 14px;box-shadow:none}
 .mini-lb .lb-row{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:800;padding:4px 0}
 .mini-lb .lb-row .rk{width:20px;height:20px;border-radius:7px;background:var(--bolt);border:2px solid #000;color:#141414;display:grid;place-items:center;font-size:11px;font-weight:900;flex-shrink:0}
 /* Admin-owned banner on the three ticket screens — one big block that owns the
@@ -796,10 +801,10 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
 .topic-btn .ti{font-size:26px;filter:drop-shadow(0 2px 0 rgba(0,0,0,.25))}
 
 /* ===== LEAGUE CTA (home) ===== */
-.league-cta{position:relative;overflow:hidden;border-radius:20px;padding:18px 16px;margin-bottom:12px;cursor:pointer;
-  background:var(--ink);border:var(--stroke);box-shadow:var(--hard),0 0 30px rgba(255,210,31,.2);
-  display:flex;align-items:center;gap:12px;transition:transform .08s,box-shadow .08s;transform:rotate(-.5deg)}
-.league-cta:active{transform:translateY(4px);box-shadow:0 1px 0 #000}
+.league-cta{position:relative;border-radius:22px;padding:18px 16px;margin-bottom:12px;cursor:pointer;
+  box-shadow:none;
+  display:flex;align-items:center;gap:12px;transition:transform .08s,box-shadow .08s}
+.league-cta:active{transform:translateY(2px)}
 .league-cta::before{content:"";position:absolute;top:0;left:-60%;width:45%;height:100%;background:linear-gradient(100deg,transparent,rgba(255,210,31,.22),transparent);animation:shineMove 2.8s ease-in-out infinite}
 @keyframes shineMove{0%,25%{left:-60%}60%,100%{left:120%}}
 .league-cta .lci{font-size:34px;filter:drop-shadow(0 0 10px var(--bolt-glow))}
@@ -953,7 +958,7 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
 .hero-streak{display:flex;flex-direction:column;align-items:center;gap:1px;flex-shrink:0}
 .hero-streak .fire{font-size:23px;filter:drop-shadow(0 0 8px rgba(255,140,40,.7));animation:float 2.6s ease-in-out infinite}
 .hero-streak small{font-size:9px;font-weight:900;color:#ffb054}
-.hero-mission{margin-top:12px;background:rgba(0,0,0,.3);border:2px solid #000;border-radius:14px;padding:10px 12px}
+.hero-mission{margin-top:12px;border-radius:22px;padding:12px 14px}
 .hero-mission .mrow{display:flex;justify-content:space-between;align-items:center;font-size:11.5px;font-weight:800}
 .hero-mission .mrow .rw{color:var(--bolt)}
 .hero-mbar{height:9px;border-radius:5px;background:#000;overflow:hidden;margin-top:7px}
@@ -3065,6 +3070,10 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
 /* Bare-text belongings anywhere in the home header get a subtle dark chip so
    they never disappear on a bright part of the photo. */
 #home .pz-header .pzh-nameline{background:rgba(6,10,14,.34);border-radius:10px;padding:2px 6px}
+/* The hero is only a layout wrapper on home now, so the mission card inside it
+   blurs the wallpaper exactly like the plan-picker cards do. */
+#home .hero{background:none!important;border:none!important;box-shadow:none!important;padding:0!important;overflow:visible!important}
+#home .hero::before{display:none!important}
 </style>
 <div id="pzWall" aria-hidden="true">
   <div class="pzw pzw-home"></div>
@@ -3424,7 +3433,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
             </div>
             <span id="hdrStreak" style="display:none"></span>
           </div>
-          <div class="hero-mission soon-dim" onclick="go('missions')">
+          <div class="hero-mission pz-glass soon-dim" onclick="go('missions')">
             <div class="mrow"><span>🎯 ماموریت امروز: ۳ پاسخ درست</span><span class="soon-tag">بزودی 🚧</span></div>
             <div class="hero-mbar"><i id="misBar"></i></div>
             <div class="mrow" style="margin-top:5px;font-size:10px;color:var(--muted)"><span id="misTxt">۲ از ۳ انجام شد</span><span>تا نیمه‌شب</span></div>
@@ -3446,13 +3455,13 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
         <div class="section-title">حالت‌های دیگر</div>
         <div class="mode-pill" onclick="lsStart()"><div class="mi">⚔️</div><div class="mt"><b>آخرین بازمانده 🏆</b><span>حذفی · بمون تا جایزه مال تو شه</span></div><span class="r-arrow" style="font-size:20px;color:var(--muted)">‹</span></div>
         <div class="mode-pill soon-dim" onclick="enterMode('consensus')"><div class="mi">🤝</div><div class="mt"><b>همه یا هیچ 🤝</b><span>تیمی بازی کن · سرنوشت با رأی جمع</span></div><span class="soon-tag">بزودی 🚧</span></div>
-        <div class="league-cta soon-dim" onclick="openLeagues()">
+        <div class="league-cta pz-glass soon-dim" onclick="openLeagues()">
           <span class="lci">🏆</span>
           <div class="lct"><b>لیگ‌های هفتگی</b><span>طلایی · نقره‌ای · برنزی — جوایز تا ۵۰ میلیون!</span></div>
           <span class="soon-tag">بزودی 🚧</span>
         </div>
 
-        <div class="mini-lb" style="margin-top:8px">
+        <div class="mini-lb pz-glass" style="margin-top:8px">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><b style="font-size:13px">برترین‌های این هفته 🏆</b><span style="font-size:11px;color:var(--gold);font-weight:700" onclick="go('rankings')">رتبه‌بندی کلی ‹</span></div>
           <div id="homeMiniLbRows"><div style="text-align:center;color:var(--muted);font-size:11.5px;font-weight:800;padding:10px">در حال بارگذاری…</div></div>
         </div>
