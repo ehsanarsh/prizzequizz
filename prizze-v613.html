@@ -3532,7 +3532,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
           <div style="font-size:13px;color:var(--muted);font-weight:900">دوئل تمرینی</div>
           <div style="font-size:25px;font-weight:900;margin:4px 0"><span id="duelPracticeStake">۲۵</span> 🪙 + ۱ ❤️</div>
           <div class="pc-line"><span>جایزه تمرینی احتمالی</span><b id="duelPracticeWin">۵۰ 🪙</b></div>
-          <div class="pc-line"><span>اگر پلن پولی بود</span><b id="duelPracticeWouldWin">۴۰٬۰۰۰ تومان</b></div>
+          <div class="pc-line"><span>اگر در رقابت اصلی بودی</span><b id="duelPracticeWouldWin">۴۰٬۰۰۰ تومان</b></div>
         </div>
         <p style="color:var(--muted);font-size:12px;margin-top:14px;line-height:1.7">اول یه سوال آسان برای تعیین موضوع؛ هر کی زودتر درست بزنه موضوع رو انتخاب می‌کنه</p>
         <div class="chip" style="margin-top:10px">شروع خودکار تا <b style="color:var(--gold);margin-right:4px" id="vsCount">۵</b> ثانیه</div>
@@ -3988,17 +3988,17 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
     </style>
     <section class="screen" id="plans">
       <div class="pl-head">
-        <h1>انتخاب مدل بازی</h1>
-        <p>با انتخاب پلن پولی، پول واقعی وسط می‌ذاری و در نهایت پول واقعی می‌بری، ولی توی پلن رایگان همه‌چی با امتیازه</p>
+        <h1>چطور بازی کنیم؟</h1>
+        <p>می‌خوای جدی وارد رقابت بشی و جایزه ببری، یا اول دوستانه دست گرم کنی؟ هر وقت خواستی می‌تونی عوضش کنی.</p>
       </div>
       <div class="pl-cards">
         <div class="pl-card" id="planPaid" onclick="planPick('premium')">
-          <div class="pl-txt"><h3>پلن پولی</h3><p>برنده شو و پول<br>واقعی ببر</p></div>
-          <div class="pl-img"><img id="planPaidImg" alt="پلن پولی"></div>
+          <div class="pl-txt"><h3>رقابت اصلی</h3><p>برنده شو و<br>جایزه ببر</p></div>
+          <div class="pl-img"><img id="planPaidImg" alt="رقابت اصلی"></div>
         </div>
         <div class="pl-card" id="planFree" onclick="planPick('free')">
-          <div class="pl-txt"><h3>پلن رایگان</h3><p>اینجا تمرین کن<br>واسه اصلی</p></div>
-          <div class="pl-img"><img id="planFreeImg" alt="پلن رایگان"></div>
+          <div class="pl-txt"><h3>دوستانه</h3><p>اینجا تمرین کن<br>واسه اصلی</p></div>
+          <div class="pl-img"><img id="planFreeImg" alt="دوستانه"></div>
         </div>
       </div>
       <div class="pl-confirm"><button class="btn btn-primary" id="planConfirmBtn" onclick="planConfirm()">تایید و ادامه</button></div>
@@ -5314,11 +5314,11 @@ function updateModeEntryPlan(){
   const note=document.getElementById('mePlanNote'),btn=document.getElementById('meStartBtn');
   if(!note)return;
   if(userPlan==='free'){
-    note.innerHTML='❤️ تمرینی — ۱ قلب + <b style="color:var(--bolt)">'+fa(practiceCoinStake)+' سکه</b> · قلب‌ها: <b style="color:#ff7aa8">'+fa(hearts)+'</b> · سکه‌ها: <b style="color:var(--bolt)">'+fa(practiceCoins)+'</b> · <span style="color:var(--bolt);cursor:pointer" onclick="plansBack=\'home\';go(\'plans\')">تغییر به حالت جایزه</span>';
+    note.innerHTML='❤️ تمرینی — ۱ قلب + <b style="color:var(--bolt)">'+fa(practiceCoinStake)+' سکه</b> · قلب‌ها: <b style="color:#ff7aa8">'+fa(hearts)+'</b> · سکه‌ها: <b style="color:var(--bolt)">'+fa(practiceCoins)+'</b> · <span style="color:var(--bolt);cursor:pointer" onclick="plansBack=\'home\';go(\'plans\')">تغییر به رقابت اصلی</span>';
     if(btn)btn.textContent='شروع با ۱ قلب و '+fa(practiceCoinStake)+' سکه ❤️';
     const pr=document.getElementById('practiceRematchCoins');if(pr)pr.textContent=fa(practiceCoinStake);
   }else{
-    note.innerHTML='💰 حالت جایزه — پول واقعی، جایزه واقعی';
+    note.innerHTML='🏆 رقابت اصلی — بازی برای جایزهٔ واقعی';
     if(btn)btn.textContent='پرداخت و ورود 🚀';
   }
 }
@@ -5871,9 +5871,9 @@ function showUpsell(wouldWin){
   removeUpsell();
   const grow=document.querySelector('#result .grow');if(!grow)return;
   const u=document.createElement('div');u.id='upsellBox';u.className='upsell';
-  u.innerHTML='<div style="font-size:13px;font-weight:800">اگه در <b style="color:var(--bolt)">حالت جایزه</b> بودی، الان برده بودی:</div>'+
+  u.innerHTML='<div style="font-size:13px;font-weight:800">اگه در <b style="color:var(--bolt)">رقابت اصلی</b> بودی، الان برده بودی:</div>'+
     '<div class="uamt">'+fa(wouldWin||50000)+' تومان 💰</div>'+
-    '<button class="btn btn-primary btn-sm" style="width:100%" onclick="plansBack=\'home\';go(\'plans\')">🚀 فعال‌سازی حالت جایزه</button>';
+    '<button class="btn btn-primary btn-sm" style="width:100%" onclick="plansBack=\'home\';go(\'plans\')">🚀 رفتن به رقابت اصلی</button>';
   grow.appendChild(u);
 }
 /* profile chart animation */
@@ -6250,7 +6250,7 @@ function renderDuelResultPanel(won){
   const score=fa(oppScore)+' - '+fa(myScore),wrong=myResults.filter(x=>x==='no').length;
   const coins=won?(lastPracticeCoinsEarned||Math.max(0,duelStage*45+80)):0,xp=duelStage*80;
   if(userPlan==='free'){
-    box.innerHTML='<div class="duel-summary-aaa"><div class="duel-summary-card"><div class="duel-summary-top"><div class="duel-side me"><div class="av">'+pzMyAvHTML('🦁')+'</div><b>'+(window.myUserId||window.myName||'من')+'</b><span>بازیکن</span></div><div class="duel-final"><div class="state '+(won?'':'lose')+'">'+(won?'پیروزی':'پایان دوئل')+'</div><div class="score">'+score+'</div></div><div class="duel-side"><div class="av" onclick="showCurrentOpponentProfile()">'+pzAvHTML(oppAv,'🦊')+'</div><b>'+(oppName||'حریف')+'</b><span>حریف</span></div></div><div class="duel-summary-kpis"><div class="duel-kpi"><b>'+fa(myScore)+'</b><span>پاسخ درست</span></div><div class="duel-kpi"><b>'+fa(wrong)+'</b><span>پاسخ اشتباه</span></div><div class="duel-kpi"><b>'+fa(xp)+'</b><span>XP</span></div><div class="duel-kpi"><b>'+fa(duelStage)+'</b><span>مرحله</span></div><div class="duel-kpi"><b>~'+fa(duelStage*52)+'ث</b><span>مدت مسابقه</span></div><div class="duel-kpi"><b>'+fa(coins)+'</b><span>سکه برده</span></div></div><div class="duel-reward-strip"><span class="bigcoin">🪙</span><b>+'+fa(coins)+' سکه</b><small>اگر پلن پولی بود، جایزه نقدی واقعی می‌گرفتی.</small></div><div class="duel-social-actions"><button onclick="requestFriend(oppName||\'حریف\')"><span class="ico">➕</span>دوستی</button><button onclick="showCurrentOpponentProfile()"><span class="ico">👤</span>پروفایل</button><button onclick="reportOpponent()"><span class="ico">🚩</span>گزارش</button><button onclick="blockOpponent()"><span class="ico">🚫</span>بلاک</button></div><div class="duel-bottom-actions"><button class="btn btn-primary" onclick="collectPracticeCoinsExit()">خروج بعد از دریافت سکه</button><button class="btn btn-blue" onclick="continueDoublePracticeCoins()">ادامه و دوبرابر کردن سکه</button></div></div></div>';
+    box.innerHTML='<div class="duel-summary-aaa"><div class="duel-summary-card"><div class="duel-summary-top"><div class="duel-side me"><div class="av">'+pzMyAvHTML('🦁')+'</div><b>'+(window.myUserId||window.myName||'من')+'</b><span>بازیکن</span></div><div class="duel-final"><div class="state '+(won?'':'lose')+'">'+(won?'پیروزی':'پایان دوئل')+'</div><div class="score">'+score+'</div></div><div class="duel-side"><div class="av" onclick="showCurrentOpponentProfile()">'+pzAvHTML(oppAv,'🦊')+'</div><b>'+(oppName||'حریف')+'</b><span>حریف</span></div></div><div class="duel-summary-kpis"><div class="duel-kpi"><b>'+fa(myScore)+'</b><span>پاسخ درست</span></div><div class="duel-kpi"><b>'+fa(wrong)+'</b><span>پاسخ اشتباه</span></div><div class="duel-kpi"><b>'+fa(xp)+'</b><span>XP</span></div><div class="duel-kpi"><b>'+fa(duelStage)+'</b><span>مرحله</span></div><div class="duel-kpi"><b>~'+fa(duelStage*52)+'ث</b><span>مدت مسابقه</span></div><div class="duel-kpi"><b>'+fa(coins)+'</b><span>سکه برده</span></div></div><div class="duel-reward-strip"><span class="bigcoin">🪙</span><b>+'+fa(coins)+' سکه</b><small>اگر در رقابت اصلی بودی، جایزهٔ واقعی می‌گرفتی.</small></div><div class="duel-social-actions"><button onclick="requestFriend(oppName||\'حریف\')"><span class="ico">➕</span>دوستی</button><button onclick="showCurrentOpponentProfile()"><span class="ico">👤</span>پروفایل</button><button onclick="reportOpponent()"><span class="ico">🚩</span>گزارش</button><button onclick="blockOpponent()"><span class="ico">🚫</span>بلاک</button></div><div class="duel-bottom-actions"><button class="btn btn-primary" onclick="collectPracticeCoinsExit()">خروج بعد از دریافت سکه</button><button class="btn btn-blue" onclick="continueDoublePracticeCoins()">ادامه و دوبرابر کردن سکه</button></div></div></div>';
   }else{
     /* The result is already shown big at the top (resultDuelScore) — so no center
        result card here. Just compact, side-by-side profile / friend buttons. */
@@ -7344,7 +7344,7 @@ function showHeartInfo(){syncHearts();showAaaModal({icon:'❤️',title:'قلب�
 setInterval(()=>{if(userPlan==='free')updateWalletUI();},60000);
 let practiceCoins=350,practiceCoinStake=25;try{const pc=localStorage.getItem('pq_practice_coins');if(pc!==null)practiceCoins=Number(pc)||practiceCoins;}catch(e){}
 function savePracticeCoins(){try{localStorage.setItem('pq_practice_coins',practiceCoins);}catch(e){}}
-function showPracticeCoinInfo(){showAaaModal({icon:'🪙',title:'سکه‌های تمرینی',sub:'سکه فعلی: '+fa(practiceCoins)+'<br>در حالت تمرینی، جوایز و ورودی‌ها با سکه انجام می‌شود و هیچ مبلغ پولی نمایش داده نمی‌شود.',primaryText:'باشه',secondaryText:''});}
+function showPracticeCoinInfo(){showAaaModal({icon:'🪙',title:'سکه‌های تمرینی',sub:'سکه فعلی: '+fa(practiceCoins)+'<br>در حالت دوستانه، جوایز و ورودی‌ها با سکه انجام می‌شود.',primaryText:'باشه',secondaryText:''});}
 function selCoinStake(el,v){document.querySelectorAll('#coinStakeGrid .tab').forEach(t=>t.classList.remove('active'));if(el)el.classList.add('active');practiceCoinStake=v;updateModeEntryPlan();}
 function spendPracticeCoins(n){if(practiceCoins<n){showSmartSnackbar({icon:'🪙',title:'سکه کافی نیست',message:'برای شروع '+fa(n)+' سکه لازم داری.',cta:'ماموریت‌ها',action:()=>go('missions')});return false;}practiceCoins-=n;savePracticeCoins();updateWalletUI();return true;}
 function earnPracticeCoins(n,label){practiceCoins+=n;savePracticeCoins();updateWalletUI();return n;}
@@ -7610,7 +7610,7 @@ function renderHeaderTickets(){
 function goShopTickets(){ go('shop'); setTimeout(()=>{ const tab=document.getElementById('shopTabTickets'); if(tab)shopTab(tab,'tickets'); },50); }
 function renderTicketShop(){
   const c=document.getElementById('shopContent');
-  c.innerHTML='<div class="pad" style="padding:2px 2px 10px;color:var(--muted);font-size:12px;font-weight:800;line-height:1.7">با خرید بلیط وارد مسابقهٔ پولی می‌شوی. برندهٔ هر دوئل، مجموع ورودی هر دو بلیط را می‌برد.</div>'+
+  c.innerHTML='<div class="pad" style="padding:2px 2px 10px;color:var(--muted);font-size:12px;font-weight:800;line-height:1.7">با خرید بلیط وارد رقابت اصلی می‌شوی. برندهٔ هر دوئل، کل جایزه را می‌برد.</div>'+
     '<div class="shop-grid" id="ticketGrid"></div>';
   const g=document.getElementById('ticketGrid');
   TICKET_DEFS.forEach(t=>{
@@ -7645,7 +7645,7 @@ async function buyTicket(t,el){
 function ticketEnterDuel(){
   const t=tDef(selectedTicket);
   if((mTickets[selectedTicket]||0)<=0){
-    showAaaModal({icon:'🎫',title:'بلیط نداری',sub:'برای ورود به مسابقهٔ پولی به '+t.name+' نیاز داری.',primaryText:'خرید بلیط',secondaryText:'بی‌خیال',onPrimary:()=>{closeAaaModal(true);goShopTickets();}});
+    showAaaModal({icon:'🎫',title:'بلیط نداری',sub:'برای ورود به رقابت اصلی به '+t.name+' نیاز داری.',primaryText:'خرید بلیط',secondaryText:'بی‌خیال',onPrimary:()=>{closeAaaModal(true);goShopTickets();}});
     return false;
   }
   /* Do NOT decrement locally. The ticket is consumed ATOMICALLY on the SERVER
@@ -8161,7 +8161,7 @@ function planPick(p){
   try{sfx('select');vib(18);}catch(e){}
 }
 function planConfirm(){
-  if(!planSel){ toast('اول یکی از پلن‌ها رو انتخاب کن'); return; }
+  if(!planSel){ toast('اول یکی از حالت‌ها رو انتخاب کن'); return; }
   choosePlan(planSel);
 }
 /* Character art for the two cards. Drop `pooli.png` (prize monster) and
@@ -8179,8 +8179,8 @@ function planPaintChars(){
 function choosePlan(p){
   userPlan=p;planExplicitlyChosen=true;try{localStorage.setItem('pq_user_plan',p);}catch(e){}
   applyPlanTheme();sfx('found');vib([30,50]);
-  if(p==='free')showAaaModal({icon:'🌤️',title:'حالت تمرین رایگان فعال شد',sub:'در حالت تمرینی هیچ پولی نمایش داده یا مصرف نمی‌شود؛ هر بازی با ۱ قلب شروع می‌شود و تم آبی تمرینی فعال است.',primaryText:'شروع تمرین',secondaryText:'',onPrimary:()=>{closeAaaModal(false);go('home');}});
-  else showAaaModal({icon:'💰',title:'حالت جایزه فعال شد',sub:'نسخه اصلی و پولی با رنگ‌های طلایی/زرد برند فعال شد.',primaryText:'ورود به خانه',secondaryText:'',onPrimary:()=>{closeAaaModal(false);go('home');}});
+  if(p==='free')showAaaModal({icon:'🤝',title:'حالت دوستانه فعال شد',sub:'اینجا فقط تمرین می‌کنی: هر بازی با ۱ قلب شروع می‌شود و امتیازها با سکه‌ی تمرینی حساب می‌شوند.',primaryText:'شروع تمرین',secondaryText:'',onPrimary:()=>{closeAaaModal(false);go('home');}});
+  else showAaaModal({icon:'🏆',title:'رقابت اصلی فعال شد',sub:'حالا با بلیط وارد مسابقه می‌شوی و برای جایزه‌ی واقعی رقابت می‌کنی.',primaryText:'ورود به خانه',secondaryText:'',onPrimary:()=>{closeAaaModal(false);go('home');}});
 }
 
 /* ===== Animated Memphis backdrop — canvas particle layer (paid section) ===== */
@@ -8438,12 +8438,12 @@ function openDailyRewards(){
 function claimDailyReward(){if(dailyState.claimed){closeAaaModal(false);return;}dailyState.claimed=true;saveDaily();badges.daily=false;saveBadges();renderDailyHero();renderBadges();const before=practiceCoins||0;try{earnPracticeCoins(100,'جایزه روزانه');animatePracticeCoinReward(100,before,practiceCoins);}catch(e){}closeAaaModal(false);}
 function showOnboardingIfNeeded(){
   try{if(localStorage.getItem('pq_onboarding_done')==='1')return;}catch(e){}
-  let step=0;const slides=[['👾','به PrizeQuiz خوش اومدی','رقابت کن، XP بگیر، سکه جمع کن و به لیگ‌های بالاتر برو.'],['🪙','سکه و قلب','در تمرینی با قلب و سکه بازی می‌کنی؛ در پولی با کیف پول واقعی.'],['🎡','گردونه و جایزه روزانه','هر روز جایزه بگیر، گردونه بچرخون و ماموریت‌ها رو کامل کن.'],['⚔️','اولین دوئل','از Duel شروع کن؛ نتیجه و پاداش‌ها با انیمیشن حرفه‌ای نمایش داده می‌شوند.']];
+  let step=0;const slides=[['👾','به PrizeQuiz خوش اومدی','رقابت کن، XP بگیر، سکه جمع کن و به لیگ‌های بالاتر برو.'],['🪙','سکه و قلب','در حالت دوستانه با قلب و سکه بازی می‌کنی؛ در رقابت اصلی با بلیط.'],['🎡','گردونه و جایزه روزانه','هر روز جایزه بگیر، گردونه بچرخون و ماموریت‌ها رو کامل کن.'],['⚔️','اولین دوئل','از Duel شروع کن؛ نتیجه و پاداش‌ها با انیمیشن حرفه‌ای نمایش داده می‌شوند.']];
   const show=()=>{const dots=slides.map((_,i)=>'<i class="'+(i<=step?'on':'')+'"></i>').join('');showAaaModal({icon:slides[step][0],title:slides[step][1],sub:'<div class="onboard-slide"><div class="onboard-ill">'+slides[step][0]+'</div><p>'+slides[step][2]+'</p><div class="onboard-progress">'+dots+'</div></div>',primaryText:step===slides.length-1?'شروع':'بعدی',secondaryText:'رد کردن',onPrimary:()=>{closeAaaModal(false);if(step<slides.length-1){step++;setTimeout(show,80);}else{try{localStorage.setItem('pq_onboarding_done','1')}catch(e){}showStarterToken();}},onSecondary:()=>{try{localStorage.setItem('pq_onboarding_done','1')}catch(e){}closeAaaModal(false);showStarterToken();}});};
   setTimeout(show,700);
 }
 let starterToken=0;try{starterToken=Number(localStorage.getItem('pq_starter_token')||'0');if(!localStorage.getItem('pq_starter_token_seen'))starterToken=1;}catch(e){starterToken=1;}
-function showStarterToken(){try{if(localStorage.getItem('pq_starter_token_seen')==='1')return;localStorage.setItem('pq_starter_token_seen','1');localStorage.setItem('pq_starter_token','1');starterToken=1;}catch(e){}showAaaModal({icon:'🎟️',title:'تو ۱ توکن پریمیوم رایگان گرفتی!',sub:'این توکن فقط یک‌بار برای یکی از مودهای پولی قابل استفاده است و قابل انتقال یا خرید نیست.',primaryText:'فهمیدم',secondaryText:''});}
+function showStarterToken(){try{if(localStorage.getItem('pq_starter_token_seen')==='1')return;localStorage.setItem('pq_starter_token_seen','1');localStorage.setItem('pq_starter_token','1');starterToken=1;}catch(e){}showAaaModal({icon:'🎟️',title:'تو ۱ توکن پریمیوم رایگان گرفتی!',sub:'این توکن فقط یک‌بار برای یکی از مودهای رقابت اصلی قابل استفاده است و قابل انتقال یا خرید نیست.',primaryText:'فهمیدم',secondaryText:''});}
 function showTutorialOnce(key,icon,title,sub){try{if(localStorage.getItem('tutorial_'+key)==='1')return;localStorage.setItem('tutorial_'+key,'1');}catch(e){}showAaaModal({icon,title,sub,primaryText:'متوجه شدم',secondaryText:''});}
 function animateXPGain(amount,origin){
   const ph=document.querySelector('.phone'),target=document.getElementById('hdrXpN');if(!ph||!target)return;
