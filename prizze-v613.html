@@ -717,15 +717,25 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
 #aaaModal{position:absolute;inset:0;z-index:92;display:none;align-items:center;justify-content:center;padding:22px;background:radial-gradient(circle at 50% 42%,rgba(255,210,31,.10),rgba(0,0,0,.52) 58%,rgba(0,0,0,.72));backdrop-filter:blur(1px)}
 #aaaModal.show{display:flex;animation:aaaOverlayIn .22s ease both}
 @keyframes aaaOverlayIn{from{opacity:0}to{opacity:1}}
-.aaa-card{width:min(330px,94%);position:relative;overflow:hidden;text-align:center;background:linear-gradient(180deg,#24242b,#121216);border:var(--stroke);border-radius:26px;padding:22px 18px 18px;box-shadow:0 7px 0 #000,0 24px 55px rgba(0,0,0,.65);animation:aaaCardIn .38s cubic-bezier(.2,1.25,.35,1) both;isolation:isolate}
+.aaa-card{width:min(330px,94%);position:relative;max-height:86vh;overflow:hidden;display:flex;flex-direction:column;text-align:center;background:linear-gradient(180deg,#24242b,#121216);border:var(--stroke);border-radius:26px;padding:22px 18px 18px;box-shadow:0 7px 0 #000,0 24px 55px rgba(0,0,0,.65);animation:aaaCardIn .38s cubic-bezier(.2,1.25,.35,1) both;isolation:isolate}
 @keyframes aaaCardIn{from{opacity:0;transform:translateY(18px) scale(.92);filter:blur(8px)}to{opacity:1;transform:none;filter:none}}
 .aaa-card::before{content:"";position:absolute;inset:-34%;z-index:-1;background:conic-gradient(from 0deg,transparent 0 22deg,rgba(255,210,31,.14) 22deg 38deg,transparent 38deg 62deg,rgba(93,183,236,.10) 62deg 78deg,transparent 78deg 110deg);animation:raysSpin 12s linear infinite;opacity:.85}
 .aaa-card::after{content:"";position:absolute;inset:3px;border-radius:21px;background:linear-gradient(180deg,rgba(255,255,255,.08),transparent 42%);pointer-events:none}
-.aaa-icon{width:96px;height:96px;margin:0 auto 10px;border-radius:28px;background:linear-gradient(180deg,#FFE24A,var(--bolt-2));border:var(--stroke);display:grid;place-items:center;font-size:50px;box-shadow:var(--hard-sm),0 0 34px rgba(255,210,31,.3);animation:aaaIconBob 2.2s ease-in-out infinite}
+.aaa-icon{flex:0 0 auto;width:96px;height:96px;margin:0 auto 10px;border-radius:28px;background:linear-gradient(180deg,#FFE24A,var(--bolt-2));border:var(--stroke);display:grid;place-items:center;font-size:50px;box-shadow:var(--hard-sm),0 0 34px rgba(255,210,31,.3);animation:aaaIconBob 2.2s ease-in-out infinite}
 @keyframes aaaIconBob{50%{transform:translateY(-5px) rotate(-2deg)}}
 .rich-mascot{position:relative;font-size:54px;line-height:1}.rich-mascot .money{position:absolute;right:-14px;bottom:-8px;font-size:30px;filter:drop-shadow(0 3px 0 #000);animation:coinBlink 1s ease-in-out infinite}@keyframes coinBlink{50%{transform:scale(1.15) rotate(12deg)}}
 .aaa-title{font-size:21px;font-weight:900;line-height:1.55;color:var(--paper);text-shadow:2px 2px 0 #000;margin:6px 0 4px}
-.aaa-sub{font-size:13px;font-weight:800;line-height:1.75;color:var(--muted);margin:0 auto 12px;max-width:280px}
+.aaa-sub{font-size:13px;font-weight:800;line-height:1.75;color:var(--muted);margin:0 auto 12px;max-width:280px;width:100%}
+/* A long body (the player profile card) scrolls on its own; the icon, title and
+   buttons stay put so nothing is cut off at the top or the bottom. */
+.aaa-card>.aaa-sub{flex:0 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding-inline:2px}
+.aaa-card>.aaa-sub::-webkit-scrollbar{width:5px}
+.aaa-card>.aaa-sub::-webkit-scrollbar-thumb{background:rgba(255,255,255,.22);border-radius:999px}
+.aaa-card>.aaa-title,.aaa-card>.aaa-actions,.aaa-card>.aaa-reward,.aaa-card>.aaa-countwrap,.aaa-card>.aaa-check{flex:0 0 auto}
+/* Notification inbox: the body text used --ink (near-black) on a dark panel. */
+.pz-reviewov{color:var(--text)}
+.pz-reviewov .pzrv-head h2{color:var(--text)}
+.pzrv-msg{font-size:13px;line-height:1.8;color:var(--text);opacity:.92}
 .aaa-reward{display:none;margin:8px auto 12px;padding:10px 12px;border-radius:16px;border:2px solid #000;background:rgba(51,217,124,.14);color:var(--ok);font-size:20px;font-weight:900;box-shadow:var(--hard-sm)}
 .aaa-reward.show{display:inline-flex;align-items:center;gap:6px;animation:aaaPop .35s cubic-bezier(.2,1.45,.35,1) both}@keyframes aaaPop{from{transform:scale(.75);opacity:0}to{transform:none;opacity:1}}
 .aaa-countwrap{display:none;margin:12px 0 14px}.aaa-countwrap.show{display:block}
@@ -2916,12 +2926,17 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
 .pzh-row1{display:flex;align-items:center;gap:11px}
 .pzh-user{flex-shrink:0;cursor:pointer}
 .pzh-av{position:relative;width:48px;height:48px;border-radius:15px;border:2.5px solid #000;background:linear-gradient(180deg,#26384c,#141d28);display:grid;place-items:center;box-shadow:0 3px 0 #000}
-.pzh-lvl{position:absolute;bottom:-7px;left:-7px;min-width:22px;height:22px;padding:0 5px;border-radius:999px;background:linear-gradient(180deg,#6EC6F5,#2E86C1);border:2.5px solid #000;color:#fff;font-size:11.5px;font-weight:900;display:grid;place-items:center;box-shadow:0 2px 0 #000}
+.pzh-lvl{position:absolute;bottom:-10px;left:-10px;width:32px;height:32px;min-width:0;padding:0;border:none;border-radius:0;background:linear-gradient(180deg,#FFE24A,var(--bolt-2));color:#20180a;font-size:11px;font-weight:900;display:grid;place-items:center;box-shadow:none;
+  clip-path:polygon(50% 1%,61% 35%,97% 35%,68% 57%,79% 93%,50% 71%,21% 93%,32% 57%,3% 35%,39% 35%);
+  /* clip-path cuts a real border off, so the outline is drawn with stacked shadows. */
+  filter:drop-shadow(1.4px 0 0 #000) drop-shadow(-1.4px 0 0 #000) drop-shadow(0 1.4px 0 #000) drop-shadow(0 -1.4px 0 #000);
+  padding-top:3px}
 .pzh-xpwrap{flex:1;min-width:0}
-.pzh-nameline{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.pzh-nameline{display:flex;align-items:baseline;gap:8px;min-width:0}
+.pzh-nameline b{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;letter-spacing:-.2px}
 .pzh-nameline b{font-size:14.5px;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.pzh-xptxt{font-size:10.5px;font-weight:900;color:#9fd8fb;white-space:nowrap;flex-shrink:0}
-.pzh-xpbar{height:13px;border-radius:999px;background:#080d13;border:2px solid #000;overflow:hidden;margin-top:6px;box-shadow:inset 0 2px 5px rgba(0,0,0,.6)}
+.pzh-xptxt{position:absolute;inset:0;display:grid;place-items:center;font-size:11px;font-weight:900;color:#fff;white-space:nowrap;letter-spacing:.2px;text-shadow:0 1px 2px rgba(0,0,0,.95),0 0 4px rgba(0,0,0,.8);pointer-events:none;z-index:2}
+.pzh-xpbar{position:relative;height:19px;border-radius:999px;background:#080d13;border:2px solid #000;overflow:hidden;margin-top:5px;box-shadow:inset 0 2px 5px rgba(0,0,0,.6)}
 .pzh-xpbar>i{display:block;height:100%;width:0;border-radius:999px;background:linear-gradient(90deg,#4FB0EA,#7FE0FF);box-shadow:0 0 10px rgba(115,217,255,.7);transition:width .65s cubic-bezier(.2,.9,.3,1)}
 .pzh-spin{flex-shrink:0;width:44px;height:44px;border-radius:14px;border:2.5px solid #000;background:linear-gradient(180deg,#2b2b34,#17171d);font-size:21px;box-shadow:0 3px 0 #000;cursor:pointer}
 .pzh-spin:active{transform:translateY(3px);box-shadow:0 0 0 #000}
@@ -3010,13 +3025,19 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
 /* HOME header sits directly on the wallpaper: no panel background, pinned (no
    scroll), and every bare text gets a strong shadow so it stays readable. The
    chips/pills keep their own backgrounds. */
-#home .pz-header{background:transparent!important;border-bottom:none!important;box-shadow:none!important;position:sticky;top:0;z-index:8;-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
+/* The header is pinned and everything that scrolls BEHIND it is blurred out, so
+   page content never reads through it and the header itself stays crisp. */
+#home .pz-header{position:sticky;top:0;z-index:8;border-bottom:none!important;
+  background:linear-gradient(180deg,rgba(10,14,20,.72),rgba(10,14,20,.52) 72%,rgba(10,14,20,0))!important;
+  -webkit-backdrop-filter:blur(16px) saturate(1.15)!important;backdrop-filter:blur(16px) saturate(1.15)!important;
+  box-shadow:0 10px 18px -12px rgba(0,0,0,.75)!important;
+  padding-bottom:14px;margin-bottom:-4px}
 #home .pz-header .pzh-nameline b,#home .pz-header .pzh-xptxt{text-shadow:0 1px 4px rgba(0,0,0,.95),0 0 3px rgba(0,0,0,.9)}
 #home .pz-header .pzh-lvl{text-shadow:0 1px 3px rgba(0,0,0,.9)}
 #home .pz-header .pzh-xpbar{box-shadow:0 1px 4px rgba(0,0,0,.6)}
 /* Bare-text belongings anywhere in the home header get a subtle dark chip so
    they never disappear on a bright part of the photo. */
-#home .pz-header .pzh-nameline{background:rgba(6,10,14,.34);border-radius:10px;padding:2px 8px;backdrop-filter:blur(1px);-webkit-backdrop-filter:blur(1px)}
+#home .pz-header .pzh-nameline{background:rgba(6,10,14,.34);border-radius:10px;padding:2px 6px}
 </style>
 <div id="pzWall" aria-hidden="true">
   <div class="pzw pzw-home"></div>
@@ -3348,8 +3369,8 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
             <div class="pzh-av"><svg class="mascot" width="40" height="40" viewBox="0 0 120 120" id="mascotHome"></svg><span class="pzh-lvl" id="hdrLvl">۳</span></div>
           </div>
           <div class="pzh-xpwrap">
-            <div class="pzh-nameline"><b id="hdrName">بازیکن</b><span class="pzh-xptxt" id="hdrXpN">۰ XP</span></div>
-            <div class="pzh-xpbar"><i id="hdrXp"></i></div>
+            <div class="pzh-nameline"><b id="hdrName">بازیکن</b></div>
+            <div class="pzh-xpbar"><i id="hdrXp"></i><span class="pzh-xptxt" id="hdrXpN">۰ XP</span></div>
           </div>
           <button class="pzh-spin" onclick="pzOpenInbox()" id="bellHdrBtn" style="position:relative">🔔<span id="pzBellBadge" style="display:none;position:absolute;top:-4px;left:-4px;min-width:17px;height:17px;padding:0 4px;border-radius:9px;background:#F26A6A;color:#fff;font-size:10px;font-weight:900;display:none;align-items:center;justify-content:center;box-shadow:0 1px 3px rgba(0,0,0,.5)">۰</span></button>
           <button class="pzh-spin" onclick="openSpin()" id="spinHdrBtn">🎡</button>
@@ -7554,7 +7575,8 @@ function pzApplyServerTickets(t){
 function renderHeaderTickets(){
   const el=document.getElementById('hdrTickets'); if(!el)return;
   /* One colored pill per MATCH-ticket type (green/blue/red), driven by real counts. */
-  el.innerHTML=TICKET_DEFS.map(t=>'<span class="pzh-pill p-tk" style="border-color:'+t.color+';background:'+t.color+'22" onclick="goShopTickets()" title="'+t.name+'">🎫<b style="color:'+t.color+'">'+fa(mTickets[t.key]||0)+'</b></span>').join('');
+  /* Solid dark base UNDER the colour tint so the chip reads on any wallpaper. */
+  el.innerHTML=TICKET_DEFS.map(t=>'<span class="pzh-pill p-tk" style="border-color:'+t.color+';background:linear-gradient(180deg,'+t.color+'3d,'+t.color+'1f),linear-gradient(180deg,#262730,#171820)" onclick="goShopTickets()" title="'+t.name+'">🎫<b style="color:'+t.color+'">'+fa(mTickets[t.key]||0)+'</b></span>').join('');
 }
 function goShopTickets(){ go('shop'); setTimeout(()=>{ const tab=document.getElementById('shopTabTickets'); if(tab)shopTab(tab,'tickets'); },50); }
 function renderTicketShop(){
@@ -11124,7 +11146,7 @@ async function pzOpenInbox(){
     return '<div onclick="pzInboxTap(\''+n.id+'\')" style="background:'+(unread?'rgba(255,210,31,.08)':'rgba(255,255,255,.04)')+';border:1px solid '+(unread?'rgba(255,210,31,.3)':'rgba(255,255,255,.08)')+';border-radius:16px;padding:14px;margin-bottom:10px;cursor:pointer">'+
       '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">'+(unread?'<span style="width:8px;height:8px;border-radius:50%;background:var(--bolt,#FFD21F);flex-shrink:0"></span>':'')+'<b style="flex:1;font-size:14px">'+pzEsc(n.title||'')+'</b><span style="font-size:11px;color:var(--muted)">'+pzRelTime(n.createdAt)+'</span></div>'+
       img+
-      '<div style="font-size:13px;color:var(--ink,#ddd);line-height:1.7">'+pzEsc(n.body||'')+'</div>'+
+      '<div class="pzrv-msg">'+pzEsc(n.body||'')+'</div>'+
       (hasLink?'<div style="margin-top:8px;color:var(--bolt,#FFD21F);font-weight:800;font-size:12.5px">'+pzEsc((n.data.actionLabel)||'مشاهده')+' ‹</div>':'')+
     '</div>';
   }).join('');
