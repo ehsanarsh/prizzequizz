@@ -444,7 +444,11 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
 .pod .base{border-radius:12px 12px 0 0;width:66px;background:var(--ink-2);border:var(--stroke);border-bottom:none;display:flex;flex-direction:column;align-items:center;padding:8px 4px 0}
 .pod.p1 .base{height:70px;background:linear-gradient(var(--bolt),#8a6a00)}
 .pod.p2 .base{height:52px}.pod.p3 .base{height:42px}
-.pod .base b{font-size:12px;font-weight:900}.pod.p1 .base b{color:#141414}
+/* A player who has not chosen a name is called user_1785586862877, and that
+   overflowed the plinth and covered the neighbouring places. Clip it to the
+   plinth instead of letting it spill across the podium. */
+.pod .base b{font-size:12px;font-weight:900;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;direction:ltr}
+.pod.p1 .base b{color:#141414}
 .pod .rk{font-size:20px;font-weight:900}.pod.p1 .rk{color:#141414}
 .rankrow{display:flex;align-items:center;gap:12px;padding:11px 14px;background:var(--ink-2);border:2px solid #000;border-radius:15px;margin-bottom:9px;box-shadow:var(--hard-sm)}
 .rankrow .num{width:24px;font-weight:900;color:var(--muted);text-align:center}
@@ -7436,10 +7440,29 @@ function showFriendProfile(id){
   showPlayerProfile(id||null,{n:f.n||f.u,a:f.a,source:'دوستان'});
 }
 /* ============ RANKINGS + LEAGUES ============ */
-/* No mock ranking data. These three fabricated tables carried invented names,
-   scores and animal-emoji faces; the renderer already falls through to a real
-   empty state when the server has nothing, so they were dead weight that could
-   only ever mislead. */
+/* No mock ranking data. Three fabricated tables used to sit here carrying
+   invented names, scores and animal-emoji faces; the renderer already falls
+   through to a real empty state when the server has nothing, so they were dead
+   weight that could only ever mislead. The two RENDERERS below are not mock
+   data and must stay — deleting them with the tables is what left the rankings
+   screen stuck on "loading" the moment a board had three or more players. */
+function podium(list){
+  const p=list.slice(0,3);
+  const pod=(i,rank,cls)=>'<div class="pod '+cls+'" onclick="showOpponentProfileByData(\''+jsStr(p[i].uid||'')+'\',\''+jsStr(p[i].n)+'\',\''+jsStr(p[i].a)+'\',\'سکوی رتبه‌بندی\')">'
+    +'<div class="pav">'+pzFaceHTML({avatar:p[i].a,character:p[i].ch})+'</div>'
+    +'<div class="base"><div class="rk">'+rank+'</div><b>'+p[i].n.split(' ')[0]+'</b></div></div>';
+  return '<div class="podium">'+pod(1,'۲','p2')+pod(0,'۱','p1')+pod(2,'۳','p3')+'</div>';
+}
+function rankRows(list,unit){
+  unit=unit||'XP';
+  const src=unit==='تومان'?'رنکینگ مبلغ':(unit==='XP'?'رنکینگ XP':'کاپ هفتگی');
+  return list.map((r,i)=>'<div class="rankrow'+(r.me?' me':'')+'" '
+    +(r.me?'onclick="go(\'profile\')"':'onclick="showOpponentProfileByData(\''+jsStr(r.uid||'')+'\',\''+jsStr(r.n)+'\',\''+jsStr(r.a)+'\',\''+jsStr(src)+'\')"')
+    +'><span class="num">'+fa(i+1)+'</span>'
+    +'<div class="rav">'+pzFaceHTML({avatar:r.a,character:r.ch})+'</div>'
+    +'<div class="rn">'+r.n+'</div>'
+    +'<div class="rp">'+r.p+' <small style="font-size:9px;color:var(--muted)">'+unit+'</small></div></div>').join('');
+}
 /* REAL leaderboards: fetch /leaderboards/{weekly|overall|winnings} from the server
    (weekly = 🏆cup, overall = XP, wins = تومان). The podium needs ≥3 entries, so it
    is only shown when there are enough real players; a mock fallback keeps the
@@ -7458,12 +7481,13 @@ const _rankMeta={
 };
 let _rankTab='cup';
 function _rankHeader(m){ return '<div class="card" style="text-align:center;margin-bottom:12px;padding:12px"><b style="font-size:13px">'+m.title+'</b><div class="rank-criteria">'+m.crit+'</div><div style="font-size:12px;color:var(--muted);margin-top:7px">'+m.note+'</div></div>'; }
+let _rankSeq=0;   /* a counter, not a clock: two calls in one millisecond must not collide */
 async function rankTab(el,tab){
   if(el){document.querySelectorAll('#rankTabs .tab').forEach(t=>t.classList.remove('active'));el.classList.add('active');}
   const c=document.getElementById('rankContent'); if(!c) return;
   _rankTab=tab;
   const m=_rankMeta[tab]||_rankMeta.cup;
-  const token=(c.dataset.rankToken=String(Date.now()));   /* ignore a stale response if the user switched tabs */
+  const token=(c.dataset.rankToken=String(++_rankSeq));   /* ignore a stale response if the user switched tabs */
   c.innerHTML=_rankHeader(m)+'<div style="text-align:center;color:var(--muted);padding:22px;font-weight:800">در حال بارگذاری رتبه‌بندی…</div>';
   let list=null;
   try{
@@ -7621,7 +7645,9 @@ function startLeagueMatch(){
   curMode='wta';curStake=(userPlan==='free'?0:30000);leagueWtaActive=true;leagueDuelActive=false;recordMissionEvent('play',1);recordMissionEvent('leaguePlay',1);
   setTimeout(()=>showRules('wta',beginWTA),800);
 }
-rankTab(null,'cup');
+/* No load-time rankTab() here: it fired a leaderboard request on every page
+   load, before login and before the player had asked for the screen. The
+   screen router loads the board when the rankings screen is actually opened. */
 
 /* ============ FEEDBACK + QUICK QUESTION SUBMIT ============ */
 let currentFeedbackType='idea',currentRating=5;
