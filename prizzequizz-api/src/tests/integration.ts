@@ -35,20 +35,47 @@ async function main(): Promise<void> {
     const me = await get<{ username: string; balances: { coins: number; hearts: number } }>(`${base}/users/me`, auth);
     assert.equal(me.username, 'Shahab_9865');
 
-    const characterCatalog = await get<{ items: Array<{ id: string; slot: string }>; states: Array<{ id: string }> }>(`${base}/characters/catalog`, auth);
-    assert.ok(characterCatalog.items.some((item) => item.id === 'cap_blue'));
-    const characterMe = await get<{ unlockedItemIds: string[]; loadout: { outfit: Record<string, string> } }>(`${base}/characters/me`, auth);
-    assert.ok(characterMe.unlockedItemIds.includes('cap_blue'));
-    const equippedCharacter = await post<{ loadout: { outfit: Record<string, string> } }>(`${base}/characters/equip`, { slot: 'head', itemId: 'cap_blue' }, auth);
-    assert.equal(equippedCharacter.loadout.outfit.head, 'cap_blue');
-    const randomizedCharacter = await post<{ loadout: { state: string } }>(`${base}/characters/randomize`, {}, auth);
-    assert.ok(randomizedCharacter.loadout.state);
-    const adminCharacterItems = await get<Array<{ id: string; status: string }>>(`${base}/admin/characters/catalog`, { 'x-admin-key': 'dev-admin' });
-    assert.ok(adminCharacterItems.some((item) => item.id === 'cap_blue'));
-    const newCharacterItem = await post<{ id: string; status: string }>(`${base}/admin/characters/items`, { id: 'qa_hat', slot: 'head', title: 'کلاه QA', src: '/character-assets/outfits/head/cap_blue.png', rarity: 'rare', priceCoins: 10, unlockLevel: 1, tags: ['qa'], status: 'active' }, { 'x-admin-key': 'dev-admin' });
-    assert.equal(newCharacterItem.id, 'qa_hat');
-    const archivedCharacterItem = await patch<{ status: string }>(`${base}/admin/characters/items/qa_hat/status`, { status: 'archived' }, { 'x-admin-key': 'dev-admin' });
-    assert.equal(archivedCharacterItem.status, 'archived');
+    /* Character selection: the admin creates the roster, the player reads it and
+     * equips. The interesting assertion is the locked one — the server must
+     * refuse it even though the request is perfectly well-formed. */
+    const openChar = await post<{ id: string; name: string }>(`${base}/admin/characters`,
+      { name: 'مانستر QA', kind: 'normal', viaLevel: true, unlockLevel: 0, sortOrder: 1 }, { 'x-admin-key': 'dev-admin' });
+    assert.ok(openChar.id);
+    const lockedChar = await post<{ id: string }>(`${base}/admin/characters`,
+      { name: 'مانستر قفل QA', kind: 'vip', viaLevel: true, unlockLevel: 99, sortOrder: 2 }, { 'x-admin-key': 'dev-admin' });
+
+    const roster = await get<{ characters: Array<{ id: string; unlocked: boolean; lockReason: string }>; level: number }>(`${base}/characters`, auth);
+    assert.ok(roster.characters.some((c) => c.id === openChar.id && c.unlocked));
+    const lockedView = roster.characters.find((c) => c.id === lockedChar.id)!;
+    assert.equal(lockedView.unlocked, false);
+    assert.ok(lockedView.lockReason.includes('99'), 'locked character states the level it needs');
+
+    const equipped = await post<{ equipped: boolean; character: { id: string } }>(`${base}/characters/${openChar.id}/equip`, {}, auth);
+    assert.equal(equipped.character.id, openChar.id);
+    const afterEquip = await get<{ equippedId: string }>(`${base}/characters`, auth);
+    assert.equal(afterEquip.equippedId, openChar.id);
+
+    // The locked one must be refused with 409, not quietly equipped.
+    const lockedAttempt = await fetch(`${base}/characters/${lockedChar.id}/equip`, {
+      method: 'POST', headers: { 'content-type': 'application/json', ...auth }, body: '{}'
+    });
+    assert.equal(lockedAttempt.status, 409, 'equipping a locked character is refused');
+
+    // An admin grant opens it without the player gaining a single point of XP.
+    await post(`${base}/admin/characters/${lockedChar.id}/grant`, { userId: 'u1', source: 'event' }, { 'x-admin-key': 'dev-admin' });
+    const granted = await get<{ characters: Array<{ id: string; unlocked: boolean; source: string }> }>(`${base}/characters`, auth);
+    const grantedView = granted.characters.find((c) => c.id === lockedChar.id)!;
+    assert.equal(grantedView.unlocked, true);
+    assert.equal(grantedView.source, 'event');
+
+    // A random box, drawn end-to-end.
+    const box = await post<{ id: string }>(`${base}/admin/character-boxes`,
+      { name: 'باکس QA', entries: [{ characterId: openChar.id, weight: 1 }], duplicatePolicy: 'none' }, { 'x-admin-key': 'dev-admin' });
+    const draw = await post<{ character: { id: string }; duplicate: boolean }>(`${base}/characters/boxes/${box.id}/open`, {}, auth);
+    assert.equal(draw.character.id, openChar.id);
+
+    const charStats = await get<{ rows: Array<{ id: string; owners: number; equipped: number }> }>(`${base}/admin/characters/stats`, { 'x-admin-key': 'dev-admin' });
+    assert.ok(charStats.rows.some((r) => r.id === openChar.id && r.equipped === 1));
     const betaInvite = await post<{ code: string; status: string }>(`${base}/admin/beta/invites`, { code: 'BETA-QA', maxUses: 3, note: 'integration' }, { 'x-admin-key': 'dev-admin' });
     assert.equal(betaInvite.code, 'BETA-QA');
     const betaRedeem = await post<{ inviteCode: string }>(`${base}/beta/redeem`, { code: 'BETA-QA' }, auth);

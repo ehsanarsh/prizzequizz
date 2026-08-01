@@ -15,7 +15,8 @@
     "test:matchmaking": "tsx src/tests/matchmaking-load.ts",
     "db:status": "tsx src/scripts/db-status.ts",
     "db:verify": "tsx src/scripts/db-verify.ts",
-    "env:validate": "tsx src/scripts/validate-env.ts"
+    "env:validate": "tsx src/scripts/validate-env.ts",
+    "test:characters": "tsx src/tests/characterSelection.test.ts"
   },
   "dependencies": {
     "@types/web-push": "^3.6.4",

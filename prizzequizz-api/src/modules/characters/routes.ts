@@ -1,115 +1,182 @@
+/* CHARACTER SELECTION — player-facing roster + the panel that owns it.
+ *
+ * The player side is deliberately tiny: read the roster, equip one, open a box.
+ * Every rule about what is unlocked lives in the service and is re-checked
+ * there, so these handlers never have to trust the client's copy of the state. */
 import type { Router } from '../../http/router.js';
 import { error, json } from '../../http/response.js';
 import { requireAdmin } from '../../services/adminGuard.js';
-import { equipCharacterItem, getCharacterCatalog, getUserCharacter, listAdminCharacterItems, listCharacterUnlockEvents, purchaseCharacterItem, randomizeCharacter, unlockCharacterItem, updateCharacterItemStatus, upsertCharacterItem } from '../../services/characterService.js';
-import { CHARACTER_CATEGORIES, getBuild, getPart, listParts, removePart, savePart, saveBuild } from '../../services/characterPartsService.js';
-import type { CharacterItemStatus } from '../../types/domain.js';
-import { bodyObject, requiredString } from '../../utils/validation.js';
+import { bodyObject } from '../../utils/validation.js';
+import {
+  buildRoster, equipCharacter, listCharacters, saveCharacter, deleteCharacter,
+  getCharacter, characterStats, grantToUsers, allUserIds, CharacterError,
+  UNLOCK_SOURCES, CHARACTER_IMAGE_MAX_BYTES
+} from '../../services/characterSelectionService.js';
+import type { UnlockSource } from '../../services/characterSelectionService.js';
+import {
+  listBoxes, getBox, saveBox, deleteBox, drawFromBox, drawForUsers, oddsFor,
+  DUPLICATE_POLICIES, BoxError
+} from '../../services/characterBoxService.js';
+
+/** Maps a thrown service error onto the right status code. */
+function fail(res: any, e: unknown): void {
+  if (e instanceof CharacterError || e instanceof BoxError) {
+    const notFound = e.code.endsWith('NOT_FOUND');
+    const locked = e.code === 'LOCKED' || e.code === 'LIMIT_REACHED' || e.code === 'BOX_DISABLED'
+      || e.code === 'NOT_STARTED' || e.code === 'ENDED' || e.code === 'DISABLED' || e.code === 'BOX_EMPTY';
+    return error(res, notFound ? 404 : locked ? 409 : 422, e.code, e.message);
+  }
+  error(res, 500, 'CHARACTER_FAILED', (e as Error)?.message || 'خطای غیرمنتظره.');
+}
 
 export function registerCharacterRoutes(router: Router, base: string): void {
-  router.add('GET', `${base}/characters/catalog`, async (ctx) => json(ctx.res, 200, await getCharacterCatalog('active')));
-  router.add('GET', `${base}/characters/me`, async (ctx) => json(ctx.res, 200, await getUserCharacter(ctx.userId ?? 'u1')));
-  router.add('POST', `${base}/characters/equip`, async (ctx) => json(ctx.res, 200, await equipCharacterItem(ctx.userId ?? 'u1', bodyObject(ctx.body) as any)));
-  router.add('POST', `${base}/characters/unlock`, async (ctx) => json(ctx.res, 200, await unlockCharacterItem(ctx.userId ?? 'u1', requiredString(bodyObject(ctx.body), 'itemId'))));
-  router.add('POST', `${base}/characters/purchase`, async (ctx) => json(ctx.res, 200, await purchaseCharacterItem(ctx.userId ?? 'u1', requiredString(bodyObject(ctx.body), 'itemId'))));
-  router.add('POST', `${base}/characters/randomize`, async (ctx) => json(ctx.res, 200, await randomizeCharacter(ctx.userId ?? 'u1')));
+  // ======================= PLAYER =======================
 
-  router.add('GET', `${base}/admin/characters/catalog`, async (ctx) => {
-    if (!requireAdmin(ctx)) return;
-    json(ctx.res, 200, await listAdminCharacterItems((ctx.query.get('status') || undefined) as CharacterItemStatus | undefined));
+  /* The whole selection screen in one call: every character (locked ones
+   * included, with the reason), which one is equipped, and the player's level
+   * so the client can render progress toward the next unlock. */
+  router.add('GET', `${base}/characters`, async (ctx) => {
+    if (!ctx.userId) return error(ctx.res, 401, 'UNAUTHORIZED', 'ابتدا وارد شو.');
+    try { json(ctx.res, 200, await buildRoster(ctx.userId)); } catch (e) { fail(ctx.res, e); }
   });
 
-  router.add('POST', `${base}/admin/characters/items`, async (ctx) => {
-    if (!requireAdmin(ctx)) return;
-    const body = bodyObject(ctx.body) as any;
-    json(ctx.res, 201, await upsertCharacterItem({ ...body, id: requiredString(body, 'id') }));
-  });
-
-  router.add('PATCH', `${base}/admin/characters/items/:id/status`, async (ctx) => {
-    if (!requireAdmin(ctx)) return;
-    const status = String((ctx.body as any)?.status ?? 'active') as CharacterItemStatus;
-    if (!['active','draft','archived'].includes(status)) return error(ctx.res, 422, 'CHARACTER_STATUS_INVALID', 'Invalid character item status.');
-    const updated = await updateCharacterItemStatus(ctx.params.id!, status);
-    if (!updated) return error(ctx.res, 404, 'CHARACTER_ITEM_NOT_FOUND', 'Character item not found.');
-    json(ctx.res, 200, updated);
-  });
-
-  router.add('POST', `${base}/admin/characters/users/:userId/unlock`, async (ctx) => {
-    if (!requireAdmin(ctx)) return;
-    const itemId = requiredString(bodyObject(ctx.body), 'itemId');
-    json(ctx.res, 200, await unlockCharacterItem(ctx.params.userId!, itemId, 'admin'));
-  });
-
-  router.add('GET', `${base}/admin/characters/users/:userId/events`, async (ctx) => {
-    if (!requireAdmin(ctx)) return;
-    json(ctx.res, 200, await listCharacterUnlockEvents(ctx.params.userId!, Number(ctx.query.get('limit') ?? 100)));
-  });
-
-  // ================= CHARACTER BUILDER (layered parts) =================
-  // Public: the ordered category list + all enabled parts, so the client can
-  // render the layered canvas without any hard-coded catalog.
-  router.add('GET', `${base}/character-builder/parts`, async (ctx) => {
-    const category = ctx.query.get('category') || undefined;
-    const parts = await listParts({ category, enabledOnly: true });
-    const byCategory: Record<string, any[]> = {};
-    for (const c of CHARACTER_CATEGORIES) byCategory[c] = [];
-    for (const p of parts) (byCategory[p.category] ??= []).push({ id: p.id, category: p.category, name: p.name, imageUrl: p.imageUrl, zIndex: p.zIndex });
-    json(ctx.res, 200, { categories: CHARACTER_CATEGORIES, parts: parts.map((p) => ({ id: p.id, category: p.category, name: p.name, imageUrl: p.imageUrl, zIndex: p.zIndex })), byCategory });
-  });
-
-  // The signed-in user's saved build (selected part id per category).
-  router.add('GET', `${base}/character-builder/build`, async (ctx) => {
-    json(ctx.res, 200, { build: await getBuild(ctx.userId ?? 'u1') });
-  });
-
-  router.add('PUT', `${base}/character-builder/build`, async (ctx) => {
-    const body = bodyObject(ctx.body) as any;
-    const build = (body.build && typeof body.build === 'object') ? body.build : body;
-    json(ctx.res, 200, { build: await saveBuild(ctx.userId ?? 'u1', build) });
-  });
-
-  // ---- Admin catalog management (like the shop) ----
-  router.add('GET', `${base}/admin/character-parts`, async (ctx) => {
-    if (!requireAdmin(ctx, { tab: 'characterbuilder' })) return;
-    const category = ctx.query.get('category') || undefined;
-    json(ctx.res, 200, { categories: CHARACTER_CATEGORIES, parts: await listParts({ category }) });
-  });
-
-  router.add('POST', `${base}/admin/character-parts`, async (ctx) => {
-    if (!requireAdmin(ctx, { tab: 'characterbuilder' })) return;
-    const body = bodyObject(ctx.body) as any;
+  router.add('POST', `${base}/characters/:id/equip`, async (ctx) => {
+    if (!ctx.userId) return error(ctx.res, 401, 'UNAUTHORIZED', 'ابتدا وارد شو.');
     try {
-      const part = await savePart({
-        id: body.id, category: requiredString(body, 'category'), name: requiredString(body, 'name'),
-        imageUrl: requiredString(body, 'imageUrl'),
-        zIndex: body.zIndex != null ? Number(body.zIndex) : undefined,
-        enabled: body.enabled != null ? !!body.enabled : undefined,
-        sortOrder: body.sortOrder != null ? Number(body.sortOrder) : undefined
-      });
-      json(ctx.res, body.id ? 200 : 201, part);
-    } catch (e) { error(ctx.res, 422, 'PART_INVALID', (e as Error).message || 'Invalid part.'); }
+      const character = await equipCharacter(ctx.userId, ctx.params.id!);
+      json(ctx.res, 200, { equipped: true, character });
+    } catch (e) { fail(ctx.res, e); }
   });
 
-  router.add('DELETE', `${base}/admin/character-parts/:id`, async (ctx) => {
-    if (!requireAdmin(ctx, { tab: 'characterbuilder' })) return;
-    const removed = await removePart(ctx.params.id!);
-    if (!removed) return error(ctx.res, 404, 'PART_NOT_FOUND', 'Character part not found.');
+  /* Boxes a player may open right now. Weights and odds are NOT published —
+   * knowing the exact table would let someone farm a box. */
+  router.add('GET', `${base}/characters/boxes`, async (ctx) => {
+    if (!ctx.userId) return error(ctx.res, 401, 'UNAUTHORIZED', 'ابتدا وارد شو.');
+    const now = Date.now();
+    const open = (await listBoxes()).filter((b) =>
+      b.enabled
+      && (!b.startsAt || Date.parse(b.startsAt) <= now)
+      && (!b.endsAt || Date.parse(b.endsAt) >= now));
+    json(ctx.res, 200, {
+      boxes: open.map((b) => ({ id: b.id, name: b.name, endsAt: b.endsAt, maxPerUser: b.maxPerUser, size: b.entries.length }))
+    });
+  });
+
+  router.add('POST', `${base}/characters/boxes/:id/open`, async (ctx) => {
+    if (!ctx.userId) return error(ctx.res, 401, 'UNAUTHORIZED', 'ابتدا وارد شو.');
+    try { json(ctx.res, 200, await drawFromBox(ctx.params.id!, ctx.userId)); } catch (e) { fail(ctx.res, e); }
+  });
+
+  // ======================= ADMIN: ROSTER =======================
+
+  router.add('GET', `${base}/admin/characters`, async (ctx) => {
+    if (!requireAdmin(ctx, { tab: 'characters' })) return;
+    const [characters, stats] = await Promise.all([
+      listCharacters({ includeDisabled: true }),
+      characterStats()
+    ]);
+    const byId = new Map(stats.rows.map((r) => [r.id, r]));
+    json(ctx.res, 200, {
+      characters: characters.map((c) => ({ ...c, stats: byId.get(c.id) ?? null })),
+      totalEquipped: stats.totalEquipped,
+      imageMaxBytes: CHARACTER_IMAGE_MAX_BYTES,
+      unlockSources: UNLOCK_SOURCES
+    });
+  });
+
+  router.add('POST', `${base}/admin/characters`, async (ctx) => {
+    if (!requireAdmin(ctx, { tab: 'characters' })) return;
+    const body = bodyObject(ctx.body) as any;
+    try { json(ctx.res, body.id ? 200 : 201, await saveCharacter(body)); } catch (e) { fail(ctx.res, e); }
+  });
+
+  /* Quick toggles (enable/disable, reorder) without resending the artwork —
+   * the payload for a character with an inline PNG is large. */
+  router.add('PATCH', `${base}/admin/characters/:id`, async (ctx) => {
+    if (!requireAdmin(ctx, { tab: 'characters' })) return;
+    const existing = await getCharacter(ctx.params.id!);
+    if (!existing) return error(ctx.res, 404, 'NOT_FOUND', 'این کاراکتر وجود ندارد.');
+    const body = bodyObject(ctx.body) as any;
+    try { json(ctx.res, 200, await saveCharacter({ ...body, id: existing.id })); } catch (e) { fail(ctx.res, e); }
+  });
+
+  router.add('DELETE', `${base}/admin/characters/:id`, async (ctx) => {
+    if (!requireAdmin(ctx, { tab: 'characters' })) return;
+    const removed = await deleteCharacter(ctx.params.id!);
+    if (!removed) return error(ctx.res, 404, 'NOT_FOUND', 'این کاراکتر وجود ندارد.');
     json(ctx.res, 200, { removed });
   });
 
-  // Toggle enabled quickly (show/hide in the builder without deleting).
-  router.add('PATCH', `${base}/admin/character-parts/:id`, async (ctx) => {
-    if (!requireAdmin(ctx, { tab: 'characterbuilder' })) return;
-    const existing = await getPart(ctx.params.id!);
-    if (!existing) return error(ctx.res, 404, 'PART_NOT_FOUND', 'Character part not found.');
+  router.add('GET', `${base}/admin/characters/stats`, async (ctx) => {
+    if (!requireAdmin(ctx, { tab: 'characters' })) return;
+    json(ctx.res, 200, await characterStats());
+  });
+
+  /* Award a character. `target` is one of:
+   *   { userId }          → one player
+   *   { userIds: [...] }  → a list
+   *   { all: true }       → everyone
+   * `source` records WHY, which is what the statistics separate on. */
+  router.add('POST', `${base}/admin/characters/:id/grant`, async (ctx) => {
+    if (!requireAdmin(ctx, { tab: 'characters' })) return;
     const body = bodyObject(ctx.body) as any;
-    const part = await savePart({
-      id: existing.id, category: existing.category, name: body.name != null ? String(body.name) : existing.name,
-      imageUrl: existing.imageUrl,
-      zIndex: body.zIndex != null ? Number(body.zIndex) : existing.zIndex,
-      enabled: body.enabled != null ? !!body.enabled : existing.enabled,
-      sortOrder: body.sortOrder != null ? Number(body.sortOrder) : existing.sortOrder
+    const source: UnlockSource = UNLOCK_SOURCES.includes(body.source) ? body.source : 'admin';
+
+    let userIds: string[] = [];
+    if (body.all === true) userIds = await allUserIds();
+    else if (Array.isArray(body.userIds)) userIds = body.userIds.map((u: any) => String(u).trim()).filter(Boolean);
+    else if (body.userId) userIds = [String(body.userId).trim()];
+
+    if (!userIds.length) return error(ctx.res, 422, 'NO_TARGET', 'هیچ کاربری برای اهدا مشخص نشده است.');
+    try {
+      const r = await grantToUsers(ctx.params.id!, userIds, source);
+      json(ctx.res, 200, { ...r, targeted: userIds.length, source });
+    } catch (e) { fail(ctx.res, e); }
+  });
+
+  // ======================= ADMIN: RANDOM BOXES =======================
+
+  router.add('GET', `${base}/admin/character-boxes`, async (ctx) => {
+    if (!requireAdmin(ctx, { tab: 'charboxes' })) return;
+    const boxes = await listBoxes();
+    json(ctx.res, 200, {
+      // Odds are attached here so the panel never has to recompute them and
+      // risk showing different numbers than the engine uses.
+      boxes: boxes.map((b) => ({ ...b, odds: oddsFor(b) })),
+      duplicatePolicies: DUPLICATE_POLICIES
     });
-    json(ctx.res, 200, part);
+  });
+
+  router.add('POST', `${base}/admin/character-boxes`, async (ctx) => {
+    if (!requireAdmin(ctx, { tab: 'charboxes' })) return;
+    const body = bodyObject(ctx.body) as any;
+    try {
+      const box = await saveBox(body);
+      json(ctx.res, body.id ? 200 : 201, { ...box, odds: oddsFor(box) });
+    } catch (e) { fail(ctx.res, e); }
+  });
+
+  router.add('DELETE', `${base}/admin/character-boxes/:id`, async (ctx) => {
+    if (!requireAdmin(ctx, { tab: 'charboxes' })) return;
+    const removed = await deleteBox(ctx.params.id!);
+    if (!removed) return error(ctx.res, 404, 'NOT_FOUND', 'این باکس وجود ندارد.');
+    json(ctx.res, 200, { removed });
+  });
+
+  /* Run a box on the panel's behalf. Limits are bypassed here on purpose: this
+   * is an operator handing out a prize, not a player spending an entry. */
+  router.add('POST', `${base}/admin/character-boxes/:id/draw`, async (ctx) => {
+    if (!requireAdmin(ctx, { tab: 'charboxes' })) return;
+    const body = bodyObject(ctx.body) as any;
+    const box = await getBox(ctx.params.id!);
+    if (!box) return error(ctx.res, 404, 'NOT_FOUND', 'این باکس وجود ندارد.');
+
+    let userIds: string[] = [];
+    if (body.all === true) userIds = await allUserIds();
+    else if (Array.isArray(body.userIds)) userIds = body.userIds.map((u: any) => String(u).trim()).filter(Boolean);
+    else if (body.userId) userIds = [String(body.userId).trim()];
+    if (!userIds.length) return error(ctx.res, 422, 'NO_TARGET', 'هیچ کاربری برای قرعه‌کشی مشخص نشده است.');
+
+    try { json(ctx.res, 200, await drawForUsers(ctx.params.id!, userIds)); } catch (e) { fail(ctx.res, e); }
   });
 }
