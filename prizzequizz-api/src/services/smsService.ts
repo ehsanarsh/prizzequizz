@@ -262,8 +262,15 @@ async function niazpardazPost(cfg: SmsConfig, endpoint: string, payload: unknown
 }
 
 /** Panel credit and the sender lines this key may send from — what the admin
- *  needs to see to know whether the key is really wired up. */
-export async function niazpardazAccount(cfgIn?: SmsConfig): Promise<{ credit: number | null; senders: string[]; error?: string }> {
+ *  needs to see to know whether the key is really wired up.
+ *
+ *  The two calls are judged separately on purpose. GetCredit answering is what
+ *  proves the key and the route to the provider are good; GetSenderNumbers is a
+ *  convenience that some accounts simply cannot answer — a real key returns
+ *  "Sequence contains no elements" from it while sending perfectly well. Letting
+ *  that failure mark the whole check as broken would send someone hunting a
+ *  problem they do not have. */
+export async function niazpardazAccount(cfgIn?: SmsConfig): Promise<{ credit: number | null; senders: string[]; error?: string; sendersError?: string }> {
   const cfg = cfgIn ?? await getSmsConfig();
   if (!cfg.apiKey) return { credit: null, senders: [], error: 'کلید API وارد نشده است.' };
   try {
@@ -276,7 +283,8 @@ export async function niazpardazAccount(cfgIn?: SmsConfig): Promise<{ credit: nu
     return {
       credit: cErr ? null : Number(credit?.credit ?? 0),
       senders: sErr ? [] : (Array.isArray(senders?.senders) ? senders.senders.map(String) : []),
-      error: cErr || sErr || undefined
+      error: cErr || undefined,
+      sendersError: sErr || undefined
     };
   } catch (e) { return { credit: null, senders: [], error: (e as Error).message }; }
 }

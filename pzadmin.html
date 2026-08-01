@@ -1958,8 +1958,11 @@ async function smsCheckAccount(){
     if(!r.supported){ box.innerHTML='<div class="note">این ارائه‌دهنده بررسی اتصال ندارد.</div>'; return; }
     if(r.error){ box.innerHTML='<div class="note" style="border-color:#E8544F">❌ '+esc(r.error)+'</div>'; return; }
     const senders=(r.senders||[]);
-    let s='<div class="note" style="border-color:#2FBF71">✅ اتصال برقرار است. اعتبار باقی‌مانده: <b>'+fa(r.credit||0)+'</b></div>';
-    s+='<div class="note">خط‌های ارسال این حساب: '+(senders.length?senders.map(x=>'<b class="mono">'+esc(x)+'</b>').join('، '):'—')+'</div>';
+    let s='<div class="note" style="border-color:#2FBF71">✅ اتصال برقرار است و کلید API معتبر است. اعتبار باقی‌مانده: <b>'+fa(r.credit||0)+'</b></div>';
+    if(senders.length) s+='<div class="note">خط‌های ارسال این حساب: '+senders.map(x=>'<b class="mono">'+esc(x)+'</b>').join('، ')+'</div>';
+    /* Some accounts cannot answer this call at all while sending fine, so it is
+       reported as "unavailable", never as a failure. */
+    else s+='<div class="note">فهرست خط‌های ارسال از سرویس در دسترس نیست'+(r.sendersError?' ('+esc(r.sendersError)+')':'')+'. اشکالی ندارد — درستی خط «'+esc(r.senderConfigured||'—')+'» با یک پیامک آزمایشی مشخص می‌شود.</div>';
     if(r.senderValid===false) s+='<div class="note" style="border-color:#E8544F">❌ خط ارسال‌کنندهٔ ذخیره‌شده («'+esc(r.senderConfigured||'')+'») در فهرست بالا نیست؛ ارسال با خطای «شماره فرستنده نامعتبر» رد می‌شود.</div>';
     box.innerHTML=s;
   }catch(e){ if(box)box.innerHTML='<div class="note" style="border-color:#E8544F">❌ '+esc(e.message)+'</div>'; }
