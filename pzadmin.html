@@ -148,7 +148,7 @@ async function loadCfg(){ try{ CFG=await api('GET','/admin/config'); $('#cfgVer'
 /* ---- nav: 25 sections grouped ---- */
 const NAV=[
   ['اصلی',[['dashboard','📊','داشبورد'],['finance','💰','داشبورد مالی'],['accounting','🧾','حسابداری و گزارش'],['expenses','🧮','هزینه‌های شرکت'],['users','👤','کاربران'],['matches','🎮','مسابقات'],['lastsurvivor','🏆','آخرین بازمانده'],['support','🎧','پشتیبانی']]],
-  ['محتوا',[['questions','❓','سوالات'],['qreports','🚩','گزارش سؤالات'],['aistudio','🤖','استودیوی سوال (AI)'],['pipeline','🔬','خط‌لولهٔ کیفیت'],['categories','🏷️','موضوعات'],['characterbuilder','🎭','قطعات کاراکتر']]],
+  ['محتوا',[['questions','❓','سوالات'],['qreports','🚩','گزارش سؤالات'],['aistudio','🤖','استودیوی سوال (AI)'],['pipeline','🔬','خط‌لولهٔ کیفیت'],['categories','🏷️','موضوعات'],['characters','🎭','کاراکترها'],['charboxes','🎲','قرعه‌کشی کاراکتر']]],
   ['اقتصاد',[['wallet','👛','کیف پول'],['withdrawals','💸','برداشت‌ها'],['rewardholds','⏳','جوایز در انتظار'],['tickets','🎫','بلیط‌ها'],['shop','🛒','فروشگاه'],['giftcodes','🎁','کدهای هدیه'],['payments','🏦','درگاه پرداخت']]],
   ['بالانس بازی (Data-Driven)',[['cfg_xp','✨','XP'],['cfg_level','🏅','Level'],['cfg_cup','🏆','Cup'],['cfg_gameplay','🕹️','گیم‌پلی مودها'],['leagues','🛡️','لیگ‌ها'],['missions','🎯','مأموریت‌ها'],['rewards','🎉','جوایز/چرخونه/استریک']]],
   ['رشد و تعامل',[['leaderboard','📈','لیدربرد'],['campaign','🎁','کمپین کاربر جدید'],['events','📅','رویدادها'],['banners','🖼️','بنرها'],['notifications','🔔','اعلان‌ها'],['sms','📱','پنل پیامکی']]],
@@ -179,7 +179,7 @@ async function render(){
   try{
     if(CUR==='accounts')return renderAccounts();
     if(CONFIG_PAGES[CUR])return renderConfigSection(CONFIG_PAGES[CUR][0],CONFIG_PAGES[CUR][1]);
-    const fn={dashboard:renderDashboard,finance:renderFinance,accounting:renderAccounting,expenses:renderExpenses,backup:renderBackup,users:renderUsers,matches:renderMatches,support:renderSupport,questions:renderQuestions,qreports:renderQReports,aistudio:renderAiStudio,pipeline:renderPipeline,categories:renderCategories,wallet:renderWallet,withdrawals:renderWithdrawals,rewardholds:renderRewardHolds,tickets:renderTickets,giftcodes:renderGiftCodes,shop:renderShopAdmin,characterbuilder:renderCharParts,lastsurvivor:renderLastSurvivor,sms:renderSms,payments:renderPayments,leaderboard:renderLeaderboard,notifications:renderNotifications,anticheat:renderAntiCheat,suspicious:renderSuspicious,reports:renderReports,logs:renderLogs,reset:renderReset,roles:renderRoles,rawcfg:renderRawCfg,monitoring:renderMonitoring}[CUR];
+    const fn={dashboard:renderDashboard,finance:renderFinance,accounting:renderAccounting,expenses:renderExpenses,backup:renderBackup,users:renderUsers,matches:renderMatches,support:renderSupport,questions:renderQuestions,qreports:renderQReports,aistudio:renderAiStudio,pipeline:renderPipeline,categories:renderCategories,wallet:renderWallet,withdrawals:renderWithdrawals,rewardholds:renderRewardHolds,tickets:renderTickets,giftcodes:renderGiftCodes,shop:renderShopAdmin,characters:renderCharacters,charboxes:renderCharBoxes,lastsurvivor:renderLastSurvivor,sms:renderSms,payments:renderPayments,leaderboard:renderLeaderboard,notifications:renderNotifications,anticheat:renderAntiCheat,suspicious:renderSuspicious,reports:renderReports,logs:renderLogs,reset:renderReset,roles:renderRoles,rawcfg:renderRawCfg,monitoring:renderMonitoring}[CUR];
     if(fn)return fn();
   }catch(e){$('#main').innerHTML=head('خطا')+'<div class="card empty">'+(e.message||'خطا')+'</div>';}
 }
@@ -1460,59 +1460,338 @@ async function shopSaveItem(id){
 async function shopToggle(id){const it=(window._SHOP_ROWS||{})[id];if(!it)return;try{await api('POST','/admin/shop/items',{...it,enabled:!it.enabled});toast(it.enabled?'غیرفعال شد':'فعال شد','ok');render();}catch(e){toast(e.message,'bad');}}
 async function shopDelete(id){if(!confirm('این آیتم حذف شود؟'))return;try{await api('DELETE','/admin/shop/items/'+id);toast('حذف شد','ok');render();}catch(e){toast(e.message,'bad');}}
 
-/* ================= CHARACTER BUILDER PARTS ================= */
-const CHAR_CATS={body:'🧸 بدن',eyesDouble:'👀 دو چشم',eyesSingle:'👁️ تک‌چشم',eyebrows:'🤨 ابرو',beard:'🧔 ریش',hair:'💇 مو',horns:'🐏 شاخ',hat:'🎩 کلاه',glasses:'🕶️ عینک',arms:'💪 دست',legs:'🦵 پا',shoes:'👟 کفش',accessories:'🎀 اکسسوری'};
-let CHAR_CAT='';
-async function renderCharParts(){
-  let data={categories:[],parts:[]};try{data=await api('GET','/admin/character-parts');}catch(e){$('#main').innerHTML=head('قطعات کاراکتر')+'<div class="card empty">'+(e.message||'خطا')+'</div>';return;}
-  const rows=data.parts||[];window._CP_ROWS={};rows.forEach(p=>window._CP_ROWS[p.id]=p);
-  const order=(data.categories&&data.categories.length?data.categories:Object.keys(CHAR_CATS));
-  const catTabs='<div class="subtabs"><button class="'+(CHAR_CAT===''?'active':'')+'" onclick="CHAR_CAT=\'\';render()">همه ('+fa(rows.length)+')</button>'+
-    order.map(c=>{const n=rows.filter(i=>i.category===c).length;return '<button class="'+(CHAR_CAT===c?'active':'')+'" onclick="CHAR_CAT='+JSON.stringify(c).replace(/"/g,'&quot;')+';render()">'+esc(CHAR_CATS[c]||c)+' ('+fa(n)+')</button>';}).join('')+'</div>';
-  const list=rows.filter(i=>!CHAR_CAT||i.category===CHAR_CAT).sort((a,b)=>a.category===b.category?a.sortOrder-b.sortOrder:(order.indexOf(a.category)-order.indexOf(b.category)));
-  $('#main').innerHTML=head('قطعات کاراکتر','قطعهٔ جدید اضافه کن (تصویر PNG/SVG شفاف، هم‌اندازهٔ ۳۰۰×۳۰۰). هر قطعه‌ای اضافه کنی، بی‌درنگ در سازندهٔ کاراکترِ بازی ظاهر می‌شود.','<button class="btn pri" onclick="cpEdit()">➕ افزودن قطعه</button>')+
-    catTabs+
-    '<div class="tbl-wrap"><table><thead><tr>'+['','نام','دسته','لایه (z)','ترتیب','وضعیت','عملیات'].map(c=>'<th>'+c+'</th>').join('')+'</tr></thead><tbody>'+
-    (list.length?list.map(it=>'<tr>'+
-      '<td><div style="width:46px;height:46px;border-radius:10px;background:#0e1510;background-image:linear-gradient(45deg,#1c261e 25%,transparent 25%,transparent 75%,#1c261e 75%),linear-gradient(45deg,#1c261e 25%,transparent 25%,transparent 75%,#1c261e 75%);background-size:10px 10px;background-position:0 0,5px 5px;display:flex;align-items:center;justify-content:center"><img src="'+esc(it.imageUrl)+'" style="max-width:100%;max-height:100%;object-fit:contain"></div></td>'+
-      '<td><b>'+esc(it.name)+'</b></td>'+
-      '<td>'+esc(CHAR_CATS[it.category]||it.category)+'</td>'+
-      '<td>'+fa(it.zIndex)+'</td>'+
-      '<td>'+fa(it.sortOrder)+'</td>'+
-      '<td><span class="pill '+(it.enabled?'ok':'bad')+'">'+(it.enabled?'فعال':'غیرفعال')+'</span></td>'+
-      '<td><button class="btn sm" onclick="cpEdit(\''+it.id+'\')">ویرایش</button> <button class="btn sm '+(it.enabled?'':'ok')+'" onclick="cpToggle(\''+it.id+'\')">'+(it.enabled?'خاموش':'روشن')+'</button> <button class="btn sm bad" onclick="cpDelete(\''+it.id+'\')">حذف</button></td>'+
-    '</tr>').join(''):'<tr><td colspan="7" class="empty">قطعه‌ای نیست — یکی اضافه کن</td></tr>')+'</tbody></table></div>';
+/* ================= CHARACTERS =================
+   The roster and the lottery boxes that hand it out. Everything a character is
+   — art, type, unlock level, which routes may unlock it, price, order — is
+   edited here, so adding the hundredth character never touches the game. */
+const CHAR_SOURCES={reward:'جایزهٔ مسابقه',league:'جایزهٔ لیگ',mission:'جایزهٔ مأموریت',event:'جایزهٔ رویداد',admin:'اهدای مدیر',purchase:'خرید',random:'قرعه‌کشی'};
+let CHAR_FILTER='all';
+
+async function renderCharacters(){
+  let d={characters:[]};
+  try{ d=await api('GET','/admin/characters'); }
+  catch(e){ $('#main').innerHTML=head('کاراکترها')+'<div class="card empty">'+(e.message||'خطا')+'</div>'; return; }
+  const rows=d.characters||[]; window._CH_ROWS={}; rows.forEach(c=>window._CH_ROWS[c.id]=c);
+  window._CH_MAXKB=Math.round((d.imageMaxBytes||600*1024)/1024);
+
+  const counts={all:rows.length,normal:rows.filter(c=>c.kind==='normal').length,vip:rows.filter(c=>c.kind==='vip').length,off:rows.filter(c=>!c.enabled).length};
+  const tabs='<div class="subtabs">'+
+    [['all','همه'],['normal','معمولی'],['vip','VIP'],['off','غیرفعال']].map(([k,n])=>
+      '<button class="'+(CHAR_FILTER===k?'active':'')+'" onclick="CHAR_FILTER=\''+k+'\';render()">'+n+' ('+fa(counts[k])+')</button>').join('')+'</div>';
+
+  const list=rows.filter(c=>CHAR_FILTER==='all'?true:CHAR_FILTER==='off'?!c.enabled:c.kind===CHAR_FILTER);
+
+  $('#main').innerHTML=head('کاراکترها',
+      'هر کاراکتر یک تصویر کامل PNG است. تعداد کاراکترها نامحدود است و افزودن کاراکتر جدید هیچ تغییری در برنامه لازم ندارد. حداکثر حجم تصویر '+fa(window._CH_MAXKB)+' کیلوبایت (تصویر بزرگ خودکار فشرده می‌شود).',
+      '<button class="btn pri" onclick="chEdit()">➕ افزودن کاراکتر</button>')
+    +tabs
+    +'<div class="tbl-wrap"><table><thead><tr>'+['','نام','نوع','آزادسازی','دارندگان','در حال استفاده','از قرعه','از جایزه','محبوبیت','وضعیت','عملیات'].map(c=>'<th>'+c+'</th>').join('')+'</tr></thead><tbody>'
+    +(list.length?list.map(c=>{
+      const st=c.stats||{};
+      const ways=[];
+      if(c.viaLevel)ways.push('لول '+fa(c.unlockLevel));
+      if(c.viaReward)ways.push('جایزه');
+      if(c.viaEvent)ways.push('رویداد');
+      if(c.viaRandom)ways.push('قرعه');
+      if(c.viaPurchase)ways.push('خرید'+(c.price?' '+fa(c.price):''));
+      return '<tr>'
+        +'<td>'+chThumb(c.image,46)+'</td>'
+        +'<td><b>'+esc(c.name)+'</b>'+(c.description?'<div class="note" style="max-width:220px">'+esc(c.description.slice(0,60))+'</div>':'')+'</td>'
+        +'<td>'+(c.kind==='vip'?'<span class="pill" style="background:linear-gradient(135deg,#FFE9A8,#E0A93B);color:#3A2A00">VIP</span>':'<span class="pill">معمولی</span>')+'</td>'
+        +'<td>'+(ways.length?esc(ways.join(' • ')):'<span class="note">—</span>')+'</td>'
+        +'<td>'+fa(st.owners||0)+'</td>'
+        +'<td>'+fa(st.equipped||0)+'</td>'
+        +'<td>'+fa(st.fromRandom||0)+'</td>'
+        +'<td>'+fa(st.fromReward||0)+'</td>'
+        +'<td>'+fa(st.popularity||0)+'٪</td>'
+        +'<td><span class="pill '+(c.enabled?'ok':'bad')+'">'+(c.enabled?'فعال':'غیرفعال')+'</span></td>'
+        +'<td style="white-space:nowrap">'
+          +'<button class="btn sm" onclick="chEdit(\''+c.id+'\')">ویرایش</button> '
+          +'<button class="btn sm ok" onclick="chGrant(\''+c.id+'\')">🎁 اهدا</button> '
+          +'<button class="btn sm '+(c.enabled?'':'ok')+'" onclick="chToggle(\''+c.id+'\')">'+(c.enabled?'خاموش':'روشن')+'</button> '
+          +'<button class="btn sm bad" onclick="chDelete(\''+c.id+'\')">حذف</button>'
+        +'</td></tr>';
+    }).join(''):'<tr><td colspan="11" class="empty">کاراکتری نیست — یکی اضافه کن</td></tr>')
+    +'</tbody></table></div>'
+    +'<div class="note" style="margin-top:10px">«دارندگان» فقط کسانی‌اند که کاراکتر برایشان ثبت شده. کاراکترهایی که با رسیدن به لول باز می‌شوند ردیفی ذخیره نمی‌کنند، پس عددشان صفر می‌ماند و این درست است — سطح، لحظهٔ خواندن محاسبه می‌شود.</div>';
 }
-function cpEdit(id){
-  const it=(window._CP_ROWS||{})[id]||{};
-  const catOpts=Object.keys(CHAR_CATS).map(k=>'<option value="'+k+'"'+(it.category===k?' selected':'')+'>'+esc(CHAR_CATS[k])+'</option>').join('');
-  modal(id?'ویرایش قطعه':'افزودن قطعه',
-    '<div class="grid g2">'+
-      '<div class="field"><label>نام قطعه</label><input id="cp_name" value="'+esc(it.name||'')+'" placeholder="مثلاً شاخ قرمز"></div>'+
-      '<div class="field"><label>دسته</label><select id="cp_cat">'+catOpts+'</select></div>'+
-    '</div>'+
-    '<div class="field"><label>تصویر قطعه (URL یا data:image؛ شفاف و ۳۰۰×۳۰۰)</label><input id="cp_img" value="'+esc(it.imageUrl||'')+'" dir="ltr" placeholder="https://… یا data:image/png;base64,…" oninput="cpPreview()"></div>'+
-    '<div style="display:flex;gap:12px;align-items:center;margin:4px 0 10px"><div style="width:90px;height:90px;border-radius:12px;background:#0e1510;background-image:linear-gradient(45deg,#1c261e 25%,transparent 25%,transparent 75%,#1c261e 75%),linear-gradient(45deg,#1c261e 25%,transparent 25%,transparent 75%,#1c261e 75%);background-size:16px 16px;background-position:0 0,8px 8px;display:flex;align-items:center;justify-content:center"><img id="cp_prev" src="'+esc(it.imageUrl||'')+'" style="max-width:100%;max-height:100%;object-fit:contain"></div><div class="note">پیش‌نمایش روی زمینهٔ شطرنجی — قطعه باید کاملاً شفاف و در مختصات ثابت باشد تا با بقیهٔ لایه‌ها جفت شود.</div></div>'+
-    '<div class="grid g3">'+
-      '<div class="field"><label>لایه (z-index)</label><input id="cp_z" type="number" value="'+(it.zIndex!=null?it.zIndex:'')+'" placeholder="خودکار"></div>'+
-      '<div class="field"><label>ترتیب نمایش</label><input id="cp_order" type="number" value="'+(it.sortOrder||0)+'"></div>'+
-      '<div class="field"><label>وضعیت</label><select id="cp_enabled"><option value="1"'+(it.enabled!==false?' selected':'')+'>فعال</option><option value="0"'+(it.enabled===false?' selected':'')+'>غیرفعال</option></select></div>'+
-    '</div>'+
-    '<div class="note" style="margin-bottom:8px">لایه‌ها از کوچک به بزرگ روی هم می‌نشینند (بدن پایین، اکسسوری بالا). اگر z را خالی بگذاری، بر اساس دسته خودکار انتخاب می‌شود.</div>'+
-    '<button class="btn pri" onclick="cpSave(\''+(id||'')+'\')">💾 ذخیره</button>');
+
+function chThumb(src,size){
+  const box='width:'+size+'px;height:'+size+'px;border-radius:10px;background:#0e1510;'
+    +'background-image:linear-gradient(45deg,#1c261e 25%,transparent 25%,transparent 75%,#1c261e 75%),linear-gradient(45deg,#1c261e 25%,transparent 25%,transparent 75%,#1c261e 75%);'
+    +'background-size:10px 10px;background-position:0 0,5px 5px;display:flex;align-items:center;justify-content:center';
+  return '<div style="'+box+'">'+(src?'<img src="'+esc(src)+'" style="max-width:100%;max-height:100%;object-fit:contain">':'<span style="opacity:.4">🎭</span>')+'</div>';
 }
-function cpPreview(){const v=$('#cp_img').value.trim();const img=$('#cp_prev');if(img)img.src=v;}
-async function cpSave(id){
-  const name=$('#cp_name').value.trim(); if(!name)return toast('نام قطعه لازم است','bad');
-  const img=$('#cp_img').value.trim(); if(!img)return toast('تصویر قطعه لازم است','bad');
-  const zRaw=$('#cp_z').value.trim();
-  const body={id:id||undefined,name,category:$('#cp_cat').value,imageUrl:img,
-    sortOrder:Number($('#cp_order').value||0),enabled:$('#cp_enabled').value==='1'};
-  if(zRaw!=='')body.zIndex=Number(zRaw);
-  try{await api('POST','/admin/character-parts',body);toast('ذخیره شد ✅','ok');document.querySelector('.modal-bg').remove();render();}catch(e){toast(e.message,'bad');}
+
+function chEdit(id){
+  const c=(window._CH_ROWS||{})[id]||{};
+  const chk=(k,label,on)=>'<label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">'
+    +'<input type="checkbox" id="ch_'+k+'"'+(on?' checked':'')+'> '+label+'</label>';
+  modal(id?'ویرایش کاراکتر':'افزودن کاراکتر',
+    '<div class="grid g2">'
+      +'<div class="field"><label>نام</label><input id="ch_name" value="'+esc(c.name||'')+'" placeholder="مثلاً مانستر آبی"></div>'
+      +'<div class="field"><label>نوع</label><select id="ch_kind"><option value="normal"'+(c.kind!=='vip'?' selected':'')+'>معمولی</option><option value="vip"'+(c.kind==='vip'?' selected':'')+'>VIP</option></select></div>'
+    +'</div>'
+    +'<div class="field"><label>توضیحات</label><input id="ch_desc" value="'+esc(c.description||'')+'" placeholder="یک جمله دربارهٔ این کاراکتر"></div>'
+    +'<div class="field"><label>تصویر کاراکتر (PNG با پس‌زمینهٔ شفاف)</label>'
+      +'<input type="file" id="ch_file" accept="image/png,image/webp,image/jpeg" onchange="chPickImage(this)">'
+      +'<div class="note">فایل انتخابی خودکار به کمترین حجم فشرده می‌شود. می‌توانی به‌جایش یک آدرس https هم بگذاری.</div></div>'
+    +'<div class="field"><label>یا آدرس تصویر</label><input id="ch_img" value="'+esc(/^https:/i.test(c.image||'')?c.image:'')+'" dir="ltr" placeholder="https://…" oninput="chPreview()"></div>'
+    +'<div style="display:flex;gap:12px;align-items:center;margin:4px 0 12px">'
+      +'<div id="ch_prevbox">'+chThumb(c.image||'',96)+'</div>'
+      +'<div class="note" id="ch_size">'+(c.image?'تصویر فعلی ذخیره شده است.':'هنوز تصویری انتخاب نشده.')+'</div></div>'
+
+    +'<div style="border-top:1px solid rgba(255,255,255,.1);margin:10px 0;padding-top:10px"><b style="font-size:13px">راه‌های آزادسازی</b></div>'
+    +'<div class="grid g3" style="gap:8px;margin-bottom:8px">'
+      +chk('viaLevel','با رسیدن به لول',c.viaLevel!==false)
+      +chk('viaReward','جایزهٔ مسابقات',!!c.viaReward)
+      +chk('viaEvent','جایزهٔ رویداد',!!c.viaEvent)
+      +chk('viaRandom','قرعه‌کشی',!!c.viaRandom)
+      +chk('viaPurchase','خرید',!!c.viaPurchase)
+    +'</div>'
+    +'<div class="grid g3">'
+      +'<div class="field"><label>لول آزادسازی</label><input id="ch_lvl" type="number" min="0" value="'+(c.unlockLevel!=null?c.unlockLevel:0)+'"></div>'
+      +'<div class="field"><label>قیمت (سکه)</label><input id="ch_price" type="number" min="0" value="'+(c.price||0)+'"></div>'
+      +'<div class="field"><label>ترتیب نمایش</label><input id="ch_order" type="number" value="'+(c.sortOrder||0)+'"></div>'
+    +'</div>'
+    +'<div class="grid g2">'
+      +'<div class="field"><label>نشان «جدید» تا تاریخ</label><input id="ch_new" type="date" value="'+esc((c.newUntil||'').slice(0,10))+'"><div class="note">خالی = بدون نشان جدید</div></div>'
+      +'<div class="field"><label>وضعیت</label><select id="ch_enabled"><option value="1"'+(c.enabled!==false?' selected':'')+'>فعال</option><option value="0"'+(c.enabled===false?' selected':'')+'>غیرفعال</option></select></div>'
+    +'</div>'
+    +'<div class="note" style="margin-bottom:8px">اگر «با رسیدن به لول» روشن باشد و لول را ۰ بگذاری، کاراکتر برای همه از ابتدا باز است.</div>'
+    +'<button class="btn pri" onclick="chSave(\''+(id||'')+'\')">💾 ذخیره</button>');
+  window._CH_IMG=c.image||'';
 }
-async function cpToggle(id){const it=(window._CP_ROWS||{})[id];if(!it)return;try{await api('PATCH','/admin/character-parts/'+id,{enabled:!it.enabled});toast(it.enabled?'غیرفعال شد':'فعال شد','ok');render();}catch(e){toast(e.message,'bad');}}
-async function cpDelete(id){if(!confirm('این قطعه حذف شود؟'))return;try{await api('DELETE','/admin/character-parts/'+id);toast('حذف شد','ok');render();}catch(e){toast(e.message,'bad');}}
+
+/* Shrinks the picked file before it is ever sent: a 4 MB phone photo becomes a
+   few tens of KB, which is what keeps the roster fast to load on a phone. */
+function chPickImage(input){
+  const f=input.files&&input.files[0]; if(!f)return;
+  const maxKB=window._CH_MAXKB||600;
+  const img=new Image();
+  const url=URL.createObjectURL(f);
+  img.onload=function(){
+    URL.revokeObjectURL(url);
+    const MAX=512;
+    let w=img.width,h=img.height;
+    if(w>MAX||h>MAX){ const k=MAX/Math.max(w,h); w=Math.round(w*k); h=Math.round(h*k); }
+    const cv=document.createElement('canvas'); cv.width=w; cv.height=h;
+    cv.getContext('2d').drawImage(img,0,0,w,h);
+    // Try the smallest modern format first and keep whichever the browser
+    // actually produced — canvas silently falls back to PNG when it cannot
+    // encode the type you asked for.
+    const tries=['image/webp','image/png'];
+    let best='';
+    for(const t of tries){
+      const d=cv.toDataURL(t,0.9);
+      if(d.indexOf('data:'+t)===0 && (!best||d.length<best.length))best=d;
+    }
+    if(!best)best=cv.toDataURL('image/png');
+    const kb=Math.round((best.length-best.indexOf(',')-1)*3/4/1024);
+    if(kb>maxKB){ toast('تصویر حتی بعد از فشرده‌سازی '+fa(kb)+'KB است؛ تصویر کوچک‌تری انتخاب کن','bad'); return; }
+    window._CH_IMG=best;
+    $('#ch_prevbox').innerHTML=chThumb(best,96);
+    $('#ch_size').textContent='فشرده شد: '+fa(kb)+' کیلوبایت • '+fa(w)+'×'+fa(h);
+  };
+  img.onerror=function(){ URL.revokeObjectURL(url); toast('این فایل تصویر نیست','bad'); };
+  img.src=url;
+}
+function chPreview(){
+  const v=($('#ch_img').value||'').trim();
+  if(v){ window._CH_IMG=v; $('#ch_prevbox').innerHTML=chThumb(v,96); }
+}
+
+async function chSave(id){
+  const name=($('#ch_name').value||'').trim();
+  if(!name)return toast('نام کاراکتر لازم است','bad');
+  const urlV=($('#ch_img').value||'').trim();
+  const body={
+    id:id||undefined, name,
+    description:($('#ch_desc').value||'').trim(),
+    kind:$('#ch_kind').value,
+    unlockLevel:Number($('#ch_lvl').value||0),
+    price:Number($('#ch_price').value||0),
+    sortOrder:Number($('#ch_order').value||0),
+    enabled:$('#ch_enabled').value==='1',
+    viaLevel:$('#ch_viaLevel').checked, viaReward:$('#ch_viaReward').checked,
+    viaEvent:$('#ch_viaEvent').checked, viaRandom:$('#ch_viaRandom').checked,
+    viaPurchase:$('#ch_viaPurchase').checked,
+    newUntil:($('#ch_new').value||'')?new Date($('#ch_new').value+'T23:59:59').toISOString():''
+  };
+  const img=urlV||window._CH_IMG||'';
+  if(img)body.image=img;
+  try{ await api('POST','/admin/characters',body); toast('ذخیره شد ✅','ok'); document.querySelector('.modal-bg').remove(); render(); }
+  catch(e){ toast(e.message,'bad'); }
+}
+async function chToggle(id){
+  const c=(window._CH_ROWS||{})[id]; if(!c)return;
+  try{ await api('PATCH','/admin/characters/'+id,{enabled:!c.enabled}); toast(c.enabled?'غیرفعال شد':'فعال شد','ok'); render(); }
+  catch(e){ toast(e.message,'bad'); }
+}
+async function chDelete(id){
+  const c=(window._CH_ROWS||{})[id]||{};
+  if(!confirm('«'+(c.name||'')+'» حذف شود؟ از لیست همهٔ کاربرانی که آن را دارند هم پاک می‌شود.'))return;
+  try{ await api('DELETE','/admin/characters/'+id); toast('حذف شد','ok'); render(); }
+  catch(e){ toast(e.message,'bad'); }
+}
+
+/* Award a character: to one player, a pasted list, or everyone. */
+function chGrant(id){
+  const c=(window._CH_ROWS||{})[id]||{};
+  modal('اهدای «'+esc(c.name||'')+'»',
+    '<div class="field"><label>به چه کسی</label><select id="chg_mode" onchange="chGrantMode()">'
+      +'<option value="one">یک کاربر</option><option value="many">چند کاربر</option><option value="all">همهٔ کاربران</option></select></div>'
+    +'<div class="field" id="chg_onebox"><label>شناسهٔ کاربر</label><input id="chg_one" dir="ltr" placeholder="user id"></div>'
+    +'<div class="field" id="chg_manybox" style="display:none"><label>شناسهٔ کاربران (هر خط یکی)</label><textarea id="chg_many" rows="5" dir="ltr" placeholder="id1&#10;id2"></textarea></div>'
+    +'<div class="field"><label>به‌عنوان</label><select id="chg_src">'
+      +Object.keys(CHAR_SOURCES).map(k=>'<option value="'+k+'">'+CHAR_SOURCES[k]+'</option>').join('')+'</select>'
+      +'<div class="note">این برچسب در آمار جدا شمرده می‌شود، پس واقعیِ همان جایزه را انتخاب کن.</div></div>'
+    +'<button class="btn pri" onclick="chGrantRun(\''+id+'\')">🎁 اهدا کن</button>');
+}
+function chGrantMode(){
+  const m=$('#chg_mode').value;
+  $('#chg_onebox').style.display=m==='one'?'':'none';
+  $('#chg_manybox').style.display=m==='many'?'':'none';
+}
+async function chGrantRun(id){
+  const m=$('#chg_mode').value; const body={source:$('#chg_src').value};
+  if(m==='all'){ if(!confirm('به همهٔ کاربران اهدا شود؟'))return; body.all=true; }
+  else if(m==='many'){ body.userIds=($('#chg_many').value||'').split('\n').map(s=>s.trim()).filter(Boolean); if(!body.userIds.length)return toast('حداقل یک شناسه بنویس','bad'); }
+  else { body.userId=($('#chg_one').value||'').trim(); if(!body.userId)return toast('شناسهٔ کاربر لازم است','bad'); }
+  try{
+    const r=await api('POST','/admin/characters/'+id+'/grant',body);
+    toast('اهدا شد: '+fa(r.granted)+' نفر'+(r.already?' • '+fa(r.already)+' نفر از قبل داشتند':''),'ok');
+    document.querySelector('.modal-bg').remove(); render();
+  }catch(e){ toast(e.message,'bad'); }
+}
+
+/* ================= RANDOM CHARACTER BOXES ================= */
+async function renderCharBoxes(){
+  let d={boxes:[]},chars={characters:[]};
+  try{ d=await api('GET','/admin/character-boxes'); }
+  catch(e){ $('#main').innerHTML=head('قرعه‌کشی کاراکتر')+'<div class="card empty">'+(e.message||'خطا')+'</div>'; return; }
+  try{ chars=await api('GET','/admin/characters'); }catch(e){}
+  window._CB_CHARS=chars.characters||[];
+  const rows=d.boxes||[]; window._CB_ROWS={}; rows.forEach(b=>window._CB_ROWS[b.id]=b);
+  const nameOf=(cid)=>{const c=(window._CB_CHARS||[]).find(x=>x.id===cid);return c?c.name:'(حذف‌شده)';};
+
+  $('#main').innerHTML=head('قرعه‌کشی کاراکتر',
+      'هر باکس یک مجموعه کاراکتر با شانس مشخص است. شانس‌ها «وزن» هستند نه درصد — درصد از روی وزن‌ها حساب می‌شود، پس حذف یک کاراکتر هیچ‌وقت باکس را خراب نمی‌کند.',
+      '<button class="btn pri" onclick="cbEditBox()">➕ باکس جدید</button>')
+    +(rows.length?rows.map(b=>{
+      const odds=b.odds||[];
+      const win=[b.startsAt?('از '+esc(b.startsAt.slice(0,10))):'',b.endsAt?('تا '+esc(b.endsAt.slice(0,10))):''].filter(Boolean).join(' ');
+      return '<div class="card" style="margin-bottom:12px">'
+        +'<div class="head"><div><h2 style="font-size:15px">'+esc(b.name)+' <span class="pill '+(b.enabled?'ok':'bad')+'">'+(b.enabled?'فعال':'خاموش')+'</span></h2>'
+        +'<div class="sub">'+(win||'بدون محدودیت زمانی')
+        +' • سقف هر کاربر: '+(b.maxPerUser?fa(b.maxPerUser):'نامحدود')
+        +' • شانس VIP: '+fa(b.vipChance)+'٪'
+        +' • تکراری: '+(b.duplicatePolicy==='none'?'بدون جبران':(b.duplicatePolicy==='xp'?fa(b.duplicateAmount)+' XP':fa(b.duplicateAmount)+' سکه'))
+        +'</div></div><div>'
+        +'<button class="btn sm" onclick="cbEditBox(\''+b.id+'\')">ویرایش</button> '
+        +'<button class="btn sm ok" onclick="cbDraw(\''+b.id+'\')">🎲 اجرای قرعه</button> '
+        +'<button class="btn sm bad" onclick="cbDeleteBox(\''+b.id+'\')">حذف</button></div></div>'
+        +'<div class="tbl-wrap"><table><thead><tr><th>کاراکتر</th><th>وزن</th><th>شانس</th></tr></thead><tbody>'
+        +(odds.length?odds.map(o=>'<tr><td>'+esc(nameOf(o.characterId))+'</td><td>'+fa(o.weight)+'</td><td>'+fa(o.percent)+'٪'+(o.weight===0?' <span class="note">(خارج از قرعه)</span>':'')+'</td></tr>').join('')
+          :'<tr><td colspan="3" class="empty">این باکس خالی است</td></tr>')
+        +'</tbody></table></div></div>';
+    }).join(''):'<div class="card empty">هنوز باکسی ساخته نشده</div>');
+}
+
+function cbEditBox(id){
+  const b=(window._CB_ROWS||{})[id]||{};
+  const entries=b.entries||[];
+  const chars=window._CB_CHARS||[];
+  const rowsHtml=chars.map(c=>{
+    const e=entries.find(x=>x.characterId===c.id);
+    return '<tr><td style="width:34px">'+chThumb(c.image,30)+'</td>'
+      +'<td>'+esc(c.name)+(c.kind==='vip'?' <span class="pill" style="background:linear-gradient(135deg,#FFE9A8,#E0A93B);color:#3A2A00">VIP</span>':'')+'</td>'
+      +'<td style="width:110px"><input type="number" min="0" data-cid="'+c.id+'" class="cb_w" value="'+(e?e.weight:0)+'" style="width:100%"></td></tr>';
+  }).join('');
+  modal(id?'ویرایش باکس':'باکس جدید',
+    '<div class="grid g2">'
+      +'<div class="field"><label>نام باکس</label><input id="cb_name" value="'+esc(b.name||'')+'" placeholder="مثلاً باکس نوروز"></div>'
+      +'<div class="field"><label>وضعیت</label><select id="cb_enabled"><option value="1"'+(b.enabled!==false?' selected':'')+'>فعال</option><option value="0"'+(b.enabled===false?' selected':'')+'>خاموش</option></select></div>'
+    +'</div>'
+    +'<div class="grid g2">'
+      +'<div class="field"><label>شروع</label><input id="cb_start" type="date" value="'+esc((b.startsAt||'').slice(0,10))+'"></div>'
+      +'<div class="field"><label>پایان</label><input id="cb_end" type="date" value="'+esc((b.endsAt||'').slice(0,10))+'"></div>'
+    +'</div>'
+    +'<div class="grid g2">'
+      +'<div class="field"><label>سقف دریافت هر کاربر</label><input id="cb_max" type="number" min="0" value="'+(b.maxPerUser||0)+'"><div class="note">۰ = نامحدود</div></div>'
+      +'<div class="field"><label>شانس VIP (٪)</label><input id="cb_vip" type="number" min="0" max="100" value="'+(b.vipChance||0)+'"><div class="note">۰ = VIP هم با وزن عادی خودش در قرعه است</div></div>'
+    +'</div>'
+    +'<div class="grid g2">'
+      +'<div class="field"><label>اگر تکراری بود</label><select id="cb_dup">'
+        +'<option value="coins"'+(b.duplicatePolicy!=='xp'&&b.duplicatePolicy!=='none'?' selected':'')+'>سکه بده</option>'
+        +'<option value="xp"'+(b.duplicatePolicy==='xp'?' selected':'')+'>XP بده</option>'
+        +'<option value="none"'+(b.duplicatePolicy==='none'?' selected':'')+'>هیچی</option></select></div>'
+      +'<div class="field"><label>مقدار جبران تکراری</label><input id="cb_dupamt" type="number" min="0" value="'+(b.duplicateAmount||0)+'"></div>'
+    +'</div>'
+    +'<div style="border-top:1px solid rgba(255,255,255,.1);margin:10px 0;padding-top:10px"><b style="font-size:13px">محتویات باکس</b>'
+      +'<div class="note">وزن ۰ یعنی کاراکتر در باکس هست ولی هرگز درنمی‌آید. برای حذف کامل هم کافی است وزن را ۰ بگذاری.</div></div>'
+    +'<div class="tbl-wrap" style="max-height:280px;overflow:auto"><table><tbody>'+(rowsHtml||'<tr><td class="empty">اول باید کاراکتر بسازی</td></tr>')+'</tbody></table></div>'
+    +'<button class="btn pri" style="margin-top:10px" onclick="cbSaveBox(\''+(id||'')+'\')">💾 ذخیره</button>');
+}
+
+async function cbSaveBox(id){
+  const name=($('#cb_name').value||'').trim();
+  if(!name)return toast('نام باکس لازم است','bad');
+  const entries=[...document.querySelectorAll('.cb_w')]
+    .map(i=>({characterId:i.getAttribute('data-cid'),weight:Number(i.value||0)}))
+    .filter(e=>e.weight>0);
+  if(!entries.length)return toast('حداقل یک کاراکتر با وزن بزرگ‌تر از صفر لازم است','bad');
+  const body={id:id||undefined,name,
+    enabled:$('#cb_enabled').value==='1',
+    startsAt:$('#cb_start').value?new Date($('#cb_start').value+'T00:00:00').toISOString():'',
+    endsAt:$('#cb_end').value?new Date($('#cb_end').value+'T23:59:59').toISOString():'',
+    maxPerUser:Number($('#cb_max').value||0),
+    vipChance:Number($('#cb_vip').value||0),
+    duplicatePolicy:$('#cb_dup').value,
+    duplicateAmount:Number($('#cb_dupamt').value||0),
+    entries};
+  try{ await api('POST','/admin/character-boxes',body); toast('ذخیره شد ✅','ok'); document.querySelector('.modal-bg').remove(); render(); }
+  catch(e){ toast(e.message,'bad'); }
+}
+async function cbDeleteBox(id){
+  const b=(window._CB_ROWS||{})[id]||{};
+  if(!confirm('باکس «'+(b.name||'')+'» حذف شود؟'))return;
+  try{ await api('DELETE','/admin/character-boxes/'+id); toast('حذف شد','ok'); render(); }
+  catch(e){ toast(e.message,'bad'); }
+}
+
+function cbDraw(id){
+  const b=(window._CB_ROWS||{})[id]||{};
+  modal('اجرای قرعه — '+esc(b.name||''),
+    '<div class="field"><label>برای چه کسی</label><select id="cbd_mode" onchange="cbDrawMode()">'
+      +'<option value="one">یک کاربر</option><option value="many">چند کاربر</option><option value="all">همهٔ کاربران</option></select></div>'
+    +'<div class="field" id="cbd_onebox"><label>شناسهٔ کاربر</label><input id="cbd_one" dir="ltr" placeholder="user id"></div>'
+    +'<div class="field" id="cbd_manybox" style="display:none"><label>شناسهٔ کاربران (هر خط یکی)</label><textarea id="cbd_many" rows="5" dir="ltr"></textarea></div>'
+    +'<div class="note" style="margin-bottom:8px">قرعه‌کشیِ مدیر سقف و بازهٔ زمانی را نادیده می‌گیرد — این اهدای دستی است، نه مصرف شانس کاربر.</div>'
+    +'<button class="btn pri" onclick="cbDrawRun(\''+id+'\')">🎲 بکش</button>'
+    +'<div id="cbd_out" style="margin-top:12px"></div>');
+}
+function cbDrawMode(){
+  const m=$('#cbd_mode').value;
+  $('#cbd_onebox').style.display=m==='one'?'':'none';
+  $('#cbd_manybox').style.display=m==='many'?'':'none';
+}
+async function cbDrawRun(id){
+  const m=$('#cbd_mode').value; const body={};
+  if(m==='all'){ if(!confirm('برای همهٔ کاربران قرعه کشیده شود؟'))return; body.all=true; }
+  else if(m==='many'){ body.userIds=($('#cbd_many').value||'').split('\n').map(s=>s.trim()).filter(Boolean); if(!body.userIds.length)return toast('حداقل یک شناسه بنویس','bad'); }
+  else { body.userId=($('#cbd_one').value||'').trim(); if(!body.userId)return toast('شناسهٔ کاربر لازم است','bad'); }
+  try{
+    const r=await api('POST','/admin/character-boxes/'+id+'/draw',body);
+    const res=r.results||[], fails=r.failures||[];
+    $('#cbd_out').innerHTML='<div class="tbl-wrap"><table><thead><tr><th>کاربر</th><th>کاراکتر</th><th>نتیجه</th></tr></thead><tbody>'
+      +res.slice(0,200).map(x=>'<tr><td dir="ltr">'+esc(x.userId)+'</td><td>'+esc(x.character.name)+'</td><td>'
+        +(x.duplicate?('تکراری'+(x.compensation.amount?(' • '+fa(x.compensation.amount)+(x.compensation.type==='xp'?' XP':' سکه')):'')):'<span class="pill ok">جدید</span>')+'</td></tr>').join('')
+      +fails.slice(0,50).map(f=>'<tr><td dir="ltr">'+esc(f.userId)+'</td><td>—</td><td><span class="pill bad">'+esc(f.reason)+'</span></td></tr>').join('')
+      +'</tbody></table></div>';
+    toast('قرعه انجام شد: '+fa(res.length)+' نفر','ok');
+  }catch(e){ toast(e.message,'bad'); }
+}
 
 /* ================= LAST SURVIVOR ================= */
 let _LS_CFG=null;
