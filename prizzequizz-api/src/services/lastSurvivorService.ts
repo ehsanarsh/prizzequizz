@@ -250,7 +250,7 @@ export async function findOrCreateRoom(topic: string, cfg: LastSurvivorConfig): 
  * Join Last Survivor for a topic with a ticket colour. Consumes ONE real ticket
  * and adds its value to the room pot. Returns the room the player landed in.
  */
-export async function joinTopic(user: { id: string; username: string; avatar?: string | null }, topic: string, color: string): Promise<{ room: RoomRow; player: PlayerRow }> {
+export async function joinTopic(user: { id: string; username: string; avatar?: string | null; character?: { id: string; name: string; image: string; kind: 'normal' | 'vip' } | null }, topic: string, color: string): Promise<{ room: RoomRow; player: PlayerRow }> {
   const cfg = await getConfig();
   if (!isTopicPlayable(cfg, topic)) throw new LastSurvivorError('TOPIC_LOCKED', 'این موضوع فعلاً فعال نیست (به‌زودی).');
   if (!cfg.economy.tickets[color]) throw new LastSurvivorError('TICKET_COLOR_INVALID', 'نوع بلیط نامعتبر است.');

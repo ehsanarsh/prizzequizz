@@ -2,15 +2,13 @@ import type { Router } from '../../http/router.js';
 import { json, error } from '../../http/response.js';
 import { getPgPool } from '../../database/postgres.js';
 import { avatarUrlsFor } from '../../services/avatarService.js';
+import { equippedCharactersFor } from '../../services/characterSelectionService.js';
 
 // Real, DB-backed friends system: send request → accept/reject → friends list →
 // 1:1 chat. All state lives in the `friendships` and `friend_messages` tables.
 const pool = () => getPgPool();
-const avatarFor = (username: string): string => {
-  const pool = ['🦊', '🐼', '🦁', '🐯', '🐸', '🐵', '🦄', '🐧', '🐨', '🦉'];
-  let h = 0; for (let i = 0; i < username.length; i++) h = (h * 31 + username.charCodeAt(i)) >>> 0;
-  return pool[h % pool.length]!;
-};
+/* No generated stand-in art: a player is their photo and their character, and
+ * nothing else. When neither exists the client draws its own empty state. */
 
 export function registerFriendRoutes(router: Router, base: string): void {
   // Accepted friends of the current user (either direction), with unread counts.
@@ -28,10 +26,11 @@ export function registerFriendRoutes(router: Router, base: string): void {
          ORDER BY last_at DESC NULLS LAST, u.username`,
         [me]
       );
-      // Real profile photos where uploaded; the deterministic emoji otherwise.
-      const photos = await avatarUrlsFor(rows.map((r) => String(r.id)));
+      const fids = rows.map((r) => String(r.id));
+      const [photos, characters] = await Promise.all([avatarUrlsFor(fids), equippedCharactersFor(fids)]);
       json(ctx.res, 200, rows.map((r) => ({
-        id: r.id, username: r.username, displayName: r.display_name || r.username, avatar: photos.get(String(r.id)) ?? avatarFor(r.username),
+        id: r.id, username: r.username, displayName: r.display_name || r.username,
+        avatar: photos.get(String(r.id)) ?? '', character: characters.get(String(r.id)) ?? null,
         level: r.level, online: false, unread: Number(r.unread || 0),
         lastMessage: r.last_body || '', lastAt: r.last_at?.toISOString?.() ?? r.last_at ?? null
       })));
@@ -50,8 +49,11 @@ export function registerFriendRoutes(router: Router, base: string): void {
         `SELECT f.id, u.id AS user_id, u.username, u.display_name, u.level, f.created_at
          FROM friendships f JOIN users u ON u.id = f.addressee_id
          WHERE f.requester_id = $1 AND f.status = 'pending' ORDER BY f.created_at DESC`, [me]);
-      const photos = await avatarUrlsFor([...inc.rows, ...out.rows].map((r: any) => String(r.user_id)));
-      const map = (r: any) => ({ id: r.id, userId: r.user_id, username: r.username, displayName: r.display_name || r.username, avatar: photos.get(String(r.user_id)) ?? avatarFor(r.username), level: r.level, at: r.created_at?.toISOString?.() ?? r.created_at });
+      const rids = [...inc.rows, ...out.rows].map((r: any) => String(r.user_id));
+      const [photos, characters] = await Promise.all([avatarUrlsFor(rids), equippedCharactersFor(rids)]);
+      const map = (r: any) => ({ id: r.id, userId: r.user_id, username: r.username, displayName: r.display_name || r.username,
+        avatar: photos.get(String(r.user_id)) ?? '', character: characters.get(String(r.user_id)) ?? null,
+        level: r.level, at: r.created_at?.toISOString?.() ?? r.created_at });
       json(ctx.res, 200, { incoming: inc.rows.map(map), outgoing: out.rows.map(map) });
     } catch { json(ctx.res, 200, { incoming: [], outgoing: [] }); }
   });

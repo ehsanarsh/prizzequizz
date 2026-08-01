@@ -368,6 +368,32 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
 @keyframes pop{0%{transform:scale(.3);opacity:0}60%{transform:scale(1.08)}100%{transform:scale(1);opacity:1}}
 .pop{animation:pop .5s cubic-bezier(.2,1.2,.4,1) both}
 .mascot{filter:drop-shadow(0 8px 0 rgba(0,0,0,.22))}
+/* ---- the player face card ----
+   Fills whatever slot it is dropped into, so every existing avatar frame keeps
+   its own size and rounding; the card only supplies the two faces. */
+.pz-avc{position:relative;width:100%;height:100%;border-radius:inherit;display:block;
+  perspective:520px;-webkit-tap-highlight-color:transparent}
+.pz-avc .pz-avc-img{width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block}
+.pz-avc.solo{overflow:hidden}
+.pz-avc.flip{cursor:pointer}
+.pz-avc-in{position:relative;width:100%;height:100%;border-radius:inherit;
+  transform-style:preserve-3d;transition:transform .5s cubic-bezier(.3,.9,.3,1)}
+.pz-avc.flipped .pz-avc-in{transform:rotateY(180deg)}
+.pz-avc-f,.pz-avc-b{position:absolute;inset:0;border-radius:inherit;overflow:hidden;
+  -webkit-backface-visibility:hidden;backface-visibility:hidden}
+.pz-avc-b{transform:rotateY(180deg)}
+/* A VIP character's face gets the same gold edge it has on the stage, so the
+   two screens agree about what "VIP" looks like. */
+.pz-avc.vip .pz-avc-b,.pz-avc.solo.vip{box-shadow:inset 0 0 0 2px #F7C64B,0 0 10px rgba(255,205,90,.45)}
+/* The hint that a card has a back at all. */
+/* Sits INSIDE the frame: the slots that host a card are round and clip their
+   overflow, so a badge hanging off the edge simply disappeared. Top-inline-start
+   keeps it clear of the profile camera badge and the header level star. */
+.pz-avc.flip::after{content:'';position:absolute;inset-inline-start:5%;top:5%;width:30%;height:30%;
+  max-width:15px;max-height:15px;min-width:8px;min-height:8px;border-radius:50%;
+  background:rgba(12,16,13,.82) url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='3' stroke-linecap='round'><path d='M4 9a8 8 0 0 1 14-4M20 15a8 8 0 0 1-14 4'/><path d='M18 3v4h-4M6 21v-4h4'/></svg>") center/64% no-repeat;
+  border:1.5px solid rgba(255,255,255,.32);pointer-events:none;opacity:.9}
+@media (prefers-reduced-motion:reduce){ .pz-avc-in{transition:none} }
 
 /* ===== PLAYERS ===== */
 .players{display:flex;flex-wrap:wrap;gap:10px;justify-content:center}
@@ -3577,7 +3603,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
       <header class="pz-header">
         <div class="pzh-row1">
           <div class="pzh-user" onclick="go('profile')">
-            <div class="pzh-av"><svg class="mascot" width="40" height="40" viewBox="0 0 120 120" id="mascotHome"></svg><span class="pzh-lvl" id="hdrLvl">۳</span></div>
+            <div class="pzh-av"><div class="mascot" id="mascotHome" data-noflip="1" style="width:40px;height:40px;border-radius:50%;overflow:hidden"></div><span class="pzh-lvl" id="hdrLvl">۳</span></div>
           </div>
           <div class="pzh-xpwrap">
             <div class="pzh-nameline"><b id="hdrName">بازیکن</b></div>
@@ -3708,7 +3734,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
     <!-- ============ LOBBY ============ -->
     <section class="screen pad center" id="lobby">
       <div class="grow center" style="width:100%">
-        <div class="pop" style="position:relative"><svg class="mascot floaty" width="110" height="110" viewBox="0 0 120 120" id="mascotLobby"></svg>
+        <div class="pop" style="position:relative"><div class="mascot floaty" id="mascotLobby" style="width:110px;height:110px;border-radius:50%;overflow:hidden"></div>
           <div style="position:absolute;top:10px;right:6px;font-size:30px;filter:drop-shadow(0 0 8px rgba(181,123,255,.6))">🔍</div></div>
         <h1 style="font-size:21px;font-weight:900;margin-top:18px">در جستجوی رقیب برای شما</h1>
         <p style="color:var(--muted);margin-top:8px;font-size:14px" id="lobbyCount">۳ نفر پیوستند</p>
@@ -3723,9 +3749,9 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
       <div class="grow center" style="width:100%">
         <div class="chip" style="margin-bottom:10px">🏆 مرحله <b id="duelStage">۱</b> از ۱۰</div>
         <div style="display:flex;align-items:center;gap:16px;margin:14px 0">
-          <div style="text-align:center"><div style="width:88px;height:88px;border-radius:26px;background:rgba(93,183,236,.18);border:2px solid #5DB7EC;display:grid;place-items:center"><svg class="mascot" width="66" height="66" viewBox="0 0 120 120" id="mascotDuelMe"></svg></div><b style="font-size:14px;display:block;margin-top:8px" id="duelMeName">Shahab_9865</b></div>
+          <div style="text-align:center"><div style="width:88px;height:88px;border-radius:26px;background:rgba(93,183,236,.18);border:2px solid #5DB7EC;display:grid;place-items:center"><div class="mascot" id="mascotDuelMe" style="width:66px;height:66px;border-radius:50%;overflow:hidden"></div></div><b style="font-size:14px;display:block;margin-top:8px" id="duelMeName">Shahab_9865</b></div>
           <div style="font-size:34px;font-weight:900;color:var(--gold);text-shadow:0 0 16px rgba(255,210,63,.5)">VS</div>
-          <div style="text-align:center"><div style="width:88px;height:88px;border-radius:26px;background:var(--red-soft);border:2px solid var(--red);display:grid;place-items:center;font-size:44px" id="duelOppAv" onclick="showCurrentOpponentProfile()">🦊</div><b style="font-size:14px;display:block;margin-top:8px" id="duelOppName">Sara_1452</b></div>
+          <div style="text-align:center"><div style="width:88px;height:88px;border-radius:26px;background:var(--red-soft);border:2px solid var(--red);display:grid;place-items:center;overflow:hidden" id="duelOppAv" onclick="showCurrentOpponentProfile()"></div><b style="font-size:14px;display:block;margin-top:8px" id="duelOppName">Sara_1452</b></div>
         </div>
         <div class="card money-duel-card" style="width:100%;text-align:center">
           <div class="money-line" style="font-size:13px;color:var(--muted)">هر نفر می‌ذاره وسط</div>
@@ -3776,7 +3802,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
         <button class="pzm-quit" onclick="quitGame()">✕</button>
         <div class="pzm-players">
           <div class="pzm-player pzm-me">
-            <div class="pzm-av pzm-av-me"><svg class="mascot" width="30" height="30" viewBox="0 0 120 120" id="mascotDuelMe2"></svg></div>
+            <div class="pzm-av pzm-av-me"><div class="mascot" id="mascotDuelMe2" style="width:30px;height:30px;border-radius:50%;overflow:hidden"></div></div>
             <div class="pzm-pmeta"><b class="pzm-pname" id="duelMeName2">تو</b><span class="pzm-pscore duel-me-score">۰</span></div>
           </div>
           <div class="pzm-center">
@@ -3785,7 +3811,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
             <div class="pzm-conn" id="pzDuelConn"><span class="pzm-conn-dot"></span><span id="pzDuelConnTxt">آنلاین</span></div>
           </div>
           <div class="pzm-player pzm-opp">
-            <div class="pzm-av pzm-av-opp" id="duelOppAv2" onclick="showCurrentOpponentProfile()">🦊</div>
+            <div class="pzm-av pzm-av-opp" id="duelOppAv2" onclick="showCurrentOpponentProfile()"></div>
             <div class="pzm-pmeta"><b class="pzm-pname" id="duelOppName2">حریف</b><span class="pzm-pscore duel-opp-score">۰</span></div>
           </div>
         </div>
@@ -3844,7 +3870,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
       </div>
       <div class="q-progress" id="qProgress"></div>
       <div class="q-body">
-        <svg class="mascot q-mascot" width="66" height="66" viewBox="0 0 120 120"></svg>
+        <div class="mascot q-mascot" style="width:66px;height:66px;border-radius:50%;overflow:hidden"></div>
         <span class="chip q-topic" id="q-topic">🎬 موضوع: سینما</span>
         <div class="q-text" id="qText">سوال</div>
         <div class="powerups" data-pwslot></div>
@@ -3880,7 +3906,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
     <section class="screen pad center" id="result">
       <div class="grow center" style="width:100%">
         <div id="resultCharSlot" style="display:flex;align-items:flex-end;justify-content:center;height:150px;margin-bottom:8px">
-          <svg class="mascot pop" width="120" height="120" viewBox="0 0 120 120" id="mascotResult"></svg>
+          <div class="mascot pop" id="mascotResult" style="width:120px;height:120px;border-radius:50%;overflow:hidden"></div>
           <img id="resultChar" alt="" style="display:none;max-width:150px;max-height:150px;width:auto;height:100%;object-fit:contain;filter:drop-shadow(0 12px 20px rgba(0,0,0,.45));animation:pzPop .5s cubic-bezier(.2,1.4,.4,1)">
         </div>
         <h1 style="font-size:26px;font-weight:900" id="resultTitle">برنده شدی!</h1>
@@ -4038,7 +4064,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
       .pz-avbox{position:relative;width:98px;height:98px;border-radius:28px;background:var(--ink-2);border:var(--stroke);display:grid;place-items:center;box-shadow:var(--hard-sm),0 0 26px var(--bolt-glow);cursor:pointer;overflow:hidden}
       .pz-avbox:active{transform:translateY(2px)}
       .pz-avbox>svg,.pz-avbox>img{display:block}
-      .pz-avcam{position:absolute;bottom:-2px;left:-2px;width:32px;height:32px;border-radius:12px;background:var(--bolt);border:2.5px solid #000;display:grid;place-items:center;font-size:15px;box-shadow:0 3px 0 #000}
+      .pz-avcam{cursor:pointer;position:absolute;bottom:-2px;left:-2px;width:32px;height:32px;border-radius:12px;background:var(--bolt);border:2.5px solid #000;display:grid;place-items:center;font-size:15px;box-shadow:0 3px 0 #000}
       .pz-avspin{position:absolute;inset:0;background:rgba(0,0,0,.55);display:none;place-items:center}
       .pz-avspin.on{display:grid}
       .pz-avspin.on::after{content:'';width:26px;height:26px;border-radius:50%;border:3px solid rgba(255,255,255,.25);border-top-color:var(--bolt);animation:pzAvSpin .7s linear infinite}
@@ -4047,9 +4073,9 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
     <section class="screen" id="profile">
       <div class="topbar"><button class="iconbtn" onclick="menuBack('home')">→</button><h1>پروفایل کاربر</h1><button class="iconbtn" onclick="go('settings')">⚙️</button></div>
       <div style="display:flex;flex-direction:column;align-items:center;gap:4px;margin:16px 0 4px">
-        <div class="pz-avbox" id="profAvBox" onclick="pzPickAvatar()" title="تغییر عکس پروفایل">
-          <svg class="mascot" width="72" height="72" viewBox="0 0 120 120" id="mascotProfile"></svg>
-          <span class="pz-avcam">📷</span>
+        <div class="pz-avbox" id="profAvBox" title="یک ضربه: برگرداندن کارت · دو ضربه: بزرگ‌نمایی">
+          <div class="mascot" id="mascotProfile" style="width:72px;height:72px;border-radius:50%;overflow:hidden"></div>
+          <span class="pz-avcam" onclick="event.stopPropagation();pzPickAvatar()" title="تغییر عکس پروفایل">📷</span>
           <span class="pz-avspin" id="profAvSpin"></span>
         </div>
         <input type="file" id="profAvFile" accept="image/*" style="display:none" onchange="pzOnAvatarPicked(this)">
@@ -4216,7 +4242,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
         <div class="chip" style="margin-bottom:20px" id="mmStatus">🔍 در حال جستجوی حریف...</div>
         <div class="radar" id="radar">
           <div class="radar-grid"></div><div class="ring r1"></div><div class="ring r2"></div><div class="ring r3"></div><div class="radar-orbit o1"><i></i></div><div class="radar-orbit o2"><i></i></div>
-          <div class="center-av"><svg class="mascot" width="48" height="48" viewBox="0 0 120 120" id="mascotMM"></svg></div>
+          <div class="center-av"><div class="mascot" id="mascotMM" style="width:48px;height:48px;border-radius:50%;overflow:hidden"></div></div>
         </div>
         <div class="mm-status-card"><b id="mmScanTitle">اسکن بازیکنان نزدیک<span class="mm-dots"><i></i><i></i><i></i></span></b><span id="mmScanSub">در حال بررسی سطح، سرعت پاسخ و اتصال بازیکن‌ها</span></div>
         <div style="display:flex;gap:20px;margin-top:26px">
@@ -4292,7 +4318,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
         <div id="wtaStage">
           <div class="wta-center"><div class="pot" id="wtaPot">۴۵۰٬۰۰۰</div><small>جایزه استودیو 🏆</small></div>
           <div class="me-hud" id="meHud">
-            <div class="mh-av" id="meHudAv">🦁</div>
+            <div class="mh-av" id="meHudAv"></div>
             <div class="mh-info"><div class="mh-name"><b>تو</b> <span id="meHudStatus" style="color:var(--muted);font-weight:700"></span></div><div class="big-lamps" id="meHudLamps"></div></div>
           </div>
         <div id="wtaQArea" style="display:none">
@@ -4387,7 +4413,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
   <div id="wtaFirstIntro">
     <div class="wfi-rays"></div>
     <div class="wfi-label">سیستم انتخاب کرد</div>
-    <div class="wfi-av" id="wfiAv">🦁</div>
+    <div class="wfi-av" id="wfiAv"></div>
     <div class="wfi-name" id="wfiName">علی</div>
     <div class="wfi-sub" id="wfiSub">اولین سوال رو شروع می‌کنه</div>
   </div>
@@ -4396,7 +4422,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
   <div id="turnOverlay">
     <div class="spot"></div>
     <div class="turn-lbl">🎥 نوبتِ</div>
-    <div class="turn-av" id="turnAv">🦁</div>
+    <div class="turn-av" id="turnAv"></div>
     <div class="turn-name" id="turnName">تو</div>
     <div class="ready-count" id="turnCount" style="display:none;font-size:58px">۳</div>
   </div>
@@ -4620,7 +4646,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
     <div class="grab"></div>
     <div class="menu-sheet-head"><button class="iconbtn" onclick="closeMenu()">→</button><h2>منوی بیشتر</h2><button class="iconbtn" onclick="closeMenu()">✕</button></div>
     <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px" onclick="menuGo('profile')">
-      <div class="prof-av" style="width:52px;height:52px;border-radius:16px;border-width:2px"><svg class="mascot" width="38" height="38" viewBox="0 0 120 120" id="mascotMenu"></svg></div>
+      <div class="prof-av" style="width:52px;height:52px;border-radius:16px;border-width:2px"><div class="mascot" id="mascotMenu" style="width:38px;height:38px;border-radius:50%;overflow:hidden"></div></div>
       <div style="flex:1"><b style="font-size:15px" id="menuProfName">بازیکن</b><div style="color:var(--muted);font-size:12px"><span id="menuProfLvl">سطح ۱</span> · مشاهده پروفایل</div></div><span style="color:var(--muted)">‹</span></div>
     <div class="row" onclick="menuGo('wallet')"><div class="r-ico">💳</div><div class="r-txt"><b>کیف پول</b></div><span class="r-arrow">‹</span></div>
     <div class="row" onclick="closeMenu();plansBack='home';go('plans')"><div class="r-ico">👑</div><div class="r-txt"><b>پلن اشتراک</b></div><span class="r-arrow">‹</span></div>
@@ -4644,27 +4670,22 @@ document.addEventListener('DOMContentLoaded',()=>{document.getElementById('splas
 
 /* ============ REAL BRAND MASCOT (embedded art) ============ */
 const ART_FACE_FILTERS={'#F4C21B':'','#FFCF33':'','#28C46A':'hue-rotate(62deg) saturate(.9)','#5DB7EC':'hue-rotate(165deg) saturate(.85)','#F2604D':'hue-rotate(-38deg) saturate(1.15)','#B57bff':'hue-rotate(215deg) saturate(.9)','#FF9F43':'hue-rotate(-16deg)'};
-function mascotSVG(color){
-  mascotSVG._n=(mascotSVG._n||0)+1;const u=mascotSVG._n;
-  const f=ART_FACE_FILTERS[color]||'';
-  return '<defs><clipPath id="mcp'+u+'"><rect x="4" y="4" width="112" height="112" rx="28"/></clipPath></defs>'+
-   '<rect x="4" y="4" width="112" height="112" rx="28" fill="#F7F4EC" clip-path="url(#mcp'+u+')"/>'+
-   '<image href="'+window.ART_FACE+'" x="4" y="4" width="112" height="112" preserveAspectRatio="xMidYMid slice" clip-path="url(#mcp'+u+')"'+(f?' style="filter:'+f+'"':'')+'/>'+
-   '<rect x="4" y="4" width="112" height="112" rx="28" fill="none" stroke="#000" stroke-width="5"/>';
+/* Every «.mascot» slot is one of MY faces. The generated tinted mascot that
+   used to fill these is gone: a hashed colour is not a choice the player made,
+   and it made the same person look different from screen to screen. */
+function paintMascots(){
+  const html=pzMyAvHTML();
+  document.querySelectorAll('.mascot').forEach(m=>{
+    m.innerHTML=html;
+    /* A few slots are themselves navigation controls — the home header avatar is
+       the only route to the profile screen. Those keep the card's two faces but
+       give the tap back to their container. */
+    if(m.hasAttribute('data-noflip')){
+      const c=m.querySelector('.pz-avc');
+      if(c){ c.removeAttribute('data-flip'); c.removeAttribute('data-zoom'); }
+    }
+  });
 }
-let mColor='#FFCF33';
-/* When the player uploaded a real photo it replaces the mascot art EVERYWHERE
-   their own avatar is drawn (header, lobby, duel, result, profile, side menu).
-   Same rounded-square frame, so nothing else in the layout moves. */
-window.PZ_MY_AVATAR='';
-function pzPhotoSVG(url){
-  pzPhotoSVG._n=(pzPhotoSVG._n||0)+1;const u=pzPhotoSVG._n;
-  return '<defs><clipPath id="pcp'+u+'"><rect x="4" y="4" width="112" height="112" rx="28"/></clipPath></defs>'+
-   '<rect x="4" y="4" width="112" height="112" rx="28" fill="#F7F4EC" clip-path="url(#pcp'+u+')"/>'+
-   '<image href="'+url+'" x="4" y="4" width="112" height="112" preserveAspectRatio="xMidYMid slice" clip-path="url(#pcp'+u+')"/>'+
-   '<rect x="4" y="4" width="112" height="112" rx="28" fill="none" stroke="#000" stroke-width="5"/>';
-}
-function paintMascots(){const ph=window.PZ_MY_AVATAR;document.querySelectorAll('.mascot').forEach(m=>m.innerHTML=ph?pzPhotoSVG(ph):mascotSVG(m.id==='mascotChar'?mColor:mColor));}
 paintMascots();
 
 /* ============ CHARACTER CREATOR (AAA) ============ */
@@ -4904,6 +4925,8 @@ async function csEquip(){
       csBuildRing(); csLayout(); csPaintInfo();
       csFlash(); try{ sfx('win'); vib([18,40,18]); }catch(e){}
       toast('کاراکترت انتخاب شد! 🎉');
+      // Every avatar slot in the app is showing my card; refresh its other face.
+      try{ pzApplyMyCharacter({id:c.id,name:c.name,image:c.image,kind:c.kind}); }catch(e){}
       try{ localStorage.setItem('pz_charId',c.id); }catch(e){}
     }else{
       toast((r&&r.error&&r.error.message)||'ذخیره نشد');
@@ -5353,15 +5376,10 @@ function lsWaitHtml(snap){
   ${r.manualStartEnabled?`<div class="ls-vote" id="lsVoteBtn" onclick="lsVote()"><i id="lsVoteFill"></i><span id="lsVoteTxt">شروع با همین تعداد</span></div>`:''}
   <div class="ls-tabs" role="tablist"><div class="ls-tab ${lsTab==='players'?'on':''}" data-tab="players" role="tab" onclick="lsSetTab('players')"><span class="ti">👥</span>بازیکنان</div>${r.chatEnabled?`<div class="ls-tab ${lsTab==='chat'?'on':''}" data-tab="chat" role="tab" onclick="lsSetTab('chat')"><span class="ti">💬</span>چت روم</div>`:''}</div>`;
 }
-/* Real COLOURED character art for every player — the same mascotSVG the duel and
-   home header use, tinted deterministically per user so everyone is distinct. */
-const LS_AV_COLORS=['#FFCF33','#28C46A','#5DB7EC','#F2604D','#B57bff','#FF9F43','#F4C21B'];
+/* Last Survivor players get the same two-sided card as everywhere else. The
+   deterministic colour-tinted mascot that used to stand in here is gone. */
 function lsAvatarHTML(p){
-  if(p.avatar) return `<img src="${(typeof pzAvatarAbs==='function'?pzAvatarAbs(p.avatar):p.avatar)}" style="width:100%;height:100%;object-fit:cover" onerror="this.style.display='none'">`;
-  let h=0; const s=String(p.userId||p.username||''); for(let i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))>>>0;
-  const col=LS_AV_COLORS[h%LS_AV_COLORS.length];
-  try{ if(typeof mascotSVG==='function'&&window.ART_FACE) return `<svg viewBox="0 0 120 120" style="width:100%;height:100%">${mascotSVG(col)}</svg>`; }catch(e){}
-  return '👤';
+  return pzFaceHTML({avatar:p.avatar,character:p.character});
 }
 function lsPlayersCells(snap,markElim){
   return snap.players.map(p=>{
@@ -5980,7 +5998,9 @@ QUESTIONS.push(...QUESTION_BANK_EXTRA);
 const keysFA=['الف','ب','ج','د'];
 
 /* ================= ARENA / CONSENSUS ================= */
-const avatars=['👾','🐹','🐸','🦊','🐼','🐯','🦁','🐵','🐰','🐨'];
+/* No pool of stand-in faces: anywhere a player is not yet known, the neutral
+   silhouette is shown rather than a face nobody chose. */
+function pzBlankFace(){ return pzFaceHTML({}); }
 const names=['علی','مریم','سارا','رضا','نگار','امیر','لیلا','حسن','مینا','کیان'];
 let qIndex=0,arenaOthers=0,prize=0,answered=false,timer,timeLeft=15;
 
@@ -6233,7 +6253,7 @@ function showElimination(count,gain,cb){
   const box=document.getElementById('elimAvatars');box.innerHTML='';
   for(let i=0;i<Math.min(count,10);i++){
     const d=document.createElement('div');d.className='elim-av';d.style.animationDelay=(i*0.08)+'s';
-    d.innerHTML=avatars[(i+qIndex)%avatars.length]+'<span class="x" style="animation-delay:'+(i*0.08+0.15)+'s">✕</span>';
+    d.innerHTML=pzBlankFace()+'<span class="x" style="animation-delay:'+(i*0.08+0.15)+'s">✕</span>';
     box.appendChild(d);
   }
   ov.classList.add('show');
@@ -6244,10 +6264,10 @@ function showElimination(count,gain,cb){
 let duelStage,duelStakeVal,myScore,oppScore,dQ,suddenDeath,dAnswered,dTimer,dTimeLeft,dCorrect,duelRoundQs=[],oppName,oppAv;
 let leagueWtaActive=false,leagueDuelActive=false;
 const oppNames=['رضا','مریم','امیر','نگار','حسن','سارا'];
-const oppAvs=['🦊','🐼','🐯','🦁','🐵','🐸'];
+
 
 function pickOpponent(){
-  const i=Math.floor(Math.random()*oppNames.length);oppName=oppNames[i];oppAv=oppAvs[i];
+  const i=Math.floor(Math.random()*oppNames.length);oppName=oppNames[i];oppAv='';
   ['duelOppName','duelOppName2'].forEach(id=>document.getElementById(id).textContent=oppName);
   ['duelOppAv','duelOppAv2'].forEach(id=>document.getElementById(id).textContent=oppAv);
 }
@@ -6791,7 +6811,7 @@ function renderDuelResultPanel(won){
   const score=fa(oppScore)+' - '+fa(myScore),wrong=myResults.filter(x=>x==='no').length;
   const coins=won?(lastPracticeCoinsEarned||Math.max(0,duelStage*45+80)):0,xp=duelStage*80;
   if(userPlan==='free'){
-    box.innerHTML='<div class="duel-summary-aaa"><div class="duel-summary-card"><div class="duel-summary-top"><div class="duel-side me"><div class="av">'+pzMyAvHTML('🦁')+'</div><b>'+(window.myUserId||window.myName||'من')+'</b><span>بازیکن</span></div><div class="duel-final"><div class="state '+(won?'':'lose')+'">'+(won?'پیروزی':'پایان دوئل')+'</div><div class="score">'+score+'</div></div><div class="duel-side"><div class="av" onclick="showCurrentOpponentProfile()">'+pzAvHTML(oppAv,'🦊')+'</div><b>'+(oppName||'حریف')+'</b><span>حریف</span></div></div><div class="duel-summary-kpis"><div class="duel-kpi"><b>'+fa(myScore)+'</b><span>پاسخ درست</span></div><div class="duel-kpi"><b>'+fa(wrong)+'</b><span>پاسخ اشتباه</span></div><div class="duel-kpi"><b>'+fa(xp)+'</b><span>XP</span></div><div class="duel-kpi"><b>'+fa(duelStage)+'</b><span>مرحله</span></div><div class="duel-kpi"><b>~'+fa(duelStage*52)+'ث</b><span>مدت مسابقه</span></div><div class="duel-kpi"><b>'+fa(coins)+'</b><span>سکه برده</span></div></div><div class="duel-reward-strip"><span class="bigcoin">🪙</span><b>+'+fa(coins)+' سکه</b><small>اگر در رقابت اصلی بودی، جایزهٔ واقعی می‌گرفتی.</small></div><div class="duel-social-actions"><button onclick="requestFriend(oppName||\'حریف\')"><span class="ico">➕</span>دوستی</button><button onclick="showCurrentOpponentProfile()"><span class="ico">👤</span>پروفایل</button><button onclick="reportOpponent()"><span class="ico">🚩</span>گزارش</button><button onclick="blockOpponent()"><span class="ico">🚫</span>بلاک</button></div><div class="duel-bottom-actions"><button class="btn btn-primary" onclick="collectPracticeCoinsExit()">خروج بعد از دریافت سکه</button><button class="btn btn-blue" onclick="continueDoublePracticeCoins()">ادامه و دوبرابر کردن سکه</button></div></div></div>';
+    box.innerHTML='<div class="duel-summary-aaa"><div class="duel-summary-card"><div class="duel-summary-top"><div class="duel-side me"><div class="av">'+pzMyAvHTML()+'</div><b>'+(window.myUserId||window.myName||'من')+'</b><span>بازیکن</span></div><div class="duel-final"><div class="state '+(won?'':'lose')+'">'+(won?'پیروزی':'پایان دوئل')+'</div><div class="score">'+score+'</div></div><div class="duel-side"><div class="av">'+pzFaceHTML({avatar:oppAv,character:(window.pzRt&&pzRt.oppCharacter)||null})+'</div><b>'+(oppName||'حریف')+'</b><span>حریف</span></div></div><div class="duel-summary-kpis"><div class="duel-kpi"><b>'+fa(myScore)+'</b><span>پاسخ درست</span></div><div class="duel-kpi"><b>'+fa(wrong)+'</b><span>پاسخ اشتباه</span></div><div class="duel-kpi"><b>'+fa(xp)+'</b><span>XP</span></div><div class="duel-kpi"><b>'+fa(duelStage)+'</b><span>مرحله</span></div><div class="duel-kpi"><b>~'+fa(duelStage*52)+'ث</b><span>مدت مسابقه</span></div><div class="duel-kpi"><b>'+fa(coins)+'</b><span>سکه برده</span></div></div><div class="duel-reward-strip"><span class="bigcoin">🪙</span><b>+'+fa(coins)+' سکه</b><small>اگر در رقابت اصلی بودی، جایزهٔ واقعی می‌گرفتی.</small></div><div class="duel-social-actions"><button onclick="requestFriend(oppName||\'حریف\')"><span class="ico">➕</span>دوستی</button><button onclick="showCurrentOpponentProfile()"><span class="ico">👤</span>پروفایل</button><button onclick="reportOpponent()"><span class="ico">🚩</span>گزارش</button><button onclick="blockOpponent()"><span class="ico">🚫</span>بلاک</button></div><div class="duel-bottom-actions"><button class="btn btn-primary" onclick="collectPracticeCoinsExit()">خروج بعد از دریافت سکه</button><button class="btn btn-blue" onclick="continueDoublePracticeCoins()">ادامه و دوبرابر کردن سکه</button></div></div></div>';
   }else{
     /* The result is already shown big at the top (resultDuelScore) — so no center
        result card here. Just compact, side-by-side profile / friend buttons. */
@@ -7319,12 +7339,11 @@ function jsStr(s){return String(s||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'")
 let _pzProfileSeq=0;
 const PZ_MODE_FA={duel:'دوئل',lastSurvivor:'آخرین بازمانده',allOrNothing:'همه یا هیچ',weeklyLeague:'لیگ هفتگی'};
 
-/* The modal icon is a real photo when the player has one — tap it to enlarge. */
-function pzProfileIcon(av){
-  const url=pzAvIsUrl(av)?pzAvatarAbs(av):'';
-  return url
-    ? '<img src="'+frEsc(url)+'" alt="" onclick="pzOpenPhoto(\''+jsStr(url)+'\')" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block;cursor:zoom-in">'
-    : (av||'🦊');
+/* The modal icon is the same two-sided card as everywhere else: one tap turns
+   it over, two taps enlarge. The enlarge used to be a single tap, which left no
+   gesture for the flip. */
+function pzProfileIcon(av,character){
+  return pzFaceHTML((av&&typeof av==='object')?av:{avatar:av,character:character||null});
 }
 function pzOpenPhoto(url){
   if(!url) return;
@@ -7371,7 +7390,7 @@ async function showPlayerProfile(userId,fb){
   const seq=++_pzProfileSeq;
   const title=fb.n||'بازیکن';
   showAaaModal({
-    iconHTML:pzProfileIcon(fb.a||'🦊'),
+    iconHTML:pzProfileIcon(fb.a||'',fb.ch||null),
     title:title,
     sub:'<div class="opp-profile"><div class="opp-loading">در حال دریافت آمار…</div></div>',
     primaryText:userId?'ارسال درخواست دوستی':'بستن',
@@ -7386,7 +7405,7 @@ async function showPlayerProfile(userId,fb){
   if(r&&r.ok&&r.data){
     const d=r.data;
     const t=document.getElementById('aaaTitle'); if(t) t.textContent=d.username||title;
-    const ic=document.getElementById('aaaIcon'); if(ic) ic.innerHTML=pzProfileIcon(d.avatar||fb.a||'🦊');
+    const ic=document.getElementById('aaaIcon'); if(ic) ic.innerHTML=pzProfileIcon(d.avatar||fb.a||'',d.character||fb.ch||null);
     paint(pzProfileBody(d,fb.source?'<div class="opp-src">'+frEsc(fb.source)+'</div>':''));
   } else {
     paint('<div class="opp-profile"><div class="opp-empty"><span class="big">📡</span>آمار دریافت نشد — اتصالت را بررسی کن.</div></div>');
@@ -7408,7 +7427,7 @@ function showOpponentProfile(data){ data=data||{}; showPlayerProfile(data.userId
 function showOpponentProfileByData(userId,n,a,source){ showPlayerProfile(userId||null,{n:n,a:a,source:source}); }
 async function showCurrentOpponentProfile(){
   const nm=(typeof pzRt!=='undefined'&&pzRt&&pzRt.oppName)||oppName||document.getElementById('duelOppName')?.textContent||'حریف';
-  const av=(typeof pzRt!=='undefined'&&pzRt&&pzRt.oppAv)||oppAv||'🦊';
+  const av=(typeof pzRt!=='undefined'&&pzRt&&pzRt.oppAv)||oppAv||'';
   const oppId=(typeof pzRt!=='undefined'&&pzRt&&pzRt.oppId)?pzRt.oppId:null;
   showPlayerProfile(oppId,{n:nm,a:av,source:'حریف فعلی'});
 }
@@ -7417,35 +7436,10 @@ function showFriendProfile(id){
   showPlayerProfile(id||null,{n:f.n||f.u,a:f.a,source:'دوستان'});
 }
 /* ============ RANKINGS + LEAGUES ============ */
-const RANK_W=[
-  {a:'👾',n:'NimaX77',p:'۱۲٬۸۵۰'},{a:'🐙',n:'SanaGamer01',p:'۱۱٬۹۲۰'},
-  {a:'🐸',n:'AriaKill3r',p:'۱۰٬۷۴۰'},{a:'🦊',n:'TinaXP2025',p:'۹٬۹۸۰'},
-  {a:'🐼',n:'RahaShadow9',p:'۸٬۸۶۰'},{a:'🐯',n:'KianSniper88',p:'۷٬۹۳۰'},
-  {a:'🦁',n:'Shahab_9865 (تو)',p:'۷٬۴۲۰',me:true},{a:'🐵',n:'MeliNova14',p:'۶٬۸۱۰'},
-];
-const RANK_O=[
-  {a:'🐯',n:'ProMaster',p:'۱۸۴٬۰۰۰'},{a:'👾',n:'NimaX77',p:'۱۷۱٬۴۰۰'},
-  {a:'🦁',n:'QuizKing',p:'۱۶۵٬۲۰۰'},{a:'🐙',n:'SanaGamer01',p:'۱۵۸٬۹۰۰'},
-  {a:'🦊',n:'Shahab_9865 (تو)',p:'۱۴۲٬۳۰۰',me:true},{a:'🐼',n:'RahaShadow9',p:'۱۳۹٬۷۰۰'},
-];
-function podium(list){
-  const p=list.slice(0,3);
-  return '<div class="podium">'+
-   '<div class="pod p2" onclick="showOpponentProfileByData(\''+jsStr(p[1].uid||'')+'\',\''+jsStr(p[1].n)+'\',\''+jsStr(p[1].a)+'\',\'سکوی رتبه‌بندی\')"><div class="pav">'+pzAvHTML(p[1].a,'🦊')+'</div><div class="base"><div class="rk">۲</div><b>'+p[1].n.split(' ')[0]+'</b></div></div>'+
-   '<div class="pod p1" onclick="showOpponentProfileByData(\''+jsStr(p[0].uid||'')+'\',\''+jsStr(p[0].n)+'\',\''+jsStr(p[0].a)+'\',\'سکوی رتبه‌بندی\')"><div class="pav">'+pzAvHTML(p[0].a,'🦊')+'</div><div class="base"><div class="rk">۱</div><b>'+p[0].n.split(' ')[0]+'</b></div></div>'+
-   '<div class="pod p3" onclick="showOpponentProfileByData(\''+jsStr(p[2].uid||'')+'\',\''+jsStr(p[2].n)+'\',\''+jsStr(p[2].a)+'\',\'سکوی رتبه‌بندی\')"><div class="pav">'+pzAvHTML(p[2].a,'🦊')+'</div><div class="base"><div class="rk">۳</div><b>'+p[2].n.split(' ')[0]+'</b></div></div></div>';
-}
-function rankRows(list,unit){
-  unit=unit||'XP';
-  const src=unit==='تومان'?'رنکینگ مبلغ':(unit==='XP'?'رنکینگ XP':'کاپ هفتگی');
-  return list.map((r,i)=>'<div class="rankrow'+(r.me?' me':'')+'" '+(r.me?'onclick="go(\'profile\')"':'onclick="showOpponentProfileByData(\''+jsStr(r.uid||'')+'\',\''+jsStr(r.n)+'\',\''+jsStr(r.a)+'\',\''+jsStr(src)+'\')"')+'><span class="num">'+fa(i+1)+'</span><div class="rav">'+pzAvHTML(r.a,'🦊')+'</div><div class="rn">'+r.n+'</div><div class="rp">'+r.p+' <small style="font-size:9px;color:var(--muted)">'+unit+'</small></div></div>').join('');
-}
-const RANK_WINS=[
-  {a:'🐯',n:'ProMaster',p:'۴۸٬۰۰۰٬۰۰۰'},{a:'👾',n:'NimaX77',p:'۳۲٬۵۰۰٬۰۰۰'},
-  {a:'🦊',n:'TinaXP2025',p:'۲۱٬۸۰۰٬۰۰۰'},{a:'🐙',n:'SanaGamer01',p:'۱۸٬۲۰۰٬۰۰۰'},
-  {a:'🦁',n:'Shahab_9865 (تو)',p:'۱۵٬۶۰۰٬۰۰۰',me:true},{a:'🐼',n:'RahaShadow9',p:'۱۲٬۹۰۰٬۰۰۰'},
-  {a:'🐯',n:'KianSniper88',p:'۹٬۴۰۰٬۰۰۰'},{a:'🐵',n:'MeliNova14',p:'۷٬۱۰۰٬۰۰۰'},
-];
+/* No mock ranking data. These three fabricated tables carried invented names,
+   scores and animal-emoji faces; the renderer already falls through to a real
+   empty state when the server has nothing, so they were dead weight that could
+   only ever mislead. */
 /* REAL leaderboards: fetch /leaderboards/{weekly|overall|winnings} from the server
    (weekly = 🏆cup, overall = XP, wins = تومان). The podium needs ≥3 entries, so it
    is only shown when there are enough real players; a mock fallback keeps the
@@ -7457,10 +7451,10 @@ const RANK_WINS=[
      wins     → ledger, lifetime
    The home screen paints the weekly cup; this screen carries all four. */
 const _rankMeta={
-  cup:{kind:'weekly',unit:'🏆',title:'🏆 کاپ هفتگی',crit:'معیار: کاپِ (🏆) این هفته',note:'هر هفته ریست می‌شود · نفرات برتر به لیگ بالاتر می‌روند',mock:'RANK_W'},
-  overall:{kind:'overall',unit:'XP',title:'⭐ رنکینگ کلی',crit:'معیار: مجموع XP',note:'مجموع XP از ابتدای فعالیت کاربر (دائمی)',mock:'RANK_O'},
-  weekWins:{kind:'weekly-winnings',unit:'تومان',title:'💵 برد این هفته',crit:'معیار: مبلغ برده‌شده در این هفته',note:'همزمان با کاپ هفتگی ریست می‌شود',mock:'RANK_WINS'},
-  wins:{kind:'winnings',unit:'تومان',title:'💰 برد کلی',crit:'معیار: مبلغ برنده‌شده',note:'بیشترین جایزهٔ کسب‌شده از ابتدا (دائمی)',mock:'RANK_WINS'}
+  cup:{kind:'weekly',unit:'🏆',title:'🏆 کاپ هفتگی',crit:'معیار: کاپِ (🏆) این هفته',note:'هر هفته ریست می‌شود · نفرات برتر به لیگ بالاتر می‌روند'},
+  overall:{kind:'overall',unit:'XP',title:'⭐ رنکینگ کلی',crit:'معیار: مجموع XP',note:'مجموع XP از ابتدای فعالیت کاربر (دائمی)'},
+  weekWins:{kind:'weekly-winnings',unit:'تومان',title:'💵 برد این هفته',crit:'معیار: مبلغ برده‌شده در این هفته',note:'همزمان با کاپ هفتگی ریست می‌شود'},
+  wins:{kind:'winnings',unit:'تومان',title:'💰 برد کلی',crit:'معیار: مبلغ برنده‌شده',note:'بیشترین جایزهٔ کسب‌شده از ابتدا (دائمی)'}
 };
 let _rankTab='cup';
 function _rankHeader(m){ return '<div class="card" style="text-align:center;margin-bottom:12px;padding:12px"><b style="font-size:13px">'+m.title+'</b><div class="rank-criteria">'+m.crit+'</div><div style="font-size:12px;color:var(--muted);margin-top:7px">'+m.note+'</div></div>'; }
@@ -7476,7 +7470,7 @@ async function rankTab(el,tab){
     const r=await pzApi('GET','/leaderboards/'+m.kind);
     if(c.dataset.rankToken!==token) return;   /* superseded */
     if(r&&r.ok&&r.data&&Array.isArray(r.data.entries)&&r.data.entries.length){
-      list=r.data.entries.map(e=>({uid:e.userId,a:e.avatar||'🦊',n:(e.username||'بازیکن')+(e.highlighted?' (تو)':''),p:fa(Number(e.score)||0),me:!!e.highlighted}));
+      list=r.data.entries.map(e=>({uid:e.userId,a:e.avatar||'',ch:e.character||null,n:(e.username||'بازیکن')+(e.highlighted?' (تو)':''),p:fa(Number(e.score)||0),me:!!e.highlighted}));
     }
   }catch(e){}
   if(c.dataset.rankToken!==token) return;
@@ -7609,11 +7603,11 @@ function goLeagueLive(tier, previewOnly){
   const hero=document.getElementById('llHero');hero.className='league '+cls;
   const tb=document.getElementById('llTable');tb.innerHTML='';
   const rows=[];
-  for(let i=0;i<10;i++)rows.push({n:names[i%names.length],a:avatars[i%avatars.length],p:(10-i)*120000});
+  for(let i=0;i<10;i++)rows.push({n:names[i%names.length],a:'',p:(10-i)*120000});
   rows.splice(4,0,{n:'Shahab_9865 (تو)',a:'🦁',p:6*120000,me:true});
   rows.forEach((r,i)=>{
     const d=document.createElement('div');d.className='rankrow'+(r.me?' me':'');
-    d.innerHTML='<span class="num">'+fa(i+1)+'</span><div class="rav">'+r.a+'</div><div class="rn">'+r.n+'</div><div class="rp">'+fa(r.p)+' ت</div>';
+    d.innerHTML='<span class="num">'+fa(i+1)+'</span><div class="rav">'+(r.a?pzFaceHTML({avatar:r.a}):pzBlankFace())+'</div><div class="rn">'+r.n+'</div><div class="rp">'+fa(r.p)+' ت</div>';
     tb.appendChild(d);
   });
   go('league-live');
@@ -7766,11 +7760,11 @@ let _frOutgoing=[], _frChatPoll=null, _frLoading=false;
 function frEsc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 function frTime(iso){ try{ const d=new Date(iso); if(isNaN(d))return 'الان'; return fa(('0'+d.getHours()).slice(-2))+':'+fa(('0'+d.getMinutes()).slice(-2)); }catch(e){ return 'الان'; } }
 function mapFriend(sf){
-  return { id:sf.id, a:sf.avatar||'🦊', n:sf.displayName||sf.username, u:sf.username, lvl:sf.level||1,
+  return { id:sf.id, a:sf.avatar||'', ch:sf.character||null, n:sf.displayName||sf.username, u:sf.username, lvl:sf.level||1,
            on:!!sf.online, unread:sf.unread||0, fav:false, s:(sf.online?'آنلاین':'آفلاین'),
            league:'سطح '+fa(sf.level||1), last:sf.lastMessage||'', m:(FRIENDS_DATA.find(x=>x.id===sf.id)||{}).m||[] };
 }
-function mapReq(r){ return { id:r.id, userId:r.userId, a:r.avatar||'🦊', n:r.displayName||r.username, u:r.username, lvl:r.level||1, mutual:0, msg:'می‌خواهد با تو دوست شود' }; }
+function mapReq(r){ return { id:r.id, userId:r.userId, a:r.avatar||'', ch:r.character||null, n:r.displayName||r.username, u:r.username, lvl:r.level||1, mutual:0, msg:'می‌خواهد با تو دوست شود' }; }
 async function friendsLoad(){
   if(_frLoading) return; _frLoading=true;
   try{
@@ -7828,7 +7822,7 @@ function friendCard(f,mode){
   else if(isChat)actions=unread;
   const cardClick=isChat?'onclick="openFriendChat(\''+f.id+'\')"':'';
   const profileClick=isChat?'':'onclick="event.stopPropagation();showFriendProfile(\''+f.id+'\')"';
-  return '<div class="friend-card '+(f.on?'online':'')+'" '+cardClick+'><div class="fav" '+profileClick+'>'+pzAvHTML(f.a,'🦊')+star+(f.on?'<span class="on"></span>':'')+'</div><div class="info" '+profileClick+'><b>'+f.n+'</b><span>@'+f.u+' · '+f.s+'</span><div class="meta"><span class="mini-badge ok">لول '+fa(f.lvl)+'</span><span class="mini-badge y">'+f.league+'</span></div></div><div class="fr-actions">'+actions+'</div></div>';
+  return '<div class="friend-card '+(f.on?'online':'')+'" '+cardClick+'><div class="fav" '+profileClick+'>'+pzFaceHTML({avatar:f.a,character:f.ch})+star+(f.on?'<span class="on"></span>':'')+'</div><div class="info" '+profileClick+'><b>'+f.n+'</b><span>@'+f.u+' · '+f.s+'</span><div class="meta"><span class="mini-badge ok">لول '+fa(f.lvl)+'</span><span class="mini-badge y">'+f.league+'</span></div></div><div class="fr-actions">'+actions+'</div></div>';
 }
 function renderFriendsList(c,q){
   const list=FRIENDS_DATA.filter(f=>friendMatch(f,q)).sort((a,b)=>(b.fav-a.fav)||(b.on-a.on));
@@ -7841,11 +7835,11 @@ function renderChatsList(c,q){
 }
 function renderRequests(c,q){
   const list=FRIEND_REQUESTS.filter(f=>friendMatch(f,q));
-  c.innerHTML=list.length?list.map(r=>'<div class="friend-card request-card"><div class="fav">'+pzAvHTML(r.a,'🦊')+'</div><div class="info"><b>'+frEsc(r.n)+'</b><span>@'+frEsc(r.u)+' · لول '+fa(r.lvl)+'</span><div class="meta"><span class="mini-badge y">'+r.msg+'</span></div></div><div class="fr-actions"><button class="btn btn-ghost btn-sm" onclick="showOpponentProfileByData(\''+jsStr(r.userId||'')+'\',\''+jsStr(r.n)+'\',\''+jsStr(r.a)+'\',\'درخواست دوستی\')">پروفایل</button><button class="btn btn-green btn-sm" onclick="acceptFriendRequest(\''+r.id+'\')">قبول</button><button class="btn btn-red btn-sm" onclick="declineFriendRequest(\''+r.id+'\')">رد</button></div></div>').join(''):'<div class="fr-empty"><span class="big">📭</span>درخواست جدیدی نداری.</div>';
+  c.innerHTML=list.length?list.map(r=>'<div class="friend-card request-card"><div class="fav">'+pzFaceHTML({avatar:r.a,character:r.ch})+'</div><div class="info"><b>'+frEsc(r.n)+'</b><span>@'+frEsc(r.u)+' · لول '+fa(r.lvl)+'</span><div class="meta"><span class="mini-badge y">'+r.msg+'</span></div></div><div class="fr-actions"><button class="btn btn-ghost btn-sm" onclick="showOpponentProfileByData(\''+jsStr(r.userId||'')+'\',\''+jsStr(r.n)+'\',\''+jsStr(r.a)+'\',\'درخواست دوستی\')">پروفایل</button><button class="btn btn-green btn-sm" onclick="acceptFriendRequest(\''+r.id+'\')">قبول</button><button class="btn btn-red btn-sm" onclick="declineFriendRequest(\''+r.id+'\')">رد</button></div></div>').join(''):'<div class="fr-empty"><span class="big">📭</span>درخواست جدیدی نداری.</div>';
 }
 function renderAddFriend(c,q){
   const out=(_frOutgoing||[]);
-  const outHtml=out.length?('<div class="section-title" style="margin-top:4px">درخواست‌های ارسالی (در انتظار پاسخ)</div>'+out.map(s=>'<div class="friend-card"><div class="fav">'+pzAvHTML(s.a,'🦊')+'</div><div class="info"><b>'+frEsc(s.n)+'</b><span>@'+frEsc(s.u)+' · لول '+fa(s.lvl)+'</span><div class="meta"><span class="mini-badge y">در انتظار پاسخ ⏳</span></div></div></div>').join('')):'';
+  const outHtml=out.length?('<div class="section-title" style="margin-top:4px">درخواست‌های ارسالی (در انتظار پاسخ)</div>'+out.map(s=>'<div class="friend-card"><div class="fav">'+pzFaceHTML({avatar:s.a,character:s.ch})+'</div><div class="info"><b>'+frEsc(s.n)+'</b><span>@'+frEsc(s.u)+' · لول '+fa(s.lvl)+'</span><div class="meta"><span class="mini-badge y">در انتظار پاسخ ⏳</span></div></div></div>').join('')):'';
   c.innerHTML='<div class="add-panel"><h3>افزودن دوست با یوزرنیم</h3><p>یوزرنیم دقیق دوستت رو وارد کن تا درخواست دوستی براش بره.</p><div style="display:flex;gap:8px"><input class="input" id="friendAddInput" placeholder="مثلاً Sara_1452" dir="ltr" onkeydown="if(event.key===\'Enter\')sendFriendRequest()"><button class="btn btn-primary btn-sm" style="height:48px" onclick="sendFriendRequest()">ارسال</button></div><div class="qr-card"><div class="qr-box"></div><div style="flex:1"><b style="font-size:13px">لینک دعوت تو</b><div style="font-size:12px;color:var(--bolt);font-weight:900;margin-top:4px" dir="ltr">'+frEsc(((typeof _usr!=='undefined'&&_usr&&_usr.username)||'PRIZZE'))+'</div></div><button class="btn btn-ghost btn-sm" onclick="copyInviteLink()">کپی</button></div></div>'+outHtml;
 }
 async function openFriendChat(id){frActiveChat=id;frActiveTab='chats';document.querySelectorAll('#frTabs .fr-tab').forEach(b=>b.classList.toggle('active',b.dataset.tab==='chats'));const f=FRIENDS_DATA.find(x=>x.id===id);if(f)f.unread=0;renderFriendsHub();await frLoadMessages(id);if(frActiveChat===id)renderChatView(id);frStartChatPoll(id);}
@@ -8875,6 +8869,7 @@ async function pzHydrateAll(){
     if(r&&r.ok&&r.data){
       const u=r.data; _usr=u; try{ localStorage.setItem('pz_usr',JSON.stringify(u)); }catch(e){}
       try{ pzApplyMyAvatar(u.avatar||''); }catch(e){}   /* real profile photo, if uploaded */
+      try{ pzApplyMyCharacter(u.character||null); }catch(e){}
       try{ pzLoadNotifPrefs(); }catch(e){}   /* reflect server notification prefs in settings */
       if(typeof u.weeklyScore==='number'){ try{ weeklyScore=u.weeklyScore; }catch(e){} }
       try{ pzUpdateXpBar(u.xp||0); }catch(e){}
@@ -8908,7 +8903,7 @@ async function pzHydrateBoards(){
       if(!list.length){ rows.innerHTML='<div style="text-align:center;color:var(--muted);font-size:11.5px;font-weight:800;padding:10px">هنوز رتبه‌ای برای این هفته ثبت نشده — اولین نفر باش!</div>'; }
       /* The avatar is a real photo URL for players who uploaded one, so it goes
          through pzAvHTML — a raw value here printed the file path on screen. */
-      else rows.innerHTML=list.map((e,i)=>'<div class="lb-row" style="cursor:pointer" onclick="showOpponentProfileByData(\''+jsStr(e.userId||'')+'\',\''+jsStr(e.username||'بازیکن')+'\',\''+jsStr(e.avatar||'')+'\',\'رتبه‌بندی هفتگی\')"><span class="rk"'+(i===1?' style="background:#c8c8c8"':i===2?' style="background:#cd7f32"':'')+'>'+fa(i+1)+'</span><span style="flex:1;display:flex;align-items:center;gap:7px;min-width:0"><span class="lb-av">'+pzAvHTML(e.avatar,'🦊')+'</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+frEsc(e.username||'بازیکن')+(e.highlighted?' (تو)':'')+'</span></span><span style="color:var(--bolt);font-weight:900;flex-shrink:0">'+fa(Number(e.score)||0)+' 🏆</span></div>').join('');
+      else rows.innerHTML=list.map((e,i)=>'<div class="lb-row" style="cursor:pointer" onclick="showOpponentProfileByData(\''+jsStr(e.userId||'')+'\',\''+jsStr(e.username||'بازیکن')+'\',\''+jsStr(e.avatar||'')+'\',\'رتبه‌بندی هفتگی\')"><span class="rk"'+(i===1?' style="background:#c8c8c8"':i===2?' style="background:#cd7f32"':'')+'>'+fa(i+1)+'</span><span style="flex:1;display:flex;align-items:center;gap:7px;min-width:0"><span class="lb-av">'+pzFaceHTML(e)+'</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+frEsc(e.username||'بازیکن')+(e.highlighted?' (تو)':'')+'</span></span><span style="color:var(--bolt);font-weight:900;flex-shrink:0">'+fa(Number(e.score)||0)+' 🏆</span></div>').join('');
     }
   }catch(e){}
 }
@@ -9120,7 +9115,7 @@ function startMatchmaking(){
     const ang=Math.random()*Math.PI*2,r=52+Math.random()*52;
     ping.style.left='calc(50% + '+(Math.cos(ang)*r).toFixed(0)+'px - 16px)';
     ping.style.top='calc(50% + '+(Math.sin(ang)*r).toFixed(0)+'px - 16px)';
-    ping.textContent=avatars[Math.floor(Math.random()*avatars.length)];
+    ping.innerHTML=pzBlankFace();
     radar.appendChild(ping);setTimeout(()=>ping.remove(),1600);sfx('blip');
   },650);
   const scanMsgs=['هماهنگ‌سازی سطح مهارت...','پیدا کردن اتصال پایدار...','بررسی سرعت پاسخ...','آماده‌سازی دوئل تمرینی...'];let msgIdx=0;
@@ -9162,7 +9157,7 @@ function openRoom(){
     if(!document.getElementById('room').classList.contains('active')){clearInterval(roomJoinT);return;}
     roomJoined++;const me=roomJoined===roomTotal;
     const p=document.createElement('div');p.className='player'+(me?' me':'');
-    const pav=avatars[(roomJoined-1)%avatars.length],pname=(me?'تو':names[(roomJoined-1)%names.length]);
+    const pav='',pname=(me?'تو':names[(roomJoined-1)%names.length]);
     p.innerHTML='<div class="pav">'+pav+'</div><small>'+pname+'</small>';
     if(!me)p.onclick=()=>showOpponentProfile({n:pname,a:pav,source:'روم مسابقه',status:'منتظر شروع',league:'🥉 برنزی',lvl:2+roomJoined});
     pbox.appendChild(p);p.querySelector('.pav').classList.add('pop');
@@ -9245,7 +9240,7 @@ function beginWTA(){
   gameType='wta';acStrikes=0;puUsed={};
   wtaPot=(userPlan==='free'?0:curStake*15);wtaPlayers=[];
   const meIdx=Math.floor(Math.random()*15);
-  for(let i=0;i<15;i++)wtaPlayers.push({name:i===meIdx?'تو':names[i%names.length],av:avatars[i%avatars.length],lives:3,out:false,me:i===meIdx});
+  for(let i=0;i<15;i++)wtaPlayers.push({name:i===meIdx?'تو':names[i%names.length],av:'',lives:3,out:false,me:i===meIdx});
   wtaCur=0;wtaPickMode=false;
   go('wta');
   document.getElementById('wtaPot').textContent=(userPlan==='free'?'تمرینی':fa(wtaPot));
@@ -9262,7 +9257,7 @@ function showWtaFirstIntro(cb){
   wtaCur=firstIdx;
   const p=wtaPlayers[firstIdx];
   const ov=document.getElementById('wtaFirstIntro');
-  document.getElementById('wfiAv').textContent=p.av;
+  document.getElementById('wfiAv').innerHTML=p.av?pzFaceHTML({avatar:p.av}):pzBlankFace();
   document.getElementById('wfiName').textContent=p.me?'تو 👑':p.name;
   document.getElementById('wfiSub').textContent=p.me?'تو اول شروع می‌کنی! 🎯':'اولین سوال رو شروع می‌کنه';
   ov.classList.add('show');
@@ -9275,7 +9270,7 @@ function wtaBuildStage(){
   [...st.querySelectorAll('.wta-seat')].forEach(e=>e.remove());
   wtaSeatEls=[];
   wtaMeIdx=wtaPlayers.findIndex(p=>p.me);
-  document.getElementById('meHudAv').textContent=wtaPlayers[wtaMeIdx]?wtaPlayers[wtaMeIdx].av:'🦁';
+  document.getElementById('meHudAv').innerHTML=pzMyAvHTML();
   // همه‌ی بازیکن‌ها به‌جز «تو» دور بیضی می‌شینن؛ خودِ تو در HUD پایین ثابته
   const ring=wtaPlayers.map((p,i)=>({p,i})).filter(x=>!x.p.me);
   const N=ring.length; // ۱۴
@@ -9536,7 +9531,7 @@ let _tok = localStorage.getItem('pz_tok') || null;
 let _usr = JSON.parse(localStorage.getItem('pz_usr') || 'null');
 let _rid = null, _mid = null, _mmt = null, _mmi = null;
 
-if(_tok && _usr) setTimeout(()=>{ wallet = _usr.balances?.wallet||0; updateWalletUI(); try{applyMyName();}catch(e){} try{pzApplyMyAvatar(_usr.avatar||'');}catch(e){} try{pzHydrateAll();}catch(e){} },300);
+if(_tok && _usr) setTimeout(()=>{ wallet = _usr.balances?.wallet||0; updateWalletUI(); try{applyMyName();}catch(e){} try{pzApplyMyAvatar(_usr.avatar||'');}catch(e){} try{pzApplyMyCharacter(_usr.character||null);}catch(e){} try{pzHydrateAll();}catch(e){} },300);
 
 let _pzRefreshing=null; // shared in-flight refresh so parallel 401s refresh once
 async function pzApi(m,p,b,a=true){
@@ -9708,6 +9703,7 @@ function populateProfileEdit(){
   const nEl=document.getElementById('profEditName'); if(nEl) nEl.value=(_usr&&_usr.displayName&&_usr.displayName!=='بازیکن جدید')?_usr.displayName:'';
   const uEl=document.getElementById('profEditUsername'); if(uEl) uEl.value=(_usr&&_usr.username&&!/^user_\d+$/.test(_usr.username))?_usr.username:'';
   try{ pzApplyMyAvatar((_usr&&_usr.avatar)||''); }catch(e){}
+  try{ pzApplyMyCharacter((_usr&&_usr.character)||null); }catch(e){}
 }
 async function submitProfileEdit(){
   const full=(document.getElementById('profEditName')?.value||'').trim();
@@ -9739,18 +9735,121 @@ function pzAvatarAbs(u){
   if(/^(https?:|data:|blob:)/i.test(u)) return u;
   return String(_A).replace(/\/v1\/?$/,'')+u;
 }
-/* A player's «avatar» from the server is EITHER a placeholder emoji or a real
-   photo URL — these three helpers let every avatar slot handle both. */
 function pzAvIsUrl(a){ return typeof a==='string' && /^(https?:|\/|data:)/i.test(a); }
-function pzAvHTML(a,fallback){
-  const v=a||fallback||'👤';
-  return pzAvIsUrl(v) ? '<img src="'+pzAvatarAbs(v)+'" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block">' : v;
+/* ============ THE PLAYER FACE — one two-sided card, used everywhere ============
+   A player is exactly two things: the photo they uploaded and the character they
+   equipped. There is no generated stand-in art any more — no hashed animal
+   emoji, no tinted mascot — because a stand-in is indistinguishable from a real
+   choice and made the same person look different on different screens.
+
+   The card carries both faces at once:
+     • photo + character → two sides, tap flips
+     • only one of them  → that one, no flip (there is nothing to flip to)
+     • neither           → a neutral silhouette, the empty state
+
+   Tap flips, double-tap enlarges. That ordering matters: the enlarge used to be
+   a single tap, so there was no gesture left for the flip. */
+function pzFaceSrc(p){
+  /* Accepts the whole player/row object, or a bare avatar string from an older
+     call site. Returns the two faces, already absolute. */
+  if(p&&typeof p==='object'){
+    const photo=p.avatar&&pzAvIsUrl(p.avatar)?pzAvatarAbs(p.avatar):'';
+    const ch=p.character&&p.character.image?pzAvatarAbs(p.character.image):'';
+    return {photo,ch,kind:(p.character&&p.character.kind)||'normal',name:(p.character&&p.character.name)||''};
+  }
+  const v=typeof p==='string'?p:'';
+  return {photo:pzAvIsUrl(v)?pzAvatarAbs(v):'',ch:'',kind:'normal',name:''};
 }
-function pzSetAv(el,a,fallback){
-  if(!el) return; const v=a||fallback||'👤';
-  if(pzAvIsUrl(v)) el.innerHTML=pzAvHTML(v); else el.textContent=v;
+
+/* The neutral empty state. Deliberately a flat silhouette rather than a face:
+   it must never read as "this player chose this".
+   A function, not a const: the first paint happens during load, before a const
+   on this line would have left its temporal dead zone. */
+function PZ_FACE_EMPTY(){
+  return '<svg viewBox="0 0 48 48" style="width:100%;height:100%;display:block" aria-hidden="true">'
+    +'<circle cx="24" cy="24" r="24" fill="rgba(255,255,255,.10)"/>'
+    +'<circle cx="24" cy="18" r="7.5" fill="rgba(255,255,255,.34)"/>'
+    +'<path d="M9 42c1.6-8.4 7.7-13 15-13s13.4 4.6 15 13z" fill="rgba(255,255,255,.34)"/></svg>';
 }
-function pzMyAvHTML(fallback){ return window.PZ_MY_AVATAR ? pzAvHTML(window.PZ_MY_AVATAR) : (fallback||'🦁'); }
+
+function pzFaceHTML(p,opts){
+  opts=opts||{};
+  const f=pzFaceSrc(p);
+  const img=(src,cls)=>'<img class="'+cls+'" src="'+frEsc(src)+'" alt="" draggable="false">';
+
+  // Nothing to show at all.
+  if(!f.photo&&!f.ch) return '<div class="pz-avc solo">'+PZ_FACE_EMPTY()+'</div>';
+
+  // Only one face → render it flat. A flip with nothing on the back is a lie.
+  if(!f.photo||!f.ch){
+    const only=f.photo||f.ch;
+    const vip=!f.photo&&f.kind==='vip'?' vip':'';
+    return '<div class="pz-avc solo'+vip+'"'+(f.photo&&opts.zoom!==false?' data-zoom="'+frEsc(f.photo)+'"':'')+'>'+img(only,'pz-avc-img')+'</div>';
+  }
+
+  // Both → a real two-sided card.
+  const vip=f.kind==='vip'?' vip':'';
+  return '<div class="pz-avc flip'+vip+'" data-flip="1"'+(opts.zoom!==false?' data-zoom="'+frEsc(f.photo)+'"':'')+'>'
+    +'<div class="pz-avc-in">'
+      +'<div class="pz-avc-f">'+img(f.photo,'pz-avc-img')+'</div>'
+      +'<div class="pz-avc-b">'+img(f.ch,'pz-avc-img')+'</div>'
+    +'</div></div>';
+}
+
+/* One delegated listener for every card on the page, however it got there.
+   Single tap flips; a second tap inside the window enlarges instead. */
+(function(){
+  let tapTimer=null, tapCard=null;
+  const FLIP_WINDOW=260;
+
+  function zoom(card){
+    const url=card.getAttribute('data-zoom');
+    if(url&&typeof pzOpenPhoto==='function')pzOpenPhoto(url);
+  }
+  function flip(card){
+    card.classList.toggle('flipped');
+    try{ sfx('blip'); vib([10]); }catch(e){}
+  }
+
+  document.addEventListener('click',function(e){
+    const card=e.target&&e.target.closest?e.target.closest('.pz-avc'):null;
+    if(!card)return;
+    const canFlip=card.hasAttribute('data-flip');
+    const canZoom=card.hasAttribute('data-zoom');
+    if(!canFlip&&!canZoom)return;
+
+    /* The card is usually sitting inside something that navigates (a friend
+       row, a leaderboard row). Swallowing the event here is what lets the
+       avatar be its own control while the name beside it still opens the
+       profile. */
+    e.stopPropagation();
+    e.preventDefault();
+
+    if(!canFlip){ zoom(card); return; }   // photo-only card: one tap enlarges
+
+    if(tapTimer&&tapCard===card){
+      clearTimeout(tapTimer); tapTimer=null; tapCard=null;
+      zoom(card);
+      return;
+    }
+    if(tapTimer){ clearTimeout(tapTimer); }
+    tapCard=card;
+    tapTimer=setTimeout(function(){ tapTimer=null; tapCard=null; flip(card); },FLIP_WINDOW);
+  },true);
+})();
+
+/* Legacy shims. Every old call site keeps working and simply renders the card
+   with whatever it knows; the ones that were given the full row show both faces. */
+function pzAvHTML(a,fallback,character){
+  if(a&&typeof a==='object')return pzFaceHTML(a);
+  return pzFaceHTML({avatar:a,character:character||null});
+}
+function pzSetAv(el,a,fallback,character){
+  if(!el)return;
+  el.innerHTML=(a&&typeof a==='object')?pzFaceHTML(a):pzFaceHTML({avatar:a,character:character||null});
+}
+function pzMyFace(){ return {avatar:window.PZ_MY_AVATAR||'',character:window.PZ_MY_CHARACTER||null}; }
+function pzMyAvHTML(fallback){ return pzFaceHTML(pzMyFace()); }
 /* Decode any file the OS hands us (JPEG/PNG/HEIC/WebP), honouring EXIF rotation. */
 async function pzDecodeImage(file){
   if(typeof createImageBitmap==='function'){
@@ -9817,6 +9916,14 @@ function pzApplyMyAvatar(url){
   try{ paintMascots(); }catch(e){}
   const del=document.getElementById('profAvDel'); if(del) del.style.display = url ? '' : 'none';
   if(_usr){ _usr.avatar = url || null; try{ localStorage.setItem('pz_usr',JSON.stringify(_usr)); }catch(e){} }
+}
+/* The other half of my own card. Repaints through exactly the same path as the
+   photo, so picking a character on the selection screen updates every slot in
+   the app at once instead of only after a reload. */
+function pzApplyMyCharacter(ch){
+  window.PZ_MY_CHARACTER = ch || null;
+  try{ paintMascots(); }catch(e){}
+  if(_usr){ _usr.character = ch || null; try{ localStorage.setItem('pz_usr',JSON.stringify(_usr)); }catch(e){} }
 }
 function pzPickAvatar(){ const i=document.getElementById('profAvFile'); if(i){ i.value=''; i.click(); } }
 async function pzOnAvatarPicked(input){
@@ -9903,7 +10010,7 @@ startMatchmaking = async function(){
     const ang=Math.random()*Math.PI*2, r=52+Math.random()*52;
     ping.style.left='calc(50% + '+Math.cos(ang)*r+'px - 16px)';
     ping.style.top='calc(50% + '+Math.sin(ang)*r+'px - 16px)';
-    ping.textContent=avatars[Math.floor(Math.random()*avatars.length)];
+    ping.innerHTML=pzBlankFace();
     radar.appendChild(ping); setTimeout(()=>ping.remove(),1600);
   },650);
   mmTimer=setInterval(()=>{
@@ -10212,7 +10319,7 @@ function pzApplyDuelNames(){
   const oa=(pzRt&&pzRt.oppAv)||oppAv||'🦊';
   ['duelMeName','duelMeName2'].forEach(id=>{const el=document.getElementById(id); if(el)el.textContent=me;});
   ['duelOppName','duelOppName2','vsOppName'].forEach(id=>{const el=document.getElementById(id); if(el)el.textContent=op;});
-  ['duelOppAv','duelOppAv2','vsOppAv'].forEach(id=>{const el=document.getElementById(id); if(el)pzSetAv(el,oa,'🦊');});
+  ['duelOppAv','duelOppAv2','vsOppAv'].forEach(id=>{const el=document.getElementById(id); if(el)el.innerHTML=pzFaceHTML({avatar:oa,character:(window.pzRt&&pzRt.oppCharacter)||null});});
 }
 function pzCleanupRt(){
   pzRt.active=false; pzHeartbeat(false); try{ pzConnStop(); }catch(_){}
@@ -10750,7 +10857,7 @@ function pzRenderWaitPanel(half){
     '<div class="pzm-status-title">حریف خود را بیشتر بشناس</div>'+
     '<div class="pzm-status-sub">حریف در حال انتخاب موضوع است...'+(half===1?'<br><b style="color:var(--bolt)">در نیمهٔ دوم انتخاب موضوع با توست.</b>':'')+'</div>'+
     '<div class="pzm-oppcard">'+
-      '<div class="pzm-oppav">'+pzAvHTML(av,'🦊')+'</div>'+
+      '<div class="pzm-oppav">'+pzFaceHTML({avatar:av,character:(window.pzRt&&pzRt.oppCharacter)||null})+'</div>'+
       '<div class="pzm-oppname">@'+frEsc(nm)+'</div>'+
       '<div class="pzm-oppmeta" id="pzOppMeta">در حال دریافت آمار...</div>'+
       '<div class="pzm-oppstats" id="pzOppStats"></div>'+
@@ -10868,7 +10975,7 @@ function pzResultGate(myRight,oppRight,cb,label){
      finished are already on the server, so the difficulty is final. */
   try{ if(typeof pzPrepRound==='function'&&typeof dQ==='number') pzPrepRound(dQ); }catch(e){}
   const meId=((pzRt&&pzRt.myName)||window.myName||'تو'), opId=((pzRt&&pzRt.oppName)||'حریف');
-  const meAv=pzMyAvHTML('🦁'), opAv=pzAvHTML((pzRt&&pzRt.oppAv)||oppAv,'🦊');
+  const meAv=pzMyAvHTML(), opAv=pzFaceHTML({avatar:(pzRt&&pzRt.oppAv)||oppAv,character:(pzRt&&pzRt.oppCharacter)||null});
   const meCol=myScore>oppScore?'var(--ok)':(myScore<oppScore?'var(--red)':'var(--text)');
   const opCol=oppScore>myScore?'var(--ok)':(oppScore<myScore?'var(--red)':'var(--text)');
   const prevMy=myScore-(myRight?1:0), prevOpp=oppScore-(oppRight?1:0);

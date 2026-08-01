@@ -3,6 +3,7 @@ import { error, json } from '../../http/response.js';
 import { repositories } from '../../repositories/index.js';
 import { AvatarError, AVATAR_MAX_BYTES, avatarUrlFor, getAvatar, removeAvatar, saveAvatar } from '../../services/avatarService.js';
 import { buildUserStats } from '../../services/userStatsService.js';
+import { equippedCharacterFor } from '../../services/characterSelectionService.js';
 import { effectiveWeeklyScore } from '../../services/scoringConfig.js';
 
 export function registerUserRoutes(router: Router, base: string): void {
@@ -15,7 +16,9 @@ export function registerUserRoutes(router: Router, base: string): void {
     if (!ctx.userId) return error(ctx.res, 401, 'UNAUTHORIZED', 'ابتدا وارد شو.');
     const user = await repositories.users.findById(ctx.userId);
     if (!user) return error(ctx.res, 404, 'USER_NOT_FOUND', 'User not found');
-    json(ctx.res, 200, { ...toDto(user), avatar: await avatarUrlFor(user.id) });
+    // `character` rides along with `avatar` everywhere a player is drawn: the
+    // card shows the photo on one face and the character on the other.
+    json(ctx.res, 200, { ...toDto(user), avatar: await avatarUrlFor(user.id), character: await equippedCharacterFor(user.id) });
   });
 
   // Complete/update the player's own profile (display name + unique username).
@@ -32,7 +35,7 @@ export function registerUserRoutes(router: Router, base: string): void {
     } catch {
       return error(ctx.res, 409, 'USERNAME_TAKEN', 'این نام کاربری قبلاً گرفته شده است');
     }
-    json(ctx.res, 200, { ...toDto(user), avatar: await avatarUrlFor(user.id) });
+    json(ctx.res, 200, { ...toDto(user), avatar: await avatarUrlFor(user.id), character: await equippedCharacterFor(user.id) });
   });
   /* ---- Profile photo ----
    * The client uploads an ALREADY-SHRUNK square thumbnail (WebP when the device

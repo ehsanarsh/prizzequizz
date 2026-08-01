@@ -241,6 +241,7 @@ export async function getCharacter(characterId: string): Promise<Character | nul
 }
 
 export async function saveCharacter(input: any): Promise<Character> {
+  _catalogCache = null;   // an edit must show up at once, not after the TTL
   await ensureSchema();
   const existingId = str(input.id, 60);
   const existing = existingId ? await getCharacter(existingId) : null;
@@ -266,6 +267,7 @@ export async function saveCharacter(input: any): Promise<Character> {
 }
 
 export async function deleteCharacter(characterId: string): Promise<boolean> {
+  _catalogCache = null;
   await ensureSchema();
   const pool = pg();
   if (pool) {
@@ -477,6 +479,70 @@ export async function characterStats(): Promise<{ rows: CharacterStat[]; totalEq
     };
   });
   return { rows, totalEquipped, hasDatabase: true };
+}
+
+// ---------------------------------------------------------------------------
+// The equipped character, for anywhere a player is shown
+// ---------------------------------------------------------------------------
+/* The public face of a player: whatever they are currently wearing. Kept to
+ * exactly what a card needs to draw, so a leaderboard page carrying fifty of
+ * these does not also carry fifty descriptions and unlock rules. */
+export interface EquippedCharacter { id: string; name: string; image: string; kind: CharacterKind }
+
+/* The roster is small and changes rarely, while these lookups happen on every
+ * leaderboard, match and friends list. One short-lived snapshot of the catalog
+ * turns N queries into one. */
+let _catalogCache: { at: number; byId: Map<string, Character> } | null = null;
+const CATALOG_TTL_MS = 60_000;
+
+async function catalogById(): Promise<Map<string, Character>> {
+  const now = Date.now();
+  if (_catalogCache && now - _catalogCache.at < CATALOG_TTL_MS) return _catalogCache.byId;
+  const list = await listCharacters({ includeDisabled: true });
+  const byId = new Map(list.map((c) => [c.id, c]));
+  _catalogCache = { at: now, byId };
+  return byId;
+}
+
+function publicFace(c: Character | undefined): EquippedCharacter | null {
+  if (!c || !c.image) return null;   // no artwork → nothing worth drawing
+  return { id: c.id, name: c.name, image: c.image, kind: c.kind };
+}
+
+export async function equippedCharacterFor(userId: string): Promise<EquippedCharacter | null> {
+  if (!userId) return null;
+  try {
+    const [pickId, byId] = await Promise.all([equippedFor(userId), catalogById()]);
+    return pickId ? publicFace(byId.get(pickId)) : null;
+  } catch { return null; }
+}
+
+/** Batch form — one query for the picks, one cached read for the catalog. */
+export async function equippedCharactersFor(userIds: string[]): Promise<Map<string, EquippedCharacter>> {
+  const out = new Map<string, EquippedCharacter>();
+  const ids = [...new Set(userIds.filter(Boolean))];
+  if (!ids.length) return out;
+  await ensureSchema();
+
+  const byId = await catalogById();
+  const pool = pg();
+  if (pool) {
+    try {
+      const { rows } = await pool.query(
+        `SELECT user_id, character_id FROM user_character_pick WHERE user_id = ANY($1)`, [ids]);
+      for (const r of rows) {
+        const face = publicFace(byId.get(String(r.character_id)));
+        if (face) out.set(String(r.user_id), face);
+      }
+    } catch { /* no table yet → nobody has picked anything */ }
+    return out;
+  }
+  for (const uid of ids) {
+    const cid = memPick.get(uid);
+    const face = cid ? publicFace(byId.get(cid)) : null;
+    if (face) out.set(uid, face);
+  }
+  return out;
 }
 
 /** Bulk grant used by the panel: one user, a list, or everyone. */

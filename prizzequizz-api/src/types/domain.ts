@@ -46,6 +46,9 @@ export interface MatchPlayer {
   userId: UUID;
   username: string;
   avatar: string;
+  /** The other face of the player's card: whatever character they equipped.
+   *  null for bots and for anyone who has not picked one. */
+  character?: { id: string; name: string; image: string; kind: 'normal' | 'vip' } | null;
   score: number;
   correctAnswers: number;
   wrongAnswers: number;

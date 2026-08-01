@@ -9,6 +9,7 @@ import { joinTopic, snapshot, addVote, addChat, listChat, getRoom, listAllRooms,
 import { submitAnswer, submitDecision, useLifeline } from '../../services/lastSurvivorWorker.js';
 import { requireAdmin } from '../../services/adminGuard.js';
 import { avatarUrlFor } from '../../services/avatarService.js';
+import { equippedCharacterFor } from '../../services/characterSelectionService.js';
 
 export function registerLastSurvivorRoutes(router: Router, base: string): void {
   // ---------------- ADMIN: config + topic gating + live rooms ----------------
@@ -67,7 +68,7 @@ export function registerLastSurvivorRoutes(router: Router, base: string): void {
     if (!userId) return error(ctx.res, 401, 'UNAUTHORIZED', 'ابتدا وارد شو.');
     let user: any = null; try { user = await repositories.users.findById(userId); } catch { /* fallback below */ }
     try {
-      const { room } = await joinTopic({ id: userId, username: user?.username || user?.displayName || 'بازیکن', avatar: await avatarUrlFor(userId) }, topic, color);
+      const { room } = await joinTopic({ id: userId, username: user?.username || user?.displayName || 'بازیکن', avatar: await avatarUrlFor(userId), character: await equippedCharacterFor(userId) }, topic, color);
       json(ctx.res, 201, await snapshot(room.id, userId));
     } catch (e) {
       if (e instanceof LastSurvivorError) return error(ctx.res, 409, e.code, e.message);

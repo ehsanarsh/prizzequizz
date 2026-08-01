@@ -5,6 +5,8 @@ import { id } from '../utils/id.js';
 import { logger } from './logger.js';
 import { realtimePubSub } from '../realtime/pubSub.js';
 import { avatarUrlsFor } from './avatarService.js';
+import { equippedCharactersFor } from './characterSelectionService.js';
+import type { EquippedCharacter } from './characterSelectionService.js';
 import { prizeMoneyBoard, weekStartIso } from './walletLedgerService.js';
 import { effectiveWeeklyScore, isoWeekId } from './scoringConfig.js';
 import { getPgPool } from '../database/postgres.js';
@@ -23,6 +25,8 @@ export interface LeaderboardEntry {
   username: string;
   displayName: string;
   avatar: string;
+  /** The card's other face — what this player is wearing. */
+  character: EquippedCharacter | null;
   level: number;
   score: number;
   metric: LeaderboardKind;
@@ -313,8 +317,9 @@ export class LeaderboardService {
   private async enrich(kind: LeaderboardKind, rows: RawScoreRow[], viewerUserId?: string): Promise<LeaderboardEntry[]> {
     const entries: LeaderboardEntry[] = [];
     const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    // One batched lookup so a 50-row board costs a single avatar query.
-    const photos = await avatarUrlsFor(rows.map((r) => String(r.userId)).filter((u) => UUID_RE.test(u)));
+    // One batched lookup each, so a 50-row board still costs two queries.
+    const ids = rows.map((r) => String(r.userId)).filter((u) => UUID_RE.test(u));
+    const [photos, characters] = await Promise.all([avatarUrlsFor(ids), equippedCharactersFor(ids)]);
     for (const row of rows) {
       const uid = String(row.userId);
       if (!UUID_RE.test(uid)) continue; // defensively skip any corrupt id — never 500 the board
@@ -326,7 +331,8 @@ export class LeaderboardService {
         userId: uid,
         username: user?.username ?? uid,
         displayName: user?.displayName ?? user?.username ?? uid,
-        avatar: photos.get(uid) ?? avatarFor(rank - 1, uid),
+        avatar: photos.get(uid) ?? '',
+        character: characters.get(uid) ?? null,
         level: user?.level ?? 1,
         score: Math.round(Number(row.score ?? 0)),
         metric: kind,
@@ -356,12 +362,6 @@ function metricLabelFor(kind: LeaderboardKind): string {
   return 'winnings';
 }
 
-function avatarFor(index: number, userId: string): string {
-  const avatars = ['🦁', '🦊', '🐼', '🐯', '👾', '🐙', '🦄', '🐲'];
-  let hash = index;
-  for (const ch of userId) hash += ch.charCodeAt(0);
-  return avatars[Math.abs(hash) % avatars.length]!;
-}
 
 const adapter: LeaderboardAdapter = process.env.LEADERBOARD_ADAPTER === 'redis' && process.env.REDIS_URL
   ? new RedisLeaderboardAdapter()

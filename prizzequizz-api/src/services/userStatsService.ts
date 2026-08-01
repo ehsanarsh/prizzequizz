@@ -12,6 +12,8 @@
 import { getPgPool } from '../database/postgres.js';
 import { repositories } from '../repositories/index.js';
 import { avatarUrlFor } from './avatarService.js';
+import { equippedCharacterFor } from './characterSelectionService.js';
+import type { EquippedCharacter } from './characterSelectionService.js';
 import { effectiveWeeklyScore } from './scoringConfig.js';
 
 /** Weekly-cup thresholds. Must stay in step with the client's `leagueTargets`. */
@@ -29,6 +31,8 @@ export interface PublicUserStats {
   id: string;
   username: string;
   avatar: string | null;
+  /** The card's other face. null when nothing is equipped. */
+  character: EquippedCharacter | null;
   level: number;
   xp: number;
   weeklyScore: number;
@@ -54,6 +58,7 @@ export async function buildUserStats(uid: string): Promise<PublicUserStats> {
     id: uid,
     username: user?.username ?? 'player',
     avatar: await avatarUrlFor(uid),
+    character: await equippedCharacterFor(uid),
     level: Number(user?.level ?? 1),
     xp: Number(user?.xp ?? 0),
     weeklyScore,
