@@ -40,7 +40,7 @@ import {
   ok(roster.level === 1, 'new player is level 1');
   ok(byId(free.id).unlocked === true, 'level-0 character is open at level 1');
   ok(byId(lvl9.id).unlocked === false, 'level-9 character is locked at level 1');
-  ok(byId(lvl9.id).lockReason.includes('9'), 'lock reason names the required level');
+  ok(byId(lvl9.id).lockReason.includes('۹'), 'lock reason names the required level in Persian digits');
   ok(byId(vip.id).unlocked === false, 'random-only VIP starts locked');
   ok(byId(vip.id).lockReason.includes('قرعه'), 'non-level lock names the real unlock route');
 

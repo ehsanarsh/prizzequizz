@@ -321,9 +321,12 @@ export async function grantCharacter(userId: string, characterId: string, source
 // The roster, as one player sees it
 // ---------------------------------------------------------------------------
 function lockReasonFor(c: Character, level: number): string {
+  // Persian digits throughout — a Latin numeral in the middle of a Persian
+  // sentence is the kind of detail players read as unfinished.
+  const fa = (n: number) => n.toLocaleString('fa-IR');
   if (c.viaLevel && c.unlockLevel > 0) {
     if (level >= c.unlockLevel) return '';
-    return `در لول ${c.unlockLevel} آزاد می‌شود`;
+    return `در لول ${fa(c.unlockLevel)} آزاد می‌شود`;
   }
   // Not level-gated → it has to arrive some other way. Name the routes that are
   // actually switched on for this character, never a generic message.
@@ -331,7 +334,7 @@ function lockReasonFor(c: Character, level: number): string {
   if (c.viaReward) ways.push('جایزهٔ مسابقات');
   if (c.viaEvent) ways.push('جایزهٔ رویدادها');
   if (c.viaRandom) ways.push('قرعه‌کشی');
-  if (c.viaPurchase) ways.push(c.price > 0 ? `خرید (${c.price.toLocaleString('fa-IR')} سکه)` : 'خرید از فروشگاه');
+  if (c.viaPurchase) ways.push(c.price > 0 ? `خرید (${fa(c.price)} سکه)` : 'خرید از فروشگاه');
   if (!ways.length) return 'فعلاً در دسترس نیست';
   return `آزادسازی با: ${ways.join(' یا ')}`;
 }

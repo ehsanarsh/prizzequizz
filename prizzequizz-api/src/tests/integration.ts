@@ -48,7 +48,7 @@ async function main(): Promise<void> {
     assert.ok(roster.characters.some((c) => c.id === openChar.id && c.unlocked));
     const lockedView = roster.characters.find((c) => c.id === lockedChar.id)!;
     assert.equal(lockedView.unlocked, false);
-    assert.ok(lockedView.lockReason.includes('99'), 'locked character states the level it needs');
+    assert.ok(lockedView.lockReason.includes('۹۹'), 'locked character states the level it needs');
 
     const equipped = await post<{ equipped: boolean; character: { id: string } }>(`${base}/characters/${openChar.id}/equip`, {}, auth);
     assert.equal(equipped.character.id, openChar.id);

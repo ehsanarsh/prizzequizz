@@ -3178,64 +3178,244 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
     </section>
 
     <!-- ============ CHARACTER (AAA) ============ -->
+    <!-- ============ CHARACTER SELECTION ============
+         A circular carousel around a lit stage. Every character in the roster
+         is a slot on an ellipse; dragging spins the ring, and whichever slot
+         reaches the front is the selection — scaled up, lit, and standing on
+         the podium. Locked characters stay on the ring on purpose: the roster
+         is also the goal list. -->
     <section class="screen" id="character">
-      <style id="cbCSS">
-        #character{display:flex;flex-direction:column;min-height:100%;background:#0e1510}
-        .cb-top{display:flex;align-items:center;gap:10px;padding:14px 16px 6px}
-        .cb-back{width:38px;height:38px;border-radius:12px;background:rgba(255,255,255,.08);color:#fff;font-size:24px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex:none}
-        .cb-title{flex:1}
-        .cb-title h1{font-size:19px;font-weight:900;color:#fff;margin:0}
-        .cb-title p{font-size:11px;color:#9fb0a4;margin:2px 0 0}
-        .cb-rand{border:0;border-radius:12px;padding:9px 12px;background:linear-gradient(135deg,#F5A800,#FFE24A);color:#1a1000;font-weight:900;font-size:13px;cursor:pointer;flex:none}
-        /* fixed square stage — every layer shares these exact coordinates */
-        .cb-stage{margin:6px auto 4px;width:min(74vw,300px);aspect-ratio:1/1;position:relative}
-        .cb-canvas{position:absolute;inset:0;border-radius:24px;background:radial-gradient(120% 100% at 50% 20%,rgba(255,210,31,.10),rgba(255,255,255,.03) 60%,transparent);box-shadow:inset 0 0 0 1px rgba(255,255,255,.06)}
-        .cb-canvas .cbl{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;pointer-events:none;image-rendering:auto}
-        .cb-shadow{position:absolute;left:18%;right:18%;bottom:6%;height:14px;border-radius:50%;background:rgba(0,0,0,.35);filter:blur(5px)}
-        .cb-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#5c6b60;font-size:12px;font-weight:800}
-        /* category tabs — horizontal scroll */
-        .cb-cats{display:flex;gap:8px;overflow-x:auto;padding:8px 14px;scrollbar-width:none}
-        .cb-cats::-webkit-scrollbar{display:none}
-        .cb-cat{flex:none;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 6px;min-width:58px;border-radius:14px;background:rgba(255,255,255,.05);cursor:pointer;transition:.15s;border:1.5px solid transparent}
-        .cb-cat.active{background:rgba(255,210,31,.16);border-color:rgba(255,210,31,.6)}
-        .cb-cat .ci{font-size:20px}
-        .cb-cat b{font-size:10px;color:#cdd8d0;font-weight:800;white-space:nowrap}
-        .cb-cat.active b{color:#FFE24A}
-        /* thumbnails of the active category */
-        .cb-panel{flex:1;background:linear-gradient(180deg,rgba(255,255,255,.04),rgba(255,255,255,.02));border-radius:22px 22px 0 0;padding:14px 12px 18px;margin-top:4px}
-        .cb-panel-h{display:flex;align-items:center;justify-content:space-between;padding:0 4px 10px}
-        .cb-panel-h b{color:#fff;font-size:14px;font-weight:900}
-        .cb-thumbs{display:flex;gap:10px;overflow-x:auto;padding:2px 2px 10px;scrollbar-width:none}
-        .cb-thumbs::-webkit-scrollbar{display:none}
-        .cb-thumb{flex:none;width:70px;height:70px;border-radius:16px;background:rgba(255,255,255,.06);border:2px solid transparent;cursor:pointer;position:relative;display:flex;align-items:center;justify-content:center;transition:.15s;overflow:hidden}
-        .cb-thumb img{width:100%;height:100%;object-fit:contain}
-        .cb-thumb.sel{border-color:#FFD21F;background:rgba(255,210,31,.14);box-shadow:0 0 0 3px rgba(255,210,31,.18)}
-        .cb-thumb.none{color:#8a978c;font-size:11px;font-weight:900;flex-direction:column;gap:2px}
-        .cb-thumb.sel .cb-check{position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#FFD21F;color:#1a1000;font-size:11px;font-weight:900;display:flex;align-items:center;justify-content:center}
-        .cb-actions{display:flex;gap:10px;margin-top:8px}
-        .cb-actions .btn{flex:1}
+      <style id="csCSS">
+        /* The global photo wallpaper and particle field show through, so the
+           screen itself paints nothing but its own stage lighting. */
+        #character{display:flex;flex-direction:column;min-height:100%;background:transparent;position:relative;overflow:hidden}
+
+        /* ---- ambient depth: three parallax layers over the wallpaper ---- */
+        .cs-amb{position:absolute;inset:0;z-index:0;pointer-events:none;overflow:hidden}
+        .cs-amb i{position:absolute;display:block}
+        /* god rays slanting through the canopy */
+        .cs-rays{position:absolute;inset:-20% -10%;opacity:.5;mix-blend-mode:screen;
+          background:
+            linear-gradient(102deg,transparent 34%,rgba(210,255,222,.16) 37%,transparent 41%),
+            linear-gradient(97deg,transparent 48%,rgba(190,245,215,.13) 52%,transparent 56%),
+            linear-gradient(106deg,transparent 62%,rgba(225,255,235,.10) 65%,transparent 69%);
+          animation:csRays 14s ease-in-out infinite alternate}
+        @keyframes csRays{0%{transform:translate3d(-2%,0,0) scaleY(1)}100%{transform:translate3d(2.5%,1.5%,0) scaleY(1.06)}}
+        /* low drifting mist — the depth cue that sells the clearing */
+        .cs-fog{position:absolute;left:-25%;right:-25%;bottom:-6%;height:56%;opacity:.42;
+          background:radial-gradient(60% 80% at 30% 70%,rgba(180,220,196,.30),transparent 70%),
+                     radial-gradient(55% 70% at 72% 76%,rgba(150,200,180,.22),transparent 72%);
+          filter:blur(14px);animation:csFog 22s ease-in-out infinite alternate}
+        @keyframes csFog{0%{transform:translate3d(-4%,0,0)}100%{transform:translate3d(5%,-2%,0)}}
+        /* floating motes, drawn on canvas so hundreds cost nothing */
+        .cs-dust{position:absolute;inset:0;width:100%;height:100%;opacity:.75}
+
+        /* ---- header ---- */
+        .cs-top{position:relative;z-index:6;display:flex;align-items:center;gap:10px;padding:14px 16px 4px}
+        .cs-back{width:38px;height:38px;border-radius:12px;background:rgba(10,16,12,.55);border:1.5px solid rgba(255,255,255,.16);
+          color:#fff;font-size:24px;line-height:1;display:flex;align-items:center;justify-content:center;cursor:pointer;flex:none;backdrop-filter:blur(6px)}
+        .cs-htxt{flex:1;min-width:0}
+        .cs-htxt h1{font-size:19px;font-weight:900;color:#fff;margin:0;text-shadow:0 2px 8px rgba(0,0,0,.6)}
+        .cs-htxt p{font-size:11px;color:#bcd3c4;margin:2px 0 0;text-shadow:0 1px 4px rgba(0,0,0,.6)}
+        .cs-lvl{flex:none;display:flex;align-items:center;gap:5px;padding:7px 11px;border-radius:12px;
+          background:rgba(10,16,12,.55);border:1.5px solid rgba(255,210,31,.45);backdrop-filter:blur(6px);
+          color:var(--bolt);font-weight:900;font-size:12px}
+
+        /* ---- filters ---- */
+        .cs-filters{position:relative;z-index:6;display:flex;align-items:center;gap:8px;padding:8px 14px 2px;flex-wrap:wrap}
+        .cs-tabs{display:flex;gap:5px;padding:3px;border-radius:13px;background:rgba(10,16,12,.55);border:1.5px solid rgba(255,255,255,.13);backdrop-filter:blur(6px)}
+        .cs-tab{border:0;background:transparent;color:#c9d8cd;font-weight:800;font-size:12px;padding:6px 11px;border-radius:10px;cursor:pointer;transition:.18s;white-space:nowrap}
+        .cs-tab.on{background:var(--bolt);color:#1a1000;box-shadow:0 2px 0 rgba(0,0,0,.45)}
+        .cs-kinds{display:flex;gap:5px;margin-inline-start:auto}
+        .cs-kind{border:1.5px solid rgba(255,255,255,.14);background:rgba(10,16,12,.55);color:#c9d8cd;font-weight:800;font-size:11px;
+          padding:6px 10px;border-radius:11px;cursor:pointer;transition:.18s;backdrop-filter:blur(6px);white-space:nowrap}
+        .cs-kind.on{border-color:var(--bolt);color:var(--bolt);background:rgba(255,210,31,.14)}
+        .cs-kind.vip.on{border-color:#FFD98A;color:#FFD98A;background:rgba(255,200,90,.14)}
+
+        /* ---- the stage ---- */
+        .cs-stage{position:relative;z-index:5;flex:1;min-height:330px;
+          /* perspective is what makes the far side of the ring read as far */
+          perspective:900px;perspective-origin:50% 42%;touch-action:pan-y;user-select:none;-webkit-user-select:none}
+        /* volumetric shaft of light landing on the podium */
+        .cs-spot{position:absolute;left:50%;top:-4%;width:64%;height:82%;transform:translateX(-50%);pointer-events:none;
+          background:linear-gradient(to bottom,rgba(226,255,236,.20),rgba(200,245,218,.07) 55%,transparent 82%);
+          clip-path:polygon(34% 0,66% 0,100% 100%,0 100%);filter:blur(5px);
+          animation:csSpot 6s ease-in-out infinite alternate}
+        @keyframes csSpot{0%{opacity:.55}100%{opacity:.9}}
+
+        /* podium — three stacked stone tiers, drawn rather than shipped as art
+           so it stays crisp at any density and needs no asset */
+        .cs-podium{position:absolute;left:50%;bottom:11%;width:min(86vw,360px);transform:translateX(-50%);pointer-events:none}
+        .cs-podium svg{width:100%;display:block;filter:drop-shadow(0 16px 26px rgba(0,0,0,.55))}
+        /* contact shadow the selected character casts on the top face */
+        .cs-cast{position:absolute;left:50%;bottom:calc(11% + 6.5%);width:min(46vw,190px);height:20px;transform:translateX(-50%);
+          border-radius:50%;background:rgba(0,0,0,.42);filter:blur(7px);pointer-events:none;z-index:3;transition:width .3s,opacity .3s}
+
+        /* ---- the ring ---- */
+        .cs-ring{position:absolute;inset:0;transform-style:preserve-3d;cursor:grab}
+        .cs-ring.drag{cursor:grabbing}
+        .cs-slot{position:absolute;left:50%;top:0;width:132px;height:112px;margin-left:-66px;
+          /* origin at the soles: scale grows the character upward from the floor */
+          transform-origin:50% 100%;
+          will-change:transform,opacity;transition:filter .25s}
+        .cs-slot .cs-art{position:relative;width:112px;height:112px;margin:0 auto;display:flex;align-items:flex-end;justify-content:center}
+        .cs-slot img{max-width:100%;max-height:100%;object-fit:contain;display:block;
+          filter:drop-shadow(0 8px 10px rgba(0,0,0,.5));transition:filter .3s}
+        .cs-slot .cs-fallback{font-size:96px;line-height:1.05;filter:drop-shadow(0 8px 10px rgba(0,0,0,.5))}
+        .cs-slot .cs-name{display:none}   /* the info card under the stage is the label */
+
+        /* selected: lit from below, gently breathing */
+        .cs-slot.sel img,.cs-slot.sel .cs-fallback{filter:drop-shadow(0 10px 14px rgba(0,0,0,.55)) drop-shadow(0 0 18px rgba(255,231,150,.55))}
+        .cs-slot.sel .cs-art{animation:csBreathe 3.2s ease-in-out infinite}
+        @keyframes csBreathe{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+
+        /* locked: visible but plainly out of reach */
+        .cs-slot.locked img,.cs-slot.locked .cs-fallback{filter:grayscale(1) brightness(.42) blur(.6px) drop-shadow(0 8px 10px rgba(0,0,0,.5))}
+        .cs-lockb{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:34px;height:34px;border-radius:50%;
+          display:flex;align-items:center;justify-content:center;font-size:17px;
+          background:rgba(12,16,13,.82);border:2px solid rgba(255,255,255,.28);box-shadow:0 3px 0 rgba(0,0,0,.5)}
+        .cs-slot.locked .cs-name{color:#a9b8ad}
+
+        /* VIP: a gold halo ring behind the art, so it reads as special from
+           across the carousel even when it is small and far away */
+        .cs-slot.vip .cs-art::before{content:'';position:absolute;left:50%;top:52%;width:104px;height:104px;transform:translate(-50%,-50%);
+          border-radius:50%;background:conic-gradient(from 0deg,#FFE9A8,#F7C64B,#FFF3CF,#E0A93B,#FFE9A8);
+          -webkit-mask:radial-gradient(circle,transparent 44%,#000 46%,#000 50%,transparent 52%);
+                  mask:radial-gradient(circle,transparent 44%,#000 46%,#000 50%,transparent 52%);
+          animation:csSpin 7s linear infinite;opacity:.9}
+        @keyframes csSpin{to{transform:translate(-50%,-50%) rotate(360deg)}}
+        .cs-slot.vip.sel .cs-art::after{content:'';position:absolute;left:50%;top:52%;width:150px;height:150px;transform:translate(-50%,-50%);
+          border-radius:50%;background:radial-gradient(circle,rgba(255,214,110,.34),transparent 66%);animation:csVipPulse 2.4s ease-in-out infinite}
+        @keyframes csVipPulse{0%,100%{opacity:.55;transform:translate(-50%,-50%) scale(.94)}50%{opacity:1;transform:translate(-50%,-50%) scale(1.06)}}
+
+        /* corner badges */
+        .cs-badges{position:absolute;top:2px;inset-inline-end:4px;display:flex;flex-direction:column;gap:3px;align-items:flex-end}
+        .cs-bdg{font-size:9px;font-weight:900;padding:2.5px 6px;border-radius:7px;line-height:1;white-space:nowrap;box-shadow:0 2px 0 rgba(0,0,0,.45)}
+        .cs-bdg.vip{background:linear-gradient(135deg,#FFE9A8,#E0A93B);color:#3A2A00}
+        .cs-bdg.new{background:var(--ok);color:#04220f}
+        .cs-bdg.eq{background:var(--info);color:#04222f}
+
+        /* ---- info card + actions ---- */
+        .cs-info{position:relative;z-index:6;margin:0 14px 8px;padding:12px 14px;border-radius:18px;
+          background:rgba(28,32,26,.62);border:2px solid rgba(255,255,255,.14);backdrop-filter:blur(8px);
+          box-shadow:0 6px 0 rgba(0,0,0,.35)}
+        .cs-info.vip{border-color:rgba(255,214,110,.55);box-shadow:0 6px 0 rgba(0,0,0,.35),0 0 22px rgba(255,200,80,.2) inset}
+        .cs-i-h{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+        .cs-i-h b{font-size:16px;font-weight:900;color:#fff}
+        .cs-i-d{font-size:11.5px;color:#c2d2c6;line-height:1.65;min-height:19px}
+        .cs-i-lock{display:flex;align-items:center;gap:6px;margin-top:7px;padding:8px 10px;border-radius:12px;
+          background:rgba(255,90,72,.13);border:1.5px solid rgba(255,90,72,.32);color:#ffc9c2;font-size:11.5px;font-weight:800}
+        .cs-i-lock.gold{background:rgba(255,200,90,.13);border-color:rgba(255,200,90,.35);color:#FFE2A6}
+
+        .cs-actions{position:relative;z-index:6;display:flex;gap:9px;padding:0 14px calc(14px + env(safe-area-inset-bottom))}
+        .cs-actions .btn{flex:1}
+        .cs-empty{position:relative;z-index:6;margin:auto;text-align:center;color:#9db0a3;font-size:13px;font-weight:800;padding:40px 20px;line-height:2}
+
+        /* ---- unlock reveal (random box win / new character) ---- */
+        .cs-reveal{position:fixed;inset:0;z-index:1400;display:flex;align-items:center;justify-content:center;
+          background:radial-gradient(circle at 50% 45%,rgba(20,30,22,.82),rgba(4,8,5,.94));animation:csFade .3s}
+        @keyframes csFade{from{opacity:0}to{opacity:1}}
+        .cs-rv-card{position:relative;text-align:center;padding:0 24px;max-width:340px}
+        .cs-rv-burst{position:absolute;left:50%;top:44%;width:280px;height:280px;transform:translate(-50%,-50%);pointer-events:none;
+          background:conic-gradient(from 0deg,transparent,rgba(255,231,150,.5),transparent 22%,transparent 25%,rgba(255,231,150,.5),transparent 47%,transparent 50%,rgba(255,231,150,.5),transparent 72%,transparent 75%,rgba(255,231,150,.5),transparent 97%);
+          animation:csBurstSpin 8s linear infinite;opacity:.75}
+        .cs-rv-card.vip .cs-rv-burst{background:conic-gradient(from 0deg,transparent,rgba(255,205,90,.75),transparent 20%,transparent 25%,rgba(255,240,190,.75),transparent 45%,transparent 50%,rgba(255,205,90,.75),transparent 70%,transparent 75%,rgba(255,240,190,.75),transparent 95%)}
+        @keyframes csBurstSpin{to{transform:translate(-50%,-50%) rotate(360deg)}}
+        .cs-rv-art{position:relative;width:190px;height:190px;margin:0 auto 14px;display:flex;align-items:center;justify-content:center;
+          animation:csRvPop .75s cubic-bezier(.16,1.5,.4,1)}
+        @keyframes csRvPop{0%{transform:scale(.2) rotate(-14deg);opacity:0}60%{transform:scale(1.12) rotate(4deg);opacity:1}100%{transform:scale(1) rotate(0)}}
+        .cs-rv-art img{max-width:100%;max-height:100%;object-fit:contain;filter:drop-shadow(0 12px 18px rgba(0,0,0,.6)) drop-shadow(0 0 26px rgba(255,231,150,.7))}
+        .cs-rv-art .cs-fallback{font-size:110px}
+        .cs-rv-k{font-size:12px;font-weight:900;letter-spacing:.5px;color:var(--bolt);margin-bottom:5px;animation:csRvUp .5s .25s both}
+        .cs-rv-card.vip .cs-rv-k{color:#FFD98A}
+        .cs-rv-n{font-size:24px;font-weight:900;color:#fff;margin-bottom:6px;animation:csRvUp .5s .34s both;text-shadow:0 3px 12px rgba(0,0,0,.7)}
+        .cs-rv-d{font-size:12.5px;color:#c8d6cc;line-height:1.7;margin-bottom:18px;animation:csRvUp .5s .42s both}
+        .cs-rv-b{animation:csRvUp .5s .5s both}
+        @keyframes csRvUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+        /* confetti motes thrown on reveal */
+        .cs-rv-p{position:fixed;width:9px;height:9px;border-radius:2px;pointer-events:none;z-index:1401;animation:csRvP 1.5s cubic-bezier(.15,.7,.35,1) forwards}
+        @keyframes csRvP{0%{transform:translate(0,0) rotate(0);opacity:1}100%{transform:translate(var(--dx),var(--dy)) rotate(var(--rz));opacity:0}}
+
+        @media (max-height:680px){
+          .cs-stage{min-height:270px}
+          .cs-slot .cs-art{width:96px;height:96px}
+          .cs-info{padding:10px 12px}
+          .cs-i-d{display:none}
+        }
+        @media (prefers-reduced-motion:reduce){
+          .cs-rays,.cs-fog,.cs-spot,.cs-slot.sel .cs-art,.cs-slot.vip .cs-art::before{animation:none}
+        }
       </style>
-      <div class="cb-top">
-        <div class="cb-back" onclick="go(charBack||'plans')">‹</div>
-        <div class="cb-title">
-          <h1>ساخت کاراکتر <span class="spk">✨</span></h1>
-          <p>هر قطعه را انتخاب کن؛ زنده روی کاراکتر می‌نشیند</p>
+
+      <div class="cs-amb" aria-hidden="true">
+        <div class="cs-rays"></div>
+        <div class="cs-fog"></div>
+        <canvas class="cs-dust" id="csDust"></canvas>
+      </div>
+
+      <div class="cs-top">
+        <div class="cs-back" onclick="go(charBack||'profile')">‹</div>
+        <div class="cs-htxt">
+          <h1>انتخاب کاراکتر <span class="spk">✨</span></h1>
+          <p id="csSub">بچرخان و کاراکترت را انتخاب کن</p>
         </div>
-        <button class="cb-rand" onclick="cbRandom()">🎲 تصادفی</button>
+        <div class="cs-lvl" id="csLvl">⭐ —</div>
       </div>
-      <div class="cb-stage">
-        <div class="cb-canvas" id="cbCanvas"><div class="cb-empty" id="cbEmpty">در حال بارگذاری…</div></div>
-        <div class="cb-shadow"></div>
-      </div>
-      <div class="cb-cats" id="cbCats"></div>
-      <div class="cb-panel">
-        <div class="cb-panel-h"><b id="cbCatName">قطعه‌ها</b><span id="cbCatCount" style="color:#8a978c;font-size:11px;font-weight:800"></span></div>
-        <div class="cb-thumbs" id="cbThumbs"></div>
-        <div class="cb-actions">
-          <button class="btn btn-ghost" onclick="cbSkip()">بعداً</button>
-          <button class="btn btn-primary" onclick="cbSave()" id="cbSaveBtn">ذخیره کاراکتر</button>
+
+      <div class="cs-filters">
+        <div class="cs-tabs">
+          <button class="cs-tab on" data-tab="all"      onclick="csTab('all',this)">همه</button>
+          <button class="cs-tab"    data-tab="unlocked" onclick="csTab('unlocked',this)">آزادشده</button>
+          <button class="cs-tab"    data-tab="locked"   onclick="csTab('locked',this)">قفل</button>
+        </div>
+        <div class="cs-kinds">
+          <button class="cs-kind on"  data-kind="all"    onclick="csKind('all',this)">همه</button>
+          <button class="cs-kind"     data-kind="normal" onclick="csKind('normal',this)">معمولی</button>
+          <button class="cs-kind vip" data-kind="vip"    onclick="csKind('vip',this)">VIP</button>
         </div>
       </div>
+
+      <div class="cs-stage" id="csStage">
+        <div class="cs-spot"></div>
+        <div class="cs-podium">
+          <!-- Three tiers seen slightly from above: each is an ellipse plus the
+               band of its side wall, which is what gives the stone thickness. -->
+          <svg viewBox="0 0 360 150" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <linearGradient id="csTopG" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#CFCABA"/><stop offset="1" stop-color="#98938A"/>
+              </linearGradient>
+              <linearGradient id="csWallG" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#3A3F3B"/><stop offset="1" stop-color="#1B211D"/>
+              </linearGradient>
+              <linearGradient id="csWall2" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#313632"/><stop offset="1" stop-color="#161B18"/>
+              </linearGradient>
+              <radialGradient id="csGlow" cx="50%" cy="40%" r="60%">
+                <stop offset="0" stop-color="#fff8dc" stop-opacity=".5"/><stop offset="1" stop-color="#fff8dc" stop-opacity="0"/>
+              </radialGradient>
+            </defs>
+            <!-- bottom tier -->
+            <ellipse cx="180" cy="118" rx="176" ry="27" fill="#141916"/>
+            <path d="M4 118a176 27 0 0 0 352 0v-12a176 27 0 0 1-352 0z" fill="url(#csWall2)"/>
+            <ellipse cx="180" cy="106" rx="176" ry="27" fill="#232925"/>
+            <!-- middle tier -->
+            <path d="M22 96a158 25 0 0 0 316 0v-13a158 25 0 0 1-316 0z" fill="url(#csWallG)"/>
+            <ellipse cx="180" cy="83" rx="158" ry="25" fill="#2B322D"/>
+            <!-- top face -->
+            <path d="M40 74a140 23 0 0 0 280 0v-11a140 23 0 0 1-280 0z" fill="#20261F"/>
+            <ellipse cx="180" cy="63" rx="140" ry="23" fill="url(#csTopG)"/>
+            <ellipse cx="180" cy="63" rx="140" ry="23" fill="url(#csGlow)"/>
+            <ellipse cx="180" cy="63" rx="128" ry="19" fill="none" stroke="rgba(255,255,255,.16)" stroke-width="1.2"/>
+          </svg>
+        </div>
+        <div class="cs-cast" id="csCast"></div>
+        <div class="cs-ring" id="csRing"></div>
+      </div>
+
+      <div class="cs-info" id="csInfo" style="display:none"></div>
+
+      <div class="cs-actions" id="csActions"></div>
     </section>
 
     <!-- ============ LAST SURVIVOR ============ -->
@@ -3882,7 +4062,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
         <small id="profAvHint" style="font-size:11px;color:var(--muted);font-weight:800;margin-top:2px">عکس روی گوشی خودت فشرده می‌شود و سبک آپلود می‌شود</small>
       </div>
       <div class="pad" style="padding-top:0">
-        <button class="btn btn-ghost btn-sm soon-dim" style="width:100%;margin-bottom:14px" onclick="charBack='profile';go('character')">🎭 ویرایش کاراکتر <span class="soon-tag">بزودی 🚧</span></button>
+        <button class="btn btn-ghost btn-sm" style="width:100%;margin-bottom:14px" onclick="charBack='profile';go('character')">🎭 انتخاب کاراکتر</button>
         <div class="field"><label>نام و نام خانوادگی</label><input class="input" id="profEditName" placeholder="نام و نام خانوادگی"></div>
         <div class="field"><label>نام کاربری</label><input class="input" id="profEditUsername" dir="ltr" placeholder="username"></div>
         <button class="btn btn-primary" onclick="submitProfileEdit()">ذخیره تغییرات</button>
@@ -3903,7 +4083,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
       <div class="set-group-title">تجربه بازی</div>
       <div class="row" onclick="openSettingDetail('notifications')"><div class="r-ico">🔔</div><div class="r-txt"><b>اعلان‌ها</b><span id="setSumNotifications">مدیریت پیام‌ها و یادآوری‌ها</span></div><span class="r-arrow">‹</span></div>
       <div class="row" onclick="openSettingDetail('audio')"><div class="r-ico">🔊</div><div class="r-txt"><b>صدا و لرزش</b><span id="setSumAudio">افکت‌های صوتی بازی</span></div><span class="r-arrow">‹</span></div>
-      <div class="row soon-dim" onclick="charBack='settings';go('character')"><div class="r-ico">🎭</div><div class="r-txt"><b>ویرایش کاراکتر</b><span>ظاهر، رنگ، لباس و اکسسوری شخصیت</span></div><span class="soon-tag">بزودی 🚧</span></div>
+      <div class="row" onclick="charBack='settings';go('character')"><div class="r-ico">🎭</div><div class="r-txt"><b>انتخاب کاراکتر</b><span>کاراکترت را از بین همه انتخاب کن</span></div><span class="r-go">›</span></div>
       <div class="row" onclick="openSettingDetail('gameplay')"><div class="r-ico">🎮</div><div class="r-txt"><b>تنظیمات بازی</b><span id="setSumGameplay">راهنماها، چت سریع و تایمرها</span></div><span class="r-arrow">‹</span></div>
       <div class="row" onclick="openSettingDetail('appearance')"><div class="r-ico">🎨</div><div class="r-txt"><b>ظاهر و دسترس‌پذیری</b><span id="setSumAppearance">کنتراست، انیمیشن و تراکم صفحه</span></div><span class="r-arrow">‹</span></div>
       <div class="set-group-title">حساب و حریم خصوصی</div>
@@ -4488,129 +4668,462 @@ function paintMascots(){const ph=window.PZ_MY_AVATAR;document.querySelectorAll('
 paintMascots();
 
 /* ============ CHARACTER CREATOR (AAA) ============ */
-/* ============ CHARACTER BUILDER — layered, server-driven ============
-   Every part is a full-canvas transparent image; layers stack on ONE fixed
-   300x300 stage sorted by z-index, so nothing shifts when a part is swapped.
-   The catalog + saved build come from the API — add new parts from the admin
-   panel and they appear here automatically, no client change needed. */
-const CB_CATS=[
-  {k:'body',ic:'🧸',n:'بدن'},
-  {k:'eyesDouble',ic:'👀',n:'دو چشم'},
-  {k:'eyesSingle',ic:'👁️',n:'تک‌چشم'},
-  {k:'eyebrows',ic:'🤨',n:'ابرو'},
-  {k:'beard',ic:'🧔',n:'ریش'},
-  {k:'hair',ic:'💇',n:'مو'},
-  {k:'horns',ic:'🐏',n:'شاخ'},
-  {k:'hat',ic:'🎩',n:'کلاه'},
-  {k:'glasses',ic:'🕶️',n:'عینک'},
-  {k:'arms',ic:'💪',n:'دست'},
-  {k:'legs',ic:'🦵',n:'پا'},
-  {k:'shoes',ic:'👟',n:'کفش'},
-  {k:'accessories',ic:'🎀',n:'اکسسوری'}
-];
-let cbByCat={}, cbZ={}, cbBuild={}, cbCat='body', cbLoaded=false;
+/* ============ CHARACTER SELECTION — circular carousel on a lit stage ============
+   The roster comes from the server whole: every character, whether this player
+   has it, and if not, why. Nothing about a character is known to this file —
+   name, art, type, unlock level and unlock routes are all server data, so the
+   admin can add the hundredth character without a client change.
 
-async function cbInit(){
-  cbRenderCats();
-  if(!cbLoaded){ cbSetEmpty('در حال بارگذاری…'); await cbLoad(); }
-  cbPickCat(cbCat);
-  cbRenderPreview();
+   The ring is real 3-D-ish: each slot sits on an ellipse and is placed by its
+   angle, with scale, vertical offset, blur and z-order all derived from its
+   depth. Whichever slot is nearest the front IS the selection — there is no
+   separate "selected" state to keep in sync, only the rotation angle. */
+let csData=null, csRot=0, csTargetRot=0, csTabF='all', csKindF='all', csRaf=null, csView=[], csBusy=false;
+let csDragging=false, csDragX=0, csDragRot=0, csVel=0, csLastX=0, csLastT=0, csLoaded=false, csDustRaf=null;
+
+/* Where to go when leaving. Set by whichever screen opened this one.
+   (var → reachable from the inline onclick in the markup.) */
+var charBack='profile';
+
+function csFa(n){ try{ return (Number(n)||0).toLocaleString('fa-IR'); }catch(e){ return String(n); } }
+
+async function csInit(){
+  csStartDust();
+  if(!csLoaded){ csSetEmpty('در حال بارگذاری…'); await csLoad(); }
+  csApplyFilter();
+  csBindDrag();
+  csTick();
 }
-window.ccInit=cbInit; // keep the existing navigation hook (id==='character') working
+/* The screen router calls ccInit; keep that name working. */
+window.ccInit=csInit;
 
-async function cbLoad(){
+async function csLoad(){
   try{
-    const r=await pzApi('GET','/character-builder/parts',null,true);
+    const r=await pzApi('GET','/characters',null,true);
     const d=(r&&r.data)||{};
-    cbByCat=d.byCategory||{};
-    (d.parts||[]).forEach(p=>{cbZ[p.id]=p.zIndex;});
-    const rb=await pzApi('GET','/character-builder/build',null,true);
-    cbBuild=((rb&&rb.data&&rb.data.build)||{});
-    cbLoaded=true;
-  }catch(e){ cbSetEmpty('خطا در بارگذاری قطعه‌ها'); }
+    csData=d;
+    csLoaded=true;
+  }catch(e){ csSetEmpty('خطا در بارگذاری کاراکترها'); }
 }
 
-function faN(n){try{return Number(n).toLocaleString('fa-IR');}catch(e){return String(n);}}
-
-function cbRenderCats(){
-  const el=document.getElementById('cbCats'); if(!el)return;
-  el.innerHTML=CB_CATS.map(c=>`<div class="cb-cat${c.k===cbCat?' active':''}" data-cat="${c.k}" onclick="cbPickCat('${c.k}')"><div class="ci">${c.ic}</div><b>${c.n}</b></div>`).join('');
+function csSetEmpty(msg){
+  const ring=document.getElementById('csRing');
+  const info=document.getElementById('csInfo');
+  const act=document.getElementById('csActions');
+  if(ring)ring.innerHTML='<div class="cs-empty">'+msg+'</div>';
+  if(info)info.style.display='none';
+  if(act)act.innerHTML='';
 }
 
-function cbPickCat(cat){
-  cbCat=cat;
-  document.querySelectorAll('#cbCats .cb-cat').forEach(c=>c.classList.toggle('active',c.dataset.cat===cat));
-  const meta=CB_CATS.find(c=>c.k===cat)||{n:''};
-  const nn=document.getElementById('cbCatName'); if(nn)nn.textContent=meta.n;
-  cbRenderThumbs();
-  vib(10);
+/* ---- filters ------------------------------------------------------------ */
+function csTab(t,el){
+  csTabF=t;
+  document.querySelectorAll('#character .cs-tab').forEach(b=>b.classList.toggle('on',b===el));
+  csApplyFilter(); try{ sfx('blip'); }catch(e){}
+}
+function csKind(k,el){
+  csKindF=k;
+  document.querySelectorAll('#character .cs-kind').forEach(b=>b.classList.toggle('on',b===el));
+  csApplyFilter(); try{ sfx('blip'); }catch(e){}
 }
 
-function cbRenderThumbs(){
-  const c=document.getElementById('cbThumbs'); if(!c)return;
-  const list=cbByCat[cbCat]||[];
-  const sel=cbBuild[cbCat]||null;
-  const cc=document.getElementById('cbCatCount'); if(cc)cc.textContent=list.length?(faN(list.length)+' مدل'):'به‌زودی';
-  let html=`<div class="cb-thumb none${sel?'':' sel'}" onclick="cbPickPart(null)"><span style="font-size:20px">🚫</span>حذف</div>`;
-  html+=list.map(p=>`<div class="cb-thumb${p.id===sel?' sel':''}" onclick="cbPickPart('${p.id}')"><img src="${p.imageUrl}" alt="${(p.name||'').replace(/"/g,'')}"><span class="cb-check">✓</span></div>`).join('');
-  c.innerHTML=html;
-}
+function csApplyFilter(){
+  if(!csData||!Array.isArray(csData.characters)){ return; }
+  const lvl=document.getElementById('csLvl');
+  if(lvl)lvl.textContent='⭐ لول '+csFa(csData.level||1);
 
-function cbPickPart(partId){
-  cbBuild[cbCat]=partId; // null = None
-  cbRenderThumbs();
-  cbRenderPreview();
-  vib(14); try{sfx('select');}catch(e){}
-}
+  csView=csData.characters.filter(c=>{
+    if(csTabF==='unlocked'&&!c.unlocked)return false;
+    if(csTabF==='locked'&&c.unlocked)return false;
+    if(csKindF!=='all'&&c.kind!==csKindF)return false;
+    return true;
+  });
 
-function cbRenderPreview(){
-  const cv=document.getElementById('cbCanvas'); if(!cv)return;
-  const layers=[];
-  for(const c of CB_CATS){
-    const id=cbBuild[c.k];
-    if(!id) continue;
-    const p=(cbByCat[c.k]||[]).find(x=>x.id===id);
-    if(p) layers.push(p);
+  if(!csView.length){
+    csSetEmpty(csData.characters.length?'در این دسته کاراکتری نیست':'هنوز کاراکتری اضافه نشده است');
+    return;
   }
-  layers.sort((a,b)=>((a.zIndex||cbZ[a.id]||50)-(b.zIndex||cbZ[b.id]||50)));
-  if(!layers.length){ cbSetEmpty('یک بدن انتخاب کن تا شروع شود'); return; }
-  cv.innerHTML=layers.map(p=>`<img class="cbl" src="${p.imageUrl}" alt="">`).join('');
+
+  // Open on the equipped character so the screen always starts where the
+  // player left it, not at an arbitrary slot.
+  let start=csView.findIndex(c=>c.equipped);
+  if(start<0)start=csView.findIndex(c=>c.unlocked);
+  if(start<0)start=0;
+
+  csBuildRing();
+  csRot=csTargetRot=-start*(Math.PI*2/csView.length);
+  csLayout(); csPaintInfo();
 }
 
-function cbSetEmpty(msg){
-  const cv=document.getElementById('cbCanvas'); if(cv)cv.innerHTML=`<div class="cb-empty">${msg}</div>`;
+/* ---- ring ---------------------------------------------------------------- */
+function csArtHTML(c,cls){
+  if(c.image) return '<img src="'+String(c.image).replace(/"/g,'&quot;')+'" alt="" draggable="false">';
+  // No artwork uploaded yet → a shape rather than a broken image icon.
+  return '<div class="cs-fallback'+(cls||'')+'">'+(c.kind==='vip'?'👑':'🎭')+'</div>';
 }
 
-function cbRandom(){
-  const optional=['hat','glasses','beard','accessories','horns','eyesSingle'];
-  for(const c of CB_CATS){
-    const list=cbByCat[c.k]||[];
-    if(!list.length){ continue; }
-    if(optional.includes(c.k) && Math.random()<0.4){ cbBuild[c.k]=null; }
-    else { cbBuild[c.k]=list[Math.floor(Math.random()*list.length)].id; }
+function csBuildRing(){
+  const ring=document.getElementById('csRing');
+  if(!ring)return;
+  ring.innerHTML=csView.map((c,i)=>{
+    const badges=[];
+    if(c.kind==='vip')badges.push('<span class="cs-bdg vip">VIP</span>');
+    if(c.isNew)badges.push('<span class="cs-bdg new">جدید</span>');
+    if(c.equipped)badges.push('<span class="cs-bdg eq">در حال استفاده</span>');
+    return '<div class="cs-slot'+(c.unlocked?'':' locked')+(c.kind==='vip'?' vip':'')+'" data-i="'+i+'" onclick="csSlotTap('+i+')">'
+      + '<div class="cs-art">'+csArtHTML(c)
+      + (c.unlocked?'':'<span class="cs-lockb">🔒</span>')
+      + (badges.length?'<div class="cs-badges">'+badges.join('')+'</div>':'')
+      + '</div>'
+      + '<div class="cs-name">'+csEsc(c.name)+'</div>'
+      + '</div>';
+  }).join('');
+}
+
+function csEsc(s){ return String(s==null?'':s).replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m])); }
+
+/* Places every slot from the current rotation. Called every frame while the
+   ring is moving — it does nothing but write transforms, so it stays cheap. */
+function csLayout(){
+  const ring=document.getElementById('csRing');
+  const stage=document.getElementById('csStage');
+  if(!ring||!stage||!csView.length)return;
+  const n=csView.length;
+  const w=stage.clientWidth||360, h=stage.clientHeight||360;
+
+  /* The floor line is measured off the podium itself rather than guessed from
+     percentages, so the characters stand on the stone at any screen size:
+     the SVG's top face sits at 63/150 of its own height. */
+  let baseY=h*0.72;
+  const svg=stage.querySelector('.cs-podium svg');
+  if(svg){
+    const pr=svg.getBoundingClientRect(), sr=stage.getBoundingClientRect();
+    if(pr.height)baseY=(pr.top-sr.top)+pr.height*(63/150);
   }
-  // Don't wear both single and double eyes at once.
-  if(cbBuild.eyesDouble && cbBuild.eyesSingle){ if(Math.random()<0.5)cbBuild.eyesSingle=null; else cbBuild.eyesDouble=null; }
-  cbRenderThumbs(); cbRenderPreview();
-  vib([30,50,30]); try{sfx('found');}catch(e){}
+  const ART=112;                                  // slot height, see .cs-slot
+  const rx=Math.min(w*0.38,158);                  // horizontal radius
+  const rise=Math.min(h*0.19,104);                // how much higher the far side sits
+  const step=Math.PI*2/n;
+
+  const slots=ring.children;
+  let front=0, best=-2;
+  for(let i=0;i<n;i++){
+    const a=csRot+i*step;
+    const sn=Math.sin(a), cs=Math.cos(a);
+    if(cs>best){ best=cs; front=i; }
+    const el=slots[i]; if(!el)continue;
+    // cs = +1 at the front of the ring, -1 at the back.
+    const depth=(cs+1)/2;                         // 0 far .. 1 near
+    const scale=0.38+depth*0.68;
+    const x=sn*rx;
+    // feet land on the floor line, lifted toward the back for the ellipse
+    const y=(baseY-(1-depth)*rise)-ART;
+    const blur=(1-depth)*1.7;
+    el.style.transform='translate3d('+x.toFixed(1)+'px,'+y.toFixed(1)+'px,0) scale('+scale.toFixed(3)+')';
+    el.style.zIndex=String(Math.round(depth*100));
+    el.style.opacity=(0.34+depth*0.66).toFixed(2);
+    el.style.filter=blur>0.06?('blur('+blur.toFixed(2)+'px)'):'';
+    el.classList.remove('sel');
+  }
+  const fe=slots[front];
+  if(fe)fe.classList.add('sel');
+  // contact shadow sits on the floor line under whoever is at the front
+  const cast=document.getElementById('csCast');
+  if(cast){
+    cast.style.top=(baseY-8)+'px';
+    cast.style.bottom='auto';
+    cast.style.opacity=(0.30+best*0.34).toFixed(2);
+  }
+  if(csFront!==front){ csFront=front; csPaintInfo(); try{ vib([8]); }catch(e){} }
+}
+var csFront=-1;
+
+function csCurrent(){ return csView[csFront]||csView[0]||null; }
+
+/* ---- info card + action -------------------------------------------------- */
+function csPaintInfo(){
+  const c=csCurrent(); const info=document.getElementById('csInfo'); const act=document.getElementById('csActions');
+  if(!c||!info||!act)return;
+  info.style.display='';
+  info.className='cs-info'+(c.kind==='vip'?' vip':'');
+  let lock='';
+  if(!c.unlocked){
+    const gold=c.kind==='vip';
+    lock='<div class="cs-i-lock'+(gold?' gold':'')+'"><span>🔒</span><span>'+csEsc(c.lockReason||'هنوز باز نشده')+'</span></div>';
+  }
+  info.innerHTML='<div class="cs-i-h"><b>'+csEsc(c.name)+'</b>'
+    +(c.kind==='vip'?'<span class="cs-bdg vip">VIP</span>':'')
+    +(c.isNew?'<span class="cs-bdg new">جدید</span>':'')
+    +'</div>'
+    +'<div class="cs-i-d">'+csEsc(c.description||'')+'</div>'+lock;
+
+  if(c.equipped){
+    act.innerHTML='<button class="btn btn-ghost" disabled>✓ در حال استفاده</button>';
+  }else if(c.unlocked){
+    act.innerHTML='<button class="btn btn-primary" onclick="csEquip()">انتخاب این کاراکتر</button>';
+  }else{
+    act.innerHTML='<button class="btn btn-ghost" onclick="csWhy()">چطور بازش کنم؟</button>';
+  }
 }
 
-async function cbSave(){
-  const btn=document.getElementById('cbSaveBtn');
-  if(btn){btn.disabled=true;btn.textContent='در حال ذخیره…';}
+function csSlotTap(i){
+  // A drag that happens to end on top of a slot still fires that slot's click.
+  // Without this the throw would be overridden by whatever the finger was
+  // resting on, which feels like the ring fighting you.
+  if(csDragMoved){ csDragMoved=false; return; }
+  if(i===csFront){ const c=csCurrent(); if(c&&!c.unlocked)csWhy(); return; }
+  csSnapTo(i);
+}
+var csDragMoved=false;
+
+/* Spins to a slot by the SHORTEST way round, so tapping the one just behind
+   you never sends the ring the long way. */
+function csSnapTo(i){
+  const n=csView.length; if(!n)return;
+  const step=Math.PI*2/n;
+  const want=-i*step;
+  let d=want-csTargetRot;
+  d=((d+Math.PI)%(Math.PI*2)+Math.PI*2)%(Math.PI*2)-Math.PI;
+  csTargetRot+=d; csVel=0;
+  // The loop parks itself whenever the screen is hidden; anything that moves
+  // the ring has to be able to wake it, or the carousel silently freezes.
+  if(!csRaf)csTick();
+  try{ sfx('blip'); }catch(e){}
+}
+
+async function csEquip(){
+  const c=csCurrent(); if(!c||csBusy)return;
+  csBusy=true;
+  const act=document.getElementById('csActions');
+  if(act)act.innerHTML='<button class="btn btn-primary" disabled>در حال ذخیره…</button>';
   try{
-    const r=await pzApi('PUT','/character-builder/build',{build:cbBuild},true);
-    if(r&&r.ok!==false){ try{localStorage.setItem('pz_char',JSON.stringify(cbBuild));}catch(e){} toast('کاراکترت ذخیره شد! 🎉'); _ccFinish(); }
-    else { toast('ذخیره نشد؛ دوباره تلاش کن'); }
-  }catch(e){ toast('خطای شبکه در ذخیره'); }
-  finally{ if(btn){btn.disabled=false;btn.textContent='ذخیره کاراکتر';} }
+    const r=await pzApi('POST','/characters/'+encodeURIComponent(c.id)+'/equip',{},true);
+    if(r&&r.ok!==false){
+      (csData.characters||[]).forEach(x=>{ x.equipped=(x.id===c.id); });
+      csData.equippedId=c.id;
+      csBuildRing(); csLayout(); csPaintInfo();
+      csFlash(); try{ sfx('win'); vib([18,40,18]); }catch(e){}
+      toast('کاراکترت انتخاب شد! 🎉');
+      try{ localStorage.setItem('pz_charId',c.id); }catch(e){}
+    }else{
+      toast((r&&r.error&&r.error.message)||'ذخیره نشد');
+      csPaintInfo();
+    }
+  }catch(e){ toast('خطای شبکه'); csPaintInfo(); }
+  finally{ csBusy=false; }
 }
 
-/* Where to go after the character screen: 'plans' during first-time onboarding,
-   or 'settings'/'profile' when editing later. (var → reachable from inline onclick.) */
-var charBack='plans';
-function _ccFinish(){ try{localStorage.setItem('pz_charDone','1');}catch(e){} const b=charBack||'plans'; if(b==='plans')plansBack='home'; charBack='plans'; go(b); }
-function cbSkip(){ toast('باشه؛ هر وقت خواستی از تنظیمات کاراکترت رو بساز'); _ccFinish(); }
+function csWhy(){
+  const c=csCurrent(); if(!c)return;
+  const ways=[];
+  if(c.viaLevel&&c.unlockLevel>0)ways.push('رسیدن به لول '+csFa(c.unlockLevel));
+  if(c.viaReward)ways.push('جایزهٔ مسابقات');
+  if(c.viaEvent)ways.push('جایزهٔ رویدادها');
+  if(c.viaRandom)ways.push('قرعه‌کشی');
+  if(c.viaPurchase)ways.push(c.price>0?('خرید — '+csFa(c.price)+' سکه'):'خرید از فروشگاه');
+  const need=(c.viaLevel&&c.unlockLevel>0)?('<div style="margin-top:10px;font-size:12px;color:#c9d8cd">لول فعلی تو: <b style="color:var(--bolt)">'+csFa((csData&&csData.level)||1)+'</b> از '+csFa(c.unlockLevel)+'</div>'):'';
+  try{
+    showAaaModal({
+      iconHTML:'<div style="width:96px;height:96px;margin:0 auto;display:flex;align-items:center;justify-content:center">'+csArtHTML(c)+'</div>',
+      title:c.name+(c.kind==='vip'?' 👑':''),
+      sub:(c.description?csEsc(c.description)+'<br><br>':'')
+        +(c.kind==='vip'?'<b style="color:#FFD98A">این یک کاراکتر VIP است.</b><br>':'')
+        +'<b>راه‌های آزادسازی:</b><br>'+(ways.length?ways.map(w=>'• '+w).join('<br>'):'فعلاً در دسترس نیست')
+        +need,
+      primaryText:'باشه', secondaryText:''
+    });
+  }catch(e){ toast(c.lockReason||'هنوز باز نشده'); }
+}
+
+/* A quick sweep of light across the stage on a successful pick. */
+function csFlash(){
+  const stage=document.getElementById('csStage'); if(!stage)return;
+  const f=document.createElement('div');
+  f.style.cssText='position:absolute;inset:0;z-index:9;pointer-events:none;background:radial-gradient(circle at 50% 55%,rgba(255,240,190,.55),transparent 58%);opacity:0;transition:opacity .18s';
+  stage.appendChild(f);
+  requestAnimationFrame(()=>{ f.style.opacity='1'; setTimeout(()=>{ f.style.opacity='0'; setTimeout(()=>f.remove(),320); },140); });
+  csBurstParticles(stage);
+}
+
+function csBurstParticles(host){
+  const r=host.getBoundingClientRect();
+  const cx=r.left+r.width/2, cy=r.top+r.height*0.55;
+  const cols=['#FFD21F','#FFF3CF','#33D97C','#5DB7EC'];
+  for(let i=0;i<18;i++){
+    const p=document.createElement('span');
+    p.className='cs-rv-p';
+    const a=Math.random()*Math.PI*2, dist=60+Math.random()*130;
+    p.style.left=cx+'px'; p.style.top=cy+'px';
+    p.style.background=cols[(Math.random()*cols.length)|0];
+    p.style.setProperty('--dx',(Math.cos(a)*dist).toFixed(0)+'px');
+    p.style.setProperty('--dy',(Math.sin(a)*dist-40).toFixed(0)+'px');
+    p.style.setProperty('--rz',((Math.random()*720-360)|0)+'deg');
+    document.body.appendChild(p);
+    setTimeout(()=>p.remove(),1600);
+  }
+}
+
+/* ---- drag + inertia ------------------------------------------------------ */
+function csBindDrag(){
+  const ring=document.getElementById('csRing');
+  if(!ring||ring._csBound)return;
+  ring._csBound=true;
+  /* The floor line is measured off the podium, and the podium moves whenever
+     the stage does — the info card rendering under it is enough to shift it.
+     Without this the characters keep the position they were given on the very
+     first frame and end up standing beside the podium instead of on it. */
+  const stage=document.getElementById('csStage');
+  if(stage&&window.ResizeObserver){
+    try{ new ResizeObserver(()=>{ csLayout(); }).observe(stage); }catch(e){}
+  }
+  window.addEventListener('resize',()=>{ csLayout(); });
+  const down=(x)=>{ csDragging=true; csDragMoved=false; csDragX=x; csDragRot=csTargetRot; csVel=0; csLastX=x; csLastT=performance.now(); ring.classList.add('drag'); };
+  const move=(x)=>{
+    if(!csDragging)return;
+    if(Math.abs(x-csDragX)>6)csDragMoved=true;   // past this it is a drag, not a tap
+    const stage=document.getElementById('csStage');
+    const w=(stage&&stage.clientWidth)||360;
+    // A full drag across the stage turns the ring roughly half a revolution —
+    // enough to feel direct without overshooting on a small screen.
+    csTargetRot=csRot=csDragRot+((x-csDragX)/w)*Math.PI*1.15;
+    const t=performance.now(), dt=Math.max(1,t-csLastT);
+    csVel=((x-csLastX)/w)*Math.PI*1.15/dt*16;
+    csLastX=x; csLastT=t;
+    csLayout();
+  };
+  const up=()=>{
+    if(!csDragging)return;
+    csDragging=false; ring.classList.remove('drag');
+    // Carry the throw, then settle on whichever slot ends up nearest the front.
+    const n=csView.length||1, step=Math.PI*2/n;
+    const glide=csVel*8;
+    csTargetRot=Math.round((csRot+glide)/step)*step;
+    csVel=0;
+    if(!csRaf)csTick();
+  };
+  ring.addEventListener('pointerdown',e=>{ down(e.clientX); ring.setPointerCapture&&ring.setPointerCapture(e.pointerId); });
+  ring.addEventListener('pointermove',e=>{ if(csDragging){ e.preventDefault(); move(e.clientX); } });
+  ring.addEventListener('pointerup',up);
+  ring.addEventListener('pointercancel',up);
+  ring.addEventListener('pointerleave',up);
+  // Wheel / trackpad spins it too.
+  ring.addEventListener('wheel',e=>{
+    if(!csView.length)return;
+    e.preventDefault();
+    const n=csView.length, step=Math.PI*2/n;
+    csTargetRot+= (e.deltaY>0?1:-1)*step;
+    if(!csRaf)csTick();
+  },{passive:false});
+}
+
+/* One animation loop eases the rotation toward its target. Everything else —
+   scale, depth, z-order, the info card — falls out of csLayout. */
+function csTick(){
+  if(csRaf)cancelAnimationFrame(csRaf);
+  const loop=()=>{
+    const scr=document.getElementById('character');
+    if(!scr||!scr.classList.contains('active')){ csRaf=null; return; }
+    if(!csDragging){
+      const d=csTargetRot-csRot;
+      if(Math.abs(d)>0.0005){ csRot+=d*0.14; csLayout(); }
+    }
+    csRaf=requestAnimationFrame(loop);
+  };
+  csRaf=requestAnimationFrame(loop);
+}
+
+/* ---- floating dust motes (canvas — cheaper than N DOM nodes) ------------- */
+function csStartDust(){
+  const cv=document.getElementById('csDust'); if(!cv)return;
+  const ctx=cv.getContext&&cv.getContext('2d'); if(!ctx)return;
+  if(window.matchMedia&&window.matchMedia('(prefers-reduced-motion:reduce)').matches)return;
+  let W=0,H=0,parts=[];
+  const dpr=Math.min(2,window.devicePixelRatio||1);
+  const size=()=>{
+    const r=cv.getBoundingClientRect();
+    W=Math.max(1,r.width|0); H=Math.max(1,r.height|0);
+    cv.width=W*dpr; cv.height=H*dpr; ctx.setTransform(dpr,0,0,dpr,0,0);
+    if(!parts.length){
+      const N=Math.round(Math.min(46,Math.max(20,W/9)));
+      for(let i=0;i<N;i++)parts.push({
+        x:Math.random()*W,y:Math.random()*H,r:Math.random()*1.9+0.5,
+        vy:-(Math.random()*0.20+0.05),vx:(Math.random()-0.5)*0.16,
+        a:Math.random()*0.5+0.18,ph:Math.random()*Math.PI*2
+      });
+    }
+  };
+  size();
+  if(csDustRaf)cancelAnimationFrame(csDustRaf);
+  const draw=()=>{
+    const scr=document.getElementById('character');
+    if(!scr||!scr.classList.contains('active')){ csDustRaf=null; return; }
+    ctx.clearRect(0,0,W,H);
+    for(const p of parts){
+      p.y+=p.vy; p.x+=p.vx+Math.sin((p.ph+=0.012))*0.14;
+      if(p.y<-4){ p.y=H+4; p.x=Math.random()*W; }
+      if(p.x<-4)p.x=W+4; if(p.x>W+4)p.x=-4;
+      const tw=p.a*(0.62+0.38*Math.sin(p.ph*2));
+      ctx.beginPath();
+      ctx.fillStyle='rgba(226,255,214,'+tw.toFixed(3)+')';
+      ctx.arc(p.x,p.y,p.r,0,6.283);
+      ctx.fill();
+    }
+    csDustRaf=requestAnimationFrame(draw);
+  };
+  csDustRaf=requestAnimationFrame(draw);
+  if(!cv._csResize){ cv._csResize=true; window.addEventListener('resize',()=>{ parts=[]; size(); }); }
+}
+
+/* ---- unlock reveal — used when a character arrives from a box or a prize -- */
+function csRevealCharacter(character,opts){
+  if(!character)return;
+  opts=opts||{};
+  const vip=character.kind==='vip';
+  const el=document.createElement('div');
+  el.className='cs-reveal';
+  el.innerHTML='<div class="cs-rv-card'+(vip?' vip':'')+'">'
+    +'<div class="cs-rv-burst"></div>'
+    +'<div class="cs-rv-art">'+csArtHTML(character)+'</div>'
+    +'<div class="cs-rv-k">'+(opts.kicker||(vip?'کاراکتر VIP باز شد!':'کاراکتر جدید باز شد!'))+'</div>'
+    +'<div class="cs-rv-n">'+csEsc(character.name)+'</div>'
+    +'<div class="cs-rv-d">'+csEsc(opts.note||character.description||'')+'</div>'
+    +'<button class="btn btn-primary cs-rv-b" onclick="this.closest(\'.cs-reveal\').remove()">عالیه!</button>'
+    +'</div>';
+  document.body.appendChild(el);
+  try{ sfx(vip?'win':'coin'); vib(vip?[20,60,20,60,30]:[18,40,18]); }catch(e){}
+  setTimeout(()=>csBurstParticles(el),120);
+  if(vip)setTimeout(()=>csBurstParticles(el),520);
+  // Bring the roster back in line with what the player just won.
+  csLoaded=false;
+  if(document.getElementById('character')&&document.getElementById('character').classList.contains('active')){
+    csLoad().then(()=>csApplyFilter());
+  }
+}
+
+/* Opens a random box and plays the reveal. Exposed so a prize flow elsewhere
+   in the app can call it once boxes are surfaced to players. */
+async function csOpenBox(boxId){
+  if(csBusy)return; csBusy=true;
+  try{
+    const r=await pzApi('POST','/characters/boxes/'+encodeURIComponent(boxId)+'/open',{},true);
+    const d=(r&&r.data)||{};
+    if(!d.character){ toast((r&&r.error&&r.error.message)||'قرعه‌کشی انجام نشد'); return; }
+    if(d.duplicate){
+      const amt=d.compensation&&d.compensation.amount;
+      const kind=d.compensation&&d.compensation.type;
+      csRevealCharacter(d.character,{
+        kicker:'تکراری بود!',
+        note:amt?('به‌جایش '+csFa(amt)+(kind==='xp'?' XP':' سکه')+' گرفتی.'):'این کاراکتر را از قبل داشتی.'
+      });
+    }else{
+      csRevealCharacter(d.character);
+    }
+  }catch(e){ toast('خطای شبکه'); }
+  finally{ csBusy=false; }
+}
+
+/* Kept for the old entry points that navigate away after the character step. */
+function _ccFinish(){ try{ localStorage.setItem('pz_charDone','1'); }catch(e){} const b=charBack||'profile'; charBack='profile'; go(b); }
 
 
 /* ============ LAST SURVIVOR (آخرین بازمانده) — real-time elimination ============
@@ -10894,7 +11407,7 @@ function startIntroFlow(){
    PZ_SOON below (and, if you want, drop the .soon-dim / .soon-tag markup from
    its card in the HTML). Nothing else needs to change.
    ===================================================================== */
-const PZ_SOON={ missions:'ماموریت‌ها', arena:'آخرین بازمانده', consensus:'همه یا هیچ', leagues:'لیگ‌های هفتگی', character:'ساخت کاراکتر' };
+const PZ_SOON={ missions:'ماموریت‌ها', arena:'آخرین بازمانده', consensus:'همه یا هیچ', leagues:'لیگ‌های هفتگی' };
 function comingSoon(key){
   const label=PZ_SOON[key]||key;
   try{ sfx('blip'); vib([18]); }catch(e){}
@@ -10913,7 +11426,6 @@ function comingSoon(key){
   const _origGo=go;
   go=function(id){
     if(id==='missions'){ return comingSoon('missions'); }
-    if(id==='character'){ return comingSoon('character'); } /* builder ready but gated until art is final */
     return _origGo(id);
   };
   const _origEnterMode=(typeof enterMode==='function')?enterMode:null;
