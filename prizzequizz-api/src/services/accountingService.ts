@@ -51,32 +51,44 @@ function pg(): ReturnType<typeof getPgPool> | null {
   try { return process.env.DATABASE_URL ? getPgPool() : null; } catch { return null; }
 }
 
+/* Schema statements are run once and independently: one that cannot apply in a
+ * given deployment (e.g. the ALTER when `monitor_servers` has not been created
+ * yet) must not take the other four down with it, and must not make the whole
+ * accounting tab fail. Each statement is tried on its own, the pass is marked
+ * done either way, and any query that then hits a missing table degrades to an
+ * empty figure rather than a 500. */
 let _schemaReady = false;
-async function ensureSchema(pool: ReturnType<typeof getPgPool>): Promise<void> {
-  if (_schemaReady) return;
-  await pool.query(`CREATE TABLE IF NOT EXISTS company_expenses (
+const SCHEMA_SQL = [
+  `CREATE TABLE IF NOT EXISTS company_expenses (
     id TEXT PRIMARY KEY,
     title TEXT NOT NULL,
     category VARCHAR(40) NOT NULL DEFAULT 'other',
     amount BIGINT NOT NULL CHECK (amount >= 0),
     spent_at DATE NOT NULL DEFAULT current_date,
     note TEXT NOT NULL DEFAULT '',
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now())`);
-  await pool.query(`CREATE INDEX IF NOT EXISTS idx_company_expenses_date ON company_expenses(spent_at DESC)`);
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now())`,
+  `CREATE INDEX IF NOT EXISTS idx_company_expenses_date ON company_expenses(spent_at DESC)`,
   // Price per hour for each monitored machine (0 = free / not billed).
-  await pool.query(`ALTER TABLE monitor_servers ADD COLUMN IF NOT EXISTS hourly_cost BIGINT NOT NULL DEFAULT 0`);
+  `ALTER TABLE monitor_servers ADD COLUMN IF NOT EXISTS hourly_cost BIGINT NOT NULL DEFAULT 0`,
   /* Item-sales log. The shop is catalog-only today — there is no buy endpoint —
    * so this stays empty and the "shop" income line reads zero until the purchase
    * flow is built. The table exists now so that flow has somewhere to write. */
-  await pool.query(`CREATE TABLE IF NOT EXISTS shop_purchases (
+  `CREATE TABLE IF NOT EXISTS shop_purchases (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL,
     item_id TEXT NOT NULL,
     price BIGINT NOT NULL CHECK (price >= 0),
     currency VARCHAR(12) NOT NULL DEFAULT 'cash',
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now())`);
-  await pool.query(`CREATE INDEX IF NOT EXISTS idx_shop_purchases_time ON shop_purchases(created_at DESC)`);
-  _schemaReady = true;
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now())`,
+  `CREATE INDEX IF NOT EXISTS idx_shop_purchases_time ON shop_purchases(created_at DESC)`
+];
+
+async function ensureSchema(pool: ReturnType<typeof getPgPool>): Promise<void> {
+  if (_schemaReady) return;
+  _schemaReady = true;   // set first: the DDL is attempted once, never per request
+  for (const sql of SCHEMA_SQL) {
+    try { await pool.query(sql); } catch { /* not applicable here — the reader below copes */ }
+  }
 }
 
 const memExpenses: ExpenseRow[] = [];
@@ -98,9 +110,11 @@ export async function listExpenses(from?: string, to?: string, limit = 500): Pro
   const pool = pg();
   if (pool) {
     await ensureSchema(pool);
-    const { rows } = await pool.query(
-      `SELECT * FROM company_expenses WHERE spent_at BETWEEN $1 AND $2 ORDER BY spent_at DESC, created_at DESC LIMIT $3`, [f, t, limit]);
-    return rows.map(expenseFromRow);
+    try {
+      const { rows } = await pool.query(
+        `SELECT * FROM company_expenses WHERE spent_at BETWEEN $1 AND $2 ORDER BY spent_at DESC, created_at DESC LIMIT $3`, [f, t, limit]);
+      return rows.map(expenseFromRow);
+    } catch { return []; }   // no table yet → an empty list, not a broken tab
   }
   return memExpenses.filter((e) => e.spentAt >= f && e.spentAt <= t).slice(0, limit);
 }

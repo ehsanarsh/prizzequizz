@@ -33,7 +33,7 @@ import type { DeviceTrustStatus, IntegritySeverity, IntegrityStatus, Notificatio
 import type { Question } from '../../types/domain.js';
 import { financeReport, listExpenses, saveExpense, deleteExpense, setServerHourlyCost, reportToCsv, reportToPdf, EXPENSE_CATEGORIES } from '../../services/accountingService.js';
 import { securityAlerts } from '../../services/securityAlertService.js';
-import { buildBackup, backupFilename, BACKUP_TABLES } from '../../services/backupService.js';
+import { streamBackup, backupFilename, BACKUP_TABLES } from '../../services/backupService.js';
 
 export function registerAdminRoutes(router: Router, base: string): void {
   // ===== Admin auth + accounts (per-tab access control) =====
@@ -523,13 +523,17 @@ export function registerAdminRoutes(router: Router, base: string): void {
    * it to one trusted account from the roles tab without opening anything else. */
   router.add('GET', `${base}/admin/backup/export`, async (ctx) => {
     if (!requireAdmin(ctx, { tab: 'backup' })) return;
-    const dump = await buildBackup();
-    const body = Buffer.from(JSON.stringify(dump), 'utf8');
+    /* Streamed, so peak memory is one page of rows no matter how big the
+     * database gets. That means no content-length — the size is unknown until
+     * the last row is written — which is exactly what chunked transfer is for. */
     ctx.res.statusCode = 200;
     ctx.res.setHeader('content-type', 'application/json; charset=utf-8');
     ctx.res.setHeader('content-disposition', `attachment; filename="${backupFilename()}"`);
-    ctx.res.setHeader('content-length', String(body.length));
-    ctx.res.end(body);
+    ctx.res.setHeader('cache-control', 'no-store');
+    try {
+      await streamBackup(ctx.res);
+    } catch { /* socket died mid-dump — nothing left to say on it */ }
+    ctx.res.end();
   });
   router.add('GET', `${base}/admin/backup/status`, async (ctx) => {
     if (!requireAdmin(ctx, { tab: 'backup' })) return;

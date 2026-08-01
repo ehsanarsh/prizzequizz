@@ -1,6 +1,10 @@
 services:
   postgres:
     image: postgres:16-alpine
+    # Every service restarts by itself. Without this, any reboot — including the
+    # one a VPS does when its plan is resized — leaves nginx up with nothing
+    # behind it, and the whole site answers 502 until someone logs in by hand.
+    restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -17,6 +21,7 @@ services:
 
   redis:
     image: redis:7-alpine
+    restart: unless-stopped
     ports:
       - "6379:6379"
     healthcheck:
@@ -27,6 +32,7 @@ services:
 
   api:
     build: ./prizzequizz-api
+    restart: unless-stopped
     environment:
       NODE_ENV: development
       PORT: 3000
@@ -51,6 +57,7 @@ services:
 
   pwa:
     build: ./prizzequizz-pwa
+    restart: unless-stopped
     environment:
       VITE_API_BASE_URL: http://localhost:3000/v1
     ports:
