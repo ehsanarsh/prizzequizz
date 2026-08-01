@@ -9526,7 +9526,20 @@ let otpSec=59;setInterval(()=>{if(otpSec>0){otpSec--;document.getElementById('ot
 
 
 /* ======= PrizzeQuizz Real API — Minimal & Clean ======= */
-const _A = 'http://193.93.169.245/v1';
+/* API base. A page served from a real host talks to ITS OWN origin, which is
+   what lets the site work behind a domain and TLS: an https page may not call
+   http://<ip>/v1 — the browser blocks it as mixed content before the request is
+   ever sent, and the WebSocket below (derived from this) would be blocked too.
+   The bare IP stays as the fallback for file:// and local development. */
+const _A = (function(){
+  try{
+    var h = location.hostname;
+    if(/^https?:$/.test(location.protocol) && h && h!=='localhost' && h!=='127.0.0.1' && h!=='::1'){
+      return location.origin + '/v1';
+    }
+  }catch(e){}
+  return 'http://193.93.169.245/v1';
+})();
 let _tok = localStorage.getItem('pz_tok') || null;
 let _usr = JSON.parse(localStorage.getItem('pz_usr') || 'null');
 let _rid = null, _mid = null, _mmt = null, _mmi = null;
