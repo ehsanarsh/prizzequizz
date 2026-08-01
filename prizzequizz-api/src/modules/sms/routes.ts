@@ -5,7 +5,8 @@ import { requireAdmin } from '../../services/adminGuard.js';
 import { bodyObject } from '../../utils/validation.js';
 import {
   getSmsConfig, updateSmsConfig, maskConfig, listTemplates, saveTemplate, removeTemplate,
-  listLog, listBlacklist, addBlacklist, removeBlacklist, smsStats, sendSms, resend, cancelPending
+  listLog, listBlacklist, addBlacklist, removeBlacklist, smsStats, sendSms, resend, cancelPending,
+  niazpardazAccount
 } from '../../services/smsService.js';
 
 export function registerSmsRoutes(router: Router, base: string): void {
@@ -18,13 +19,30 @@ export function registerSmsRoutes(router: Router, base: string): void {
     const patch: any = {
       enabled: !!b.enabled, sandbox: !!b.sandbox, provider: String(b.provider || 'sandbox'),
       sender: String(b.sender || ''), genericUrl: b.genericUrl != null ? String(b.genericUrl) : undefined,
-      otp: { maxPerHour: Number(b?.otp?.maxPerHour ?? 5), expirySeconds: Number(b?.otp?.expirySeconds ?? 120), minIntervalSeconds: Number(b?.otp?.minIntervalSeconds ?? 60) }
+      otp: {
+        maxPerHour: Number(b?.otp?.maxPerHour ?? 5),
+        expirySeconds: Number(b?.otp?.expirySeconds ?? 120),
+        minIntervalSeconds: Number(b?.otp?.minIntervalSeconds ?? 60),
+        testCode: String(b?.otp?.testCode ?? '1234').replace(/\D/g, '').slice(0, 6) || '1234'
+      }
     };
     // Keep existing secret/apiKey when the field is blank or still masked.
     if (b.apiKey && !String(b.apiKey).startsWith('••••')) patch.apiKey = String(b.apiKey);
     if (b.secret && !String(b.secret).startsWith('••••')) patch.secret = String(b.secret);
     json(ctx.res, 200, maskConfig(await updateSmsConfig(patch)));
   });
+  /* Reads the panel back: remaining credit and the sender lines the key is
+   * allowed to use. It answers the two questions a failed send raises — is the
+   * key right, and is the sender number one this account actually owns —
+   * without spending an SMS to find out. */
+  router.add('GET', `${base}/admin/sms/account`, async (ctx) => {
+    if (!guard(ctx)) return;
+    const cfg = await getSmsConfig();
+    if (cfg.provider !== 'niazpardaz') return json(ctx.res, 200, { provider: cfg.provider, supported: false });
+    const acc = await niazpardazAccount(cfg);
+    json(ctx.res, 200, { provider: cfg.provider, supported: true, ...acc, senderConfigured: cfg.sender, senderValid: !acc.senders.length ? null : acc.senders.includes(cfg.sender) });
+  });
+
   router.add('POST', `${base}/admin/sms/test`, async (ctx) => {
     if (!guard(ctx)) return;
     const b = bodyObject(ctx.body) as any;

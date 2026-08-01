@@ -3183,14 +3183,16 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
       <div class="grow center" style="width:100%">
         <div style="width:100%;text-align:center">
           <h1 style="font-size:24px;font-weight:900">کد تأیید</h1>
-          <p style="color:var(--muted);margin:8px 0 26px;font-size:14px">کد ۴ رقمی ارسال‌شده به<br><b style="color:var(--text)" dir="ltr">۰۹۱۲ ۳۴۵ ۶۷۸۹</b> رو وارد کن</p>
+          <p style="color:var(--muted);margin:8px 0 26px;font-size:14px">کد ۴ رقمی ارسال‌شده به<br><b style="color:var(--text)" dir="ltr" id="otpPhone">—</b> رو وارد کن</p>
           <div style="display:flex;gap:12px;justify-content:center;direction:ltr" id="otpBoxes">
             <input class="input mono" maxlength="1" inputmode="numeric" style="width:60px;height:66px;text-align:center;font-size:26px;font-weight:800">
             <input class="input mono" maxlength="1" inputmode="numeric" style="width:60px;height:66px;text-align:center;font-size:26px;font-weight:800">
             <input class="input mono" maxlength="1" inputmode="numeric" style="width:60px;height:66px;text-align:center;font-size:26px;font-weight:800">
             <input class="input mono" maxlength="1" inputmode="numeric" style="width:60px;height:66px;text-align:center;font-size:26px;font-weight:800">
           </div>
-          <p style="color:var(--muted);font-size:13px;margin-top:22px">ارسال مجدد کد تا <b style="color:var(--gold)" id="otpTimer">۰۰:۵۹</b></p>
+          <p style="color:var(--muted);font-size:13px;margin-top:22px" id="otpTimerLine">اعتبار کد تا <b style="color:var(--gold)" id="otpTimer">—</b></p>
+          <button class="btn btn-ghost" id="otpResend" style="margin-top:10px;display:none" onclick="realResendOtp()">ارسال دوبارهٔ کد</button>
+          <p id="otpHint" style="color:var(--muted2);font-size:11px;margin-top:12px"></p>
         </div>
       </div>
       <button class="btn btn-primary" onclick="realVerifyOtp()">ورود</button>
@@ -9696,8 +9698,55 @@ function fa(n){
   return s.replace(/[0-9]/g,d=>f[d]);
 }
 
-/* OTP countdown */
-let otpSec=59;setInterval(()=>{if(otpSec>0){otpSec--;document.getElementById('otpTimer').textContent='۰۰:'+fa(String(otpSec).padStart(2,'0'));}},1000);
+/* OTP countdown.
+   This used to be a single interval started at page load counting down from a
+   fixed 59, so by the time anyone reached the code screen it had long since hit
+   zero and never restarted. It now starts when a code is actually requested and
+   counts the expiry the SERVER reported, so the number on screen is the real
+   deadline rather than a decoration. */
+let _otpTick=null, _otpEndsAt=0, _otpResendAt=0;
+/* fa() formats a NUMBER — it drops a leading zero and adds a thousands
+   separator, which turns 09354447788 into ۹۳۵ ۴۴۴ ۷٬۷۸۸ and 01:34 into ۱:۳۴.
+   Phone numbers and clocks are digit strings, not quantities. */
+function faDigits(s){
+  const f=['۰','۱','۲','۳','۴','۵','۶','۷','۸','۹'];
+  return String(s==null?'':s).replace(/[0-9]/g,d=>f[+d]);
+}
+function otpClock(secs){
+  /* Ceil, not round: a countdown that still has 0.4s left must not already
+     read ۰۰:۰۰ — next to a button that is still refusing, that looks broken. */
+  const n=Math.max(0,Math.ceil(secs));
+  return faDigits(String(Math.floor(n/60)).padStart(2,'0')+':'+String(n%60).padStart(2,'0'));
+}
+function otpStartTimer(ttlSeconds,resendAfterSeconds){
+  _otpEndsAt=Date.now()+Math.max(0,Number(ttlSeconds)||0)*1000;
+  _otpResendAt=Date.now()+Math.max(0,Number(resendAfterSeconds)||0)*1000;
+  if(_otpTick)clearInterval(_otpTick);
+  const paint=()=>{
+    const left=(_otpEndsAt-Date.now())/1000;
+    const t=document.getElementById('otpTimer'), line=document.getElementById('otpTimerLine'), btn=document.getElementById('otpResend');
+    if(!t)return;
+    if(left>0){ t.textContent=otpClock(left); if(line)line.style.display=''; }
+    else { if(line)line.style.display='none'; }
+    /* The resend button appears only once the server would accept another
+       request — offering it earlier just earns a rejection. */
+    if(btn){
+      const wait=(_otpResendAt-Date.now())/1000;
+      if(left<=0||wait<=0){ btn.style.display=''; btn.disabled=false; btn.textContent='ارسال دوبارهٔ کد'; }
+      else { btn.style.display=''; btn.disabled=true; btn.textContent='ارسال دوباره تا '+otpClock(wait); }
+    }
+    if(left<=0&&(_otpResendAt-Date.now())<=0){ clearInterval(_otpTick); _otpTick=null; }
+  };
+  paint();
+  _otpTick=setInterval(paint,1000);
+}
+function otpStopTimer(){ if(_otpTick){clearInterval(_otpTick);_otpTick=null;} }
+/* ۰۹۱۲ ۳۴۵ ۶۷۸۹ — grouped for reading, still the player's own number. */
+function otpPrettyPhone(p){
+  const d=String(p||'').replace(/\D/g,'');
+  if(d.length!==11)return faDigits(d);
+  return faDigits(d.slice(0,4)+' '+d.slice(4,7)+' '+d.slice(7));
+}
 
 
 /* ======= PrizzeQuizz Real API — Minimal & Clean ======= */
@@ -9803,21 +9852,56 @@ async function pzRefreshToken(){
 }
 
 /* AUTH */
+let _otpPhone='';
 async function realSendOtp(){
-  const ph=(document.getElementById('phoneInput')?.value||'').trim().replace(/\s/g,'');
+  const ph=pzToLatinDigits((document.getElementById('phoneInput')?.value||'')).trim().replace(/\s/g,'');
   if(!/^09\d{9}$/.test(ph)){toast('شماره صحیح نیست');return;}
   const btn=document.querySelector('#login .btn-primary');
   if(btn){btn.disabled=true;btn.textContent='ارسال...';}
-  const r=await pzApi('POST','/auth/login',{phone:ph},false);
+  const ok=await pzRequestOtp(ph);
   if(btn){btn.disabled=false;btn.textContent='دریافت کد احراز';}
-  if(r.ok){_rid=r.data.requestId;go('otp');toast('کد ارسال شد');}
-  else toast('خطا: '+(r.error?.message||'دوباره تلاش کن'));
+  if(ok)go('otp');
+}
+
+/* Asks for a code and sets the screen up from the SERVER's answer: whose
+   number it went to, how long it lives, and when another one may be asked
+   for. Shared by the first request and the resend button. */
+async function pzRequestOtp(phone){
+  const r=await pzApi('POST','/auth/login',{phone},false);
+  if(!r.ok){ toast(r.error?.message||'خطا در ارسال کد؛ دوباره تلاش کن'); return false; }
+  _rid=r.data.requestId;
+  _otpPhone=r.data.phone||phone;
+  const el=document.getElementById('otpPhone'); if(el)el.textContent=otpPrettyPhone(_otpPhone);
+  const boxes=document.querySelectorAll('#otpBoxes input');
+  boxes.forEach(b=>b.value=''); boxes[0]?.focus();
+  otpStartTimer(r.data.ttlSeconds,r.data.resendAfterSeconds);
+  const hint=document.getElementById('otpHint');
+  /* In test mode nothing is really sent, so saying "کد ارسال شد" would be a
+     lie the tester then has to debug. */
+  if(hint)hint.textContent=r.data.testMode?'سرویس پیامک در حالت آزمایشی است؛ پیامکی ارسال نشد.':'';
+  toast(r.data.testMode?'حالت آزمایشی — پیامکی ارسال نشد':'کد به '+otpPrettyPhone(_otpPhone)+' ارسال شد');
+  return true;
+}
+
+async function realResendOtp(){
+  if(!_otpPhone){go('login');return;}
+  const btn=document.getElementById('otpResend');
+  if(btn){btn.disabled=true;btn.textContent='ارسال...';}
+  await pzRequestOtp(_otpPhone);
+}
+
+/* Persian and Arabic-Indic digits both reach the field from an Iranian
+   keyboard; the regex below only knows about 0-9. */
+function pzToLatinDigits(v){
+  return String(v==null?'':v)
+    .replace(/[۰-۹]/g,d=>String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d)))
+    .replace(/[٠-٩]/g,d=>String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)));
 }
 
 async function realVerifyOtp(){
   if(!_rid){go('login');return;}
   const boxes=document.querySelectorAll('#otpBoxes input');
-  const code=Array.from(boxes).map(b=>b.value).join('');
+  const code=pzToLatinDigits(Array.from(boxes).map(b=>b.value).join(''));
   if(code.length<4){toast('کد را کامل وارد کن');return;}
   const btn=document.querySelector('#otp .btn-primary');
   if(btn){btn.disabled=true;btn.textContent='بررسی...';}
@@ -9828,6 +9912,7 @@ async function realVerifyOtp(){
     localStorage.setItem('pz_tok',_tok);
     localStorage.setItem('pz_usr',JSON.stringify(_usr));
     if(r.data.refreshToken){ try{localStorage.setItem('pz_rtok',r.data.refreshToken);}catch(e){} }  /* stay logged in for 30 days */
+    otpStopTimer();
     wallet=_usr.balances?.wallet||0; updateWalletUI();
     applyMyName(); try{ pzHydrateAll(); }catch(e){}
     /* New account (no chosen name yet) → registration; otherwise straight in. */

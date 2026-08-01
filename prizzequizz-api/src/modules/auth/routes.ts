@@ -2,7 +2,7 @@ import type { Router } from '../../http/router.js';
 import { error, json } from '../../http/response.js';
 import { repositories } from '../../repositories/index.js';
 import { grantNewUserCampaign } from '../../services/campaignService.js';
-import { otpProvider } from '../../services/otpProvider.js';
+import { OtpError, otpProvider } from '../../services/otpProvider.js';
 import { createSession, refreshSession, revokeRefreshToken } from '../../services/sessionService.js';
 import { recordSecurityEvent } from '../../services/securityEvents.js';
 import { ensureBetaAccess } from '../../services/betaService.js';
@@ -15,8 +15,28 @@ export function registerAuthRoutes(router: Router, base: string): void {
   router.add('POST', `${base}/auth/login`, async (ctx) => {
     const body = bodyObject(ctx.body);
     const phone = requiredString(body, 'phone');
-    const otp = await otpProvider.createOtp(phone);
-    json(ctx.res, 200, { otpRequired: true, requestId: otp.requestId, ttlSeconds: otp.ttlSeconds });
+    if (!/^09\d{9}$/.test(phone)) return error(ctx.res, 422, 'PHONE_INVALID', 'شماره موبایل معتبر نیست.');
+    try {
+      const otp = await otpProvider.createOtp(phone);
+      /* The phone comes back so the code screen can say which number the code
+       * went to instead of printing a made-up example, and the two timings so
+       * its countdown is the server's, not a guess. */
+      json(ctx.res, 200, {
+        otpRequired: true,
+        requestId: otp.requestId,
+        ttlSeconds: otp.ttlSeconds,
+        resendAfterSeconds: otp.resendAfterSeconds,
+        phone,
+        delivered: otp.delivered,
+        testMode: otp.testMode
+      });
+    } catch (e) {
+      if (e instanceof OtpError) {
+        recordSecurityEvent({ req: ctx.req, eventType: 'OTP_SEND_REFUSED', severity: 'warn', metadata: { code: e.code } });
+        return error(ctx.res, e.status, e.code, e.message);
+      }
+      throw e;
+    }
   });
 
   router.add('POST', `${base}/auth/otp/verify`, async (ctx) => {

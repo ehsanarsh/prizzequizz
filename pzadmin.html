@@ -1877,7 +1877,7 @@ async function lsToggleTopic(name,enabled){
 
 /* ================= SMS PANEL ================= */
 let SMS_SUB='config';
-const SMS_PROVIDERS={sandbox:'حالت تست (Sandbox)',kavenegar:'کاوه‌نگار',melipayamak:'ملی‌پیامک',farazsms:'فراز اس‌ام‌اس',generic:'سفارشی (Generic)'};
+const SMS_PROVIDERS={sandbox:'حالت تست (Sandbox)',niazpardaz:'نیازپرداز',kavenegar:'کاوه‌نگار',melipayamak:'ملی‌پیامک',farazsms:'فراز اس‌ام‌اس',generic:'سفارشی (Generic)'};
 const SMS_STLABEL={sent:'ارسال شد',pending:'در انتظار',failed:'ناموفق',blocked:'مسدود',disabled:'غیرفعال'};
 async function renderSms(){
   const subtabs='<div class="subtabs">'+[['config','⚙️ سرویس'],['templates','📝 قالب‌ها'],['log','📄 گزارش'],['stats','📊 آمار'],['blacklist','🚫 لیست سیاه']].map(s=>'<button class="'+(SMS_SUB===s[0]?'active':'')+'" onclick="SMS_SUB=\''+s[0]+'\';renderSms()">'+s[1]+'</button>').join('')+'</div>';
@@ -1893,29 +1893,76 @@ async function renderSms(){
 }
 async function smsRenderConfig(b){
   const c=await api('GET','/admin/sms/config');
+  window._SMS_CFG=c;   // what the SERVER currently has, not what is on screen
   const provOpts=Object.keys(SMS_PROVIDERS).map(k=>'<option value="'+k+'"'+(c.provider===k?' selected':'')+'>'+esc(SMS_PROVIDERS[k])+'</option>').join('');
   b.innerHTML='<div class="card"><h3>⚙️ تنظیمات سرویس</h3><div class="grid g2">'+
-    '<div class="field"><label>ارائه‌دهنده</label><select id="sm_prov">'+provOpts+'</select></div>'+
+    '<div class="field"><label>ارائه‌دهنده</label><select id="sm_prov" onchange="smsProvChanged()">'+provOpts+'</select></div>'+
     '<div class="field"><label>خط/شماره ارسال‌کننده</label><input id="sm_sender" value="'+esc(c.sender||'')+'" dir="ltr"></div>'+
     '<div class="field"><label>API Key '+(c.apiKeySet?'(ثبت‌شده)':'')+'</label><input id="sm_apikey" dir="ltr" placeholder="'+(c.apiKeySet?esc(c.apiKey):'کلید را وارد کن')+'"></div>'+
     '<div class="field"><label>Secret '+(c.secretSet?'(ثبت‌شده)':'')+'</label><input id="sm_secret" type="password" dir="ltr" placeholder="'+(c.secretSet?'••••':'در صورت نیاز')+'"></div>'+
     '<div class="field"><label>آدرس سفارشی (Generic)</label><input id="sm_url" value="'+esc(c.genericUrl||'')+'" dir="ltr" placeholder="https://…"></div>'+
     '<div class="field"><label>وضعیت سرویس</label><select id="sm_enabled"><option value="1"'+(c.enabled?' selected':'')+'>فعال</option><option value="0"'+(!c.enabled?' selected':'')+'>غیرفعال</option></select></div>'+
     '<div class="field"><label>حالت تست (Sandbox)</label><select id="sm_sandbox"><option value="1"'+(c.sandbox?' selected':'')+'>روشن (پیامک واقعی ارسال نمی‌شود)</option><option value="0"'+(!c.sandbox?' selected':'')+'>خاموش (ارسال واقعی)</option></select></div>'+
-    '</div><div class="note">در حالت Sandbox هیچ پیامک واقعی ارسال نمی‌شود و فقط در گزارش ثبت می‌گردد.</div></div>'+
+    '</div><div class="note">در حالت Sandbox هیچ پیامک واقعی ارسال نمی‌شود و فقط در گزارش ثبت می‌گردد.</div>'+
+    '<div id="sm_npBox"'+(c.provider==='niazpardaz'?'':' style="display:none"')+'>'+
+      '<div class="note">نیازپرداز فقط <b>API Key</b> می‌خواهد؛ فیلد Secret را خالی بگذارید. «خط ارسال‌کننده» باید یکی از شماره‌های ثبت‌شده در پنل شما باشد — با دکمهٔ زیر می‌توانید فهرست آن‌ها و اعتبار باقی‌مانده را ببینید، بدون اینکه پیامکی خرج شود.</div>'+
+      '<button class="btn" onclick="smsCheckAccount()">🔍 بررسی اتصال و اعتبار</button><div id="sm_acct"></div>'+
+    '</div>'+
+    '</div>'+
+    /* This is the single most confusing thing about the panel: if it is off or
+       in sandbox, the game still logs people in — with the fixed code below.
+       Saying so here is what stops "why does 1234 work?" turning into a bug
+       report a month from now. */
     '<div class="card"><h3>🔐 امنیت کد یک‌بارمصرف (OTP)</h3><div class="grid g3">'+
       '<div class="field"><label>حداکثر ارسال در ساعت</label><input id="sm_otpMax" type="number" value="'+(c.otp.maxPerHour)+'"></div>'+
       '<div class="field"><label>انقضای کد (ثانیه)</label><input id="sm_otpExp" type="number" value="'+(c.otp.expirySeconds)+'"></div>'+
       '<div class="field"><label>حداقل فاصلهٔ دو درخواست (ثانیه)</label><input id="sm_otpMin" type="number" value="'+(c.otp.minIntervalSeconds)+'"></div>'+
-    '</div></div>'+
+      '<div class="field"><label>کد ثابتِ حالت آزمایشی</label><input id="sm_otpTest" dir="ltr" value="'+esc(c.otp.testCode||'1234')+'"></div>'+
+    '</div>'+
+    (smsLive(c)
+      ? '<div class="note">سرویس زنده است: کد ورود تصادفی ساخته و با پیامک فرستاده می‌شود و هرگز از سمت سرور برگردانده نمی‌شود.</div>'
+      : '<div class="note" style="border-color:#F1B211">⚠️ سرویس زنده نیست (غیرفعال یا Sandbox یا ارائه‌دهندهٔ تست). تا وقتی این‌طور است هرکس با کد ثابتِ <b class="mono">'+esc(c.otp.testCode||'1234')+'</b> وارد بازی می‌شود. برای راه‌اندازی واقعی: ارائه‌دهنده = نیازپرداز، وضعیت = فعال، Sandbox = خاموش.</div>')+
+    '</div>'+
     '<button class="btn pri" onclick="smsSaveConfig()">💾 ذخیرهٔ تنظیمات</button>'+
     '<div class="card" style="margin-top:14px"><h3>✉️ ارسال پیامک آزمایشی</h3><div class="grid g2"><div class="field"><label>شماره مقصد</label><input id="sm_testTo" dir="ltr" placeholder="09xxxxxxxxx"></div><div class="field"><label>متن</label><input id="sm_testBody" value="پیام آزمایشی پرایز کوییز ✅"></div></div><button class="btn" onclick="smsTest()">ارسال آزمایشی</button></div>';
 }
+/* The niazpardaz-only help and its connection check follow the dropdown
+   without re-rendering, so nothing typed into the other fields is lost. */
+function smsProvChanged(){
+  const box=$('#sm_npBox'); if(box)box.style.display=($('#sm_prov').value==='niazpardaz')?'':'none';
+}
+
+/* Mirrors smsIsLive() on the server: everything else is test mode. */
+function smsLive(c){ return !!c.enabled && !c.sandbox && c.provider!=='sandbox'; }
+
 async function smsSaveConfig(){
   const patch={enabled:$('#sm_enabled').value==='1',sandbox:$('#sm_sandbox').value==='1',provider:$('#sm_prov').value,sender:$('#sm_sender').value.trim(),genericUrl:$('#sm_url').value.trim(),
     apiKey:$('#sm_apikey').value.trim(),secret:$('#sm_secret').value.trim(),
-    otp:{maxPerHour:Number($('#sm_otpMax').value||5),expirySeconds:Number($('#sm_otpExp').value||120),minIntervalSeconds:Number($('#sm_otpMin').value||60)}};
+    otp:{maxPerHour:Number($('#sm_otpMax').value||5),expirySeconds:Number($('#sm_otpExp').value||120),minIntervalSeconds:Number($('#sm_otpMin').value||60),testCode:($('#sm_otpTest')?.value||'1234').trim()}};
   try{await api('PUT','/admin/sms/config',patch);toast('ذخیره شد ✅','ok');renderSms();}catch(e){toast(e.message,'bad');}
+}
+
+/* Asks the provider about the account rather than spending a message to find
+   out whether the key works. Save first — it reads the STORED config. */
+async function smsCheckAccount(){
+  const box=$('#sm_acct'); if(box)box.innerHTML='<div class="note">در حال بررسی…</div>';
+  /* The check reads what is SAVED. Saying so beats letting it answer about the
+     previous provider while a different one is picked on screen. */
+  const stored=(window._SMS_CFG||{});
+  if(stored.provider!==$('#sm_prov').value || $('#sm_apikey').value.trim() || $('#sm_sender').value.trim()!==(stored.sender||'')){
+    box.innerHTML='<div class="note" style="border-color:#F1B211">⚠️ اول «ذخیرهٔ تنظیمات» را بزنید؛ این بررسی روی تنظیمات ذخیره‌شده انجام می‌شود.</div>';
+    return;
+  }
+  try{
+    const r=await api('GET','/admin/sms/account');
+    if(!r.supported){ box.innerHTML='<div class="note">این ارائه‌دهنده بررسی اتصال ندارد.</div>'; return; }
+    if(r.error){ box.innerHTML='<div class="note" style="border-color:#E8544F">❌ '+esc(r.error)+'</div>'; return; }
+    const senders=(r.senders||[]);
+    let s='<div class="note" style="border-color:#2FBF71">✅ اتصال برقرار است. اعتبار باقی‌مانده: <b>'+fa(r.credit||0)+'</b></div>';
+    s+='<div class="note">خط‌های ارسال این حساب: '+(senders.length?senders.map(x=>'<b class="mono">'+esc(x)+'</b>').join('، '):'—')+'</div>';
+    if(r.senderValid===false) s+='<div class="note" style="border-color:#E8544F">❌ خط ارسال‌کنندهٔ ذخیره‌شده («'+esc(r.senderConfigured||'')+'») در فهرست بالا نیست؛ ارسال با خطای «شماره فرستنده نامعتبر» رد می‌شود.</div>';
+    box.innerHTML=s;
+  }catch(e){ if(box)box.innerHTML='<div class="note" style="border-color:#E8544F">❌ '+esc(e.message)+'</div>'; }
 }
 async function smsTest(){
   const to=$('#sm_testTo').value.trim(); if(!to)return toast('شماره مقصد لازم است','bad');

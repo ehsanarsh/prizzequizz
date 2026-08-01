@@ -10,7 +10,7 @@ import { getPgPool } from '../database/postgres.js';
 import { id } from '../utils/id.js';
 import { logger } from './logger.js';
 
-export type SmsProvider = 'sandbox' | 'kavenegar' | 'melipayamak' | 'farazsms' | 'generic';
+export type SmsProvider = 'sandbox' | 'niazpardaz' | 'kavenegar' | 'melipayamak' | 'farazsms' | 'generic';
 export interface SmsConfig {
   enabled: boolean;
   sandbox: boolean;
@@ -19,11 +19,15 @@ export interface SmsConfig {
   secret: string;
   sender: string;              // sender line / number
   genericUrl?: string;         // for 'generic' provider: a GET/POST endpoint template
-  otp: { maxPerHour: number; expirySeconds: number; minIntervalSeconds: number };
+  /* When the panel is off or in sandbox nothing is really sent, so the login
+   * code has to be something a tester can actually type. Kept in config rather
+   * than in the code so it can be changed without a deploy — and so it is
+   * obvious at a glance whether the site is live or in test mode. */
+  otp: { maxPerHour: number; expirySeconds: number; minIntervalSeconds: number; testCode: string };
 }
 export const SMS_DEFAULT_CONFIG: SmsConfig = {
   enabled: false, sandbox: true, provider: 'sandbox', apiKey: '', secret: '', sender: '',
-  otp: { maxPerHour: 5, expirySeconds: 120, minIntervalSeconds: 60 }
+  otp: { maxPerHour: 5, expirySeconds: 120, minIntervalSeconds: 60, testCode: '1234' }
 };
 
 export interface SmsTemplate { key: string; title: string; text: string; }
@@ -87,6 +91,13 @@ export async function updateSmsConfig(patch: Partial<SmsConfig>): Promise<SmsCon
   else _memCfg = next;
   return next;
 }
+/** True only when a message would really leave the building. Everything else —
+ *  panel off, sandbox on, provider still 'sandbox' — is test mode, and the OTP
+ *  falls back to the fixed test code so nobody is locked out. */
+export function smsIsLive(c: SmsConfig): boolean {
+  return !!c.enabled && !c.sandbox && c.provider !== 'sandbox';
+}
+
 // Never leak secrets wholesale to the panel — mask them.
 export function maskConfig(c: SmsConfig): SmsConfig & { apiKeySet: boolean; secretSet: boolean } {
   return { ...c, apiKey: c.apiKey ? '••••' + c.apiKey.slice(-4) : '', secret: c.secret ? '••••' : '', apiKeySet: !!c.apiKey, secretSet: !!c.secret };
@@ -186,10 +197,107 @@ export async function smsStats(): Promise<{ today: number; week: number; month: 
   };
 }
 
+/* ---- Niazpardaz -----------------------------------------------------------
+ * REST panel at login.niazpardaz.ir. Authentication is a single X-API-Key
+ * header; every call is a POST with a JSON body and answers
+ *   { success, errorMessage, result: { resultCode, ... } }
+ * where a resultCode of 0 is the only success. The codes are worth translating
+ * rather than logging as numbers: "اعتبار کافی نیست" and "خط فرستنده غیرفعال
+ * است" are two very different problems, and the SMS log is where whoever is on
+ * support will look first. */
+export const NIAZPARDAZ_BASE = 'https://login.niazpardaz.ir/api/v2/RestWebApi';
+const NIAZ_SEND_ERRORS: Record<number, string> = {
+  1: 'نام کاربری یا کلمه عبور نامعتبر است.',
+  2: 'کاربر مسدود شده است.',
+  3: 'شماره فرستنده نامعتبر است.',
+  4: 'محدودیت در ارسال روزانه.',
+  5: 'تعداد گیرندگان حداکثر ۱۰۰۰ شماره است.',
+  6: 'خط فرستنده غیرفعال است.',
+  7: 'متن پیامک شامل کلمات فیلترشده است.',
+  8: 'اعتبار پنل کافی نیست.',
+  9: 'سامانه در حال بروزرسانی است.',
+  10: 'وب‌سرویس غیرفعال است.',
+  11: 'این قابلیت پیاده‌سازی نشده است.',
+  12: 'تعداد پیام‌ها و شماره‌ها باید یکسان باشد.',
+  13: 'تعداد پیام‌ها حداکثر ۱۰۰ پیام است.',
+  14: 'تعرفه‌ای برای این کاربر تعریف نشده است.',
+  15: 'ارسال تکراری همین متن به همین شماره در بازه کوتاه.',
+  16: 'شماره گیرنده نامعتبر یا در لیست سیاه است.',
+  17: 'متن پیامک وارد نشده است.',
+  18: 'متن مطابق الگوی تعریف‌شده نیست.',
+  19: 'حساب کاربری منقضی شده است.',
+  20: 'وضعیت کاربر فعال نیست.',
+  21: 'یکی از پارامترهای ورودی معتبر نیست.',
+  22: 'آی‌پی سرور موقتاً بلاک شده است.',
+  23: 'عملیات با خطا مواجه شد؛ دقایقی بعد دوباره تلاش کنید.',
+  24: 'درخواست کاملاً تکراری در چند ثانیه گذشته.',
+  25: 'کلید API نامعتبر است.',
+  26: 'خطا در ساخت فایل صوتی.'
+};
+const NIAZ_ACCOUNT_ERRORS: Record<number, string> = {
+  [-1]: 'نام کاربری یا رمز عبور صحیح نیست.',
+  [-2]: 'کاربر غیرفعال است.',
+  [-6]: 'آی‌پی سرور موقتاً بلاک شده است.',
+  [-7]: 'کلید API نامعتبر است.'
+};
+
+async function niazpardazPost(cfg: SmsConfig, endpoint: string, payload: unknown, timeoutMs = 20_000): Promise<any> {
+  const base = (cfg.genericUrl || NIAZPARDAZ_BASE).replace(/\/+$/, '');
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const r = await fetch(base + endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-API-Key': cfg.apiKey },
+      body: JSON.stringify(payload),
+      signal: ctrl.signal
+    });
+    const text = await r.text();
+    if (!r.ok) throw new Error('پاسخ سرور نیازپرداز: HTTP ' + r.status);
+    let parsed: any;
+    try { parsed = JSON.parse(text); } catch { throw new Error('پاسخ نامعتبر از سرور نیازپرداز.'); }
+    if (!parsed?.success) throw new Error(parsed?.errorMessage || 'خطای نامشخص از سرور نیازپرداز.');
+    return parsed.result;
+  } finally { clearTimeout(t); }
+}
+
+/** Panel credit and the sender lines this key may send from — what the admin
+ *  needs to see to know whether the key is really wired up. */
+export async function niazpardazAccount(cfgIn?: SmsConfig): Promise<{ credit: number | null; senders: string[]; error?: string }> {
+  const cfg = cfgIn ?? await getSmsConfig();
+  if (!cfg.apiKey) return { credit: null, senders: [], error: 'کلید API وارد نشده است.' };
+  try {
+    const [credit, senders] = await Promise.all([
+      niazpardazPost(cfg, '/GetCredit', {}).catch((e) => ({ _err: (e as Error).message })),
+      niazpardazPost(cfg, '/GetSenderNumbers', {}).catch((e) => ({ _err: (e as Error).message }))
+    ]);
+    const cErr = credit?._err || NIAZ_ACCOUNT_ERRORS[Number(credit?.resultCode)];
+    const sErr = senders?._err || NIAZ_ACCOUNT_ERRORS[Number(senders?.resultCode)];
+    return {
+      credit: cErr ? null : Number(credit?.credit ?? 0),
+      senders: sErr ? [] : (Array.isArray(senders?.senders) ? senders.senders.map(String) : []),
+      error: cErr || sErr || undefined
+    };
+  } catch (e) { return { credit: null, senders: [], error: (e as Error).message }; }
+}
+
 // ---- provider dispatch ----
 async function dispatch(cfg: SmsConfig, to: string, body: string): Promise<{ ok: boolean; ref?: string; cost?: number; error?: string }> {
   if (cfg.sandbox || cfg.provider === 'sandbox') return { ok: true, ref: 'sandbox-' + id().slice(0, 8), cost: 0 };
   try {
+    if (cfg.provider === 'niazpardaz') {
+      if (!cfg.apiKey) return { ok: false, error: 'کلید API نیازپرداز تنظیم نشده است.' };
+      if (!cfg.sender) return { ok: false, error: 'شماره فرستنده تنظیم نشده است.' };
+      const res = await niazpardazPost(cfg, '/SendBatchSms', {
+        fromNumber: cfg.sender,
+        messageContent: body,
+        toNumbers: to,
+        isFlash: false
+      });
+      const code = Number(res?.resultCode);
+      if (code === 0) return { ok: true, ref: String(res?.batchSmsId ?? '') };
+      return { ok: false, error: NIAZ_SEND_ERRORS[code] || ('کد خطای نیازپرداز: ' + code) };
+    }
     if (cfg.provider === 'kavenegar') {
       const url = `https://api.kavenegar.com/v1/${encodeURIComponent(cfg.apiKey)}/sms/send.json?receptor=${encodeURIComponent(to)}&sender=${encodeURIComponent(cfg.sender)}&message=${encodeURIComponent(body)}`;
       const r = await fetch(url); const j: any = await r.json().catch(() => ({}));
@@ -270,7 +378,12 @@ async function recordOtp(recipient: string, purpose: string): Promise<void> {
 export async function sendOtp(recipient: string, code: string, purpose = 'login', templateKey = 'login_code'): Promise<{ sent: boolean; reason?: string; log?: SmsLogEntry }> {
   const gate = await otpAllowed(recipient);
   if (!gate.allowed) return { sent: false, reason: gate.reason };
-  await recordOtp(normalize(recipient), purpose);
   const log = await sendTemplate(recipient, templateKey, { code });
-  return { sent: log.status === 'sent' || log.status === 'disabled', log };
+  const sent = log.status === 'sent' || log.status === 'disabled';
+  /* Counted only once a message really went out. Recording first meant a run of
+   * provider failures — a wrong sender line, an empty account — locked the
+   * player out for an hour over messages they never received, which is exactly
+   * when they are most likely to keep trying. */
+  if (sent) await recordOtp(normalize(recipient), purpose);
+  return { sent, log };
 }
