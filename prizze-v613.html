@@ -3326,22 +3326,25 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
         @keyframes csVipPulse{0%,100%{opacity:.55;transform:translate(-50%,-50%) scale(.94)}50%{opacity:1;transform:translate(-50%,-50%) scale(1.06)}}
 
         /* corner badges */
-        .cs-badges{position:absolute;top:2px;inset-inline-end:4px;display:flex;flex-direction:column;gap:3px;align-items:flex-end}
+        /* Centred over the head rather than pinned to a corner: on the stage the
+           neighbours stand close, and a chip hanging off one side reads as if it
+           belonged to the character next to it. */
+        .cs-badges{position:absolute;top:1px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;gap:3px;align-items:center}
         .cs-bdg{font-size:9px;font-weight:900;padding:2.5px 6px;border-radius:7px;line-height:1;white-space:nowrap;box-shadow:0 2px 0 rgba(0,0,0,.45)}
         .cs-bdg.vip{background:linear-gradient(135deg,#FFE9A8,#E0A93B);color:#3A2A00}
         .cs-bdg.new{background:var(--ok);color:#04220f}
         .cs-bdg.eq{background:var(--info);color:#04222f}
 
         /* ---- info card + actions ---- */
-        .cs-info{position:relative;z-index:6;margin:0 14px 8px;padding:12px 14px;border-radius:18px;
+        .cs-info{position:relative;z-index:6;margin:0 14px 6px;padding:7px 12px;border-radius:15px;
           background:rgba(28,32,26,.62);border:2px solid rgba(255,255,255,.14);backdrop-filter:blur(8px);
           box-shadow:0 6px 0 rgba(0,0,0,.35)}
         .cs-info.vip{border-color:rgba(255,214,110,.55);box-shadow:0 6px 0 rgba(0,0,0,.35),0 0 22px rgba(255,200,80,.2) inset}
-        .cs-i-h{display:flex;align-items:center;gap:8px;margin-bottom:4px}
-        .cs-i-h b{font-size:16px;font-weight:900;color:#fff}
-        .cs-i-d{font-size:11.5px;color:#c2d2c6;line-height:1.65;min-height:19px}
-        .cs-i-lock{display:flex;align-items:center;gap:6px;margin-top:7px;padding:8px 10px;border-radius:12px;
-          background:rgba(255,90,72,.13);border:1.5px solid rgba(255,90,72,.32);color:#ffc9c2;font-size:11.5px;font-weight:800}
+        .cs-i-h{display:flex;align-items:center;gap:6px;margin-bottom:1px}
+        .cs-i-h b{font-size:13.5px;font-weight:900;color:#fff}
+        .cs-i-d{font-size:10.5px;color:#c2d2c6;line-height:1.5;max-height:2.9em;overflow:hidden}
+        .cs-i-lock{display:flex;align-items:center;gap:5px;margin-top:5px;padding:5px 8px;border-radius:10px;
+          background:rgba(255,90,72,.13);border:1.5px solid rgba(255,90,72,.32);color:#ffc9c2;font-size:10.5px;font-weight:800}
         .cs-i-lock.gold{background:rgba(255,200,90,.13);border-color:rgba(255,200,90,.35);color:#FFE2A6}
 
         .cs-actions{position:relative;z-index:6;display:flex;gap:9px;padding:0 14px calc(14px + env(safe-area-inset-bottom))}
@@ -4815,8 +4818,14 @@ function csBuildRing(){
     const badges=[];
     if(c.kind==='vip')badges.push('<span class="cs-bdg vip">VIP</span>');
     if(c.isNew)badges.push('<span class="cs-bdg new">جدید</span>');
-    if(c.equipped)badges.push('<span class="cs-bdg eq">در حال استفاده</span>');
-    return '<div class="cs-slot'+(c.unlocked?'':' locked')+(c.kind==='vip'?' vip':'')+'" data-i="'+i+'" onclick="csSlotTap('+i+')">'
+    /* Short on purpose: on the stage this chip sits beside the character's
+       head, and the full «در حال استفاده» is wide enough to reach across to
+       the neighbour standing next to it. The card and the button underneath
+       still spell it out. */
+    if(c.equipped)badges.push('<span class="cs-bdg eq">فعال</span>');
+    /* No onclick: the ring resolves the tap itself, because it captures the
+       pointer and a captured pointer never delivers a click to the slot. */
+    return '<div class="cs-slot'+(c.unlocked?'':' locked')+(c.kind==='vip'?' vip':'')+'" data-i="'+i+'">'
       + '<div class="cs-art">'+csArtHTML(c)
       + (c.unlocked?'':'<span class="cs-lockb">🔒</span>')
       + (badges.length?'<div class="cs-badges">'+badges.join('')+'</div>':'')
@@ -4887,14 +4896,45 @@ function csFloor(stage){
    and rotates in as you spin. Showing the back half as well was what made nine
    characters bunch together, because past ninety degrees they swing back toward
    the middle and pass in front of the ones ahead of them. */
-/* 60 degrees and one neighbour each side. The ring is pinned to the width of
-   the stone, so the podium can only hold three characters at a readable size —
-   asking it to hold five put the outer pair through each other no matter how
-   the angles were chosen. The rest of the roster rotates through. */
-const CS_STEP_DEG = 60;   // angle between neighbouring characters
-const CS_SIDE     = 1;    // how many stand either side of the front one
+/* The horizontal position is LINEAR in the distance from the front, not
+   sin(angle). A sine is the honest projection of a circle, but it flattens near
+   ninety degrees, so however the angles were chosen the outermost pair always
+   ended up almost on top of each other. Distance from the front still drives
+   DEPTH — scale, height, blur, z-order — so the row reads as a ring curving
+   away, while the gaps between neighbours stay exactly even.
 
-function csStep(){ return CS_STEP_DEG*Math.PI/180; }
+   Seven characters cannot be laid side by side across a phone without touching:
+   at 412px there is roughly 59px each, and a character is 146px wide. What buys
+   the room is the U — each step out is also a step UP, and since a slot scales
+   from its soles, the one behind ends up with its head clear above the top of
+   the one in front. The only overlap left is the lower inner corner, which is
+   feet and floor rather than face. */
+const CS_LAY = {
+  gapPx:  74,    // even horizontal gap between neighbours, at most
+  gapFrac:0.40,  // ...and never more than this much of the stage per arm,
+                 // so the character on the end of the arm is not cut by the edge
+  side:   3,     // how many stand either side of the front one — seven on stage
+  rise:   320,   // how high the arm of the U reaches, in px
+  risePow:0.80,  // <1 spends more of the climb on the first step, where the
+                 // front character is biggest and hides the most
+  lift:   46,    // raise everyone clear of the stone (about 1.2cm)
+  scale0: 1.04,  // the character at the front
+  scaleK: 0.79,  // and each step further back
+  fade:   0.5,   // slots of travel spent fading in at the end of the arm
+  dim:    0.58   // how solid the character at the end of the arm still looks
+};
+
+/* The distance between two neighbours on screen. Narrower phones tighten it so
+   the character on the end of each arm still lands inside the stage. Drag uses
+   the same number, which is what makes the row follow the finger exactly. */
+function csGap(stage){
+  const w=(stage&&stage.clientWidth)||360;
+  return Math.max(30,Math.min(CS_LAY.gapPx,w*CS_LAY.gapFrac/CS_LAY.side));
+}
+
+/* One character = one step round the ring; the ring's period is the whole
+   roster, so snapping and wrapping still work however long it gets. */
+function csStep(){ return 1; }
 /* One full turn of the carousel is the whole roster, however long it is. */
 function csPeriod(){ return Math.max(csView.length,1)*csStep(); }
 
@@ -4906,10 +4946,12 @@ function csLayout(){
   const { baseY, rx, rise } = csFloor(stage);
   const ART=146;                                  // slot height, see .cs-slot
   const step=csStep();
+  // Narrower screens tighten the gap so the neighbours never fall off the edge.
+  const gap=csGap(stage);
   const half=n/2;
   /* Half a slot wider than what is drawn, so a character fades in and out at
      the edge of the arc instead of popping. */
-  const edge=CS_SIDE+0.5;
+  const edge=CS_LAY.side+0.5;
 
   const slots=ring.children;
   let front=0, best=Infinity;
@@ -4925,19 +4967,23 @@ function csLayout(){
     if(ad>edge){ el.style.display='none'; continue; }   // not on the stage yet
     el.style.display='';
 
-    const a=d*step;
-    const sn=Math.sin(a), cs=Math.cos(a);
-    const depth=(cs+1)/2;                         // 0 far .. 1 near
-    const scale=0.44+depth*0.68;
-    const x=sn*rx;
-    // feet land on the ellipse: near edge at the front, far edge at the back
-    const y=(baseY-(1-depth)*rise)-ART;
-    const blur=(1-depth)*1.5;
-    // fade out over the last slot of the window
-    const fade=Math.min(1,Math.max(0,(edge-ad)));
+    /* The U. Horizontal spacing is even, and the arms of the curve carry the
+       outer characters UP as well as out. A slot scales from its soles, so a
+       step up is a step clear: the character behind keeps its head and body
+       above the top of the one in front, and only its feet are hidden. */
+    const u=ad/CS_LAY.side;                       // 0 at the front, 1 at a tip
+    const depth=1-u;
+    const scale=CS_LAY.scale0*Math.pow(CS_LAY.scaleK,ad);
+    const x=d*gap;
+    const y=(baseY - CS_LAY.rise*Math.pow(u,CS_LAY.risePow)) - ART - CS_LAY.lift;
+    const blur=(1-depth)*1.1;
+    /* Fading is for the character LEAVING the arm, not for the one standing at
+       the end of it — the last one on each side has to be plainly visible, or
+       the stage only really shows five. */
+    const fade=Math.min(1,Math.max(0,(edge-ad)/CS_LAY.fade));
     el.style.transform='translate3d('+x.toFixed(1)+'px,'+y.toFixed(1)+'px,0) scale('+scale.toFixed(3)+')';
     el.style.zIndex=String(Math.round(depth*100));
-    el.style.opacity=((0.40+depth*0.60)*fade).toFixed(2);
+    el.style.opacity=((CS_LAY.dim+depth*(1-CS_LAY.dim))*fade).toFixed(2);
     el.style.filter=blur>0.06?('blur('+blur.toFixed(2)+'px)'):'';
     el.classList.remove('sel');
   }
@@ -4983,15 +5029,15 @@ function csPaintInfo(){
   requestAnimationFrame(csLayout);
 }
 
+/* Only ever reached for a real tap — the ring checks csDragMoved before
+   calling, so a throw that happens to end on top of a character is not
+   mistaken for a choice. */
 function csSlotTap(i){
-  // A drag that happens to end on top of a slot still fires that slot's click.
-  // Without this the throw would be overridden by whatever the finger was
-  // resting on, which feels like the ring fighting you.
-  if(csDragMoved){ csDragMoved=false; return; }
   if(i===csFront){ const c=csCurrent(); if(c&&!c.unlocked)csWhy(); return; }
   csSnapTo(i);
 }
 var csDragMoved=false;
+var csDownSlot=null;   // the character the finger landed on, resolved on release
 
 /* Spins to a slot by the SHORTEST way round, so tapping the one just behind
    you never sends the ring the long way. */
@@ -5098,21 +5144,22 @@ function csBindDrag(){
     try{ new ResizeObserver(()=>{ csLayout(); }).observe(stage); }catch(e){}
   }
   window.addEventListener('resize',()=>{ csLayout(); });
-  const down=(x)=>{ csDragging=true; csDragMoved=false; csDragX=x; csDragRot=csTargetRot; csVel=0; csLastX=x; csLastT=performance.now(); ring.classList.add('drag'); };
+  const down=(x,target)=>{ csDragging=true; csDragMoved=false; csDragX=x; csDragRot=csTargetRot; csVel=0; csLastX=x; csLastT=performance.now(); ring.classList.add('drag');
+    csDownSlot=(target&&target.closest)?target.closest('.cs-slot'):null; };
   const move=(x)=>{
     if(!csDragging)return;
     if(Math.abs(x-csDragX)>6)csDragMoved=true;   // past this it is a drag, not a tap
-    const stage=document.getElementById('csStage');
-    const w=(stage&&stage.clientWidth)||360;
-    // A full drag across the stage turns the ring roughly half a revolution —
-    // enough to feel direct without overshooting on a small screen.
-    csTargetRot=csRot=csDragRot+((x-csDragX)/w)*Math.PI*1.15;
+    /* One gap of finger travel = one character. The row slides exactly with the
+       finger rather than at some fraction of it, which is the whole point of
+       dragging a row of characters left and right. */
+    const gap=csGap(document.getElementById('csStage'));
+    csTargetRot=csRot=csDragRot+(x-csDragX)/gap;
     const t=performance.now(), dt=Math.max(1,t-csLastT);
-    csVel=((x-csLastX)/w)*Math.PI*1.15/dt*16;
+    csVel=(x-csLastX)/gap/dt*16;
     csLastX=x; csLastT=t;
     csLayout();
   };
-  const up=()=>{
+  const up=(tap)=>{
     if(!csDragging)return;
     csDragging=false; ring.classList.remove('drag');
     // Carry the throw, then settle on whichever slot ends up nearest the front.
@@ -5121,12 +5168,21 @@ function csBindDrag(){
     csTargetRot=Math.round((csRot+glide)/step)*step;
     csVel=0;
     if(!csRaf)csTick();
+    /* The tap is resolved HERE rather than by a click handler on the slot.
+       The ring captures the pointer so a drag keeps working past its edge, and
+       a captured pointer sends the click to the ring, not to the character the
+       finger was actually on — so an onclick on the slot never fires at all. */
+    const hit=csDownSlot; csDownSlot=null;
+    if(tap&&hit&&!csDragMoved){
+      const i=+hit.getAttribute('data-i');
+      if(i>=0&&i<csView.length)csSlotTap(i);
+    }
   };
-  ring.addEventListener('pointerdown',e=>{ down(e.clientX); ring.setPointerCapture&&ring.setPointerCapture(e.pointerId); });
+  ring.addEventListener('pointerdown',e=>{ down(e.clientX,e.target); ring.setPointerCapture&&ring.setPointerCapture(e.pointerId); });
   ring.addEventListener('pointermove',e=>{ if(csDragging){ e.preventDefault(); move(e.clientX); } });
-  ring.addEventListener('pointerup',up);
-  ring.addEventListener('pointercancel',up);
-  ring.addEventListener('pointerleave',up);
+  ring.addEventListener('pointerup',()=>up(true));
+  ring.addEventListener('pointercancel',()=>up(false));
+  ring.addEventListener('pointerleave',()=>up(false));
   // Wheel / trackpad spins it too.
   ring.addEventListener('wheel',e=>{
     if(!csView.length)return;
