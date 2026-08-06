@@ -38,6 +38,12 @@ function tier(cfg: LastSurvivorConfig, color: TicketColor): TicketTier {
 export function ticketValue(cfg: LastSurvivorConfig, color: TicketColor): number {
   return Math.max(0, Math.round(tier(cfg, color).value));
 }
+/* Extra lives the colour grants for the match. Absent means none, so an older
+ * saved config keeps behaving exactly as it did. */
+export function ticketShields(cfg: LastSurvivorConfig, color: TicketColor): number {
+  return Math.max(0, Math.floor(Number(cfg.economy.tickets?.[color]?.shields ?? 0) || 0));
+}
+
 export function ticketUnits(cfg: LastSurvivorConfig, color: TicketColor): number {
   return Math.max(0, Math.round(tier(cfg, color).units));
 }

@@ -17,7 +17,7 @@ import { consumeTicket, refundTicket } from './ticketService.js';
 import { postEntry } from './walletLedgerService.js';
 import { logger } from './logger.js';
 import { getConfig, isTopicPlayable, type LastSurvivorConfig } from './lastSurvivorConfig.js';
-import { ticketValue, ticketUnits, buildPool, computeStats, cashoutShareFor, finalSplit, type PrizePlayer } from './lastSurvivorPrize.js';
+import { ticketValue, ticketUnits, buildPool, computeStats, cashoutShareFor, finalSplit, type PrizePlayer, ticketShields} from './lastSurvivorPrize.js';
 
 export type RoomStatus = 'waiting' | 'running' | 'finished';
 export type RoomPhase = 'waiting' | 'ready' | 'question' | 'elimination' | 'dashboard' | 'cashout' | 'finished';
@@ -63,6 +63,9 @@ export interface PlayerRow {
   eliminatedRound: number | null;
   cashedOutRound: number | null;
   payoutCash: number;
+  /* Extra lives left. Set from the ticket colour at join; a wrong answer spends
+   * one before elimination is even considered. */
+  shields: number;
   joinedAt: number;
   lastSeenAt: number;
 }
@@ -88,12 +91,17 @@ async function ensureSchema(pool: ReturnType<typeof getPgPool>): Promise<void> {
     answer_round INT NOT NULL DEFAULT 0, answer_index INT, answer_correct BOOLEAN,
     decision_round INT NOT NULL DEFAULT 0, decision TEXT,
     eliminated_round INT, cashed_out_round INT, payout_cash BIGINT NOT NULL DEFAULT 0,
+    shields INT NOT NULL DEFAULT 0,
     joined_at BIGINT NOT NULL, last_seen_at BIGINT NOT NULL,
     PRIMARY KEY (room_id, user_id))`);
   await pool.query(`CREATE TABLE IF NOT EXISTS ls_votes (room_id TEXT NOT NULL, user_id TEXT NOT NULL, PRIMARY KEY(room_id,user_id))`);
   await pool.query(`CREATE TABLE IF NOT EXISTS ls_chat (id TEXT PRIMARY KEY, room_id TEXT NOT NULL, user_id TEXT NOT NULL, username TEXT NOT NULL, body TEXT NOT NULL, created_at BIGINT NOT NULL)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_ls_chat_room ON ls_chat(room_id, created_at)`);
   await pool.query(`CREATE TABLE IF NOT EXISTS ls_answers (room_id TEXT NOT NULL, round INT NOT NULL, user_id TEXT NOT NULL, selected_index INT NOT NULL, correct BOOLEAN NOT NULL, created_at BIGINT NOT NULL, PRIMARY KEY(room_id,round,user_id))`);
+  /* The table above already exists on every live server, so CREATE ... IF NOT
+   * EXISTS will not add a new column to it. Rooms already in flight keep 0,
+   * which is exactly the old behaviour: one wrong answer, out. */
+  await pool.query(`ALTER TABLE ls_room_players ADD COLUMN IF NOT EXISTS shields INT NOT NULL DEFAULT 0`);
   _schemaReady = true;
 }
 
@@ -125,7 +133,8 @@ function playerToRow(r: any): PlayerRow {
     decisionRound: Number(r.decision_round), decision: r.decision ?? null,
     eliminatedRound: r.eliminated_round != null ? Number(r.eliminated_round) : null,
     cashedOutRound: r.cashed_out_round != null ? Number(r.cashed_out_round) : null,
-    payoutCash: Number(r.payout_cash), joinedAt: Number(r.joined_at), lastSeenAt: Number(r.last_seen_at)
+    payoutCash: Number(r.payout_cash), shields: Number(r.shields ?? 0),
+    joinedAt: Number(r.joined_at), lastSeenAt: Number(r.last_seen_at)
   };
 }
 
@@ -180,10 +189,10 @@ export async function savePlayer(p: PlayerRow): Promise<void> {
   if (pool) {
     await ensureSchema(pool);
     await pool.query(
-      `INSERT INTO ls_room_players(room_id,user_id,username,avatar,color,units,status,answer_round,answer_index,answer_correct,decision_round,decision,eliminated_round,cashed_out_round,payout_cash,joined_at,last_seen_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
-       ON CONFLICT (room_id,user_id) DO UPDATE SET status=$7,answer_round=$8,answer_index=$9,answer_correct=$10,decision_round=$11,decision=$12,eliminated_round=$13,cashed_out_round=$14,payout_cash=$15,last_seen_at=$17`,
-      [p.roomId, p.userId, p.username, p.avatar, p.color, p.units, p.status, p.answerRound, p.answerIndex, p.answerCorrect, p.decisionRound, p.decision, p.eliminatedRound, p.cashedOutRound, p.payoutCash, p.joinedAt, p.lastSeenAt]);
+      `INSERT INTO ls_room_players(room_id,user_id,username,avatar,color,units,status,answer_round,answer_index,answer_correct,decision_round,decision,eliminated_round,cashed_out_round,payout_cash,joined_at,last_seen_at,shields)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+       ON CONFLICT (room_id,user_id) DO UPDATE SET status=$7,answer_round=$8,answer_index=$9,answer_correct=$10,decision_round=$11,decision=$12,eliminated_round=$13,cashed_out_round=$14,payout_cash=$15,last_seen_at=$17,shields=$18`,
+      [p.roomId, p.userId, p.username, p.avatar, p.color, p.units, p.status, p.answerRound, p.answerIndex, p.answerCorrect, p.decisionRound, p.decision, p.eliminatedRound, p.cashedOutRound, p.payoutCash, p.joinedAt, p.lastSeenAt, p.shields ?? 0]);
   } else {
     memPlayers.set(pkey(p.roomId, p.userId), { ...p });
   }
@@ -264,7 +273,7 @@ export async function joinTopic(user: { id: string; username: string; avatar?: s
     const now = Date.now();
     const player: PlayerRow = {
       roomId: room.id, userId: user.id, username: user.username || 'بازیکن', avatar: user.avatar ?? null,
-      color, units: ticketUnits(cfg, color), status: 'waiting',
+      color, units: ticketUnits(cfg, color), shields: ticketShields(cfg, color), status: 'waiting',
       answerRound: 0, answerIndex: null, answerCorrect: null, decisionRound: 0, decision: null,
       eliminatedRound: null, cashedOutRound: null, payoutCash: 0, joinedAt: now, lastSeenAt: now
     };
@@ -396,7 +405,7 @@ export async function snapshot(roomId: string, forUserId?: string): Promise<any>
       forfeited: room.status === 'finished' && stats.alive === 0 ? netRemaining : 0
     },
     stats: { ...stats, remainingPot: netRemaining },
-    players: players.map((p) => ({ userId: p.userId, username: p.username, avatar: p.avatar, color: p.color, status: p.status, payoutCash: p.payoutCash, eliminatedRound: p.eliminatedRound, cashedOutRound: p.cashedOutRound })),
+    players: players.map((p) => ({ userId: p.userId, username: p.username, avatar: p.avatar, color: p.color, status: p.status, shields: p.shields ?? 0, payoutCash: p.payoutCash, eliminatedRound: p.eliminatedRound, cashedOutRound: p.cashedOutRound })),
     votes: await countVotes(roomId)
   };
   // Current question WITHOUT the correct index (never leaked live). The TEXT and

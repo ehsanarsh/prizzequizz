@@ -183,6 +183,9 @@ async function advancePhase(room: RoomRow, now: number): Promise<void> {
     // eliminated — UNLESS there was no valid question (empty topic), in which
     // case the round is void and nobody is eliminated.
     const eliminated: string[] = [];
+    /* Who lost a shield this round rather than their place — the client needs
+     * this to show the shield breaking instead of an elimination. */
+    const shielded: Array<{ userId: string; left: number }> = [];
     if (room.correctIndex != null) {
       // Same per-question XP/cup as the duel (by difficulty, paid multiplier),
       // so Last Survivor feeds XP, level and the weekly cup identically.
@@ -202,7 +205,20 @@ async function advancePhase(room: RoomRow, now: number): Promise<void> {
         /* Track XP for the end-of-match mission report while it is known. */
         const xk = xpKey(room.id, p.userId);
         lsXp.set(xk, (lsXp.get(xk) ?? 0) + pts.xp);
-        if (!correct) { p.status = 'eliminated'; p.eliminatedRound = room.round; await savePlayer(p); eliminated.push(p.userId); }
+        if (!correct) {
+          /* A shield is spent BEFORE elimination is considered, so a red ticket
+           * (two shields) survives two wrong answers and goes out on the third.
+           * Green has none and behaves exactly as it always did. */
+          if ((p.shields ?? 0) > 0) {
+            p.shields = (p.shields ?? 0) - 1;
+            await savePlayer(p);
+            shielded.push({ userId: p.userId, left: p.shields });
+          } else {
+            p.status = 'eliminated'; p.eliminatedRound = room.round;
+            await savePlayer(p);
+            eliminated.push(p.userId);
+          }
+        }
       }
     }
     room.phase = 'elimination';
@@ -210,7 +226,7 @@ async function advancePhase(room: RoomRow, now: number): Promise<void> {
     await saveRoom(room);
     // Public: who was eliminated (for the Squid-Game animation). The correct
     // answer is delivered privately in each eliminated player's own snapshot.
-    publish(room.id, 'ls:elimination', { round: room.round, eliminated, correctIndex: room.correctIndex, questionId: room.questionId });
+    publish(room.id, 'ls:elimination', { round: room.round, eliminated, shielded, correctIndex: room.correctIndex, questionId: room.questionId });
     await broadcastState(room.id);
     return;
   }

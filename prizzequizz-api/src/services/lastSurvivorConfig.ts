@@ -7,7 +7,10 @@
  * match that is already running. */
 import { getPgPool } from '../database/postgres.js';
 
-export interface TicketTier { value: number; units: number; }
+/* `shields` are extra lives inside a match: a wrong answer spends one instead
+ * of eliminating, so a red ticket survives two mistakes and goes out on the
+ * third. It is what the more expensive ticket buys besides a bigger share. */
+export interface TicketTier { value: number; units: number; shields?: number; }
 export interface LastSurvivorConfig {
   room: {
     capacity: number;          // max players before a room starts instantly + a new room opens
@@ -53,9 +56,9 @@ export const LS_DEFAULT_CONFIG: LastSurvivorConfig = {
   economy: {
     rakePercent: 0,
     tickets: {
-      green: { value: 12500, units: 1 },
-      blue: { value: 25000, units: 2 },
-      red: { value: 50000, units: 4 }
+      green: { value: 12500, units: 1, shields: 0 },
+      blue: { value: 25000, units: 2, shields: 1 },
+      red: { value: 50000, units: 4, shields: 2 }
     }
   },
   // General knowledge is live; everything else is "coming soon" until the admin
