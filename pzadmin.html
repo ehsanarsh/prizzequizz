@@ -2007,13 +2007,21 @@ async function renderLastSurvivor(){
   const num=(id,v)=>'<input id="'+id+'" type="number" value="'+(v!=null?v:'')+'" style="width:100%">';
   const chk=(id,v)=>'<select id="'+id+'"><option value="1"'+(v?' selected':'')+'>روشن</option><option value="0"'+(!v?' selected':'')+'>خاموش</option></select>';
   const st=stat;
-  const liveRows=(rooms.rows||[]).map(r=>[
+  const FA_STATUS={waiting:'در انتظار',running:'در حال اجرا',finished:'تمام‌شده'};
+  const when=(ms)=>ms?new Date(Number(ms)).toLocaleString('fa-IR'):'—';
+  const liveRows=(rooms.rows||[]).map(r=>{const q="'"+r.id+"'";
+    return [
     '<span class="mono">'+String(r.id).slice(0,8)+'</span>', esc(r.topic),
-    '<span class="pill '+(r.status==='running'?'ok':(r.status==='finished'?'':'gold'))+'">'+esc(r.status)+'</span>',
+    '<span class="pill '+(r.status==='running'?'ok':(r.status==='finished'?'':'gold'))+'">'+(FA_STATUS[r.status]||esc(r.status))+'</span>',
     esc(r.phase)+' · دور '+fa(r.round)+'/'+fa(r.totalRounds),
     fa(r.players)+' نفر (زنده '+fa(r.alive)+' · برداشت '+fa(r.cashedOut)+')',
-    '<b style="color:var(--gold)">'+fa(r.grossPool)+' ت</b>'
-  ]);
+    '<b style="color:var(--gold)">'+fa(r.grossPool)+' ت</b>',
+    when(r.startedAt||r.createdAt),
+    '<button class="btn sm" onclick="lsRoomDetail('+q+')">جزئیات</button> '+
+      (r.status==='waiting'
+        ? '<button class="btn sm ok" onclick="lsStartRoom('+q+')">شروع</button> <button class="btn sm bad" onclick="lsCancelRoom('+q+')">لغو</button>'
+        : '')
+  ];});
   $('#main').innerHTML=head('آخرین بازمانده','تمام تنظیماتِ روم، زمان‌بندی، جایزه و موضوعات — بلافاصله روی روم‌های جدید اعمال می‌شود (روم‌های در حال اجرا با تنظیماتِ لحظهٔ شروع ادامه می‌یابند).',
     '<button class="btn pri" onclick="lsSaveConfig()">💾 ذخیرهٔ تنظیمات</button>')+
     '<div class="grid g4" style="margin-bottom:12px">'+
@@ -2049,11 +2057,21 @@ async function renderLastSurvivor(){
       '</tbody></table></div><div class="note">استخر = مجموع ارزش بلیط‌ها؛ تقسیم جایزه بر اساس مجموع «ضریب سهم»‌ها (نه تعداد نفرات).</div></div>'+
     '<div class="card"><h3>🏷️ فعال/غیرفعال موضوعات</h3><div class="note">فقط موضوعاتِ فعال قابل بازی‌اند؛ بقیه در بازی «به‌زودی» نمایش داده می‌شوند.</div>'+
       '<div class="tbl-wrap"><table><thead><tr><th>موضوع</th><th>تعداد سوال</th><th>وضعیت</th><th>عملیات</th></tr></thead><tbody>'+
-      (topics.topics||[]).map(tp=>'<tr><td><b>'+esc(tp.name)+'</b></td><td>'+fa(tp.questionCount)+'</td>'+
+      (topics.topics||[]).map(tp=>{const q=JSON.stringify(tp.name).replace(/"/g,'&quot;');
+        return '<tr><td><b>'+esc(tp.name)+'</b>'+(tp.random?' <span class="pill gold">تصادفی</span>':'')+'</td>'+
+        '<td>'+fa(tp.questionCount)+(tp.random?' <span class="mono" style="opacity:.6">(کل بانک)</span>':'')+'</td>'+
         '<td><span class="pill '+(tp.playable?'ok':'bad')+'">'+(tp.playable?'فعال':'به‌زودی')+'</span></td>'+
-        '<td><button class="btn sm '+(tp.playable?'bad':'ok')+'" onclick="lsToggleTopic('+JSON.stringify(tp.name).replace(/"/g,'&quot;')+','+(!tp.playable)+')">'+(tp.playable?'غیرفعال کن':'فعال کن')+'</button></td></tr>').join('')+
+        '<td><button class="btn sm '+(tp.playable?'bad':'ok')+'" onclick="lsToggleTopic('+q+','+(!tp.playable)+')">'+(tp.playable?'غیرفعال کن':'فعال کن')+'</button> '+
+        (tp.random
+          ? '<span class="mono" style="opacity:.55;font-size:11px">حذف نمی‌شود</span>'
+          : '<button class="btn sm bad" onclick="lsDeleteTopic('+q+')">حذف</button>')+
+        '</td></tr>';}).join('')+
       '</tbody></table></div></div>'+
-    '<div class="card"><h3>📡 روم‌های زنده</h3>'+tbl(['روم','موضوع','وضعیت','مرحله','بازیکنان','استخر'],liveRows)+'</div>';
+    '<div class="card"><h3>📡 مسابقات</h3>'+
+      '<div class="note">همهٔ مسابقات — در حال اجرا و تمام‌شده. «لغو» فقط پیش از شروع ممکن است و بلیط همه را برمی‌گرداند؛ '+
+      'مسابقهٔ در حال اجرا لغو نمی‌شود، چون پول از قبل حرکت کرده.</div>'+
+      tbl(['روم','موضوع','وضعیت','مرحله','بازیکنان','استخر','زمان','عملیات'],liveRows)+'</div>'+
+    '<div id="lsRoomBox"></div>';
 }
 async function lsSaveConfig(){
   const n=id=>Number(($('#'+id)||{}).value||0);
@@ -2073,6 +2091,60 @@ async function lsSaveConfig(){
 }
 async function lsToggleTopic(name,enabled){
   try{await api('POST','/admin/last-survivor/topics/'+encodeURIComponent(name),{enabled});toast(enabled?'فعال شد':'غیرفعال شد','ok');render();}catch(e){toast(e.message,'bad');}
+}
+async function lsDeleteTopic(name){
+  if(!confirm('تنظیمات موضوع «'+name+'» پاک شود؟\n\nاگر این دسته سؤال داشته باشد، دوباره به‌صورت «به‌زودی» در فهرست می‌آید.')) return;
+  try{await api('DELETE','/admin/last-survivor/topics/'+encodeURIComponent(name));toast('حذف شد','ok');render();}catch(e){toast(e.message,'bad');}
+}
+
+/* ---- matches ---- */
+async function lsStartRoom(id){
+  if(!confirm('این مسابقه همین حالا شروع شود؟')) return;
+  try{const r=await api('POST','/admin/last-survivor/rooms/'+id+'/start');
+    toast(r.status==='running'?('شروع شد با '+fa(r.players)+' بازیکن'):'هنوز شروع نشد — احتمالاً بازیکن کافی نیست', r.status==='running'?'ok':'bad');
+    render();}catch(e){toast(e.message,'bad');}
+}
+async function lsCancelRoom(id){
+  if(!confirm('این مسابقه لغو شود؟ بلیط همهٔ بازیکن‌ها برمی‌گردد.')) return;
+  try{const r=await api('POST','/admin/last-survivor/rooms/'+id+'/cancel');
+    toast('لغو شد — '+fa(r.refunded)+' بلیط برگشت','ok');render();}catch(e){toast(e.message,'bad');}
+}
+async function lsRoomDetail(id){
+  const box=$('#lsRoomBox'); if(!box) return;
+  box.innerHTML='<div class="card empty">در حال بارگذاری…</div>';
+  let d; try{ d=await api('GET','/admin/last-survivor/rooms/'+id); }
+  catch(e){ box.innerHTML='<div class="card empty">'+esc(e.message||'خطا')+'</div>'; return; }
+  const FA_ST={waiting:'در انتظار',alive:'زنده',eliminated:'حذف‌شده',cashed_out:'برداشت کرد'};
+  const COL={green:'🟢',blue:'🔵',red:'🔴'};
+  const when=(ms)=>ms?new Date(Number(ms)).toLocaleString('fa-IR'):'—';
+  const rows=(d.players||[]).map(p=>[
+    esc(p.username||'—')+' <span class="mono" style="opacity:.5">'+String(p.userId).slice(0,8)+'</span>',
+    (COL[p.color]||'')+' '+esc(p.color),
+    fa(p.units),
+    '<span class="pill '+(p.status==='cashed_out'?'ok':(p.status==='eliminated'?'bad':'gold'))+'">'+(FA_ST[p.status]||esc(p.status))+'</span>',
+    p.eliminatedRound?('دور '+fa(p.eliminatedRound)):(p.cashedOutRound?('دور '+fa(p.cashedOutRound)):'—'),
+    p.payoutCash?('<b style="color:var(--gold)">'+fa(p.payoutCash)+' ت</b>'):'—',
+    when(p.joinedAt)
+  ]);
+  const t=d.totals||{};
+  box.innerHTML='<div class="card"><h3>🔎 مسابقهٔ <span class="mono">'+String(d.room.id).slice(0,8)+'</span> — '+esc(d.room.topic)+'</h3>'+
+    '<div class="grid g4">'+
+      '<div class="field"><label>وضعیت</label><b>'+esc(d.room.status)+' · '+esc(d.room.phase)+'</b></div>'+
+      '<div class="field"><label>مرحله</label><b>'+fa(d.room.round)+'/'+fa(d.room.totalRounds)+'</b></div>'+
+      '<div class="field"><label>استخر ناخالص</label><b style="color:var(--gold)">'+fa(d.room.grossPool)+' ت</b></div>'+
+      '<div class="field"><label>سهم خانه</label><b>'+fa(d.room.rakePercent)+'٪</b></div>'+
+      '<div class="field"><label>بازیکنان</label><b>'+fa(t.players||0)+'</b></div>'+
+      '<div class="field"><label>زنده</label><b>'+fa(t.alive||0)+'</b></div>'+
+      '<div class="field"><label>برداشت‌کرده</label><b>'+fa(t.cashedOut||0)+'</b></div>'+
+      '<div class="field"><label>مجموع پرداختی</label><b style="color:var(--gold)">'+fa(t.paidOut||0)+' ت</b></div>'+
+      '<div class="field"><label>ساخته‌شده</label><b>'+when(d.room.createdAt)+'</b></div>'+
+      '<div class="field"><label>شروع</label><b>'+when(d.room.startedAt)+'</b></div>'+
+      '<div class="field"><label>پایان</label><b>'+when(d.room.endedAt)+'</b></div>'+
+    '</div>'+
+    (rows.length?tbl(['بازیکن','بلیط','ضریب','وضعیت','خروج','دریافتی','ورود'],rows)
+               :'<div class="empty">هیچ بازیکنی در این روم نیست.</div>')+
+    '<div class="row" style="margin-top:10px"><button class="btn sm" onclick="$(\'#lsRoomBox\').innerHTML=\'\'">بستن</button></div></div>';
+  box.scrollIntoView({behavior:'smooth',block:'start'});
 }
 
 
