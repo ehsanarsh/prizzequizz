@@ -28,6 +28,10 @@ async function seedQuestions(n: number): Promise<void> {
     } as any);
   }
 }
+/* Colour matters here now: a ticket carries shields, and a shield absorbs the
+ * wrong answer instead of eliminating. These cases are about what an ELIMINATED
+ * player is shown, so they use green — the colour with no shield — rather than
+ * asserting an elimination a blue ticket would rightly survive. */
 async function makeUser(color: string): Promise<{ id: string; username: string; color: string }> {
   const userId = id();
   const username = 'ls_' + userId.slice(0, 6);
@@ -56,7 +60,7 @@ async function run() {
   } as any);
 
   await check('a player who never answers is not shown an answer', async () => {
-    const u1 = await makeUser('green'), u2 = await makeUser('blue');
+    const u1 = await makeUser('green'), u2 = await makeUser('green');
     const j1 = await joinTopic(u1, TOPIC, u1.color);
     await joinTopic(u2, TOPIC, u2.color);
     const roomId = j1.room.id;
@@ -76,7 +80,7 @@ async function run() {
   });
 
   await check('a stale answer from an earlier round is never reused', async () => {
-    const u1 = await makeUser('green'), u2 = await makeUser('blue');
+    const u1 = await makeUser('green'), u2 = await makeUser('green');
     const j1 = await joinTopic(u1, TOPIC, u1.color);
     await joinTopic(u2, TOPIC, u2.color);
     const roomId = j1.room.id;
@@ -107,7 +111,7 @@ async function run() {
   });
 
   await check('a player who answers and gets it wrong still sees their own pick', async () => {
-    const u1 = await makeUser('green'), u2 = await makeUser('blue');
+    const u1 = await makeUser('green'), u2 = await makeUser('green');
     const j1 = await joinTopic(u1, TOPIC, u1.color);
     await joinTopic(u2, TOPIC, u2.color);
     const roomId = j1.room.id;
