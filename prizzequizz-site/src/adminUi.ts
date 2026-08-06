@@ -90,6 +90,7 @@ main{max-width:1000px;margin:0 auto;padding:18px}
   <div class="tabs">
     <button id="t-pages" class="on" onclick="tab('pages')">صفحه‌ها</button>
     <button id="t-posts" onclick="tab('posts')">وبلاگ</button>
+    <button id="t-media" onclick="tab('media')">تصویرها</button>
     <button id="t-seo" onclick="tab('seo')">تنظیمات سئو</button>
   </div>
   <div id="body"></div>
@@ -98,7 +99,7 @@ main{max-width:1000px;margin:0 auto;padding:18px}
 <div id="toast"></div>
 
 <script>
-let KEY='', DATA={pages:[],posts:[],settings:{}}, TAB='pages';
+let KEY='', DATA={pages:[],posts:[],settings:{}}, MEDIA=[], TAB='pages';
 const $=(s)=>document.querySelector(s);
 const esc=(s)=>String(s==null?'':s).replace(/[&<>"]/g,(c)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 function toast(m,bad){const t=$('#toast');t.textContent=m;t.style.borderColor=bad?'var(--bad)':'var(--line)';
@@ -121,8 +122,99 @@ async function enter(){
     $('#gate').style.display='none'; $('#app').style.display='';
   }catch(e){ $('#gateErr').textContent='کلید پذیرفته نشد.'; }
 }
-async function loadAll(){ DATA=await api('GET','all'); render(); }
-function tab(t){ TAB=t; ['pages','posts','seo'].forEach((x)=>$('#t-'+x).className=(x===t?'on':'')); render(); }
+async function loadAll(){
+  DATA=await api('GET','all');
+  try{ MEDIA=(await api('GET','media')).media||[]; }catch(e){ MEDIA=[]; }
+  render();
+}
+function tab(t){ TAB=t; ['pages','posts','media','seo'].forEach((x)=>$('#t-'+x).className=(x===t?'on':'')); render(); }
+
+/* ---------- media ---------- */
+/* Upload happens in the browser: the file is read to a data: URI and posted as
+ * JSON, so there is no multipart parser anywhere in this service. The server
+ * still checks the bytes — nothing here is trusted. */
+function bytesLabel(n){ return n>=1048576 ? (n/1048576).toFixed(1)+' MB' : Math.max(1,Math.round(n/1024))+' KB'; }
+
+function renderMedia(){
+  $('#app').innerHTML=
+    '<div class="note">تصویرهای سایت اینجا نگه‌داری می‌شوند. بعد از آپلود، دکمهٔ «انتخاب» کنار هر فیلد تصویر همین‌ها را نشان می‌دهد — لازم نیست آدرس را دستی بنویسی.<br>'+
+    'قالب‌های مجاز: PNG، JPG، GIF، WebP، ICO — تا ۳ مگابایت.</div>'+
+    '<div class="card">'+
+      '<h3>آپلود تصویر</h3>'+
+      '<p class="sub">می‌توانی چند فایل را با هم انتخاب کنی.</p>'+
+      '<input type="file" id="mfile" accept="image/png,image/jpeg,image/gif,image/webp,image/x-icon" multiple>'+
+      '<div class="row" style="margin-top:10px"><button class="btn pri" onclick="uploadMedia()">آپلود</button>'+
+      '<span id="mprog" class="pill"></span></div>'+
+    '</div>'+
+    '<div class="card"><h3>کتابخانه <span class="pill">'+MEDIA.length+'</span></h3>'+
+      (MEDIA.length? '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:11px">'+
+        MEDIA.map((m)=>
+          '<div class="item" style="margin:0">'+
+            '<img src="'+esc(m.url)+'" alt="" style="width:100%;height:110px;object-fit:contain;background:#0c0f16;border-radius:8px">'+
+            '<div style="font-size:11.5px;color:var(--muted);margin:7px 0 5px;word-break:break-all">'+esc(m.filename)+' · '+bytesLabel(m.size)+'</div>'+
+            '<div class="f"><input value="'+esc(m.alt||'')+'" placeholder="توضیح تصویر (alt)" onchange="setAlt(\'+"'"+'\'+m.id+\'+"'"+'\',this.value)"></div>'+
+            '<div class="row">'+
+              '<button class="btn sm" onclick="copyUrl(\'+"'"+'\'+m.id+\'+"'"+'\')">کپی نشانی</button>'+
+              '<button class="btn sm bad" onclick="delMedia(\'+"'"+'\'+m.id+\'+"'"+'\')">حذف</button>'+
+            '</div>'+
+          '</div>').join('')+'</div>'
+        : '<p class="sub">هنوز تصویری آپلود نشده.</p>')+
+    '</div>';
+}
+
+function readAsDataUrl(f){ return new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=rej; r.readAsDataURL(f); }); }
+
+async function uploadMedia(){
+  const inp=$('#mfile'); const files=[...(inp.files||[])];
+  if(!files.length){ toast('فایلی انتخاب نشده.',1); return; }
+  let done=0, failed=0;
+  for(const f of files){
+    $('#mprog').textContent='در حال آپلود '+(done+failed+1)+' از '+files.length;
+    try{
+      const data=await readAsDataUrl(f);
+      await api('POST','media',{data:data,filename:f.name,alt:''});
+      done++;
+    }catch(e){ failed++; toast(f.name+': '+e.message,1); }
+  }
+  $('#mprog').textContent='';
+  toast(done+' تصویر آپلود شد'+(failed?('، '+failed+' ناموفق'):''),failed?1:0);
+  await loadAll(); tab('media');
+}
+
+async function setAlt(id,alt){ try{ await api('PUT','media/'+encodeURIComponent(id),{alt:alt}); const m=MEDIA.find((x)=>x.id===id); if(m)m.alt=alt; toast('ذخیره شد'); }catch(e){ toast(e.message,1); } }
+async function delMedia(id){
+  if(!confirm('این تصویر حذف شود؟ هر جای سایت که از آن استفاده شده خالی می‌شود.')) return;
+  try{ await api('DELETE','media/'+encodeURIComponent(id)); toast('حذف شد'); await loadAll(); tab('media'); }catch(e){ toast(e.message,1); }
+}
+function copyUrl(id){
+  const m=MEDIA.find((x)=>x.id===id); if(!m) return;
+  try{ navigator.clipboard.writeText(m.url); toast('نشانی کپی شد: '+m.url); }
+  catch(e){ prompt('نشانی تصویر:',m.url); }
+}
+
+/* The picker every image field gets: no typing, no leaving the page. */
+function pick(inputId){
+  if(!MEDIA.length){ toast('اول از تب «تصویرها» آپلود کن.',1); return; }
+  const box=document.createElement('div');
+  box.style.cssText='position:fixed;inset:0;background:#000a;z-index:50;display:grid;place-items:center;padding:18px';
+  box.innerHTML='<div style="background:var(--panel);border:1.5px solid var(--line);border-radius:14px;padding:16px;max-width:760px;width:100%;max-height:82vh;overflow:auto">'+
+    '<div class="row" style="justify-content:space-between;margin-bottom:11px"><b>انتخاب تصویر</b>'+
+    '<button class="btn sm" id="pkX">بستن</button></div>'+
+    '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px">'+
+      MEDIA.map((m)=>'<div class="item" style="margin:0;cursor:pointer" data-u="'+esc(m.url)+'">'+
+        '<img src="'+esc(m.url)+'" alt="" style="width:100%;height:90px;object-fit:contain;background:#0c0f16;border-radius:7px">'+
+        '<div style="font-size:11px;color:var(--muted);margin-top:6px;word-break:break-all">'+esc(m.filename)+'</div></div>').join('')+
+    '</div>'+
+    '<div class="row" style="margin-top:12px"><button class="btn sm bad" id="pkClr">خالی کردن این فیلد</button></div></div>';
+  const close=()=>box.remove();
+  box.addEventListener('click',(e)=>{ if(e.target===box) close(); });
+  box.querySelector('#pkX').onclick=close;
+  box.querySelector('#pkClr').onclick=()=>{ const el=$('#'+inputId); if(el) el.value=''; close(); };
+  box.querySelectorAll('[data-u]').forEach((el)=>{ el.onclick=()=>{ const t=$('#'+inputId); if(t) t.value=el.getAttribute('data-u'); close(); }; });
+  document.body.appendChild(box);
+}
+/* Rendered next to an image input. */
+function pickBtn(id){ return '<button type="button" class="btn sm" style="margin-top:6px" onclick="pick(\'+"'"+'\'+id+\'+"'"+'\')">انتخاب از تصویرها</button>'; }
 
 /* ---------- pages ---------- */
 const BLOCK_LABEL={hero:'سربرگ بزرگ',text:'متن',cards:'کارت‌ها',steps:'مرحله‌ها',faq:'پرسش و پاسخ',cta:'دعوت به اقدام',stats:'آمار'};
@@ -131,6 +223,7 @@ const ITEM_KINDS=['cards','steps','faq','stats'];
 function render(){
   if(TAB==='pages') return renderPages();
   if(TAB==='posts') return renderPosts();
+  if(TAB==='media') return renderMedia();
   return renderSeo();
 }
 
@@ -164,7 +257,7 @@ function pageEditor(p,i){
       '<div class="f"><label>عنوان سئو (title)</label><input id="pg_seoTitle_'+i+'" value="'+esc(p.seoTitle||'')+'"></div>'+
       '<div class="f"><label>توضیح متا (description)</label><textarea id="pg_seoDescription_'+i+'" style="min-height:64px">'+esc(p.seoDescription||'')+'</textarea></div>'+
       '<div class="f"><label>کلیدواژه‌ها (با ویرگول)</label><input id="pg_seoKeywords_'+i+'" value="'+esc(p.seoKeywords||'')+'"></div>'+
-      '<div class="f"><label>تصویر اشتراک‌گذاری (og:image)</label><input id="pg_ogImage_'+i+'" class="mono" value="'+esc(p.ogImage||'')+'"></div>'+
+      '<div class="f"><label>تصویر اشتراک‌گذاری (og:image)</label><input id="pg_ogImage_'+i+'" class="mono" value="'+esc(p.ogImage||'')+'">'+pickBtn('pg_ogImage_'+i)+'</div>'+
     '</div>'+
     '<h3 style="margin:16px 0 8px">بلوک‌های محتوا</h3>'+
     (p.blocks||[]).map((b,bi)=>blockEditor(b,i,bi)).join('')+
@@ -276,7 +369,7 @@ function postEditor(p,i){
       '<div class="f"><label>عنوان سئو</label><input id="po_seoTitle_'+i+'" value="'+esc(p.seoTitle||'')+'"></div>'+
       '<div class="f"><label>توضیح متا</label><textarea id="po_seoDescription_'+i+'" style="min-height:60px">'+esc(p.seoDescription||'')+'</textarea></div>'+
       '<div class="f"><label>کلیدواژه‌ها</label><input id="po_seoKeywords_'+i+'" value="'+esc(p.seoKeywords||'')+'"></div>'+
-      '<div class="f"><label>تصویر کاور</label><input id="po_cover_'+i+'" class="mono" value="'+esc(p.cover||'')+'"></div>'+
+      '<div class="f"><label>تصویر کاور</label><input id="po_cover_'+i+'" class="mono" value="'+esc(p.cover||'')+'">'+pickBtn('po_cover_'+i)+'</div>'+
     '</div>'+
     '<div class="row"><button class="btn pri" onclick="savePost('+i+')">💾 ذخیرهٔ مقاله</button>'+
       '<button class="btn bad sm" onclick="delPost('+i+')">حذف مقاله</button></div>';
@@ -313,7 +406,7 @@ function renderSeo(){
       f('نشانی سایت','baseUrl','مثال: https://www.prizequiz.ir')+
       '<div class="f"><label>توضیح پیش‌فرض سایت</label><textarea id="st_description" style="min-height:70px">'+esc(s.description||'')+'</textarea></div>'+
       f('کلیدواژه‌های پیش‌فرض','keywords')+
-      '<div class="grid2">'+f('ایموجی لوگو','logoEmoji')+f('تصویر پیش‌فرض اشتراک‌گذاری','ogImage')+'</div>'+
+      '<div class="grid2">'+f('ایموجی لوگو','logoEmoji')+'<div class="f"><label>تصویر پیش‌فرض اشتراک‌گذاری</label><input id="st_ogImage" value="'+esc(s.ogImage||'')+'">'+pickBtn('st_ogImage')+'</div>'+'</div>'+
     '</div>'+
     '<div class="card"><h3>لینک بازی و دانلود</h3>'+
       '<p class="sub">هر جای سایت که نوشته شود <b>{play}</b> به همین نشانی تبدیل می‌شود، پس اگر آدرس بازی عوض شد فقط همین یک خانه را عوض کن.</p>'+

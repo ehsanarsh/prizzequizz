@@ -20,6 +20,7 @@ import {
   normaliseSlug, savePage, savePost, saveSettings, _resetSiteMemory
 } from '../content.js';
 import { esc, faDate, renderPage, renderPost, renderRobots, renderSitemap } from '../render.js';
+import { MEDIA_MAX_BYTES, deleteMedia, getMediaBytes, listMedia, saveMedia, _resetMedia } from '../media.js';
 
 let passed = 0, failed = 0;
 async function check(name: string, fn: () => Promise<void> | void): Promise<void> {
@@ -333,6 +334,74 @@ async function run(): Promise<void> {
     /* And a leap year really does reach 30 Esfand: 1403 is one. */
     assert.equal(faDate('2025-03-20T09:00:00Z'), '۳۰ اسفند ۱۴۰۳');
     assert.equal(faDate('not a date'), '');
+  });
+
+  // ------------------------------------------------------------ media ----
+
+  await check('an upload is judged by its bytes, not by what it claims to be', async () => {
+    _resetMedia();
+    const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(40)]);
+    const saved = await saveMedia({ data: 'data:image/png;base64,' + png.toString('base64'), filename: 'a b/c.PNG' });
+    assert.equal(saved.mime, 'image/png');
+    assert.ok(saved.url.startsWith('/media/'));
+    /* The name is slugged, and the extension comes from the real format. */
+    assert.ok(!saved.filename.includes('/') && saved.filename.endsWith('.png'));
+
+    /* A script that says it is a PNG is still a script. */
+    const evil = Buffer.from('<script>alert(1)</script>');
+    await assert.rejects(
+      () => saveMedia({ data: 'data:image/png;base64,' + evil.toString('base64'), filename: 'x.png' }),
+      (e: any) => e.code === 'MEDIA_TYPE');
+
+    /* SVG is a document that can carry script, and it would be served from our
+       own origin — refused however it is labelled. */
+    const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>');
+    await assert.rejects(
+      () => saveMedia({ data: 'data:image/svg+xml;base64,' + svg.toString('base64'), filename: 'x.svg' }),
+      (e: any) => e.code === 'MEDIA_TYPE');
+  });
+
+  await check('an oversized upload is refused before it is stored', async () => {
+    _resetMedia();
+    const huge = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff]), Buffer.alloc(MEDIA_MAX_BYTES + 1000)]);
+    await assert.rejects(
+      () => saveMedia({ data: huge.toString('base64'), filename: 'big.jpg' }),
+      (e: any) => e.code === 'MEDIA_TOO_LARGE');
+    assert.equal((await listMedia()).length, 0, 'nothing was stored');
+  });
+
+  await check('the bytes come back exactly as they went in', async () => {
+    _resetMedia();
+    const gif = Buffer.concat([Buffer.from('GIF89a'), Buffer.from([1, 2, 3, 4, 5, 250])]);
+    const saved = await saveMedia({ data: gif.toString('base64'), filename: 'anim.gif' });
+    const got = await getMediaBytes(saved.id);
+    assert.ok(got);
+    assert.equal(got!.mime, 'image/gif');
+    assert.deepEqual([...got!.bytes], [...gif]);
+    assert.equal(await deleteMedia(saved.id), true);
+    assert.equal(await getMediaBytes(saved.id), null);
+  });
+
+  await check('an image line in an article renders as a picture with its caption', async () => {
+    const base = (await listPosts(true))[0]!;
+    const html = renderPost({ ...base, body: 'یک پاراگراف\n!/media/abc123 عکس تست\nپاراگراف دیگر' },
+                            await listPages(true), SETTINGS_DEFAULTS, []);
+    assert.match(html, /<figure class="ph"><img src="\/media\/abc123"/);
+    assert.match(html, /<figcaption>عکس تست<\/figcaption>/);
+    assert.match(html, /loading="lazy"/);
+  });
+
+  await check('an image line cannot smuggle a script in through its source', async () => {
+    const base = (await listPosts(true))[0]!;
+    const pgs = await listPages(true);
+    for (const bad of ['javascript:alert(1)', 'data:text/html,<script>alert(1)</script>', 'vbscript:x']) {
+      const html = renderPost({ ...base, body: '!' + bad + ' caption' }, pgs, SETTINGS_DEFAULTS, []);
+      assert.doesNotMatch(html, /<img src="(javascript|data|vbscript):/i,
+        bad + ' must not become an image source');
+    }
+    /* And a caption is text like any other text. */
+    const html = renderPost({ ...base, body: '!/media/ok <img onerror=alert(1)>' }, pgs, SETTINGS_DEFAULTS, []);
+    assert.doesNotMatch(html, /<img onerror/);
   });
 
   console.log(`[site] ${passed} passed, ${failed} failed`);

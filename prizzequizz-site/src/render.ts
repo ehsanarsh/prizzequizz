@@ -152,7 +152,11 @@ details.faq .a{padding:0 18px 16px;color:#C4BDD6;font-size:14.5px}
   background:var(--ink-2);box-shadow:0 5px 0 #000;transition:transform .1s}
 .post:hover{transform:translateY(-3px)}
 .post .body{padding:18px}
+.post .cover{width:100%;height:170px;object-fit:cover;border-bottom:2.5px solid #000}
 .post h3{margin:0 0 7px;font-size:17px}
+figure.ph{margin:22px 0}
+figure.ph img{border:2.5px solid #000;border-radius:16px;box-shadow:0 5px 0 #000;width:100%}
+figure.ph figcaption{margin-top:9px;font-size:13px;color:var(--muted);text-align:center}
 .post p{margin:0 0 10px;font-size:13.5px;color:#BDB6CE}
 .meta{font-size:12px;color:var(--muted);font-weight:800}
 .tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}
@@ -392,6 +396,7 @@ function renderPostList(posts: SitePost[], s: SiteSettings): string {
   }
   return `<section><div class="wrap"><div class="posts">${posts.map((p) => `
     <a class="post" href="/blog/${esc(p.slug)}">
+      ${IMG_SRC.test(String(p.cover ?? '')) ? `<img class="cover" src="${esc(p.cover)}" alt="" loading="lazy" decoding="async">` : ''}
       <div class="body">
         <div class="meta">${esc(faDate(p.publishedAt))}</div>
         <h3>${esc(p.title)}</h3>
@@ -404,6 +409,10 @@ function renderPostList(posts: SitePost[], s: SiteSettings): string {
 /** Article body: a tiny, deliberately limited text format. '## ' is a heading,
  *  '- ' a bullet, everything else a paragraph. No HTML is accepted, so an
  *  article can never inject markup into the site's own origin. */
+/* Same allowlist idea as href(): a relative path or http(s) only, so an image
+ * line can never become a javascript: or data: source. */
+const IMG_SRC = /^(\/[^\s"'<>]*|https?:\/\/[^\s"'<>]+)$/i;
+
 function articleBody(body: string): string {
   const lines = String(body ?? '').split('\n');
   const out: string[] = [];
@@ -418,6 +427,23 @@ function articleBody(body: string): string {
       if (!inList) { out.push('<ul>'); inList = true; }
       out.push(`<li>${esc(l.slice(2))}</li>`);
       continue;
+    }
+    /* An image line: `!/media/abc توضیح تصویر`. The source is restricted to a
+     * path or an http(s) URL and the caption is escaped like any other text, so
+     * this stays a picture — it can no more inject markup than a paragraph can. */
+    if (l.startsWith('!')) {
+      const rest = l.slice(1).trim();
+      const sp = rest.search(/\s/);
+      const src = sp === -1 ? rest : rest.slice(0, sp);
+      const cap = sp === -1 ? '' : rest.slice(sp + 1).trim();
+      if (IMG_SRC.test(src)) {
+        closeList();
+        out.push(
+          `<figure class="ph"><img src="${esc(src)}" alt="${esc(cap)}" loading="lazy" decoding="async">` +
+          (cap ? `<figcaption>${esc(cap)}</figcaption>` : '') + '</figure>');
+        continue;
+      }
+      // Not a usable source — fall through and print the line as written.
     }
     closeList();
     out.push(`<p>${esc(l)}</p>`);
@@ -459,6 +485,7 @@ export function renderPost(post: SitePost, pages: SitePage[], s: SiteSettings, m
       <h1>${esc(post.title)}</h1>
       <div class="meta">${esc(faDate(post.publishedAt))}${post.author ? ' · ' + esc(post.author) : ''}</div>
       ${post.tags.length ? `<div class="tags">${post.tags.map((t) => `<span class="tag">${esc(t)}</span>`).join('')}</div>` : ''}
+      ${IMG_SRC.test(String(post.cover ?? '')) ? `<figure class="ph" style="margin-top:20px"><img src="${esc(post.cover)}" alt="${esc(post.title)}"></figure>` : ''}
       <article class="post-body prose" style="margin-top:22px">${articleBody(post.body)}</article>
       <div class="cta-band" style="margin-top:34px">
         <h2>امتحانش کن</h2>

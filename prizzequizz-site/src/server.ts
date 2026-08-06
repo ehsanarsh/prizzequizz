@@ -15,6 +15,7 @@
  */
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
+import { deleteMedia, getMediaBytes, listMedia, saveMedia, updateMedia } from './media.js';
 import {
   SiteError, deletePage, deletePost, getPage, getPost, getSettings,
   listPages, listPosts, savePage, savePost, saveSettings
@@ -57,14 +58,17 @@ const json = (res: ServerResponse, status: number, data: unknown) =>
 const fail = (res: ServerResponse, status: number, code: string, message: string) =>
   send(res, status, 'application/json; charset=utf-8', JSON.stringify({ ok: false, error: { code, message, status } }), { 'cache-control': 'no-store' });
 
-async function readBody(req: IncomingMessage): Promise<any> {
+/* base64 costs a third on top of the bytes, plus room for the JSON around it. */
+const MEDIA_BODY_LIMIT = 4_200_000;
+
+async function readBody(req: IncomingMessage, limit = 1_000_000): Promise<any> {
   const chunks: Buffer[] = [];
   let size = 0;
   for await (const c of req) {
     size += (c as Buffer).length;
-    /* An article body is the biggest thing posted here; a megabyte is far more
-     * than that and far less than something worth worrying about. */
-    if (size > 1_000_000) throw new SiteError('BODY_TOO_LARGE', 'حجم درخواست زیاد است.');
+    /* An article body is the biggest thing normally posted here; a megabyte is
+     * far more than that. An upload passes its own, larger ceiling. */
+    if (size > limit) throw new SiteError('BODY_TOO_LARGE', 'حجم درخواست زیاد است.');
     chunks.push(c as Buffer);
   }
   if (!chunks.length) return {};
@@ -119,6 +123,22 @@ async function adminRoutes(req: IncomingMessage, res: ServerResponse, path: stri
       const ok = await deletePost(decodeURIComponent(rest.slice('posts/'.length)));
       dropCache(); json(res, 200, { removed: ok }); return true;
     }
+    if (rest === 'media' && method === 'GET') { json(res, 200, { media: await listMedia() }); return true; }
+    if (rest === 'media' && method === 'POST') {
+      /* An image is far bigger than an article, so this one route reads with a
+       * larger ceiling than the JSON body helper allows. */
+      const body = await readBody(req, MEDIA_BODY_LIMIT);
+      json(res, 200, await saveMedia({ data: String(body.data ?? ''), filename: String(body.filename ?? ''), alt: String(body.alt ?? '') }));
+      return true;
+    }
+    if (rest.startsWith('media/') && method === 'PUT') {
+      const ok = await updateMedia(decodeURIComponent(rest.slice('media/'.length)), String((await readBody(req)).alt ?? ''));
+      json(res, 200, { updated: ok }); return true;
+    }
+    if (rest.startsWith('media/') && method === 'DELETE') {
+      const ok = await deleteMedia(decodeURIComponent(rest.slice('media/'.length)));
+      json(res, 200, { removed: ok }); return true;
+    }
     fail(res, 404, 'NOT_FOUND', 'مسیر یافت نشد.');
   } catch (e) {
     if (e instanceof SiteError) fail(res, 422, e.code, e.message);
@@ -144,6 +164,20 @@ export async function handle(req: IncomingMessage, res: ServerResponse): Promise
   if (path === '/site-health') { json(res, 200, { status: 'ok', service: 'prizzequizz-site' }); return; }
 
   if (await adminRoutes(req, res, path)) return;
+
+  /* Public, and immutable: an id is minted per upload and never reused, so the
+   * bytes behind a URL can never change and a year of caching is safe. */
+  if (path.startsWith('/media/')) {
+    const found = await getMediaBytes(decodeURIComponent(path.slice('/media/'.length)));
+    if (!found) { fail(res, 404, 'NOT_FOUND', 'تصویر یافت نشد.'); return; }
+    res.statusCode = 200;
+    res.setHeader('content-type', found.mime);
+    res.setHeader('content-length', String(found.bytes.length));
+    res.setHeader('cache-control', 'public, max-age=31536000, immutable');
+    res.setHeader('x-content-type-options', 'nosniff');
+    res.end(req.method === 'HEAD' ? undefined : found.bytes);
+    return;
+  }
 
   if (path === '/site-admin') {
     /* The page itself is public; every byte of DATA behind it needs the key,
