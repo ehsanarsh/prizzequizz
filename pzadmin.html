@@ -58,6 +58,16 @@ tbody tr:hover{background:var(--panel2)}
 .empty{padding:30px;text-align:center;color:var(--muted);font-weight:700}
 .note{background:rgba(123,139,255,.1);border:1.5px solid rgba(123,139,255,.3);border-radius:10px;padding:11px 13px;font-size:12px;color:#b9c2ff;margin-bottom:14px;line-height:1.7}
 .cfg-row{display:grid;grid-template-columns:1fr 180px;gap:10px;align-items:center;margin-bottom:7px;padding:5px 0;border-bottom:1px dashed var(--line)}
+/* Topic artwork tile in the categories editor: an empty dashed square invites a
+   click, a filled one shows the picture with a corner button to clear it. */
+.cat-art{position:relative;width:56px;height:56px;border-radius:12px;display:flex;align-items:center;justify-content:center;
+  cursor:pointer;overflow:hidden;background:var(--panel2);border:2px dashed var(--line);transition:border-color .12s,transform .12s}
+.cat-art:hover{border-color:var(--accent);transform:translateY(-1px)}
+.cat-art.has{border-style:solid;border-color:var(--line)}
+.cat-art img{width:100%;height:100%;object-fit:cover;display:block}
+.cat-art>span{font-size:22px;color:var(--muted);font-weight:800;line-height:1}
+.cat-art-x{position:absolute;top:2px;left:2px;width:18px;height:18px;border:0;border-radius:50%;cursor:pointer;
+  background:rgba(0,0,0,.66);color:#fff;font-size:11px;line-height:18px;padding:0;text-align:center}
 .cfg-row label{font-size:12.5px;color:var(--ink)}.cfg-row .path{font-size:10px;color:var(--muted);direction:ltr;text-align:right;display:block}
 textarea.json{min-height:300px;font-family:ui-monospace,monospace;font-size:12px;line-height:1.6;white-space:pre;direction:ltr;text-align:left}
 .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.65);display:grid;place-items:center;z-index:50;padding:14px}
@@ -148,9 +158,9 @@ async function loadCfg(){ try{ CFG=await api('GET','/admin/config'); $('#cfgVer'
 /* ---- nav: 25 sections grouped ---- */
 const NAV=[
   ['اصلی',[['dashboard','📊','داشبورد'],['finance','💰','داشبورد مالی'],['accounting','🧾','حسابداری و گزارش'],['expenses','🧮','هزینه‌های شرکت'],['users','👤','کاربران'],['matches','🎮','مسابقات'],['lastsurvivor','🏆','آخرین بازمانده'],['support','🎧','پشتیبانی']]],
-  ['محتوا',[['questions','❓','سوالات'],['qreports','🚩','گزارش سؤالات'],['aistudio','🤖','استودیوی سوال (AI)'],['pipeline','🔬','خط‌لولهٔ کیفیت'],['categories','🏷️','موضوعات'],['characters','🎭','کاراکترها'],['charboxes','🎲','قرعه‌کشی کاراکتر']]],
+  ['محتوا',[['questions','❓','سوالات'],['qreports','🚩','گزارش سؤالات'],['aistudio','🤖','استودیوی سوال (AI)'],['pipeline','🔬','خط‌لولهٔ کیفیت'],['categories','🏷️','موضوعات'],['characters','🎭','کاراکترها'],['charboxes','🎲','قرعه‌کشی کاراکتر'],['lifelines','🧩','کمک‌ها'],['rewards','🎡','گردونه و جایزه روزانه'],['recordmode','🏅','ثبت رکورد'],['onboarding','👋','خوش‌آمدگویی']]],
   ['اقتصاد',[['wallet','👛','کیف پول'],['withdrawals','💸','برداشت‌ها'],['rewardholds','⏳','جوایز در انتظار'],['tickets','🎫','بلیط‌ها'],['shop','🛒','فروشگاه'],['giftcodes','🎁','کدهای هدیه'],['payments','🏦','درگاه پرداخت']]],
-  ['بالانس بازی (Data-Driven)',[['cfg_xp','✨','XP'],['cfg_level','🏅','Level'],['cfg_cup','🏆','Cup'],['cfg_gameplay','🕹️','گیم‌پلی مودها'],['leagues','🛡️','لیگ‌ها'],['missions','🎯','مأموریت‌ها'],['rewards','🎉','جوایز/چرخونه/استریک']]],
+  ['بالانس بازی (Data-Driven)',[['cfg_xp','✨','XP'],['cfg_level','🏅','Level'],['cfg_cup','🏆','Cup'],['cfg_gameplay','🕹️','گیم‌پلی مودها'],['leagues','🛡️','لیگ‌ها'],['missions2','🎯','مأموریت‌ها']]],
   ['رشد و تعامل',[['leaderboard','📈','لیدربرد'],['campaign','🎁','کمپین کاربر جدید'],['events','📅','رویدادها'],['banners','🖼️','بنرها'],['notifications','🔔','اعلان‌ها'],['sms','📱','پنل پیامکی']]],
   ['سیستم',[['monitoring','🖥️','مانیتورینگ سرور'],['anticheat','🛡️','ضدتقلب'],['suspicious','🚨','کاربران مشکوک'],['reports','📑','گزارش‌ها'],['logs','📝','لاگ و Audit'],['reset','♻️','ابزار ریست'],['accounts','🔐','حساب‌ها و دسترسی'],['backup','💾','پشتیبان‌گیری'],['general','⚙️','تنظیمات عمومی'],['rawcfg','🧩','ویرایش خام Config']]]
 ];
@@ -169,7 +179,7 @@ function head(t,s,r){return '<div class="head"><div><h2>'+t+'</h2>'+(s?'<div cla
 function stat(k,cls,v){return '<div class="stat"><div class="k">'+k+'</div><div class="v '+(cls||'')+'">'+v+'</div></div>';}
 function tbl(cols,rows){if(!rows||!rows.length)return '<div class="empty">داده‌ای نیست</div>';return '<div class="tbl-wrap"><table><thead><tr>'+cols.map(c=>'<th>'+c+'</th>').join('')+'</tr></thead><tbody>'+rows.map(r=>'<tr>'+r.map(c=>'<td>'+c+'</td>').join('')+'</tr>').join('')+'</tbody></table></div>';}
 function modal(title,html){const bg=document.createElement('div');bg.className='modal-bg';bg.onclick=e=>{if(e.target===bg)bg.remove();};bg.innerHTML='<div class="modal"><div class="head"><h2 style="font-size:16px">'+title+'</h2><button class="btn sm" onclick="this.closest(\'.modal-bg\').remove()">✕</button></div>'+html+'</div>';document.body.appendChild(bg);return bg;}
-const CONFIG_PAGES={cfg_xp:['xp','تنظیمات XP'],cfg_level:['level','تنظیمات Level'],cfg_cup:['cup','تنظیمات Cup'],cfg_gameplay:['gameplay','گیم‌پلی هر مود'],leagues:['leagues','مدیریت لیگ‌ها'],missions:['missions','مأموریت‌ها'],rewards:['rewards','جوایز/چرخونه/استریک'],events:['events','رویدادها'],banners:['banners','بنرها'],general:['general','تنظیمات عمومی'],anticheat:['antiCheat','ضدتقلب'],campaign:['campaign','کمپین کاربر جدید']};
+const CONFIG_PAGES={cfg_xp:['xp','تنظیمات XP'],cfg_level:['level','تنظیمات Level'],cfg_cup:['cup','تنظیمات Cup'],cfg_gameplay:['gameplay','گیم‌پلی هر مود'],leagues:['leagues','مدیریت لیگ‌ها'],events:['events','رویدادها'],banners:['banners','بنرها'],general:['general','تنظیمات عمومی'],anticheat:['antiCheat','ضدتقلب'],campaign:['campaign','کمپین کاربر جدید']};
 
 async function render(){
   loading();
@@ -179,7 +189,7 @@ async function render(){
   try{
     if(CUR==='accounts')return renderAccounts();
     if(CONFIG_PAGES[CUR])return renderConfigSection(CONFIG_PAGES[CUR][0],CONFIG_PAGES[CUR][1]);
-    const fn={dashboard:renderDashboard,finance:renderFinance,accounting:renderAccounting,expenses:renderExpenses,backup:renderBackup,users:renderUsers,matches:renderMatches,support:renderSupport,questions:renderQuestions,qreports:renderQReports,aistudio:renderAiStudio,pipeline:renderPipeline,categories:renderCategories,wallet:renderWallet,withdrawals:renderWithdrawals,rewardholds:renderRewardHolds,tickets:renderTickets,giftcodes:renderGiftCodes,shop:renderShopAdmin,characters:renderCharacters,charboxes:renderCharBoxes,lastsurvivor:renderLastSurvivor,sms:renderSms,payments:renderPayments,leaderboard:renderLeaderboard,notifications:renderNotifications,anticheat:renderAntiCheat,suspicious:renderSuspicious,reports:renderReports,logs:renderLogs,reset:renderReset,roles:renderRoles,rawcfg:renderRawCfg,monitoring:renderMonitoring}[CUR];
+    const fn={dashboard:renderDashboard,finance:renderFinance,accounting:renderAccounting,expenses:renderExpenses,backup:renderBackup,users:renderUsers,matches:renderMatches,support:renderSupport,questions:renderQuestions,qreports:renderQReports,aistudio:renderAiStudio,pipeline:renderPipeline,categories:renderCategories,wallet:renderWallet,withdrawals:renderWithdrawals,rewardholds:renderRewardHolds,tickets:renderTickets,giftcodes:renderGiftCodes,shop:renderShopAdmin,characters:renderCharacters,charboxes:renderCharBoxes,lifelines:renderLifelines,rewards:renderRewards,missions2:renderMissions2,recordmode:renderRecordMode,onboarding:renderOnboarding,lastsurvivor:renderLastSurvivor,sms:renderSms,payments:renderPayments,leaderboard:renderLeaderboard,notifications:renderNotifications,anticheat:renderAntiCheat,suspicious:renderSuspicious,reports:renderReports,logs:renderLogs,reset:renderReset,roles:renderRoles,rawcfg:renderRawCfg,monitoring:renderMonitoring}[CUR];
     if(fn)return fn();
   }catch(e){$('#main').innerHTML=head('خطا')+'<div class="card empty">'+(e.message||'خطا')+'</div>';}
 }
@@ -380,6 +390,32 @@ async function renderAccounting(){
     ? r.serverCost.machines.map(m=>'<tr><td>'+esc(m.name)+'</td><td>'+money(m.hourly)+'/ساعت</td><td>'+fa(Math.round(m.hours))+' ساعت</td><td><b>'+money(m.cost)+'</b></td></tr>').join('')
     : '<tr><td colspan="4" class="empty">هزینهٔ ساعتی برای هیچ سروری ثبت نشده — در تب «هزینه‌های شرکت» وارد کن</td></tr>';
 
+  /* Money that stayed with the company without ever reaching a player: a Last
+     Survivor pot nobody won, and the commission on such a pot. Shown as its own
+     card and NOT added to the income total — the money came in as ticket sales,
+     which «فروش بلیط» already counts, and because no prize left it is already
+     inside «سود ناخالص». Adding it again would report profit twice. */
+  const HR=r.houseRevenue||{total:0,bySource:[],recent:[]};
+  const HR_SRC={ls_forfeited_pot:'پات بدون برنده (آخرین بازمانده)',ls_rake:'کارمزد آخرین بازمانده'};
+  const hrRows=(HR.recent||[]).length
+    ? HR.recent.map(h=>{
+        const m=h.metadata||{};
+        const when=String(h.createdAt||'').slice(0,16).replace('T',' ');
+        const detail=[m.topic?('موضوع: '+m.topic):'',m.round?('دور '+fa(m.round)):'',
+                      m.players?(fa(m.players)+' بازیکن'):''].filter(Boolean).join(' · ');
+        return '<tr><td>'+esc(when)+'</td><td>'+esc(HR_SRC[h.source]||h.source)+'</td>'+
+               '<td><b>'+money(h.amount)+'</b></td><td class="sub">'+esc(detail||h.description||'—')+'</td></tr>';
+      }).join('')
+    : '<tr><td colspan="4" class="empty">در این بازه پات بدون برنده‌ای ثبت نشده</td></tr>';
+  const hrCard='<div class="card" style="margin-top:13px"><b>درآمد نگه‌داشته‌شدهٔ شرکت</b>'+
+    '<div class="sub" style="margin-bottom:8px">پولی که به هیچ بازیکنی نرسید — وقتی در «آخرین بازمانده» همهٔ بازیکنان باقی‌مانده جواب را غلط می‌دهند، پات به شرکت می‌ماند و اینجا با اتاق و دور ثبت می‌شود.</div>'+
+    '<div class="grid g4" style="margin-bottom:10px">'+
+      stat('جمع در این بازه','gold',money(HR.total))+
+      (HR.bySource||[]).slice(0,3).map(b=>stat(HR_SRC[b.source]||b.source,'',money(b.amount)+' · '+fa(b.count)+' مورد')).join('')+
+    '</div>'+
+    '<div class="note">این مبلغ به «جمع درآمد» اضافه <b>نشده</b> و این عمدی است: پول به‌صورت فروش بلیط وارد شده و چون جایزه‌ای پرداخت نشده، همین حالا داخل «سود ناخالص» هست. جمع‌زدن دوباره‌اش سودی را گزارش می‌کرد که وجود ندارد. این کارت تفکیک همان پول است، نه درآمد تازه.</div>'+
+    '<div class="tbl-wrap" style="margin-top:8px"><table><thead><tr><th>زمان</th><th>بابت</th><th>مبلغ</th><th>جزئیات</th></tr></thead><tbody>'+hrRows+'</tbody></table></div></div>';
+
   $('#main').innerHTML=head('حسابداری و گزارش مالی','هر عدد از دفترکل محاسبه می‌شود؛ فیلتر تاریخ و خروجی اکسل/PDF','<button class="btn sm" onclick="render()">↻</button>')+
     (r.hasDatabase?'':'<div class="note">⚠️ دیتابیس متصل نیست — اعداد صفر است، ساختگی نیست.</div>')+
     filters+
@@ -401,6 +437,7 @@ async function renderAccounting(){
       '<div class="card"><b>کارمزد به تفکیک بازی</b><div class="tbl-wrap" style="margin-top:8px"><table><thead><tr><th>بازی</th><th>کارمزد</th><th>مسابقه</th></tr></thead><tbody>'+modeRows+'</tbody></table></div></div>'+
       '<div class="card"><b>هزینه به تفکیک دسته</b><div class="tbl-wrap" style="margin-top:8px"><table><thead><tr><th>دسته</th><th>مبلغ</th></tr></thead><tbody>'+expRows+'</tbody></table></div></div>'+
     '</div>'+
+    hrCard+
     '<div class="card" style="margin-top:13px"><b>هزینهٔ سرور (محاسبهٔ خودکار)</b>'+
       '<div class="sub" style="margin-bottom:8px">مبلغ ساعتی هر سرور را یک‌بار وارد می‌کنی؛ سیستم بر اساس مدت فعال بودن، هزینه را خودش حساب می‌کند.</div>'+
       '<div class="tbl-wrap"><table><thead><tr><th>سرور</th><th>نرخ</th><th>مدت در این بازه</th><th>هزینه</th></tr></thead><tbody>'+srvRows+'</tbody></table></div></div>';
@@ -955,28 +992,47 @@ async function rerunPipe(qid){try{const m=await api('POST','/admin/questions/'+q
 
 /* ================= CATEGORIES ================= */
 let _CATS=null;
+/* Topic artwork, keyed by category name. Kept beside _CATS rather than inside
+   it: the picture lives in its own table on the server (the config carries only
+   a URL), so it is uploaded the moment it is picked and does not wait for the
+   «ذخیره» that saves names and ordering. */
+let _CAT_IMG={}, _CAT_IMG_MAX=200*1024;
 async function renderCategories(){
   if(!CFG)await loadCfg();
   _CATS=JSON.parse(JSON.stringify(Array.isArray(CFG.categories)?CFG.categories:[]));
   // Count from the FULL question bank (all statuses), same source as the
   // questions section, so the per-topic counts match what you see there.
-  const allQ=await api('GET','/admin/questions').catch(()=>[]);
+  const [allQ,imgs]=await Promise.all([
+    api('GET','/admin/questions').catch(()=>[]),
+    api('GET','/admin/categories/images').catch(()=>({images:{}}))
+  ]);
+  _CAT_IMG=imgs.images||{}; _CAT_IMG_MAX=Number(imgs.maxBytes)||_CAT_IMG_MAX;
   const qlist=Array.isArray(allQ)?allQ:(allQ.rows||[]);
   const cmap={}; qlist.forEach(q=>{const c=(q.category||'').trim(); if(c) cmap[c]=(cmap[c]||0)+1;});
   _CATS.sort((a,b)=>(Number(a.order)||99)-(Number(b.order)||99));
+  const GRID='grid-template-columns:64px 44px 1fr 80px 80px 118px';
+  const art=(c)=>{
+    const url=_CAT_IMG[(c.name||'').trim()];
+    return '<div class="cat-art'+(url?' has':'')+'" onclick="catPickImage('+JSON.stringify(c.name||'').replace(/"/g,'&quot;')+')" title="برای انتخاب یا تعویض عکس بزن">'+
+      (url?'<img src="'+esc(API+url)+'" alt="">':'<span>＋</span>')+
+      (url?'<button class="cat-art-x" onclick="event.stopPropagation();catRemoveImage('+JSON.stringify(c.name||'').replace(/"/g,'&quot;')+')" title="حذف عکس">✕</button>':'')+
+    '</div>';
+  };
   const rows=_CATS.map((c,i)=>
-    '<div class="cfg-row" style="grid-template-columns:44px 1fr 90px 90px 120px;align-items:center">'+
-      '<input id="cat_ic_'+i+'" value="'+esc(c.icon||'')+'" style="text-align:center;font-size:18px" title="آیکون">'+
+    '<div class="cfg-row" style="'+GRID+';align-items:center">'+
+      art(c)+
+      '<input id="cat_ic_'+i+'" value="'+esc(c.icon||'')+'" style="text-align:center;font-size:18px" title="آیکون (وقتی عکس نباشد نمایش داده می‌شود)">'+
       '<input id="cat_nm_'+i+'" value="'+esc(c.name||'')+'" title="نام موضوع">'+
       '<input id="cat_or_'+i+'" type="number" value="'+(c.order||i+1)+'" title="ترتیب">'+
       '<span style="font-size:12px;color:var(--muted)">'+fa(cmap[c.name]||0)+' سوال</span>'+
       '<label style="font-size:12px;display:flex;gap:5px;align-items:center;justify-content:flex-end"><input id="cat_en_'+i+'" type="checkbox" '+(c.enabled!==false?'checked':'')+'> فعال '+
         '<button class="btn sm bad" onclick="catDel('+i+')">حذف</button></label>'+
     '</div>').join('');
-  $('#main').innerHTML=head('مدیریت موضوعات',fa(_CATS.length)+' موضوع — فعال/غیرفعال، ترتیب، آیکون','<button class="btn ok" onclick="catAdd()">➕ موضوع جدید</button> <button class="btn pri" onclick="catSave()">💾 ذخیره</button>')+
+  $('#main').innerHTML=head('مدیریت موضوعات',fa(_CATS.length)+' موضوع — عکس، آیکون، ترتیب، فعال/غیرفعال','<button class="btn ok" onclick="catAdd()">➕ موضوع جدید</button> <button class="btn pri" onclick="catSave()">💾 ذخیره</button>')+
     '<div class="note">این موضوعات مستقیم روی بازی اثر می‌گذارند: فقط موضوعاتِ <b>فعال</b> در انتخابِ موضوعِ بازی نمایش داده می‌شوند (بازی از config می‌خواند). بعد از ذخیره، در بازی Ctrl+Shift+R بزن.</div>'+
+    '<div class="note">🖼️ روی مربع عکس بزن تا برای هر موضوع تصویر بگذاری. همان عکس در <b>انتخاب موضوع دوئل</b>، <b>آخرین بازمانده</b> و <b>ثبت رکورد</b> نمایش داده می‌شود. عکس بلافاصله ذخیره می‌شود (نیازی به «ذخیره» نیست) و قبل از ارسال به ۲۵۶ پیکسل کوچک می‌شود. اگر موضوعی عکس نداشته باشد، همان آیکون ایموجی نمایش داده می‌شود.</div>'+
     '<div class="card">'+
-      '<div class="cfg-row" style="grid-template-columns:44px 1fr 90px 90px 120px;color:var(--muted);font-size:11px;font-weight:800"><span>آیکون</span><span>نام موضوع</span><span>ترتیب</span><span>سوالات</span><span>وضعیت</span></div>'+
+      '<div class="cfg-row" style="'+GRID+';color:var(--muted);font-size:11px;font-weight:800"><span>عکس</span><span>آیکون</span><span>نام موضوع</span><span>ترتیب</span><span>سوالات</span><span>وضعیت</span></div>'+
       rows+
       '<button class="btn pri" style="margin-top:12px" onclick="catSave()">💾 ذخیرهٔ همه</button>'+
     '</div>';
@@ -985,10 +1041,74 @@ function catAdd(){ catSyncFromDom(); _CATS.push({name:'موضوع جدید',icon
 function catDel(i){ catSyncFromDom(); if(!confirm('این موضوع حذف شود؟ (سوالاتش پاک نمی‌شوند)'))return; _CATS.splice(i,1); renderCatsFromMem(); }
 function catSyncFromDom(){ _CATS.forEach((c,i)=>{const ic=$('#cat_ic_'+i),nm=$('#cat_nm_'+i),or=$('#cat_or_'+i),en=$('#cat_en_'+i); if(ic)c.icon=ic.value; if(nm)c.name=nm.value.trim(); if(or)c.order=Number(or.value)||i+1; if(en)c.enabled=en.checked;}); }
 function renderCatsFromMem(){ CFG.categories=_CATS; renderCategories(); }
+
+/* Shrink to a 256px square before upload. Topic art renders at ~64px, so a full
+   camera/PNG file is wasted bytes on every player's first load — and the server
+   rejects anything over its cap anyway. SVG is passed through untouched: it is
+   already tiny and rasterising it would defeat the point. */
+function catShrink(file){
+  return new Promise((res,rej)=>{
+    if(file.type==='image/svg+xml'){
+      const fr=new FileReader(); fr.onload=()=>res(String(fr.result)); fr.onerror=()=>rej(new Error('خواندن فایل ناموفق بود')); fr.readAsDataURL(file); return;
+    }
+    const fr=new FileReader();
+    fr.onerror=()=>rej(new Error('خواندن فایل ناموفق بود'));
+    fr.onload=()=>{
+      const im=new Image();
+      im.onerror=()=>rej(new Error('این فایل تصویر معتبری نیست'));
+      im.onload=()=>{
+        const S=256, cv=document.createElement('canvas'); cv.width=S; cv.height=S;
+        const ctx=cv.getContext('2d');
+        /* Cover-crop to a square so wide and tall pictures both fill the tile. */
+        const s=Math.min(im.width,im.height);
+        ctx.drawImage(im,(im.width-s)/2,(im.height-s)/2,s,s,0,0,S,S);
+        let out=''; try{ out=cv.toDataURL('image/webp',.9); }catch(e){}
+        if(!out||out.indexOf('data:image/webp')!==0) out=cv.toDataURL('image/png');
+        res(out);
+      };
+      im.src=String(fr.result);
+    };
+    fr.readAsDataURL(file);
+  });
+}
+function catPickImage(name){
+  const inp=document.createElement('input');
+  inp.type='file'; inp.accept='image/png,image/jpeg,image/webp,image/avif,image/svg+xml';
+  inp.onchange=async()=>{
+    const f=inp.files&&inp.files[0]; if(!f)return;
+    try{
+      const dataUri=await catShrink(f);
+      const approxBytes=Math.round((dataUri.length-(dataUri.indexOf(',')+1))*3/4);
+      if(approxBytes>_CAT_IMG_MAX) throw new Error('حجم تصویر بعد از فشرده‌سازی هنوز زیاد است ('+fa(Math.round(approxBytes/1024))+' کیلوبایت)');
+      const r=await api('POST','/admin/categories/'+encodeURIComponent(name)+'/image',{image:dataUri});
+      _CAT_IMG[name]=r.url;
+      toast('عکس موضوع «'+name+'» ذخیره شد ✅','ok');
+      renderCategories();
+    }catch(e){ toast(e.message,'bad'); }
+  };
+  inp.click();
+}
+async function catRemoveImage(name){
+  if(!confirm('عکس موضوع «'+name+'» حذف شود؟ (آیکون ایموجی جایگزین می‌شود)'))return;
+  try{ await api('DELETE','/admin/categories/'+encodeURIComponent(name)+'/image'); delete _CAT_IMG[name]; toast('عکس حذف شد','ok'); renderCategories(); }
+  catch(e){ toast(e.message,'bad'); }
+}
 async function catSave(){
+  const before=_CATS.map(c=>c.name);
   catSyncFromDom();
   const clean=_CATS.filter(c=>c.name).map(c=>({name:c.name,icon:c.icon||'❓',enabled:c.enabled!==false,order:Number(c.order)||99}));
-  try{await api('PATCH','/admin/config',{categories:clean});toast('موضوعات ذخیره شد ✅','ok');await loadCfg();render();}catch(e){toast(e.message,'bad');}
+  try{
+    await api('PATCH','/admin/config',{categories:clean});
+    /* Artwork is keyed by NAME, so a rename would orphan the picture. Carry it
+       across before reloading, or the admin would have to upload it again. */
+    for(let i=0;i<_CATS.length;i++){
+      const from=before[i], to=_CATS[i]&&_CATS[i].name;
+      if(from&&to&&from!==to&&_CAT_IMG[from]){
+        try{ await api('POST','/admin/categories/image/rename',{from:from,to:to}); }catch(e){}
+      }
+    }
+    toast('موضوعات ذخیره شد ✅','ok');await loadCfg();render();
+  }catch(e){toast(e.message,'bad');}
 }
 
 /* ================= WALLET ================= */
@@ -1154,12 +1274,92 @@ let NT_TAB='compose';
 const NT_LINKS={'':'— بدون مقصد —','/home':'🏠 خانه','/shop':'🛒 فروشگاه','/wallet':'👛 کیف پول','/match':'⚔️ شروع مسابقه','/league':'🛡️ لیگ','/rewards':'🎡 جوایز و گردونه','/profile':'👤 پروفایل','/notifications':'🔔 صندوق پیام'};
 async function renderNotifications(){
   const tab=(k,label)=>'<button class="btn sm '+(NT_TAB===k?'pri':'')+'" onclick="NT_TAB=\''+k+'\';render()">'+label+'</button>';
-  const tabs=tab('dashboard','📊 داشبورد')+' '+tab('compose','✍️ ارسال پیام')+' '+tab('history','🗂️ کمپین‌ها و آنالیز')+' '+tab('scheduled','⏰ زمان‌بندی‌شده');
+  const tabs=tab('dashboard','📊 داشبورد')+' '+tab('compose','✍️ ارسال پیام')+' '+tab('history','🗂️ کمپین‌ها و آنالیز')+' '+tab('scheduled','⏰ زمان‌بندی‌شده')+' '+tab('push','📲 وضعیت پوش');
   $('#main').innerHTML=head('مرکز اعلان‌ها','ارسال هدفمند به بخش واقعیِ کاربران، زمان‌بندی، و آنالیزِ باز/کلیک',tabs)+'<div id="ntBody"><div class="empty">در حال بارگذاری…</div></div>';
   if(NT_TAB==='dashboard')return ntRenderDashboard();
   if(NT_TAB==='history')return ntRenderHistory();
   if(NT_TAB==='scheduled')return ntRenderScheduled();
+  if(NT_TAB==='push')return ntRenderPush();
   return ntRenderCompose();
+}
+
+/* Whether a message actually reaches a phone, and a way to prove it on one
+   device instead of broadcasting to everybody and hoping. */
+async function ntRenderPush(){
+  const b=$('#ntBody');
+  try{
+    const d=await api('GET','/admin/notifications/diagnostics');
+    let pc={}; try{ pc=await api('GET','/admin/notifications/push-config'); }catch(e){}
+    const live=!!d.vapidConfigured;
+    const whence=d.source==='env'?'روی خودِ سرور (متغیر محیطی)':d.source==='db'?'در همین پنل':'—';
+    b.innerHTML=
+      (live
+        ? '<div class="note" style="border-color:#2FBF71">✅ اعلانِ گوشی فعال است (ارائه‌دهنده: <b>'+esc(d.provider)+'</b> · تنظیم‌شده '+esc(whence)+').</div>'
+        : '<div class="note" style="border-color:#E8544F">❌ کلیدهای VAPID تنظیم نشده‌اند. تا وقتی این‌طور است، پیام‌ها فقط در صندوق داخل برنامه ثبت می‌شوند و <b>هیچ اعلانی روی گوشی نمی‌آید</b>. پایین همین صفحه، «ساخت کلید تازه» را بزنید و ذخیره کنید.</div>')+
+      ntPushKeysCard(pc)+
+      '<div class="grid g4">'+
+        '<div class="card"><h3>دستگاه‌های ثبت‌شده</h3><div style="font-size:26px;font-weight:900">'+fa(d.subscriptions)+'</div><div class="sub">گوشی‌هایی که «اعلان روی گوشی» را زده‌اند</div></div>'+
+        '<div class="card"><h3>ارسال‌شده</h3><div style="font-size:26px;font-weight:900">'+fa(d.sent)+'</div></div>'+
+        '<div class="card"><h3>در صف</h3><div style="font-size:26px;font-weight:900">'+fa(d.queued)+'</div><div class="sub">ثبت شده ولی به گوشی نرفته</div></div>'+
+        '<div class="card"><h3>ناموفق</h3><div style="font-size:26px;font-weight:900">'+fa(d.failed)+'</div></div>'+
+      '</div>'+
+      '<div class="card" style="margin-top:14px"><h3>📲 ارسال آزمایشی به یک نفر</h3>'+
+        '<div class="grid g2"><div class="field"><label>کاربر (شناسه، نام کاربری یا شماره)</label><input id="nt_tuser" dir="ltr" placeholder="09xxxxxxxxx"></div>'+
+        '<div class="field"><label>متن</label><input id="nt_tbody" value="اگر این را روی گوشی‌ات می‌بینی، اعلان درست کار می‌کند ✅"></div></div>'+
+        '<button class="btn pri" onclick="ntTestPush()">ارسال آزمایشی</button><div id="nt_tres"></div></div>'+
+      '<div class="note">اگر «دستگاه‌های ثبت‌شده» صفر است، هیچ‌کس هنوز اجازهٔ اعلان نداده. کاربر باید یک بار در بازی به تنظیمات ← اعلان‌ها ← «اعلان روی گوشی» برود. روی آیفون هم اول باید برنامه به صفحهٔ اصلی اضافه شده باشد.</div>';
+  }catch(e){ b.innerHTML='<div class="card empty">'+(e.message||'خطا')+'</div>'; }
+}
+/* The keys themselves. Two strings, but they are the entire difference between
+   "message written to the inbox" and "phone lights up", so they get a real form
+   rather than a server-side file only an admin with SSH can reach. */
+function ntPushKeysCard(pc){
+  pc=pc||{};
+  const envLocked=!!pc.envOverride;
+  return '<div class="card" style="margin-top:14px"><h3>🔑 کلیدهای اعلان (VAPID)</h3>'+
+    (envLocked
+      ? '<div class="note" style="border-color:#F1B211">این کلیدها روی خودِ سرور (متغیر محیطی) تنظیم شده‌اند و بر تنظیمات این صفحه اولویت دارند. تغییر اینجا ذخیره می‌شود ولی تا وقتی متغیر محیطی هست، اثری ندارد.</div>'
+      : '<div class="sub" style="margin-bottom:10px">اگر کلیدی ندارید، «ساخت کلید تازه» را بزنید و بعد ذخیره کنید. نیازی به ری‌استارت سرور نیست.</div>')+
+    '<div class="field"><label>وضعیت</label>'+
+      '<select id="pk_provider"><option value="webpush"'+(pc.provider==='webpush'?' selected':'')+'>روشن — اعلان به گوشی برود</option>'+
+      '<option value="log"'+(pc.provider!=='webpush'?' selected':'')+'>خاموش — فقط در صندوق داخل برنامه</option></select></div>'+
+    '<div class="field"><label>کلید عمومی (Public Key)</label><input id="pk_pub" dir="ltr" value="'+esc(pc.publicKey||'')+'" placeholder="B..."></div>'+
+    '<div class="field"><label>کلید خصوصی (Private Key)</label><input id="pk_priv" dir="ltr" placeholder="'+(pc.privateKeySet?esc(pc.privateKeyHint)+' — برای نگه‌داشتن، خالی بگذارید':'هنوز تنظیم نشده')+'"></div>'+
+    '<div class="field"><label>آدرس تماس (به push service اعلام می‌شود)</label><input id="pk_subj" dir="ltr" value="'+esc(pc.subject||'mailto:info@prizequiz.ir')+'"></div>'+
+    '<button class="btn pri" onclick="ntSavePushKeys()">ذخیره</button> '+
+    '<button class="btn" onclick="ntGenPushKeys()">🎲 ساخت کلید تازه</button>'+
+    '<div id="pk_res"></div></div>';
+}
+async function ntGenPushKeys(){
+  /* Regenerating silently would log every already-registered phone out of
+     notifications with no way to tell why, so it is asked about first. */
+  if($('#pk_pub').value.trim() && !confirm('کلید فعلی جایگزین می‌شود. هر گوشی که تا حالا اجازهٔ اعلان داده، بی‌اعتبار می‌شود و کاربر باید دوباره اجازه بدهد. ادامه؟')) return;
+  try{
+    const k=await api('POST','/admin/notifications/push-keys/generate');
+    $('#pk_pub').value=k.publicKey; $('#pk_priv').value=k.privateKey;
+    $('#pk_res').innerHTML='<div class="note">کلید ساخته شد ولی <b>هنوز ذخیره نشده</b> — دکمهٔ «ذخیره» را بزنید.</div>';
+  }catch(e){ $('#pk_res').innerHTML='<div class="note" style="border-color:#E8544F">❌ '+esc(e.message)+'</div>'; }
+}
+async function ntSavePushKeys(){
+  const box=$('#pk_res');
+  try{
+    await api('POST','/admin/notifications/push-config',{
+      provider:$('#pk_provider').value, publicKey:$('#pk_pub').value.trim(),
+      privateKey:$('#pk_priv').value.trim(), subject:$('#pk_subj').value.trim()});
+    box.innerHTML='<div class="note" style="border-color:#2FBF71">✅ ذخیره شد.</div>';
+    ntRenderPush();
+  }catch(e){ box.innerHTML='<div class="note" style="border-color:#E8544F">❌ '+esc(e.message)+'</div>'; }
+}
+async function ntTestPush(){
+  const user=$('#nt_tuser').value.trim(), box=$('#nt_tres');
+  if(!user) return toast('کاربر را وارد کن','bad');
+  box.innerHTML='<div class="note">در حال ارسال…</div>';
+  try{
+    const r=await api('POST','/admin/notifications/test',{user,body:$('#nt_tbody').value});
+    const good=r.status==='sent';
+    box.innerHTML='<div class="note" style="border-color:'+(good?'#2FBF71':'#F1B211')+'">'+(good?'✅ ':'⚠️ ')+esc(r.hint)+
+      '<br><span class="mono" style="font-size:11px">devices='+fa(r.devices)+' · status='+esc(r.status)+(r.error?(' · '+esc(r.error)):'')+'</span></div>';
+  }catch(e){ box.innerHTML='<div class="note" style="border-color:#E8544F">❌ '+esc(e.message)+'</div>'; }
 }
 /* ---- Dashboard ---- */
 async function ntRenderDashboard(){
@@ -1873,6 +2073,541 @@ async function lsSaveConfig(){
 }
 async function lsToggleTopic(name,enabled){
   try{await api('POST','/admin/last-survivor/topics/'+encodeURIComponent(name),{enabled});toast(enabled?'فعال شد':'غیرفعال شد','ok');render();}catch(e){toast(e.message,'bad');}
+}
+
+
+
+/* ================= ONBOARDING SLIDES ================= */
+/* The welcome sequence a new player sees. Kept as data so a campaign or a
+   seasonal set is a panel edit, not a release: switch a slide off, reorder it,
+   or give it a date window and it retires by itself. */
+let OB_ROWS=[], OB_EDIT=null;
+async function renderOnboarding(){
+  $('#main').innerHTML=head('خوش‌آمدگویی','اسلایدهایی که کاربر در اولین ورود می‌بیند',
+    ' <button class="btn pri" onclick="obEdit()">➕ اسلاید جدید</button>')+
+    '<div id="obBody"><div class="skel"></div></div>';
+  const b=$('#obBody');
+  try{
+    const d=await api('GET','/admin/onboarding');
+    OB_ROWS=d.rows||[];
+    b.innerHTML=
+      '<div class="note">تصویر هر اسلاید را از همین‌جا آپلود کنید (PNG با پس‌زمینهٔ شفاف، حداکثر ۶۰۰ کیلوبایت). تا وقتی تصویری نگذارید، همان ایموجی بزرگ نمایش داده می‌شود و صفحه خراب به نظر نمی‌رسد.</div>'+
+      '<div class="note">برای یک کمپین مناسبتی: اسلاید تازه بسازید، «شروع» و «پایان» را پر کنید و اسلایدهای همیشگی را دست‌نخورده بگذارید.</div>'+
+      tbl(['تصویر','عنوان','متن','فعال','بازه','ترتیب','عملیات'],
+        OB_ROWS.map(r=>[
+          (r.image?'<img src="'+esc(r.image)+'" style="width:52px;height:52px;object-fit:contain;background:'+esc(r.color)+'22;border-radius:10px">'
+                  :'<div style="width:52px;height:52px;display:flex;align-items:center;justify-content:center;font-size:26px;background:'+esc(r.color)+'22;border-radius:10px">'+esc(r.emoji)+'</div>'),
+          '<b>'+esc(r.title)+'</b>',
+          '<div style="max-width:320px;font-size:12px;color:#9fb0a6">'+esc((r.body||'').slice(0,110))+'</div>',
+          r.enabled?'<span class="badge ok">فعال</span>':'<span class="badge">خاموش</span>',
+          (r.startsAt||r.endsAt)?('<span class="mono" style="font-size:11px">'+esc((r.startsAt||'—')+' → '+(r.endsAt||'—'))+'</span>'):'همیشه',
+          String(r.sortOrder),
+          '<button class="btn sm" onclick="obEdit(\''+r.id+'\')">ویرایش</button> <button class="btn sm bad" onclick="obDel(\''+r.id+'\')">حذف</button>'
+        ]));
+  }catch(e){ b.innerHTML='<div class="card empty">'+(e.message||'خطا')+'</div>'; }
+}
+function obEdit(id){
+  const r=OB_ROWS.find(x=>x.id===id)||{id:'',title:'',body:'',image:'',emoji:'✨',color:'#8B5CF6',enabled:true,startsAt:'',endsAt:'',sortOrder:(OB_ROWS.length+1)};
+  OB_EDIT={...r};
+  modal(id?'ویرایش اسلاید':'اسلاید جدید',
+    '<div class="field"><label>عنوان</label><input id="ob_title" value="'+esc(r.title)+'" placeholder="به پرایز کوییز خوش اومدی!"></div>'+
+    '<div class="field"><label>متن</label><textarea id="ob_body" rows="3" placeholder="در یکی دو جمله بگو این صفحه چه چیزی را توضیح می‌دهد">'+esc(r.body)+'</textarea></div>'+
+    '<div class="grid g3">'+
+      '<div class="field"><label>ایموجی (جایگزین تصویر)</label><input id="ob_emoji" value="'+esc(r.emoji)+'" style="text-align:center"></div>'+
+      '<div class="field"><label>رنگ</label><input id="ob_color" type="color" value="'+esc(r.color||'#8B5CF6')+'"></div>'+
+      '<div class="field"><label>ترتیب</label><input id="ob_sort" type="number" value="'+(r.sortOrder|0)+'"></div>'+
+    '</div>'+
+    '<div class="grid g3">'+
+      '<div class="field"><label>وضعیت</label><select id="ob_en"><option value="1"'+(r.enabled?' selected':'')+'>فعال</option><option value="0"'+(!r.enabled?' selected':'')+'>خاموش</option></select></div>'+
+      '<div class="field"><label>شروع نمایش (اختیاری)</label><input id="ob_from" type="datetime-local" value="'+esc(obLocal(r.startsAt))+'"></div>'+
+      '<div class="field"><label>پایان نمایش (اختیاری)</label><input id="ob_to" type="datetime-local" value="'+esc(obLocal(r.endsAt))+'"></div>'+
+    '</div>'+
+    '<div class="field"><label>تصویر کاراکتر</label><input id="ob_file" type="file" accept="image/*" onchange="obPick(this)">'+
+      '<div id="ob_prev" style="margin-top:8px">'+(r.image?'<img src="'+esc(r.image)+'" style="max-height:120px">':'<span style="color:#9fb0a6;font-size:12px">تصویری انتخاب نشده — ایموجی نمایش داده می‌شود</span>')+'</div></div>'+
+    '<button class="btn pri" onclick="obSave()">💾 ذخیره</button>');
+}
+function obLocal(iso){ if(!iso)return ''; try{ const d=new Date(iso); const p=n=>String(n).padStart(2,'0');
+  return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+'T'+p(d.getHours())+':'+p(d.getMinutes()); }catch(e){ return ''; } }
+/* Shrunk in the browser before upload: a phone photo would blow past the size
+   limit and the panel would just say "too large" with no way forward. */
+function obPick(input){
+  const f=input.files&&input.files[0]; if(!f)return;
+  const img=new Image(); const rd=new FileReader();
+  rd.onload=()=>{ img.onload=()=>{
+    const max=520, sc=Math.min(1,max/Math.max(img.width,img.height));
+    const cv=document.createElement('canvas'); cv.width=Math.round(img.width*sc); cv.height=Math.round(img.height*sc);
+    cv.getContext('2d').drawImage(img,0,0,cv.width,cv.height);
+    let out=cv.toDataURL('image/webp',0.9);
+    if(out.indexOf('data:image/webp')!==0) out=cv.toDataURL('image/png');
+    OB_EDIT.image=out;
+    $('#ob_prev').innerHTML='<img src="'+out+'" style="max-height:120px"><div style="font-size:11px;color:#9fb0a6;margin-top:4px">'+Math.round(out.length*3/4/1024)+' کیلوبایت</div>';
+  }; img.src=rd.result; };
+  rd.readAsDataURL(f);
+}
+async function obSave(){
+  const iso=v=>{ const x=$(v).value; return x?new Date(x).toISOString():''; };
+  const payload={
+    id:OB_EDIT.id||undefined,
+    title:$('#ob_title').value.trim(),
+    body:$('#ob_body').value.trim(),
+    emoji:$('#ob_emoji').value.trim()||'✨',
+    color:$('#ob_color').value,
+    enabled:$('#ob_en').value==='1',
+    startsAt:iso('#ob_from'), endsAt:iso('#ob_to'),
+    sortOrder:Number($('#ob_sort').value||0),
+    image:OB_EDIT.image||''
+  };
+  if(!payload.title) return toast('عنوان لازم است','bad');
+  try{ await api('POST','/admin/onboarding',payload);
+    document.querySelectorAll('.modal-bg').forEach(m=>m.remove());
+    toast('ذخیره شد ✅','ok'); renderOnboarding(); }
+  catch(e){ toast(e.message,'bad'); }
+}
+async function obDel(id){
+  if(!confirm('این اسلاید حذف شود؟')) return;
+  try{ await api('DELETE','/admin/onboarding/'+encodeURIComponent(id)); toast('حذف شد','ok'); renderOnboarding(); }
+  catch(e){ toast(e.message,'bad'); }
+}
+
+/* ================= LIFELINES ================= */
+/* The catalogue is the single source of truth for the game: keys, labels,
+   prices, what a new player starts with, and — for a time help — how many
+   seconds it adds. Editing a row here changes the buttons in the match and the
+   cards in the shop with no release. */
+let LL_ROWS=[];
+/* ── WHEEL + DAILY REWARD ──────────────────────────────────────────────────
+   Everything the player can win, in one place: how many segments the wheel
+   has, what each pays, how likely it is, and how long the streak calendar
+   runs. Weights are relative numbers and mean nothing on their own, so the
+   real odds and the expected cost per spin are computed and shown alongside —
+   an operator setting a jackpot should see what it costs before players do. */
+let RW_CFG=null;
+const RW_TYPES=[['coins','🪙 سکه'],['xp','⚡ XP'],['cash','💰 تومان (کیف پول)'],['ticket','🎫 بلیت'],['heart','❤️ قلب'],['lifeline','🧩 کمک'],['nothing','— پوچ']];
+function rwTypeSel(idp,i,v){
+  return '<select id="'+idp+'_type_'+i+'" onchange="rwHint(\''+idp+'\','+i+')">'+
+    RW_TYPES.map((t)=>'<option value="'+t[0]+'"'+(v===t[0]?' selected':'')+'>'+t[1]+'</option>').join('')+'</select>';
+}
+function rwHint(idp,i){
+  const t=($('#'+idp+'_type_'+i)||{}).value, el=$('#'+idp+'_target_'+i);
+  if(!el) return;
+  el.placeholder = t==='ticket' ? 'green / blue / red' : t==='lifeline' ? 'p5050 / ptime / psecond' : '—';
+  el.disabled = !(t==='ticket'||t==='lifeline');
+}
+let RW_ODDS={rows:[],perSpin:{}};
+let RW_HOLD={enabled:false,riskThreshold:90};
+/* ── RECORD MODE ──────────────────────────────────────────────────────────
+   The settings that decide how much of the rest of the game this mode is
+   allowed to touch. All the scoring knobs default to zero on purpose: record
+   mode is meant to be its own thing, and turning any of them up makes it feed
+   XP, cup or coins into the parts of the game that carry real prizes. */
+let RM_CFG=null;
+async function renderRecordMode(){
+  $('#main').innerHTML=head('ثبت رکورد','ورود، مصرف قلب، و اینکه چقدر روی بقیهٔ بازی اثر بگذارد')+
+    '<div id="rcBody"><div class="skel"></div></div>';
+  const b=$('#rcBody');
+  try{
+    RM_CFG=await api('GET','/admin/record');
+    let HC={max:5,rechargeMinutes:60};
+    try{ HC=await api('GET','/admin/hearts'); }catch(e){}
+    const c=RM_CFG;
+    const num=(id,label,val,hint)=>'<div class="field"><label>'+label+'</label>'+
+      '<input id="'+id+'" type="number" min="0" value="'+(val|0)+'">'+
+      (hint?'<small style="display:block;color:var(--muted);font-size:11px;margin-top:4px">'+hint+'</small>':'')+'</div>';
+    b.innerHTML=
+      '<div class="card"><h3>🏅 وضعیت</h3><div class="grid g4">'+
+        '<div class="field"><label>حالت ثبت رکورد</label><select id="rc_en">'+
+          '<option value="1"'+(c.enabled?' selected':'')+'>روشن</option>'+
+          '<option value="0"'+(!c.enabled?' selected':'')+'>خاموش</option></select></div>'+
+        '<div class="field"><label>در کدام پلن دیده شود</label><select id="rc_fo">'+
+          '<option value="1"'+(c.friendlyOnly?' selected':'')+'>فقط پلن دوستانه</option>'+
+          '<option value="0"'+(!c.friendlyOnly?' selected':'')+'>هر دو پلن</option></select></div>'+
+        num('rc_entry','قلبِ ورود (از هدر)',c.entryHearts,'هنگام ورود از قلب‌های واقعیِ هدر کم می‌شود.')+
+        num('rc_run','قلبِ داخل بازی',c.runHearts,'هر جواب غلط یکی از این‌ها را خاموش می‌کند؛ روی قلب‌های هدر اثری ندارد.')+
+        num('rc_stale','انقضای بازیِ رهاشده (دقیقه)',c.staleMinutes,'اگر بازیکن برنامه را ببندد، بعد از این مدت بازی‌اش بسته می‌شود.')+
+      '</div></div>'+
+      '<div class="card"><h3>⚖️ اثر روی بقیهٔ بازی</h3>'+
+        '<div class="note">هر چهار مقدار به‌صورت پیش‌فرض صفرند و باید صفر بمانند مگر عمداً تصمیم دیگری بگیرید: ثبت رکورد نباید XP، کاپ یا سکه را وارد بخش‌هایی کند که جایزهٔ واقعی دارند. برای مأموریت‌ها نیازی به این‌ها نیست — مأموریت مستقیم به خودِ رکورد نگاه می‌کند.</div>'+
+        '<div class="grid g4">'+
+          num('rc_xpc','XP به ازای هر جواب درست',c.xpPerCorrect)+
+          num('rc_xpr','XP هنگام ثبت رکورد تازه',c.xpPerRecord)+
+          num('rc_cup','کاپ هنگام ثبت رکورد تازه',c.cupPerRecord)+
+          num('rc_coin','سکه به ازای هر جواب درست',c.coinsPerCorrect)+
+        '</div></div>'+
+      '<div class="card"><h3>❤️ قلب‌ها (کل بازی)</h3>'+
+        '<div class="note">یک موجودی قلب برای کل بازی، روی سرور. قبلاً قلب‌ها در مرورگر نگه‌داری می‌شدند و سرور عدد جداگانهٔ خودش را داشت — به همین دلیل هدر پنج قلب نشان می‌داد و ثبت رکورد می‌گفت قلب نداری.</div>'+
+        '<div class="grid g4">'+
+          num('hc_max','سقف شارژ رایگان',HC.max,'قلبِ خریداری‌شده می‌تواند از این بیشتر باشد.')+
+          num('hc_rate','هر چند دقیقه یک قلب',HC.rechargeMinutes)+
+          '<div class="field" style="grid-column:span 2;align-self:end"><button class="btn" onclick="hcSave()">ذخیرهٔ قلب‌ها</button></div>'+
+        '</div></div>'+
+      '<div style="margin:14px 0"><button class="btn pri" onclick="rcSave()">ذخیره</button> '+
+        '<button class="btn" onclick="renderRecordMode()">بازخوانی</button></div>';
+  }catch(e){ b.innerHTML='<div class="card empty">'+esc(e.message||'خطا')+'</div>'; }
+}
+async function hcSave(){
+  try{
+    await api('POST','/admin/hearts',{max:+($('#hc_max').value||5),rechargeMinutes:+($('#hc_rate').value||60)});
+    toast('ذخیره شد ✅','ok'); renderRecordMode();
+  }catch(e){ toast(e.message||'ذخیره نشد','bad'); }
+}
+async function rcSave(){
+  try{
+    RM_CFG=await api('POST','/admin/record',{
+      enabled:$('#rc_en').value==='1', friendlyOnly:$('#rc_fo').value==='1',
+      entryHearts:+($('#rc_entry').value||0), runHearts:+($('#rc_run').value||3),
+      staleMinutes:+($('#rc_stale').value||30),
+      xpPerCorrect:+($('#rc_xpc').value||0), xpPerRecord:+($('#rc_xpr').value||0),
+      cupPerRecord:+($('#rc_cup').value||0), coinsPerCorrect:+($('#rc_coin').value||0)});
+    toast('ذخیره شد ✅','ok'); renderRecordMode();
+  }catch(e){ toast(e.message||'ذخیره نشد','bad'); }
+}
+
+/* ── MISSIONS ─────────────────────────────────────────────────────────────
+   Every mission is a row. A new mission, a seasonal event, a change of reward
+   — all of it happens here, which is the point: a game meant to run for years
+   cannot ship its missions inside the app. */
+let MS_ROWS=[], MS_METRICS=[], MS_KIND='daily';
+const MS_KINDS=[['daily','روزانه'],['weekly','هفتگی'],['achievement','پیشرفت'],['skill','مهارتی'],
+  ['social','اجتماعی'],['economy','اقتصادی'],['record','ثبت رکورد'],['streak','استریک'],
+  ['event','مناسبتی'],['chain','زنجیره‌ای']];
+const MS_RARITY=[['common','🟢 معمولی'],['rare','🔵 کمیاب'],['epic','🟣 حماسی'],
+  ['legendary','🟠 افسانه‌ای'],['mythic','👑 اسطوره‌ای']];
+const MS_REWARD_TYPES=[['coins','🪙 سکه'],['xp','⚡ XP'],['heart','❤️ قلب'],['ticket','🎫 بلیت'],
+  ['cash','💰 تومان'],['lifeline','🧩 کمک'],['spin','🎡 چرخش'],['cosmetic','✨ ظاهری']];
+
+async function renderMissions2(){
+  const tabs=MS_KINDS.map((k)=>'<button class="btn sm '+(MS_KIND===k[0]?'pri':'')+
+    '" onclick="MS_KIND=\''+k[0]+'\';renderMissions2()">'+k[1]+'</button>').join(' ');
+  $('#main').innerHTML=head('مأموریت‌ها','هر مأموریت یک ردیف داده است — افزودن، تغییر جایزه یا رویداد فصلی بدون انتشار نسخهٔ جدید',tabs)+
+    '<div id="msBody"><div class="skel"></div></div>';
+  try{
+    const d=await api('GET','/admin/missions');
+    MS_ROWS=d.rows||[]; MS_METRICS=d.metrics||[];
+    msPaint();
+  }catch(e){ $('#msBody').innerHTML='<div class="card empty">'+esc(e.message||'خطا')+'</div>'; }
+}
+function msRewardText(rs){
+  if(!rs||!rs.length) return '—';
+  const nm={coins:'سکه',xp:'XP',heart:'قلب',ticket:'بلیت',cash:'تومان',lifeline:'کمک',spin:'چرخش',cosmetic:'ظاهری'};
+  return rs.map((r)=>fa(r.amount)+' '+(nm[r.type]||r.type)+(r.target?(' '+esc(r.target)):'')).join(' + ');
+}
+function msPaint(){
+  const rows=MS_ROWS.filter((r)=>r.kind===MS_KIND);
+  const counts=MS_KINDS.map((k)=>k[1]+': '+fa(MS_ROWS.filter((r)=>r.kind===k[0]).length)).join(' · ');
+  $('#msBody').innerHTML=
+    '<div class="note">مجموع '+fa(MS_ROWS.length)+' مأموریت — '+counts+'</div>'+
+    '<div class="note">«شاخص» همان چیزی است که بازی می‌شمارد. مأموریتی با شاخصی که هیچ‌جا گزارش نمی‌شود، برای همیشه روی صفر می‌ماند — برای همین موقع ذخیره بررسی می‌شود. «شانس» فقط برای روزانه و هفتگی معنی دارد: صفر یعنی هرگز در قرعهٔ روزانه نمی‌آید.</div>'+
+    tbl(['آیکن','عنوان','شاخص','دامنه','هدف','کمیابی','جایزه','سطح','شانس','فعال',''],
+      rows.map((r,i)=>[
+        esc(r.icon),
+        '<div><b>'+esc(r.title)+'</b>'+(r.chainId?('<div class="sub">زنجیره: '+esc(r.chainId)+' · مرحلهٔ '+fa(r.chainStep)+'</div>'):'')+'</div>',
+        '<span class="mono">'+esc(r.metric)+'</span>',
+        esc(r.scope||'—'),
+        fa(r.target),
+        (MS_RARITY.find((x)=>x[0]===r.rarity)||['','—'])[1],
+        msRewardText(r.rewards),
+        (r.minLevel||r.maxLevel)?(fa(r.minLevel||0)+'–'+fa(r.maxLevel||0)):'همه',
+        fa(r.weight),
+        r.enabled?'بله':'خیر',
+        '<button class="btn sm" onclick="msEdit(\''+jsAttr(r.id)+'\')">ویرایش</button> '+
+        '<button class="btn sm" onclick="msDel(\''+jsAttr(r.id)+'\')">حذف</button>'
+      ]))+
+    '<div style="margin-top:10px"><button class="btn pri" onclick="msEdit(\'\')">＋ مأموریت جدید</button></div>';
+}
+function jsAttr(v){ return String(v==null?'':v).replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
+
+function msEdit(id){
+  const r=MS_ROWS.find((x)=>x.id===id)||{kind:MS_KIND,metric:'matchesPlayed',target:1,icon:'🎯',
+    rarity:'common',rewards:[{type:'coins',amount:100}],enabled:true,weight:MS_KIND==='daily'||MS_KIND==='weekly'?10:0,
+    minLevel:0,maxLevel:0,scope:'',chainId:'',chainStep:0,startsAt:'',endsAt:'',title:'',description:''};
+  const sel=(id2,opts,val)=>'<select id="'+id2+'">'+opts.map((o)=>'<option value="'+o[0]+'"'+(val===o[0]?' selected':'')+'>'+o[1]+'</option>').join('')+'</select>';
+  const rewards=(r.rewards&&r.rewards.length?r.rewards:[{type:'coins',amount:0}]).slice(0,4);
+  while(rewards.length<4) rewards.push({type:'coins',amount:0});
+  modal(id?'ویرایش مأموریت':'مأموریت جدید',
+    '<input type="hidden" id="ms_id" value="'+esc(r.id||'')+'">'+
+    '<div class="grid g4">'+
+      '<div class="field"><label>نوع</label>'+sel('ms_kind',MS_KINDS,r.kind)+'</div>'+
+      '<div class="field"><label>آیکن</label><input id="ms_icon" value="'+esc(r.icon)+'" style="text-align:center"></div>'+
+      '<div class="field" style="grid-column:span 2"><label>عنوان</label><input id="ms_title" value="'+esc(r.title)+'"></div>'+
+      '<div class="field" style="grid-column:span 4"><label>توضیح</label><input id="ms_desc" value="'+esc(r.description||'')+'"></div>'+
+      '<div class="field"><label>شاخص</label>'+sel('ms_metric',MS_METRICS.map((m)=>[m,m]),r.metric)+'</div>'+
+      '<div class="field"><label>دامنه (موضوع)</label><input id="ms_scope" value="'+esc(r.scope||'')+'" placeholder="مثلاً فوتبال"></div>'+
+      '<div class="field"><label>هدف</label><input id="ms_target" type="number" min="1" value="'+(r.target||1)+'"></div>'+
+      '<div class="field"><label>کمیابی</label>'+sel('ms_rarity',MS_RARITY,r.rarity)+'</div>'+
+      '<div class="field"><label>حداقل لول</label><input id="ms_min" type="number" min="0" value="'+(r.minLevel||0)+'"></div>'+
+      '<div class="field"><label>حداکثر لول</label><input id="ms_max" type="number" min="0" value="'+(r.maxLevel||0)+'"></div>'+
+      '<div class="field"><label>شانس در قرعه</label><input id="ms_weight" type="number" min="0" value="'+(r.weight||0)+'"></div>'+
+      '<div class="field"><label>فعال</label><select id="ms_en"><option value="1"'+(r.enabled?' selected':'')+'>بله</option><option value="0"'+(!r.enabled?' selected':'')+'>خیر</option></select></div>'+
+      '<div class="field"><label>زنجیره</label><input id="ms_chain" value="'+esc(r.chainId||'')+'"></div>'+
+      '<div class="field"><label>مرحلهٔ زنجیره</label><input id="ms_step" type="number" min="0" value="'+(r.chainStep||0)+'"></div>'+
+      '<div class="field"><label>شروع رویداد</label><input id="ms_from" type="date" value="'+esc((r.startsAt||'').slice(0,10))+'"></div>'+
+      '<div class="field"><label>پایان رویداد</label><input id="ms_to" type="date" value="'+esc((r.endsAt||'').slice(0,10))+'"></div>'+
+    '</div>'+
+    '<div class="section-title" style="margin-top:10px">جایزه‌ها</div>'+
+    '<div class="grid g4">'+rewards.map((rw,i)=>
+      '<div class="field"><label>جایزهٔ '+fa(i+1)+'</label>'+
+        sel('ms_rt_'+i,MS_REWARD_TYPES,rw.type)+
+        '<input id="ms_ra_'+i+'" type="number" min="0" value="'+(rw.amount||0)+'" placeholder="مقدار" style="margin-top:5px">'+
+        '<input id="ms_rg_'+i+'" value="'+esc(rw.target||'')+'" placeholder="هدف (green/p5050)" style="margin-top:5px"></div>').join('')+
+    '</div>'+
+    '<div style="margin-top:12px"><button class="btn pri" onclick="msSave()">ذخیره</button> '+
+      '<button class="btn" onclick="this.closest(\'.modal-bg\').remove()">انصراف</button></div>');
+}
+async function msSave(){
+  const rewards=[];
+  for(let i=0;i<4;i++){
+    const a=+(($('#ms_ra_'+i)||{}).value||0);
+    if(a>0) rewards.push({type:($('#ms_rt_'+i)||{}).value,amount:a,target:($('#ms_rg_'+i)||{}).value||''});
+  }
+  const body={
+    id:$('#ms_id').value||undefined, kind:$('#ms_kind').value, metric:$('#ms_metric').value,
+    scope:$('#ms_scope').value, target:+$('#ms_target').value||1,
+    title:$('#ms_title').value, description:$('#ms_desc').value, icon:$('#ms_icon').value,
+    rarity:$('#ms_rarity').value, rewards:rewards, enabled:$('#ms_en').value==='1',
+    minLevel:+$('#ms_min').value||0, maxLevel:+$('#ms_max').value||0, weight:+$('#ms_weight').value||0,
+    chainId:$('#ms_chain').value, chainStep:+$('#ms_step').value||0,
+    startsAt:$('#ms_from').value||'', endsAt:$('#ms_to').value||''};
+  if(!rewards.length) return toast('حداقل یک جایزه لازم است','bad');
+  try{ await api('POST','/admin/missions',body);
+    document.querySelectorAll('.modal-bg').forEach((m)=>m.remove());
+    toast('ذخیره شد ✅','ok'); renderMissions2(); }
+  catch(e){ toast(e.message||'ذخیره نشد','bad'); }
+}
+async function msDel(id){
+  if(!confirm('این مأموریت حذف شود؟')) return;
+  try{ await api('DELETE','/admin/missions/'+encodeURIComponent(id)); toast('حذف شد','ok'); renderMissions2(); }
+  catch(e){ toast(e.message||'حذف نشد','bad'); }
+}
+
+async function renderRewards(){
+  $('#main').innerHTML=head('گردونه و جایزهٔ روزانه','بخش‌های گردونه، جایزهٔ هر بخش، شانس هر کدام و تقویم استریک — همه از همین‌جا')+
+    '<div id="rwBody"><div class="skel"></div></div>';
+  try{
+    RW_CFG=await api('GET','/admin/rewards');
+    try{ RW_ODDS=await api('GET','/admin/rewards/odds'); }catch(e){ RW_ODDS={rows:[],perSpin:{}}; }
+    /* Lives in gameConfig, not in the rewards table — different store, same
+       screen, because for an operator it is the same subject. */
+    try{ if(!CFG)await loadCfg(); RW_HOLD=Object.assign({enabled:false,riskThreshold:90},((CFG||{}).rewards||{}).hold||{}); }catch(e){}
+    rwPaint();
+  }catch(e){ $('#rwBody').innerHTML='<div class="card empty">'+esc(e.message||'خطا')+'</div>'; }
+}
+/* Painting is separate from fetching so adding or deleting a row can redraw
+   from the in-memory copy. Redrawing by refetching would throw away every
+   unsaved edit on the page the moment someone clicked "＋ بخش جدید". */
+function rwPaint(){
+  const b=$('#rwBody'); if(!b||!RW_CFG) return;
+  const odds=RW_ODDS||{rows:[],perSpin:{}};
+  const oddsBy={}; (odds.rows||[]).forEach((r)=>{oddsBy[r.id]=r;});
+  const w=RW_CFG.wheel, d=RW_CFG.daily;
+  {
+    b.innerHTML=
+      '<div class="card"><h3>🎡 تنظیمات کلی گردونه</h3><div class="grid g4">'+
+        '<div class="field"><label>وضعیت</label><select id="rw_wen"><option value="1"'+(w.enabled?' selected':'')+'>روشن</option><option value="0"'+(!w.enabled?' selected':'')+'>خاموش</option></select></div>'+
+        '<div class="field"><label>فاصلهٔ هر چرخش (ساعت)</label><input id="rw_cd" type="number" min="0" value="'+(w.cooldownHours||0)+'"></div>'+
+        '<div class="field" style="grid-column:span 2"><label>عنوان روی گردونه</label><input id="rw_title" value="'+esc(w.title||'')+'"></div>'+
+      '</div></div>'+
+
+      '<div class="card"><h3>بخش‌های گردونه ('+fa(w.segments.length)+' بخش)</h3>'+
+        '<div class="note">«شانس» یک عدد نسبی است، نه درصد: بخشی با شانس ۲۰ دو برابرِ بخشی با شانس ۱۰ می‌آید. درصد واقعی در ستون آخر حساب شده. شانس صفر یعنی روی گردونه دیده می‌شود ولی هرگز برنده نمی‌شود.</div>'+
+        tbl(['#','آیکن','نام','رنگ','نوع جایزه','مقدار','هدف','شانس','فعال','درصد واقعی',''],
+          w.segments.map((sg,i)=>[
+            fa(i+1),
+            '<input id="rw_icon_'+i+'" value="'+esc(sg.icon)+'" style="width:48px;text-align:center">',
+            '<input id="rw_label_'+i+'" value="'+esc(sg.label)+'" style="width:130px">',
+            '<input id="rw_color_'+i+'" type="color" value="'+esc(sg.color||'#D9A02B')+'" style="width:48px;padding:2px">',
+            rwTypeSel('rw',i,sg.type),
+            '<input id="rw_amount_'+i+'" type="number" min="0" value="'+(sg.amount|0)+'" style="width:96px">',
+            '<input id="rw_target_'+i+'" value="'+esc(sg.target||'')+'" style="width:96px">',
+            '<input id="rw_weight_'+i+'" type="number" min="0" step="0.5" value="'+(sg.weight||0)+'" style="width:70px">',
+            '<select id="rw_en_'+i+'"><option value="1"'+(sg.enabled?' selected':'')+'>بله</option><option value="0"'+(!sg.enabled?' selected':'')+'>خیر</option></select>',
+            '<b>'+(oddsBy[sg.id]?(oddsBy[sg.id].chance*100).toFixed(1):'—')+'٪</b>',
+            '<button class="btn sm" onclick="rwDelSeg('+i+')">حذف</button>'
+          ]))+
+        '<div style="margin-top:10px"><button class="btn" onclick="rwAddSeg()">＋ بخش جدید</button></div>'+
+      '</div>'+
+
+      '<div class="card"><h3>💸 هزینهٔ هر چرخش (میانگین)</h3>'+
+        '<div class="note">میانگینِ چیزی که هر چرخش از شما می‌گیرد، با همین شانس‌ها. اگر «تومان» را بالا ببرید همین عدد بالا می‌رود — قبل از ذخیره نگاهش کنید.</div>'+
+        '<div class="grid g4">'+
+          ['cash','coins','xp','ticket','heart','lifeline'].map((k)=>{
+            const nm={cash:'💰 تومان',coins:'🪙 سکه',xp:'⚡ XP',ticket:'🎫 بلیت',heart:'❤️ قلب',lifeline:'🧩 کمک'}[k];
+            const v=(odds.perSpin&&odds.perSpin[k])||0;
+            return '<div class="card" style="margin:0"><h3>'+nm+'</h3><div style="font-size:20px;font-weight:900">'+
+                   (v>=100?fa(Math.round(v)):v.toFixed(2))+'</div><div class="sub">به ازای هر چرخش</div></div>';
+          }).join('')+
+        '</div></div>'+
+
+      '<div class="card"><h3>🎁 جایزهٔ روزانه و استریک</h3><div class="grid g4">'+
+        '<div class="field"><label>وضعیت</label><select id="rw_den"><option value="1"'+(d.enabled?' selected':'')+'>روشن</option><option value="0"'+(!d.enabled?' selected':'')+'>خاموش</option></select></div>'+
+        '<div class="field"><label>طول استریک (روز)</label><input id="rw_sdays" type="number" min="1" max="'+d.days.length+'" value="'+d.streakDays+'"></div>'+
+        '<div class="field" style="grid-column:span 2"><label>اگر یک روز نیامد</label>'+
+          '<select id="rw_reset"><option value="1"'+(d.resetOnMiss?' selected':'')+'>استریک از روز ۱ شروع شود</option>'+
+          '<option value="0"'+(!d.resetOnMiss?' selected':'')+'>از همان‌جا ادامه دهد</option></select></div>'+
+      '</div>'+
+        '<div class="note">طول استریک نمی‌تواند از تعداد روزهای تعریف‌شده بیشتر باشد، وگرنه بازیکن به روزی می‌رسد که هیچ جایزه‌ای پشتش نیست. اگر روز بیشتری می‌خواهید، اول ردیف اضافه کنید.</div>'+
+        tbl(['روز','آیکن','نام','نوع جایزه','مقدار','هدف',''],
+          d.days.map((dd,i)=>[
+            '<input id="rd_day_'+i+'" type="number" min="1" value="'+dd.day+'" style="width:60px">',
+            '<input id="rd_icon_'+i+'" value="'+esc(dd.icon)+'" style="width:48px;text-align:center">',
+            '<input id="rd_label_'+i+'" value="'+esc(dd.label)+'" style="width:150px">',
+            rwTypeSel('rd',i,dd.type),
+            '<input id="rd_amount_'+i+'" type="number" min="0" value="'+(dd.amount|0)+'" style="width:110px">',
+            '<input id="rd_target_'+i+'" value="'+esc(dd.target||'')+'" style="width:96px">',
+            '<button class="btn sm" onclick="rwDelDay('+i+')">حذف</button>'
+          ]))+
+        '<div style="margin-top:10px"><button class="btn" onclick="rwAddDay()">＋ روز جدید</button></div>'+
+      '</div>'+
+      '<div class="card"><h3>🛡️ بررسی امنیتی جوایز</h3>'+
+        '<div class="note">وقتی روشن باشد، بردِ کاربرانی که امتیازِ ریسکشان از حد پایین‌تر نباشد به‌جای واریزِ مستقیم در «جوایز در انتظار» پارک می‌شود تا دستی تأیید کنید. پیش‌فرض خاموش است؛ بردِ سالم نباید معطل بماند.</div>'+
+        '<div class="grid g4">'+
+          '<div class="field"><label>وضعیت</label><select id="rw_hold_en">'+
+            '<option value="1"'+(RW_HOLD.enabled?' selected':'')+'>روشن — بردهای پرریسک پارک شوند</option>'+
+            '<option value="0"'+(!RW_HOLD.enabled?' selected':'')+'>خاموش — همه مستقیم واریز شوند</option></select></div>'+
+          '<div class="field"><label>حد ریسک (۱ تا ۱۰۰)</label><input id="rw_hold_th" type="number" min="1" max="100" value="'+(RW_HOLD.riskThreshold||90)+'"></div>'+
+          '<div class="field" style="grid-column:span 2;align-self:end"><button class="btn" onclick="rwSaveHold()">ذخیرهٔ بررسی امنیتی</button></div>'+
+        '</div></div>'+
+      '<div style="margin:14px 0"><button class="btn pri" onclick="rwSave()">ذخیرهٔ گردونه و جایزهٔ روزانه</button> '+
+        '<button class="btn" onclick="renderRewards()">بازخوانی</button></div>';
+    for(let i=0;i<w.segments.length;i++) rwHint('rw',i);
+    for(let i=0;i<d.days.length;i++) rwHint('rd',i);
+  }
+}
+/* Edits are read out of the form before the list changes, so adding or
+   removing a row never throws away what was typed in the others. */
+function rwCollect(){
+  const w=RW_CFG.wheel, d=RW_CFG.daily;
+  const segments=w.segments.map((sg,i)=>({
+    id:sg.id,
+    icon:($('#rw_icon_'+i)||{}).value||sg.icon,
+    label:($('#rw_label_'+i)||{}).value||'',
+    color:($('#rw_color_'+i)||{}).value||sg.color,
+    type:($('#rw_type_'+i)||{}).value||sg.type,
+    amount:+(($('#rw_amount_'+i)||{}).value||0),
+    target:($('#rw_target_'+i)||{}).value||'',
+    weight:+(($('#rw_weight_'+i)||{}).value||0),
+    enabled:($('#rw_en_'+i)||{}).value!=='0'
+  }));
+  const days=d.days.map((dd,i)=>({
+    day:+(($('#rd_day_'+i)||{}).value||dd.day),
+    icon:($('#rd_icon_'+i)||{}).value||dd.icon,
+    label:($('#rd_label_'+i)||{}).value||'',
+    type:($('#rd_type_'+i)||{}).value||dd.type,
+    amount:+(($('#rd_amount_'+i)||{}).value||0),
+    target:($('#rd_target_'+i)||{}).value||''
+  }));
+  return {
+    wheel:{enabled:($('#rw_wen')||{}).value!=='0',cooldownHours:+(($('#rw_cd')||{}).value||0),
+           title:($('#rw_title')||{}).value||w.title,segments:segments},
+    daily:{enabled:($('#rw_den')||{}).value!=='0',streakDays:+(($('#rw_sdays')||{}).value||days.length),
+           resetOnMiss:($('#rw_reset')||{}).value!=='0',days:days}
+  };
+}
+function rwAddSeg(){
+  RW_CFG=rwCollect();
+  RW_CFG.wheel.segments.push({id:'seg'+Date.now().toString(36),icon:'🎁',label:'جایزهٔ تازه',
+    color:'#D9A02B',type:'coins',amount:100,target:'',weight:10,enabled:true});
+  rwRepaint();
+}
+function rwDelSeg(i){
+  RW_CFG=rwCollect();
+  if(RW_CFG.wheel.segments.length<=1) return toast('گردونه باید حداقل یک بخش داشته باشد','bad');
+  RW_CFG.wheel.segments.splice(i,1); rwRepaint();
+}
+function rwAddDay(){
+  RW_CFG=rwCollect();
+  const next=RW_CFG.daily.days.reduce((n,x)=>Math.max(n,x.day),0)+1;
+  RW_CFG.daily.days.push({day:next,icon:'🎁',label:'جایزهٔ روز '+fa(next),type:'coins',amount:100,target:''});
+  rwRepaint();
+}
+function rwDelDay(i){
+  RW_CFG=rwCollect();
+  if(RW_CFG.daily.days.length<=1) return toast('تقویم باید حداقل یک روز داشته باشد','bad');
+  RW_CFG.daily.days.splice(i,1);
+  RW_CFG.daily.streakDays=Math.min(RW_CFG.daily.streakDays,RW_CFG.daily.days.length);
+  rwRepaint();
+}
+/* The odds column is computed server-side, so it goes stale after a local
+   edit until the next save; the header says as much rather than showing a
+   number that quietly no longer matches the weights on screen. */
+function rwRepaint(){ RW_ODDS={rows:[],perSpin:RW_ODDS.perSpin}; rwPaint(); }
+async function rwSaveHold(){
+  try{
+    const hold={enabled:($('#rw_hold_en')||{}).value==='1',
+                riskThreshold:Math.max(1,Math.min(100,+(($('#rw_hold_th')||{}).value||90)))};
+    const cur=((CFG||{}).rewards)||{};
+    await api('PATCH','/admin/config',{rewards:Object.assign({},cur,{hold:hold})});
+    RW_HOLD=hold; await loadCfg(); toast('ذخیره شد ✅','ok');
+  }catch(e){ toast(e.message||'ذخیره نشد','bad'); }
+}
+async function rwSave(){
+  try{
+    const body=rwCollect();
+    RW_CFG=await api('POST','/admin/rewards',body);
+    toast('ذخیره شد ✅','ok');
+    renderRewards();
+  }catch(e){ toast(e.message||'ذخیره نشد','bad'); }
+}
+
+async function renderLifelines(){
+  $('#main').innerHTML=head('کمک‌ها','هر کمک در هر مسابقه یک بار قابل استفاده است؛ موجودی مثل بلیط برای هر کاربر نگهداری می‌شود')+
+    '<div id="llBody"><div class="skel"></div></div>';
+  const b=$('#llBody');
+  try{
+    const d=await api('GET','/admin/lifelines');
+    LL_ROWS=d.rows||[];
+    b.innerHTML=
+      '<div class="note">«ثانیهٔ اضافه» فقط برای کمکِ وقت معنی دارد؛ برای بقیه صفر بگذارید. کمکی که ثانیه دارد در «آخرین بازمانده» نمایش داده نمی‌شود، چون ساعت آن اتاق سمت سرور و مشترک بین همهٔ بازیکنان است.</div>'+
+      tbl(['کلید','آیکن','نام','توضیح','فعال','موجودی اولیه','قیمت (تومان)','فروش','جایزه','ثانیهٔ اضافه','ترتیب'],
+        LL_ROWS.map((r,i)=>[
+          '<span class="mono">'+esc(r.key)+'</span>',
+          '<input id="ll_icon_'+i+'" value="'+esc(r.icon)+'" style="width:52px;text-align:center">',
+          '<input id="ll_label_'+i+'" value="'+esc(r.label)+'" style="width:120px">',
+          '<input id="ll_desc_'+i+'" value="'+esc(r.description||'')+'" style="width:200px">',
+          '<select id="ll_en_'+i+'"><option value="1"'+(r.enabled?' selected':'')+'>بله</option><option value="0"'+(!r.enabled?' selected':'')+'>خیر</option></select>',
+          '<input id="ll_start_'+i+'" type="number" min="0" value="'+(r.startingGrant|0)+'" style="width:70px">',
+          '<input id="ll_price_'+i+'" type="number" min="0" value="'+(r.price|0)+'" style="width:100px">',
+          '<select id="ll_sell_'+i+'"><option value="1"'+(r.sellable?' selected':'')+'>بله</option><option value="0"'+(!r.sellable?' selected':'')+'>خیر</option></select>',
+          '<select id="ll_award_'+i+'"><option value="1"'+(r.awardable?' selected':'')+'>بله</option><option value="0"'+(!r.awardable?' selected':'')+'>خیر</option></select>',
+          '<input id="ll_secs_'+i+'" type="number" min="0" value="'+(r.seconds|0)+'" style="width:70px">',
+          '<input id="ll_sort_'+i+'" type="number" value="'+(r.sortOrder|0)+'" style="width:60px">'
+        ]))+
+      '<button class="btn pri" onclick="llSave()">💾 ذخیرهٔ کمک‌ها</button>'+
+      '<div class="card" style="margin-top:14px"><h3>🎁 اهدای کمک</h3><div class="grid g3">'+
+        '<div class="field"><label>کمک</label><select id="ll_gkey">'+LL_ROWS.map(r=>'<option value="'+esc(r.key)+'">'+esc(r.icon+' '+r.label)+'</option>').join('')+'</select></div>'+
+        '<div class="field"><label>تعداد (منفی = کم کردن)</label><input id="ll_gamt" type="number" value="1"></div>'+
+        '<div class="field"><label>کاربر (شناسه یا شماره)</label><input id="ll_guser" dir="ltr" placeholder="09xxxxxxxxx"></div>'+
+      '</div><button class="btn" onclick="llGrant(false)">اهدا به این کاربر</button> '+
+      '<button class="btn bad" onclick="llGrant(true)">اهدا به همهٔ کاربران</button><div id="ll_gres"></div></div>';
+  }catch(e){ b.innerHTML='<div class="card empty">'+(e.message||'خطا')+'</div>'; }
+}
+async function llSave(){
+  const rows=LL_ROWS.map((r,i)=>({
+    key:r.key,
+    icon:$('#ll_icon_'+i).value.trim()||r.icon,
+    label:$('#ll_label_'+i).value.trim()||r.key,
+    description:$('#ll_desc_'+i).value.trim(),
+    enabled:$('#ll_en_'+i).value==='1',
+    startingGrant:Number($('#ll_start_'+i).value||0),
+    price:Number($('#ll_price_'+i).value||0),
+    sellable:$('#ll_sell_'+i).value==='1',
+    awardable:$('#ll_award_'+i).value==='1',
+    seconds:Number($('#ll_secs_'+i).value||0),
+    sortOrder:Number($('#ll_sort_'+i).value||0)
+  }));
+  try{ await api('PUT','/admin/lifelines',{rows}); toast('ذخیره شد ✅','ok'); renderLifelines(); }
+  catch(e){ toast(e.message,'bad'); }
+}
+async function llGrant(everyone){
+  const key=$('#ll_gkey').value, amount=Number($('#ll_gamt').value||0);
+  const user=$('#ll_guser').value.trim();
+  const box=$('#ll_gres');
+  if(!amount) return toast('تعداد را وارد کن','bad');
+  if(everyone&&!confirm('به همهٔ کاربران '+amount+' عدد از این کمک داده شود؟')) return;
+  try{
+    const r=await api('POST','/admin/lifelines/grant',everyone?{key,amount,everyone:true}:{key,amount,userId:user});
+    box.innerHTML='<div class="note" style="border-color:#2FBF71">✅ برای '+fa(r.granted)+' کاربر انجام شد.</div>';
+    toast('انجام شد ✅','ok');
+  }catch(e){ box.innerHTML='<div class="note" style="border-color:#E8544F">❌ '+esc(e.message)+'</div>'; }
 }
 
 /* ================= SMS PANEL ================= */
