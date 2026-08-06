@@ -23,7 +23,17 @@ tar -xzf pz-site.tgz -C "$DIR"
 # DATABASE_URL and ADMIN_KEY are read from the game's own env file so there is
 # one place to change them. Adjust the path if yours differs.
 ENV_SRC=${ENV_SRC:-/home/ubuntu/.env}
-if [ -f "$ENV_SRC" ]; then
+
+# That file holds the database password, so it is root-owned and mode 600 —
+# existing is not the same as readable. Read it through sudo when we have to,
+# and never assume a plain cat will work.
+read_env() {
+  if [ -r "$1" ]; then cat "$1"
+  else sudo cat "$1"
+  fi
+}
+
+if sudo test -f "$ENV_SRC"; then
   echo "==> reusing $ENV_SRC for DATABASE_URL / ADMIN_KEY"
 else
   echo "!! $ENV_SRC not found — set DATABASE_URL and ADMIN_KEY in $DIR/site.env yourself"
@@ -73,20 +83,30 @@ install_with_docker() {
   # and it keeps quotes as part of the value. Normalise into a file it accepts
   # rather than handing it one it will refuse — a refused run creates NO
   # container, which is why `docker logs` had nothing to show.
-  ENVF=/tmp/pz-site.env
-  : > "$ENVF"
-  if [ -f "$ENV_SRC" ]; then
-    sed -e 's/^[[:space:]]*export[[:space:]]\+//' \
-        -e '/^[[:space:]]*#/d' -e '/^[[:space:]]*$/d' \
-        -e 's/^\([A-Za-z_][A-Za-z0-9_]*\)="\(.*\)"$/\1=\2/' \
-        -e "s/^\([A-Za-z_][A-Za-z0-9_]*\)='\(.*\)'$/\1=\2/" \
-        "$ENV_SRC" | grep -E '^[A-Za-z_][A-Za-z0-9_]*=' > "$ENVF" || true
+  # This file carries the database password, so it is created private and
+  # removed on every exit path — not left in /tmp for the next person to read.
+  ENVF=$(mktemp)
+  chmod 600 "$ENVF"
+  trap 'rm -f "$ENVF"' EXIT INT TERM
+  if sudo test -f "$ENV_SRC"; then
+    read_env "$ENV_SRC" \
+      | sed -e 's/^[[:space:]]*export[[:space:]]\+//' \
+            -e '/^[[:space:]]*#/d' -e '/^[[:space:]]*$/d' \
+            -e 's/^\([A-Za-z_][A-Za-z0-9_]*\)="\(.*\)"$/\1=\2/' \
+            -e "s/^\([A-Za-z_][A-Za-z0-9_]*\)='\(.*\)'$/\1=\2/" \
+      | grep -E '^[A-Za-z_][A-Za-z0-9_]*=' > "$ENVF" || true
   fi
+  # A site.env next to the bundle wins, so an operator can override without
+  # touching the game's env file.
+  if [ -f "$DIR/site.env" ]; then read_env "$DIR/site.env" | grep -E '^[A-Za-z_][A-Za-z0-9_]*=' >> "$ENVF" || true; fi
   echo "SITE_PORT=$PORT" >> "$ENVF"
   echo "NODE_ENV=production" >> "$ENVF"
   if ! grep -q '^DATABASE_URL=' "$ENVF"; then
-    echo "!! no DATABASE_URL found in $ENV_SRC — the site cannot reach Postgres"
-    echo "   add it to $DIR/site.env and re-run, or set ENV_SRC to the right file"
+    echo "!! no DATABASE_URL — the site cannot reach Postgres."
+    echo "   Looked in $ENV_SRC$([ -f "$DIR/site.env" ] && echo " and $DIR/site.env")."
+    echo "   If that file is root-owned, this script needs sudo to read it —"
+    echo "   check that 'sudo cat $ENV_SRC' works for you."
+    echo "   Otherwise put DATABASE_URL in $DIR/site.env and re-run."
     exit 1
   fi
 
