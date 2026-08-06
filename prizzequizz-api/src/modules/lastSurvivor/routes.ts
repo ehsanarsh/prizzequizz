@@ -4,14 +4,20 @@ import type { Router } from '../../http/router.js';
 import { error, json } from '../../http/response.js';
 import { repositories } from '../../repositories/index.js';
 import { bodyObject } from '../../utils/validation.js';
-import { getConfig, updateConfig, setTopicEnabled, isTopicPlayable } from '../../services/lastSurvivorConfig.js';
-import { joinTopic, snapshot, addVote, addChat, listChat, getRoom, listAllRooms, listPlayers, LastSurvivorError } from '../../services/lastSurvivorService.js';
-import { submitAnswer, submitDecision, useLifeline } from '../../services/lastSurvivorWorker.js';
+import { getConfig, updateConfig, setTopicEnabled, isTopicPlayable, removeTopic,
+         RANDOM_TOPIC, isRandomTopic } from '../../services/lastSurvivorConfig.js';
+import { joinTopic, snapshot, addVote, addChat, listChat, getRoom, saveRoom, listAllRooms, listPlayers,
+         leaveRoom, touchPlayer, sweepIdlePlayers, LastSurvivorError } from '../../services/lastSurvivorService.js';
+import { submitAnswer, submitDecision, useLifeline, advanceRoom } from '../../services/lastSurvivorWorker.js';
 import { requireAdmin } from '../../services/adminGuard.js';
 import { avatarUrlFor } from '../../services/avatarService.js';
 import { categoryList } from '../../services/configService.js';
 import { categoryImageUrls } from '../../services/categoryImageService.js';
 import { equippedCharacterFor } from '../../services/characterSelectionService.js';
+
+/* Two lobby polls of grace. Long enough that a slow phone or a tunnel is not
+ * thrown out, short enough that the list is honest. */
+const LOBBY_IDLE_MS = 45_000;
 
 export function registerLastSurvivorRoutes(router: Router, base: string): void {
   // ---------------- ADMIN: config + topic gating + live rooms ----------------
@@ -30,6 +36,87 @@ export function registerLastSurvivorRoutes(router: Router, base: string): void {
     const cfg = await setTopicEnabled(topic, !!body.enabled, body.minUsers != null ? Number(body.minUsers) : undefined);
     json(ctx.res, 200, { topic, config: cfg.topics[topic] });
   });
+  /* Forget a topic's override. A category that still has questions returns to
+   * the list gated, which is the only thing "delete" can honestly mean when the
+   * list is derived from the question bank. */
+  router.add('DELETE', `${base}/admin/last-survivor/topics/:topic`, async (ctx) => {
+    if (!requireAdmin(ctx, { tab: 'lastsurvivor' })) return;
+    const topic = decodeURIComponent(ctx.params.topic!);
+    try {
+      const cfg = await removeTopic(topic);
+      json(ctx.res, 200, { removed: topic, topics: cfg.topics });
+    } catch (e) {
+      return error(ctx.res, 422, 'TOPIC_PROTECTED', e instanceof Error ? e.message : 'حذف نشد.');
+    }
+  });
+
+  /* One room in full: who played, what they staked, how they left and what they
+   * were paid. The list view answers "what is happening"; this answers "what
+   * happened to this person", which is the question support actually gets. */
+  router.add('GET', `${base}/admin/last-survivor/rooms/:id`, async (ctx) => {
+    if (!requireAdmin(ctx, { tab: 'lastsurvivor' })) return;
+    const room = await getRoom(ctx.params.id!);
+    if (!room) return error(ctx.res, 404, 'ROOM_NOT_FOUND', 'اتاق پیدا نشد.');
+    const players = await listPlayers(room.id);
+    json(ctx.res, 200, {
+      room: {
+        id: room.id, topic: room.topic, status: room.status, phase: room.phase,
+        round: room.round, totalRounds: room.totalRounds, capacity: room.capacity,
+        minUsers: room.minUsers, grossPool: room.grossPool, rakePercent: room.rakePercent,
+        createdAt: room.createdAt, startsAt: room.startsAt, startedAt: room.startedAt, endedAt: room.endedAt
+      },
+      players: players.map((p) => ({
+        userId: p.userId, username: p.username, color: p.color, units: p.units,
+        status: p.status, eliminatedRound: p.eliminatedRound, cashedOutRound: p.cashedOutRound,
+        payoutCash: p.payoutCash, joinedAt: p.joinedAt, lastSeenAt: p.lastSeenAt
+      })),
+      totals: {
+        players: players.length,
+        alive: players.filter((p) => p.status === 'alive').length,
+        eliminated: players.filter((p) => p.status === 'eliminated').length,
+        cashedOut: players.filter((p) => p.status === 'cashed_out').length,
+        paidOut: players.reduce((sum, p) => sum + (p.payoutCash || 0), 0)
+      }
+    });
+  });
+
+  /* Cancel a room that has not started. Every stake goes back — this is the
+   * only safe kind of cancel, because once a match is running the money has
+   * already begun moving and unwinding it would mean deciding who "should"
+   * have won. A running room is refused rather than half-refunded. */
+  router.add('POST', `${base}/admin/last-survivor/rooms/:id/cancel`, async (ctx) => {
+    if (!requireAdmin(ctx, { tab: 'lastsurvivor' })) return;
+    const room = await getRoom(ctx.params.id!);
+    if (!room) return error(ctx.res, 404, 'ROOM_NOT_FOUND', 'اتاق پیدا نشد.');
+    if (room.status !== 'waiting') {
+      return error(ctx.res, 409, 'ROOM_STARTED', 'مسابقه شروع شده — لغو با برگشت وجه ممکن نیست.');
+    }
+    let refunded = 0;
+    for (const p of await listPlayers(room.id)) {
+      const out = await leaveRoom(room.id, p.userId).catch(() => ({ left: false, refunded: false }));
+      if (out.refunded) refunded++;
+    }
+    const fresh = (await getRoom(room.id))!;
+    fresh.status = 'finished'; fresh.phase = 'finished'; fresh.endedAt = Date.now();
+    await saveRoom(fresh);
+    json(ctx.res, 200, { cancelled: room.id, refunded });
+  });
+
+  /* Start a waiting room now, without waiting for the deadline or the vote.
+   * The sweep inside maybeStart still runs, so this cannot start a room on
+   * players who have already walked away. */
+  router.add('POST', `${base}/admin/last-survivor/rooms/:id/start`, async (ctx) => {
+    if (!requireAdmin(ctx, { tab: 'lastsurvivor' })) return;
+    const room = await getRoom(ctx.params.id!);
+    if (!room) return error(ctx.res, 404, 'ROOM_NOT_FOUND', 'اتاق پیدا نشد.');
+    if (room.status !== 'waiting') return error(ctx.res, 409, 'ROOM_STARTED', 'این اتاق در انتظار نیست.');
+    room.startsAt = Date.now() - 1;          // deadline reached → advanceRoom starts it
+    await saveRoom(room);
+    await advanceRoom((await getRoom(room.id))!);
+    const after = (await getRoom(room.id))!;
+    json(ctx.res, 200, { id: after.id, status: after.status, round: after.round, players: (await listPlayers(after.id)).length });
+  });
+
   // Live rooms monitor (read-only ops view).
   router.add('GET', `${base}/admin/last-survivor/rooms`, async (ctx) => {
     if (!requireAdmin(ctx, { tab: 'lastsurvivor' })) return;
@@ -51,6 +138,7 @@ export function registerLastSurvivorRoutes(router: Router, base: string): void {
     for (const q of questions) counts.set(q.category, (counts.get(q.category) ?? 0) + 1);
     // Union of categories that have questions and topics named in config.
     const names = new Set<string>([...counts.keys(), ...Object.keys(cfg.topics || {})]);
+    names.add(RANDOM_TOPIC);          // always offered, even before any category has questions
     /* Topic name, emoji and artwork all come from the one category list the
      * admin edits, so a picture uploaded once shows up in every mode. */
     const cats = new Map(categoryList().map((c) => [c.name, c]));
@@ -59,11 +147,17 @@ export function registerLastSurvivorRoutes(router: Router, base: string): void {
       name,
       icon: cats.get(name)?.icon ?? '❓',
       image: art[name] ?? '',
-      questionCount: counts.get(name) ?? 0,
+      /* «تصادفی» draws from every category, so its bank is the whole bank —
+       * reporting a per-category count would show 0 and read as broken. */
+      questionCount: isRandomTopic(name) ? questions.length : (counts.get(name) ?? 0),
+      random: isRandomTopic(name),
       playable: isTopicPlayable(cfg, name),
       comingSoon: !isTopicPlayable(cfg, name),
       minUsers: cfg.topics?.[name]?.minUsers ?? cfg.room.minUsers
-    })).sort((a, b) => (a.playable === b.playable ? b.questionCount - a.questionCount : a.playable ? -1 : 1));
+    })).sort((a, b) =>
+      a.random !== b.random ? (a.random ? -1 : 1)
+      : a.playable !== b.playable ? (a.playable ? -1 : 1)
+      : b.questionCount - a.questionCount);
     json(ctx.res, 200, { topics, tickets: cfg.economy.tickets });
   });
 
@@ -86,9 +180,31 @@ export function registerLastSurvivorRoutes(router: Router, base: string): void {
 
   router.add('GET', `${base}/last-survivor/rooms/:id`, async (ctx) => {
     if (!ctx.userId) return error(ctx.res, 401, 'UNAUTHORIZED', 'ابتدا وارد شو.');
-    const snap = await snapshot(ctx.params.id!, ctx.userId);
+    const roomId = ctx.params.id!;
+    /* Having the room open IS being there — this is the heartbeat. Then drop
+     * anyone whose heartbeat stopped, so the lobby the caller is about to see
+     * lists the people actually in it. Both are best-effort: a stale list is a
+     * far smaller problem than a room that will not load. */
+    await touchPlayer(roomId, ctx.userId).catch(() => undefined);
+    await sweepIdlePlayers(roomId, LOBBY_IDLE_MS).catch(() => undefined);
+    const snap = await snapshot(roomId, ctx.userId);
     if (!snap) return error(ctx.res, 404, 'ROOM_NOT_FOUND', 'روم یافت نشد.');
     json(ctx.res, 200, snap);
+  });
+
+  /* Leaving the lobby. The ticket goes back and the pot shrinks by its value —
+   * see leaveRoom. Re-joining afterwards is an ordinary join. */
+  router.add('POST', `${base}/last-survivor/rooms/:id/leave`, async (ctx) => {
+    if (!ctx.userId) return error(ctx.res, 401, 'UNAUTHORIZED', 'ابتدا وارد شو.');
+    try {
+      const out = await leaveRoom(ctx.params.id!, ctx.userId);
+      json(ctx.res, 200, out);
+    } catch (e) {
+      if (e instanceof LastSurvivorError) {
+        return error(ctx.res, e.code === 'ROOM_NOT_FOUND' ? 404 : 409, e.code, e.message);
+      }
+      throw e;
+    }
   });
 
   router.add('POST', `${base}/last-survivor/rooms/:id/answer`, async (ctx) => {

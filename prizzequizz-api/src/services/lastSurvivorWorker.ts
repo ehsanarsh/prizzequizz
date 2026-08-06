@@ -6,13 +6,13 @@
  * connection recovers from the stored room/player rows. Each transition also
  * publishes to the realtime topic `ls:{roomId}` for instant client updates;
  * REST snapshot polling is the authoritative fallback. */
+import { isRandomTopic } from './lastSurvivorConfig.js';
 import { repositories } from '../repositories/index.js';
 import { realtimeRooms } from '../realtime/roomRegistry.js';
 import { logger } from './logger.js';
 import {
   listActiveRooms, listPlayers, savePlayer, saveRoom, getRoom, snapshot,
-  toPrizePlayers, payout, type RoomRow, type PlayerRow
-} from './lastSurvivorService.js';
+  toPrizePlayers, payout, type RoomRow, type PlayerRow, sweepIdlePlayers} from './lastSurvivorService.js';
 import { buildPool, activeUnits, finalSplit } from './lastSurvivorPrize.js';
 import { awardScoring } from './matchEngine.js';
 import { PZ_SCORING } from './scoringConfig.js';
@@ -57,6 +57,10 @@ async function broadcastState(roomId: string): Promise<void> {
   if (snap) publish(roomId, 'ls:state', snap);
 }
 
+/* The same grace period the lobby endpoint uses, so a player is never dropped
+ * by one code path while the other still counts them. */
+const LOBBY_IDLE_MS = 45_000;
+
 /** Advance a single room by one step if its deadline has passed. */
 export async function advanceRoom(room: RoomRow, now = Date.now()): Promise<void> {
   if (room.status === 'waiting') { await maybeStart(room, now); return; }
@@ -64,6 +68,15 @@ export async function advanceRoom(room: RoomRow, now = Date.now()): Promise<void
 }
 
 async function maybeStart(room: RoomRow, now: number): Promise<void> {
+  /* Drop anyone who walked away BEFORE counting heads. A player who closed the
+   * app used to keep their seat, so a room could reach minUsers — and start —
+   * on people who were not there, with their stake in the pot and no chance of
+   * them answering. Their ticket goes back inside leaveRoom. */
+  await sweepIdlePlayers(room.id, LOBBY_IDLE_MS).catch(() => undefined);
+  const fresh = await getRoom(room.id);
+  if (!fresh || fresh.status !== 'waiting') return;   // swept to empty, or started
+  room = fresh;
+
   const players = await listPlayers(room.id);
   const count = players.length;
   // Reap a room nobody joined well past its deadline.
@@ -104,7 +117,12 @@ export function difficultyForRound(round: number, totalRounds: number): 'easy' |
 
 async function pickQuestion(topic: string, roomId: string, round = 1, totalRounds = 12): Promise<{ id: string; correctIndex: number; text: string; options: string[]; difficulty?: string } | null> {
   const all = await repositories.questions.listApproved();
-  const pool = all.filter((q) => q.category === topic);
+  /* «تصادفی» is not a category — it is every category. Filtering by name would
+   * match nothing and the room would stall on an empty bank, so the whole
+   * approved pool is the pool. It is also what makes the mode work at all
+   * early on: one category rarely has enough questions for twelve rounds
+   * across four difficulty tiers, the union always does. */
+  const pool = isRandomTopic(topic) ? all : all.filter((q) => q.category === topic);
   if (!pool.length) return null;
   let used = usedQuestions.get(roomId); if (!used) { used = new Set(); usedQuestions.set(roomId, used); }
   const fresh = pool.filter((q) => !used!.has(q.id));

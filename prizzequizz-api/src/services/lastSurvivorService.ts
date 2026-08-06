@@ -279,6 +279,82 @@ export async function joinTopic(user: { id: string; username: string; avatar?: s
   }
 }
 
+// ---------------- leaving a room before it starts ----------------
+
+export async function removePlayer(roomId: string, userId: string): Promise<void> {
+  const pool = pg();
+  if (pool) {
+    await ensureSchema(pool);
+    await pool.query(`DELETE FROM ls_room_players WHERE room_id=$1 AND user_id=$2`, [roomId, userId]);
+    await pool.query(`DELETE FROM ls_votes WHERE room_id=$1 AND user_id=$2`, [roomId, userId]);
+  } else {
+    memPlayers.delete(pkey(roomId, userId));
+    memVotes.delete(pkey(roomId, userId));
+  }
+}
+
+/* Leaving a room that has not started yet.
+ *
+ * There was no way to do this at all: closing the app left the row in place, so
+ * everyone else still saw the player in the lobby. Worse, a player who is not
+ * there still counted towards minUsers and the start vote — a room could begin
+ * with people who had walked away — and their ticket money sat in the pot.
+ *
+ * So this is not a delete. Joining spends a real ticket, so leaving gives it
+ * back and takes its value out of the pot, and only while the room is still
+ * waiting: once the match is running the stake is committed and the way out is
+ * to cash out. */
+export async function leaveRoom(roomId: string, userId: string): Promise<{ left: boolean; refunded: boolean }> {
+  const room = await getRoom(roomId);
+  if (!room) throw new LastSurvivorError('ROOM_NOT_FOUND', 'اتاق پیدا نشد.');
+  const player = await getPlayer(roomId, userId);
+  if (!player) return { left: false, refunded: false };
+  if (room.status !== 'waiting') {
+    throw new LastSurvivorError('ROOM_STARTED', 'مسابقه شروع شده — خروج ممکن نیست، باید برداشت کنی.');
+  }
+
+  await removePlayer(roomId, userId);
+  /* Give the ticket back before touching the pot: if the refund throws, the
+   * player is out of the lobby with their stake still counted, which is
+   * recoverable. The reverse order would lose them a ticket. */
+  let refunded = false;
+  try { await refundTicket(userId, player.color); refunded = true; }
+  catch { logger.warn('ls_leave_refund_failed', { roomId, userId, color: player.color }); }
+
+  room.grossPool = Math.max(0, room.grossPool - ticketValue(room.config, player.color));
+  await saveRoom(room);
+
+  logger.info('ls_leave', { roomId, userId, color: player.color, pool: room.grossPool, refunded });
+  return { left: true, refunded };
+}
+
+/* A player who closed the app never says goodbye, so the lobby has to notice on
+ * its own. lastSeenAt was written on every action and read by nothing; this is
+ * what reads it. Only waiting rooms are swept — once the match is running a
+ * silent player is an eliminated player, not a departed one. */
+export async function sweepIdlePlayers(roomId: string, idleMs: number): Promise<number> {
+  const room = await getRoom(roomId);
+  if (!room || room.status !== 'waiting') return 0;
+  const cutoff = Date.now() - idleMs;
+  let gone = 0;
+  for (const p of await listPlayers(roomId)) {
+    if (p.lastSeenAt > cutoff) continue;
+    try { await leaveRoom(roomId, p.userId); gone++; }
+    catch { /* room started under us — nothing to sweep */ }
+  }
+  if (gone) logger.info('ls_swept_idle', { roomId, gone });
+  return gone;
+}
+
+/* Called on every read of a room the player is in, so simply having the screen
+ * open counts as being there. */
+export async function touchPlayer(roomId: string, userId: string): Promise<void> {
+  const p = await getPlayer(roomId, userId);
+  if (!p) return;
+  p.lastSeenAt = Date.now();
+  await savePlayer(p);
+}
+
 // ---------------- payouts ----------------
 export async function payout(userId: string, amount: number, roomId: string, round: number, kind: 'cashout' | 'final'): Promise<void> {
   if (amount <= 0) return;

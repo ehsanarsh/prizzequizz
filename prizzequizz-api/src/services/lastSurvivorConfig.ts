@@ -39,6 +39,12 @@ export interface LastSurvivorConfig {
   topics: Record<string, { enabled: boolean; comingSoon?: boolean; minUsers?: number }>;
 }
 
+/* The topic whose questions come from every category at once. Held here rather
+ * than typed as a string in three places, because the question picker, the
+ * topic list and the seed all have to agree on it exactly. */
+export const RANDOM_TOPIC = 'تصادفی';
+export function isRandomTopic(topic: string): boolean { return topic === RANDOM_TOPIC; }
+
 export const LS_DEFAULT_CONFIG: LastSurvivorConfig = {
   room: { capacity: 100, minUsers: 2, waitSeconds: 120, manualStartEnabled: true, startPct: 70 },
   timings: { readySeconds: 5, questionSeconds: 10, eliminationSeconds: 7, dashboardSeconds: 6, cashoutSeconds: 8 },
@@ -56,7 +62,12 @@ export const LS_DEFAULT_CONFIG: LastSurvivorConfig = {
   // enables it. The topic list itself is merged from the real categories at read
   // time, so new categories automatically show up (gated) with no code change.
   topics: {
-    'اطلاعات عمومی': { enabled: true }
+    /* The one topic that is live out of the box. It has no category of its own:
+     * its questions are drawn from the WHOLE bank, which is the point — the
+     * pool is as deep as the database instead of as deep as one category, so a
+     * long match never runs short and never repeats early. Every real category
+     * stays "coming soon" until an operator turns it on. */
+    [RANDOM_TOPIC]: { enabled: true }
   }
 };
 
@@ -106,9 +117,10 @@ export async function getConfig(): Promise<LastSurvivorConfig> {
   return _mem;
 }
 
-export async function updateConfig(patch: Partial<LastSurvivorConfig> | Record<string, any>): Promise<LastSurvivorConfig> {
-  const current = await getConfig();
-  const next = deepMerge(current, patch);
+/* Write a whole config, no merging. Removing anything has to go through this:
+ * updateConfig deep-MERGES, so a key left out of the patch is restored from the
+ * current config and a delete silently does nothing. */
+async function persistConfig(next: LastSurvivorConfig): Promise<LastSurvivorConfig> {
   const pool = pg();
   if (pool) {
     await ensureSchema(pool);
@@ -119,11 +131,35 @@ export async function updateConfig(patch: Partial<LastSurvivorConfig> | Record<s
   return next;
 }
 
+export async function updateConfig(patch: Partial<LastSurvivorConfig> | Record<string, any>): Promise<LastSurvivorConfig> {
+  const current = await getConfig();
+  return persistConfig(deepMerge(current, patch));
+}
+
 // Reset a single topic's gating (admin toggles). Convenience over updateConfig.
 export async function setTopicEnabled(topic: string, enabled: boolean, minUsers?: number): Promise<LastSurvivorConfig> {
   const cfg = await getConfig();
   const topics = { ...cfg.topics, [topic]: { ...(cfg.topics[topic] || {}), enabled, comingSoon: !enabled, ...(minUsers != null ? { minUsers } : {}) } };
   return updateConfig({ topics });
+}
+
+/* Forget a topic's settings entirely.
+ *
+ * The topic LIST is the union of the categories that have questions and the
+ * names in this config, so deleting is not "make it disappear" — a category
+ * with questions comes straight back, gated, on the next read. What it removes
+ * is the override: the enabled flag and any per-topic minUsers. That is the
+ * honest meaning of delete here, and it is why «تصادفی» refuses: it has no
+ * category behind it, so forgetting it would remove the only topic that is
+ * playable out of the box. */
+export async function removeTopic(topic: string): Promise<LastSurvivorConfig> {
+  if (isRandomTopic(topic)) {
+    throw new Error('موضوع «' + RANDOM_TOPIC + '» حذف نمی‌شود؛ می‌توانی غیرفعالش کنی.');
+  }
+  const cfg = await getConfig();
+  const topics = { ...cfg.topics };
+  delete topics[topic];
+  return persistConfig({ ...cfg, topics });
 }
 
 export function isTopicPlayable(cfg: LastSurvivorConfig, topic: string): boolean {
