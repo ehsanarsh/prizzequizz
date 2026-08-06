@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A placeholder mark in the game's gold. Replace with real artwork via
+     Android Studio → New → Image Asset before publishing. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <path
+        android:fillColor="#FFD21F"
+        android:pathData="M54,28 L64,48 L86,48 L68,61 L75,82 L54,69 L33,82 L40,61 L22,48 L44,48 Z" />
+</vector>

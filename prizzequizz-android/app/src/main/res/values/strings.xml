@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">پرایز کوئیز</string>
+    <string name="site_url">https://www.prizequiz.ir/</string>
+    <string name="offline_title">اتصال اینترنت نیست</string>
+    <string name="offline_body">برای بازی به اینترنت نیاز داری. اتصالت را بررسی کن و دوباره تلاش کن.</string>
+    <string name="retry">تلاش دوباره</string>
+</resources>

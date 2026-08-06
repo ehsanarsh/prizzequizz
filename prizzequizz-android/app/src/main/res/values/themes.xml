@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The game's own background, so the launch window does not flash white
+         before the page paints. -->
+    <style name="Theme.PrizzeQuizz" parent="Theme.AppCompat.NoActionBar">
+        <item name="android:windowBackground">@color/pz_bg</item>
+        <item name="android:statusBarColor">@color/pz_bg</item>
+        <item name="android:navigationBarColor">@color/pz_bg</item>
+    </style>
+</resources>
