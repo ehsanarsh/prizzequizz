@@ -1,0 +1,16 @@
+{
+  "name": "prizzequizz-site",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The public marketing website. Runs beside the game, never inside it.",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/server.js",
+    "dev": "tsx src/server.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx src/tests/site.test.ts"
+  },
+  "dependencies": { "pg": "latest" },
+  "devDependencies": { "@types/node": "latest", "@types/pg": "latest", "tsx": "latest", "typescript": "latest" }
+}

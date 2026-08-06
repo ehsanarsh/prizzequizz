@@ -15,8 +15,8 @@
  * to write a tag. Adding a new KIND of block is a code change; adding a page,
  * a section or an article is not.
  */
-import { getPgPool } from '../database/postgres.js';
-import { logger } from './logger.js';
+import { getPgPool } from './db.js';
+import { logger } from './log.js';
 
 // ------------------------------------------------------------------ types ----
 
@@ -497,10 +497,18 @@ function rowToPost(r: any): SitePost {
   };
 }
 
-let _seeded = false;
-async function seedIfEmpty(): Promise<void> {
-  if (_seeded) return;
-  _seeded = true;
+/* A PROMISE, not a boolean. Latching a boolean at the top of the function
+ * marked seeding "done" the instant it STARTED, so a caller arriving a
+ * microtask later — which is exactly what Promise.all([listPages, listPosts])
+ * does — sailed past and read an empty store. The blog shipped with no
+ * articles on the very first request after a cold start, and looked fine on
+ * the second. Everyone now awaits the same run. */
+let _seeding: Promise<void> | null = null;
+function seedIfEmpty(): Promise<void> {
+  _seeding ??= seedOnce().catch((e) => { _seeding = null; throw e; });
+  return _seeding;
+}
+async function seedOnce(): Promise<void> {
   const pool = pg();
   if (pool) {
     await ensureSchema(pool);
@@ -711,6 +719,6 @@ export async function saveSettings(patch: Partial<SiteSettings>): Promise<SiteSe
 
 /** Test seam. */
 export function _resetSiteMemory(): void {
-  _memPages = null; _memPosts = null; _memSettings = null; _seeded = false;
+  _memPages = null; _memPosts = null; _memSettings = null; _seeding = null;
 }
 export { seedPages as _seedPages, seedPosts as _seedPosts };

@@ -14,7 +14,7 @@
  * badge and the search-console verification tag, which only exist as snippets
  * to paste — those are documented at their admin route and are owner-only.
  */
-import type { SiteBlock, SitePage, SitePost, SiteSettings } from './siteContentService.js';
+import type { SiteBlock, SitePage, SitePost, SiteSettings } from './content.js';
 
 export function esc(s: unknown): string {
   return String(s ?? '').replace(/[&<>"']/g, (c) =>
@@ -52,10 +52,20 @@ export function faDate(iso: string): string {
 }
 
 /** `{play}` in an admin-entered link means "wherever the game lives", so the
- *  URL can be changed in one place instead of on every button. */
+ *  URL can be changed in one place instead of on every button.
+ *
+ *  The scheme is then checked against an allowlist. Escaping alone does not
+ *  save you here: `href="javascript:…"` contains no character escaping touches,
+ *  so a link is the one place admin-entered text can still execute. Only
+ *  relative paths, anchors, http(s), mailto and tel survive; anything else
+ *  becomes an inert '#'. */
+const SAFE_SCHEME = /^(https?:|mailto:|tel:)/i;
 function href(raw: string, s: SiteSettings): string {
   const v = String(raw ?? '').trim().replace('{play}', s.playUrl || '/play');
-  return v || '#';
+  if (!v) return '#';
+  if (v.startsWith('/') || v.startsWith('#')) return v;
+  if (SAFE_SCHEME.test(v)) return v;
+  return '#';
 }
 
 // ------------------------------------------------------------------ style ----
