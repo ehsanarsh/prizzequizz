@@ -87,26 +87,44 @@ install_with_docker() {
   # removed on every exit path — not left in /tmp for the next person to read.
   ENVF=$(mktemp)
   chmod 600 "$ENVF"
-  trap 'rm -f "$ENVF"' EXIT INT TERM
-  if sudo test -f "$ENV_SRC"; then
-    read_env "$ENV_SRC" \
-      | sed -e 's/^[[:space:]]*export[[:space:]]\+//' \
-            -e '/^[[:space:]]*#/d' -e '/^[[:space:]]*$/d' \
-            -e 's/^\([A-Za-z_][A-Za-z0-9_]*\)="\(.*\)"$/\1=\2/' \
-            -e "s/^\([A-Za-z_][A-Za-z0-9_]*\)='\(.*\)'$/\1=\2/" \
-      | grep -E '^[A-Za-z_][A-Za-z0-9_]*=' > "$ENVF" || true
-  fi
-  # A site.env next to the bundle wins, so an operator can override without
-  # touching the game's env file.
-  if [ -f "$DIR/site.env" ]; then read_env "$DIR/site.env" | grep -E '^[A-Za-z_][A-Za-z0-9_]*=' >> "$ENVF" || true; fi
+  RAW=$(mktemp)
+  chmod 600 "$RAW"
+  trap 'rm -f "$ENVF" "$RAW"' EXIT INT TERM
+
+  # Sources, weakest first — the last definition of a key wins.
+  #
+  # The API CONTAINER is the authoritative one: whatever DATABASE_URL the game
+  # is actually running with is reachable from the network we are joining, and
+  # it is right even when compose defines it inline and no .env on disk has it.
+  # Guessing at env files is what failed here twice.
+  sudo docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$API_CONTAINER" 2>/dev/null >> "$RAW" || true
+  if sudo test -f "$ENV_SRC"; then read_env "$ENV_SRC" >> "$RAW" || true; fi
+  if [ -f "$DIR/site.env" ]; then read_env "$DIR/site.env" >> "$RAW" || true; fi
+
+  # Only what the site actually uses. The game's env also holds JWT secrets, the
+  # VAPID private key and the SMS key — a brochure site has no business holding
+  # any of them, and handing them over would widen their blast radius for free.
+  WANT='^(DATABASE_URL|ADMIN_KEY|PGSSLMODE)='
+  sed -e 's/^[[:space:]]*export[[:space:]]\+//' \
+      -e '/^[[:space:]]*#/d' -e '/^[[:space:]]*$/d' \
+      -e 's/^\([A-Za-z_][A-Za-z0-9_]*\)="\(.*\)"$/\1=\2/' \
+      -e "s/^\([A-Za-z_][A-Za-z0-9_]*\)='\(.*\)'$/\1=\2/" \
+      "$RAW" \
+    | grep -E "$WANT" \
+    | awk -F= '{ k=$1; sub(/^[^=]*=/,""); v=$0; last[k]=v; order[k]=NR }
+               END { for (k in last) print k "=" last[k] }' > "$ENVF" || true
+  rm -f "$RAW"
+
   echo "SITE_PORT=$PORT" >> "$ENVF"
   echo "NODE_ENV=production" >> "$ENVF"
+  echo "==> passing to the site: $(cut -d= -f1 "$ENVF" | sort | tr '\n' ' ')"
+
   if ! grep -q '^DATABASE_URL=' "$ENVF"; then
     echo "!! no DATABASE_URL — the site cannot reach Postgres."
-    echo "   Looked in $ENV_SRC$([ -f "$DIR/site.env" ] && echo " and $DIR/site.env")."
-    echo "   If that file is root-owned, this script needs sudo to read it —"
-    echo "   check that 'sudo cat $ENV_SRC' works for you."
-    echo "   Otherwise put DATABASE_URL in $DIR/site.env and re-run."
+    echo "   Looked in the $API_CONTAINER container's own environment, $ENV_SRC$([ -f "$DIR/site.env" ] && echo ", $DIR/site.env")."
+    echo "   Show what the game is using:"
+    echo "     sudo docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' $API_CONTAINER | grep -i data"
+    echo "   Then put that line in $DIR/site.env and re-run."
     exit 1
   fi
 
