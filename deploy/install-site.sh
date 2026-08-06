@@ -193,6 +193,9 @@ if [ -n "${GENERATED_KEY:-}" ]; then
   echo
   echo " It is the password for /site-admin. Saved to $DIR/site.env (mode 600)"
   echo " and reused on the next install, so re-running does not change it."
+  echo
+  echo " To rotate it (do this if it is ever pasted somewhere it shouldn't be):"
+  echo "   sed -i '/^ADMIN_KEY=/d' $DIR/site.env && bash install-site.sh"
   echo "================================================================"
   echo
 fi
