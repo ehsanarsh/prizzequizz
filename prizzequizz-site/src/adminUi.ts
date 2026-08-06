@@ -71,7 +71,7 @@ main{max-width:1000px;margin:0 auto;padding:18px}
 <div id="gate">
   <div class="card">
     <h3>محتوا و سئوی سایت</h3>
-    <p class="sub">کلید مدیریت را وارد کن. همان کلیدی است که در پنل بازی استفاده می‌کنی و فقط تا بسته‌شدن همین تب نگه داشته می‌شود.</p>
+    <p class="sub">کلید مدیریت سایت را وارد کن. این کلید <b>جدا از پنل بازی</b> است و روی سرور در <span class="mono">pz-site/site.env</span> نگه‌داری می‌شود. فقط تا بسته‌شدن همین تب در مرورگر می‌ماند.</p>
     <div class="f"><label>کلید مدیریت</label><input id="key" type="password" class="mono" autocomplete="off"></div>
     <button class="btn pri" style="width:100%" onclick="enter()">ورود</button>
     <p class="sub" id="gateErr" style="color:var(--bad);margin-top:10px"></p>
@@ -162,7 +162,7 @@ function renderMedia(){
       '<h3>آپلود تصویر</h3>'+
       '<p class="sub">می‌توانی چند فایل را با هم انتخاب کنی.</p>'+
       '<input type="file" id="mfile" accept="image/png,image/jpeg,image/gif,image/webp,image/x-icon" multiple>'+
-      '<div class="row" style="margin-top:10px"><button class="btn pri" onclick="uploadMedia()">آپلود</button>'+
+      '<div class="row" style="margin-top:10px"><button class="btn pri" id="mUp">آپلود</button>'+
       '<span id="mprog" class="pill"></span></div>'+
     '</div>'+
     '<div class="card"><h3>کتابخانه <span class="pill">'+MEDIA.length+'</span></h3>'+
@@ -171,14 +171,18 @@ function renderMedia(){
           '<div class="item" style="margin:0">'+
             '<img src="'+esc(m.url)+'" alt="" style="width:100%;height:110px;object-fit:contain;background:#0c0f16;border-radius:8px">'+
             '<div style="font-size:11.5px;color:var(--muted);margin:7px 0 5px;word-break:break-all">'+esc(m.filename)+' · '+bytesLabel(m.size)+'</div>'+
-            '<div class="f"><input value="'+esc(m.alt||'')+'" placeholder="توضیح تصویر (alt)" onchange="setAlt(\'+"'"+'\'+m.id+\'+"'"+'\',this.value)"></div>'+
+            '<div class="f"><input class="mAlt" data-id="'+esc(m.id)+'" value="'+esc(m.alt||'')+'" placeholder="توضیح تصویر (alt)"></div>'+
             '<div class="row">'+
-              '<button class="btn sm" onclick="copyUrl(\'+"'"+'\'+m.id+\'+"'"+'\')">کپی نشانی</button>'+
-              '<button class="btn sm bad" onclick="delMedia(\'+"'"+'\'+m.id+\'+"'"+'\')">حذف</button>'+
+              '<button class="btn sm mCopy" data-id="'+esc(m.id)+'">کپی نشانی</button>'+
+              '<button class="btn sm bad mDel" data-id="'+esc(m.id)+'">حذف</button>'+
             '</div>'+
           '</div>').join('')+'</div>'
         : '<p class="sub">هنوز تصویری آپلود نشده.</p>')+
     '</div>';
+  $('#mUp').onclick=uploadMedia;
+  document.querySelectorAll('.mAlt').forEach((el)=>{ el.onchange=()=>setAlt(el.getAttribute('data-id'),el.value); });
+  document.querySelectorAll('.mCopy').forEach((el)=>{ el.onclick=()=>copyUrl(el.getAttribute('data-id')); });
+  document.querySelectorAll('.mDel').forEach((el)=>{ el.onclick=()=>delMedia(el.getAttribute('data-id')); });
 }
 
 function readAsDataUrl(f){ return new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=rej; r.readAsDataURL(f); }); }
@@ -233,17 +237,20 @@ function pick(inputId){
   document.body.appendChild(box);
 }
 /* Rendered next to an image input. */
-function pickBtn(id){ return '<button type="button" class="btn sm" style="margin-top:6px" onclick="pick(\'+"'"+'\'+id+\'+"'"+'\')">انتخاب از تصویرها</button>'; }
+function pickBtn(id){ return '<button type="button" class="btn sm pickBtn" style="margin-top:6px" data-for="'+id+'">انتخاب از تصویرها</button>'; }
+/* Every pickBtn on the page, wired after whichever tab drew it. */
+function wirePickers(){ document.querySelectorAll('.pickBtn').forEach((el)=>{ el.onclick=()=>pick(el.getAttribute('data-for')); }); }
 
 /* ---------- pages ---------- */
 const BLOCK_LABEL={hero:'سربرگ بزرگ',text:'متن',cards:'کارت‌ها',steps:'مرحله‌ها',faq:'پرسش و پاسخ',cta:'دعوت به اقدام',stats:'آمار'};
 const ITEM_KINDS=['cards','steps','faq','stats'];
 
 function render(){
-  if(TAB==='pages') return renderPages();
-  if(TAB==='posts') return renderPosts();
-  if(TAB==='media') return renderMedia();
-  return renderSeo();
+  if(TAB==='pages') renderPages();
+  else if(TAB==='posts') renderPosts();
+  else if(TAB==='media') renderMedia();
+  else renderSeo();
+  wirePickers();
 }
 
 function renderPages(){

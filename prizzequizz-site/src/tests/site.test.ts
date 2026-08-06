@@ -20,6 +20,7 @@ import {
   normaliseSlug, savePage, savePost, saveSettings, _resetSiteMemory
 } from '../content.js';
 import { esc, faDate, renderPage, renderPost, renderRobots, renderSitemap } from '../render.js';
+import { adminHtml } from '../adminUi.js';
 import { MEDIA_MAX_BYTES, deleteMedia, getMediaBytes, listMedia, saveMedia, _resetMedia } from '../media.js';
 
 let passed = 0, failed = 0;
@@ -402,6 +403,27 @@ async function run(): Promise<void> {
     /* And a caption is text like any other text. */
     const html = renderPost({ ...base, body: '!/media/ok <img onerror=alert(1)>' }, pgs, SETTINGS_DEFAULTS, []);
     assert.doesNotMatch(html, /<img onerror/);
+  });
+
+  await check('the admin panel\'s own script actually parses', async () => {
+    /* The panel is JavaScript built inside a TypeScript template literal, so a
+       mis-escaped quote produces a page that loads, renders, and then does
+       nothing at all — every handler is undefined because the whole script
+       failed to parse. Nothing else in this suite would notice: the HTML is
+       still perfectly well-formed. Shipping that once is enough. */
+    const html = adminHtml();
+    const m = /<script>([\s\S]*?)<\/script>/.exec(html);
+    assert.ok(m, 'the panel should carry a script');
+    new Function(m![1]!);          // throws SyntaxError if it does not parse
+
+    /* And the entry points the markup names by hand must exist in it. */
+    for (const fn of ['enter', 'loadAll', 'tab', 'uploadMedia', 'pick', 'setAlt', 'delMedia', 'copyUrl']) {
+      assert.match(m![1]!, new RegExp('function\\s+' + fn + '\\b'), fn + ' should be defined');
+    }
+    for (const onclick of html.matchAll(/onclick="([a-zA-Z_$][\w$]*)\(/g)) {
+      assert.match(m![1]!, new RegExp('function\\s+' + onclick[1] + '\\b'),
+        'inline onclick calls ' + onclick[1] + '() but nothing defines it');
+    }
   });
 
   console.log(`[site] ${passed} passed, ${failed} failed`);
