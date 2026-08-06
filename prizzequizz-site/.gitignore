@@ -1,1 +1,4 @@
-node_modules/
+# No trailing slash: locally this is a SYMLINK to the API's modules, and git
+# treats a symlink as a file, so `node_modules/` would not match it.
+node_modules
+dist
