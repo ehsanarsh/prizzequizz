@@ -1,6 +1,7 @@
 import type { Router } from '../../http/router.js';
 import { error, json } from '../../http/response.js';
 import { repositories } from '../../repositories/index.js';
+import { inventoryFor } from '../../services/lifelineService.js';
 import { AvatarError, AVATAR_MAX_BYTES, avatarUrlFor, getAvatar, removeAvatar, saveAvatar } from '../../services/avatarService.js';
 import { buildUserStats } from '../../services/userStatsService.js';
 import { equippedCharacterFor } from '../../services/characterSelectionService.js';
@@ -78,16 +79,13 @@ export function registerUserRoutes(router: Router, base: string): void {
     ctx.res.end(av.data);
   });
 
-  // Persist the player's lifeline inventory (decremented on use, server-side).
+  /* Kept so older clients do not break, but it no longer writes. It used to
+   * take whatever counts the browser sent, which made buying a help pointless:
+   * anything the client can spend it can also mint. Spending now goes through
+   * POST /lifelines/:key/use and this just answers with the truth. */
   router.add('PATCH', `${base}/users/me/lifelines`, async (ctx) => {
     if (!ctx.userId) return error(ctx.res, 401, 'UNAUTHORIZED', 'ابتدا وارد شو.');
-    const user = await repositories.users.findById(ctx.userId);
-    if (!user) return error(ctx.res, 404, 'USER_NOT_FOUND', 'User not found');
-    const l = ((ctx.body ?? {}) as any).lifelines ?? {};
-    const clamp = (n: unknown) => Math.max(0, Math.min(999, Math.floor(Number(n)) || 0));
-    const lifelines = { p5050: clamp(l.p5050), psecond: clamp(l.psecond), pstats: clamp(l.pstats) };
-    await repositories.users.updateLifelines(user.id, lifelines);
-    json(ctx.res, 200, { lifelines });
+    json(ctx.res, 200, { lifelines: await inventoryFor(ctx.userId) });
   });
   // Public profile of ANOTHER user + REAL aggregated stats (the card that opens
   // when you tap someone's avatar in a duel, on the leaderboard, in an LS room).
@@ -102,5 +100,5 @@ export function registerUserRoutes(router: Router, base: string): void {
 }
 
 function toDto(user: any) {
-  return { id: user.id, username: user.username, displayName: user.displayName, plan: user.plan, level: user.level, xp: user.xp, weeklyScore: effectiveWeeklyScore(user), lifelines: user.lifelines ?? { p5050: 2, psecond: 1, pstats: 5 }, balances: { wallet: user.wallet, coins: user.coins, hearts: user.hearts, tickets: user.tickets } };
+  return { id: user.id, username: user.username, displayName: user.displayName, plan: user.plan, level: user.level, xp: user.xp, weeklyScore: effectiveWeeklyScore(user), lifelines: user.lifelines ?? {}, balances: { wallet: user.wallet, coins: user.coins, hearts: user.hearts, tickets: user.tickets } };
 }

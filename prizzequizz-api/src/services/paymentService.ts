@@ -18,6 +18,7 @@ import { id } from '../utils/id.js';
 import { logger } from './logger.js';
 import { notifications } from './notificationService.js';
 import { WALLET_LIMITS, WalletError, postEntry } from './walletLedgerService.js';
+import { recordMoney } from './missionService.js';
 import { getPaymentSettings, pickActiveGateway } from './paymentGatewayService.js';
 
 export interface PaymentDiagnostics {
@@ -118,6 +119,9 @@ export async function settlePaymentIntent(intentId: string, sig: string, status:
     description: 'شارژ کیف پول از درگاه پرداخت', metadata: { provider: intent.provider, providerReference: intent.providerReference }
   });
   await repositories.transactions.updateStatus(intent.transactionId, 'paid', intent.id);
+  /* Only a settled intent counts as a top-up — a created or failed one is not
+   * money that arrived. claimIntent above guarantees this runs once. */
+  await recordMoney(intent.userId, 'deposit', intent.amount);
   const paid = await repositories.payments.updateStatus(intent.id, 'paid', { paidAt: new Date().toISOString(), metadata: { ...intent.metadata, verifiedAt: new Date().toISOString() } });
   await notifications.create({ userId: intent.userId, type: 'wallet_update', title: 'پرداخت موفق بود', body: `${intent.amount.toLocaleString('fa-IR')} تومان به کیف پول اضافه شد.`, data: { paymentIntentId: intent.id, amount: intent.amount, url: '/wallet' }, push: true });
   return paid;

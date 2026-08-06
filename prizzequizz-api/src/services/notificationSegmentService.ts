@@ -69,13 +69,36 @@ function normalize(s: SegmentSpec): SegmentSpec {
   return n;
 }
 
-export async function resolveSegment(spec: SegmentSpec, cap = 100000): Promise<{ userIds: string[]; count: number }> {
+
+/* A hand-typed recipient is whatever the operator entered — an id, a username,
+ * or a phone number. It used to be passed straight through, so anything that
+ * was not already a real user id reached an insert against a UUID column and
+ * killed the whole send with "invalid input syntax for type uuid". Resolving it
+ * here means the panel can accept any of the three and a typo simply drops out
+ * of the audience instead of failing the campaign. */
+export async function resolveRecipients(raw: string[]): Promise<{ ids: string[]; unknown: string[] }> {
+  const ids: string[] = [];
+  const unknown: string[] = [];
+  for (const entry of [...new Set(raw.map((x) => String(x || '').trim()).filter(Boolean))]) {
+    let user = await repositories.users.findById(entry).catch(() => null);
+    if (!user) user = await repositories.users.findByPhone(entry).catch(() => null);
+    if (!user) {
+      const all = await repositories.users.list(100000).catch(() => []);
+      user = all.find((u) => u.username === entry) ?? null;
+    }
+    if (user) ids.push(user.id); else unknown.push(entry);
+  }
+  return { ids, unknown };
+}
+
+export async function resolveSegment(spec: SegmentSpec, cap = 100000): Promise<{ userIds: string[]; count: number; unknown?: string[] }> {
   const s = normalize(spec || {});
-  const manual = Array.isArray(s.userIds) ? s.userIds.map(String).filter(Boolean) : [];
-  // Pure manual list (no other criteria) → use as-is.
-  if (manual.length && !hasCriteria(s) && s.base !== 'offline') {
-    const uniq = [...new Set(manual)];
-    return { userIds: uniq.slice(0, cap), count: uniq.length };
+  const typed = Array.isArray(s.userIds) ? s.userIds.map(String).filter(Boolean) : [];
+  const resolved = typed.length ? await resolveRecipients(typed) : { ids: [], unknown: [] };
+  const manual = resolved.ids;
+  // Pure manual list (no other criteria) → those people, and only real ones.
+  if (typed.length && !hasCriteria(s) && s.base !== 'offline') {
+    return { userIds: manual.slice(0, cap), count: manual.length, unknown: resolved.unknown };
   }
 
   const pool = pg();
@@ -112,7 +135,7 @@ export async function resolveSegment(spec: SegmentSpec, cap = 100000): Promise<{
     catch { ids = (await repositories.users.list(cap)).map((u) => u.id); } // safety net
     // Union manual ids (compound "these criteria OR these specific people").
     if (manual.length) ids = [...new Set([...ids, ...manual])];
-    return { userIds: ids.slice(0, cap), count: ids.length };
+    return { userIds: ids.slice(0, cap), count: ids.length, unknown: resolved.unknown };
   }
 
   // ---- Memory fallback (dev driver: no sessions, best-effort on user fields) ----
@@ -130,5 +153,5 @@ export async function resolveSegment(spec: SegmentSpec, cap = 100000): Promise<{
   if (s.hasTickets === false) users = users.filter((u) => (u.tickets.bronze + u.tickets.silver + u.tickets.gold) === 0);
   let ids = users.map((u) => u.id);
   if (manual.length) ids = [...new Set([...ids, ...manual])];
-  return { userIds: ids.slice(0, cap), count: ids.length };
+  return { userIds: ids.slice(0, cap), count: ids.length, unknown: resolved.unknown };
 }

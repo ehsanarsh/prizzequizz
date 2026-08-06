@@ -17,10 +17,18 @@ import { buildPool, activeUnits, finalSplit } from './lastSurvivorPrize.js';
 import { awardScoring } from './matchEngine.js';
 import { PZ_SCORING } from './scoringConfig.js';
 import { getQuestionDistribution, recordQuestionAnswer } from './questionStatsService.js';
+import * as missions from './missionService.js';
+import { bookHouseRevenue } from './houseRevenueService.js';
 
 // Per-room set of already-served question ids (best-effort; avoids repeats within
 // a match). Lost on restart, which at worst allows a repeat — never a crash.
 const usedQuestions = new Map<string, Set<string>>();
+/* XP earned per player, accumulated across the rounds so the end-of-match
+ * mission report can state it. Keyed `${roomId}:${userId}` and dropped when the
+ * room ends. Best-effort: a restart loses the running total and the missions
+ * simply see the outcome XP, never a wrong number. */
+const lsXp = new Map<string, number>();
+const xpKey = (roomId: string, userId: string) => roomId + ':' + userId;
 
 let timer: ReturnType<typeof setInterval> | null = null;
 export function startLastSurvivorWorker(intervalMs = 1000): void {
@@ -169,6 +177,13 @@ async function advancePhase(room: RoomRow, now: number): Promise<void> {
         const correct = answered && p.answerCorrect === true;
         const pts = correct ? { xp: pq.xp * mult, cup: pq.cup * mult } : { xp: PZ_SCORING.perQuestion.wrong!.xp * mult, cup: PZ_SCORING.perQuestion.wrong!.cup * mult };
         try { await awardScoring(p.userId, pts.xp, pts.cup); } catch (e) { logger.warn('ls_award_failed', { userId: p.userId, message: (e as Error).message }); }
+        /* Last Survivor answers count towards the same missions the duel feeds.
+         * A player only reaches round N by answering the first N-1 correctly,
+         * so the round number IS their correct-answer run. */
+        await missions.recordAnswer(p.userId, correct, correct ? room.round : 0);
+        /* Track XP for the end-of-match mission report while it is known. */
+        const xk = xpKey(room.id, p.userId);
+        lsXp.set(xk, (lsXp.get(xk) ?? 0) + pts.xp);
         if (!correct) { p.status = 'eliminated'; p.eliminatedRound = room.round; await savePlayer(p); eliminated.push(p.userId); }
       }
     }
@@ -232,6 +247,7 @@ async function finishRoom(room: RoomRow, now: number): Promise<void> {
   const pool = buildPool(room.config, players.map((p) => p.color));
   const paidOut = players.filter((p) => p.status === 'cashed_out').reduce((s, p) => s + p.payoutCash, 0);
   const remaining = Math.max(0, pool.net - paidOut);
+  const survivors = players.filter((p) => p.status === 'alive');
   const split = finalSplit(toPrizePlayers(players), remaining);
   for (const p of players) {
     if (p.status !== 'alive') continue;
@@ -240,19 +256,76 @@ async function finishRoom(room: RoomRow, now: number): Promise<void> {
     p.payoutCash += amount; p.cashedOutRound = p.cashedOutRound ?? room.round; p.lastSeenAt = now;
     await savePlayer(p);
   }
+
+  /* NOBODY SURVIVED. The last two or three players all answered wrongly, so
+   * finalSplit has nobody to pay and the remaining pot is not distributed.
+   * Until this was written the money simply stopped being mentioned anywhere:
+   * it stayed with the company (it entered as ticket sales and no payout left),
+   * but no record said so and no screen could show it. Now the forfeited pot is
+   * booked to the house with the room, the round and the head count, so it can
+   * be audited afterwards instead of being inferred. The rake is booked the same
+   * way — it was equally invisible before. */
+  const rake = Math.max(0, pool.gross - pool.net);
+  if (rake > 0) {
+    await bookHouseRevenue({
+      key: 'ls_rake:' + room.id, source: 'ls_rake', amount: rake,
+      refType: 'ls_room', refId: room.id,
+      description: 'کارمزد پلتفرم — آخرین بازمانده',
+      metadata: { topic: room.topic, grossPool: pool.gross, netPool: pool.net, players: players.length }
+    }).catch((e) => { logger.error('ls_rake_book_failed', { roomId: room.id, detail: (e as Error).message }); return false; });
+  }
+  const forfeited = survivors.length === 0 ? remaining : 0;
+  if (forfeited > 0) {
+    await bookHouseRevenue({
+      key: 'ls_forfeit:' + room.id, source: 'ls_forfeited_pot', amount: forfeited,
+      refType: 'ls_room', refId: room.id,
+      description: 'پات بدون برنده — همهٔ بازیکنان حذف شدند',
+      metadata: {
+        topic: room.topic, round: room.round, totalRounds: room.totalRounds,
+        players: players.length, eliminated: players.filter((p) => p.status === 'eliminated').length,
+        cashedOut: players.filter((p) => p.status === 'cashed_out').length,
+        grossPool: pool.gross, netPool: pool.net, alreadyPaidOut: paidOut
+      }
+    }).catch((e) => { logger.error('ls_forfeit_book_failed', { roomId: room.id, detail: (e as Error).message }); return false; });
+    logger.info('ls_pot_forfeited', { roomId: room.id, topic: room.topic, round: room.round, amount: forfeited, players: players.length });
+  }
+
   // End-of-match outcome XP/cup, same table the duel uses: survivors get the
   // win reward, everyone else the loss reward (so they still climb the league).
   const winMult = PZ_SCORING.paidMultiplier;
   for (const p of players) {
     const res = p.status === 'alive' ? PZ_SCORING.result.win! : PZ_SCORING.result.loss!;
     try { await awardScoring(p.userId, res.xp * winMult, res.cup * winMult); } catch (e) { logger.warn('ls_result_award_failed', { userId: p.userId, message: (e as Error).message }); }
+    /* Missions. A Last Survivor room is one topic, one entry ticket, and a win
+     * is surviving to the end — cashing out early is not a win but the money
+     * still counts. Same reporter the duel uses, so every mission that works
+     * for one works for the other. */
+    const xk = xpKey(room.id, p.userId);
+    await missions.recordMatch({
+      userId: p.userId,
+      won: p.status === 'alive',
+      paid: true,
+      categories: [room.topic],
+      xp: (lsXp.get(xk) ?? 0) + res.xp * winMult,
+      cashPrize: p.payoutCash,
+      ticketsUsed: 1,
+      /* Surviving every round means never answering wrongly. */
+      flawless: p.status === 'alive',
+      at: now
+    });
+    lsXp.delete(xk);
   }
   room.status = 'finished'; room.phase = 'finished'; room.phaseEndsAt = null; room.endedAt = now;
   await saveRoom(room);
   usedQuestions.delete(room.id);
-  publish(room.id, 'ls:ended', { round: room.round, winners: players.filter((p) => p.status === 'alive').map((p) => ({ userId: p.userId, amount: (split[p.userId] ?? 0) })) });
+  /* `forfeited` tells the client why the end screen has no winner, so it can say
+   * so plainly instead of showing an empty podium. */
+  publish(room.id, 'ls:ended', {
+    round: room.round, forfeited,
+    winners: survivors.map((p) => ({ userId: p.userId, amount: (split[p.userId] ?? 0) }))
+  });
   await broadcastState(room.id);
-  logger.info('ls_finished', { roomId: room.id, round: room.round });
+  logger.info('ls_finished', { roomId: room.id, round: room.round, survivors: survivors.length, forfeited });
 }
 
 // ---- player actions (called from HTTP/WS) ----

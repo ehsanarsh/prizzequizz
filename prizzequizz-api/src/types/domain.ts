@@ -27,7 +27,9 @@ export interface User {
   hearts: number;
   tickets: { bronze: number; silver: number; gold: number };
   /** Persistent lifeline (کمکی) inventory: 50:50 / Second-Chance / Audience-Poll. */
-  lifelines?: { p5050: number; psecond: number; pstats: number };
+  /** Help inventory, keyed by the catalogue's keys. An open map on purpose:
+   *  adding a help is an admin row, not a schema change. */
+  lifelines?: Record<string, number>;
 }
 
 export interface Question {
@@ -71,6 +73,13 @@ export interface Match {
   duelAnswers?: Record<string, { selectedIndex: number; correct: boolean }>;
   /** Set to true once the finish/reward side-effects have run, so they run once. */
   duelSettled?: boolean;
+  /** When the first question was actually served. This is the line entry
+   *  tickets turn on: before it every ending refunds them, after it none do. */
+  startedAt?: string;
+  /** Set when a match was thrown away before it ever started (a cancelled
+   *  search, an opponent who never arrived). Not a loss for anybody. */
+  voided?: boolean;
+  voidReason?: string;
   /** Server-authoritative XP/🏆cup scoring accumulated during the match (keyed by
    *  userId), the current correct-streak per player, and which player answered a
    *  given round first (for the speed bonus). Applied to the users at finish. */
@@ -98,6 +107,10 @@ export interface Match {
   /** Per-player highest round reached — used as a start barrier so both players
    *  enter the first question at the same time (no 5–10s head start). */
   duelReady?: Record<string, number>;
+  /** Distinct question categories this match actually served. Adaptive
+   *  difficulty picks questions round by round, so the topics are only known
+   *  once they have been played — which is what the topic missions count. */
+  duelCategories?: string[];
   /** Rematch handshake between the same two players: one requests, the other
    *  accepts/rejects; on accept the server creates a fresh match and both sides
    *  read `newMatchId` here to enter it. */

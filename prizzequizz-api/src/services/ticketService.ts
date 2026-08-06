@@ -12,6 +12,7 @@ import { repositories } from '../repositories/index.js';
 import { getTicketPrices } from './economyConfig.js';
 import { postEntry } from './walletLedgerService.js';
 import { WalletError } from './walletLedgerService.js';
+import { recordPurchase } from './missionService.js';
 
 export class TicketError extends Error {
   constructor(public code: string, message: string) { super(message); }
@@ -111,6 +112,9 @@ export async function purchaseTicket(input: { userId: string; tier: string; ip?:
     await postEntry({ userId: input.userId, entryType: 'refund', kind: 'credit', amount: price, idempotencyKey: `ticket_refund:${posted.entry.id}`, refType: 'ticket', refId: input.tier, description: 'برگشت وجه: صدور بلیت ناموفق بود' });
     throw new TicketError('TICKET_GRANT_FAILED', 'صدور بلیت ناموفق بود؛ مبلغ برگشت خورد.');
   }
+  /* Only a ticket that was really issued counts — the refund path above returns
+   * before this, so a failed purchase never advances «خرید اولین بلیت». */
+  await recordPurchase(input.userId, { tickets: 1 });
   return { tier: input.tier, price, tickets, balance: posted.account.available, duplicate: false };
 }
 

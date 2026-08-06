@@ -16,12 +16,19 @@ export const logger = {
 
 function write(level: LogLevel, message: string, context: LogContext): void {
   if (levelOrder[level] < levelOrder[configuredLevel]) return;
+  /* Context is spread FIRST so it can never overwrite the event name. Many call
+     sites pass an error string as `message:` in the context — with the old
+     order that replaced the event name, so grepping the logs for e.g.
+     `push_notification_failed` found nothing and every failure looked
+     anonymous. The caller's text is kept, just under `detail`. */
+  const { message: shadowed, ...rest } = context as LogContext & { message?: unknown };
   const record = {
     ts: new Date().toISOString(),
     level,
     service: 'prizzequizz-api',
     message,
-    ...context
+    ...rest,
+    ...(shadowed === undefined ? {} : { detail: shadowed })
   };
   const line = JSON.stringify(record);
   if (level === 'error') console.error(line);

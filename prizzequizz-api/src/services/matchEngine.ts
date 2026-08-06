@@ -10,7 +10,10 @@ import { leaderboards } from './leaderboardService.js';
 import { PZ_SCORING, getResultBonus, isoWeekId, levelForXp } from './scoringConfig.js';
 import { getPgPool } from '../database/postgres.js';
 import { logger } from './logger.js';
+import { bindHoldsToMatch, refundHolds, spendHolds } from './ticketHoldService.js';
 import { recordQuestionAnswer } from './questionStatsService.js';
+import * as missions from './missionService.js';
+import { areFriends } from './friendService.js';
 import { avatarUrlsFor } from './avatarService.js';
 import { equippedCharactersFor } from './characterSelectionService.js';
 import type { GameModeId, Match, MatchEvent, MatchPlayer, PlanType } from '../types/domain.js';
@@ -90,8 +93,44 @@ export async function createMatchForPlayers(userId: string, opponentUserId: stri
   const match: Match = { id: id(), modeId, economyType, phase: 'matchmaking', round: 0, configVersion: gameConfig.version, players: [player, opponent], createdAt: now, updatedAt: now };
   await repositories.matches.save(match);
   await activeMatchState.set(match, 60 * 60);
+  /* Move both players' entry-ticket holds onto this match, so every path that
+   * can end it — a cancelled search, a leaver, a timeout, a server error — has
+   * one place to give the tickets back from. Done here rather than in the queue
+   * because the queue does not know which tier was taken, and because the
+   * player who was matched INTO never runs the enqueue path again. */
+  const humanIds = match.players.filter((p) => !p.userId.startsWith('bot_')).map((p) => p.userId);
+  try { await bindHoldsToMatch(humanIds, match.id); }
+  catch (e) { logger.error('hold_bind_failed', { matchId: match.id, message: e instanceof Error ? e.message : 'unknown' }); }
+
   await appendMatchEvent(match.id, 'MATCH_CREATED', { modeId, economyType, opponentUserId: opponentUser.id, opponentIsBot });
   return match;
+}
+
+/* Throw a match away because it never started: a cancelled search, or an
+ * opponent who never turned up. Not a forfeit — there is no winner and no
+ * loser, both players get their entry ticket back, and the opponent's client is
+ * told over the match room so it stops waiting on a game that will not happen.
+ *
+ * Returns false once the match has really begun, which is what makes it safe to
+ * call from a cancel button: a player cannot use it to walk out of a duel they
+ * are losing. */
+export async function voidMatchBeforeStart(matchId: string, reason: string): Promise<boolean> {
+  let match: Match;
+  try { match = await getMatch(matchId); } catch { return false; }
+  if (match.startedAt || match.phase === 'question' || match.phase === 'result' || match.phase === 'finished') return false;
+  if (match.duelSettled) return false;
+  match.voided = true;
+  match.voidReason = reason;
+  match.duelSettled = true;         // no settlement will ever run for this match
+  match.phase = 'finished';
+  match.winnerUserId = undefined;
+  match.updatedAt = new Date().toISOString();
+  await refundHolds('match', match.id, reason);
+  await repositories.matches.save(match);
+  await activeMatchState.set(match, 60 * 60);
+  await appendMatchEvent(match.id, 'MATCH_VOIDED', { reason });
+  logger.info('match_voided', { matchId: match.id, reason });
+  return true;
 }
 
 export async function getMatch(matchId: string): Promise<Match> {
@@ -103,6 +142,13 @@ export async function getMatch(matchId: string): Promise<Match> {
 export async function startMatch(matchId: string): Promise<Match> {
   const match = await getMatch(matchId);
   match.phase = 'question';
+  /* The moment the first question is served the entry tickets are really
+   * spent — no ending after this refunds them. Recorded once, so a 'continue'
+   * between rounds does not keep pushing the line forward. */
+  if (!match.startedAt) {
+    match.startedAt = new Date().toISOString();
+    await spendHolds(match.id);
+  }
   match.updatedAt = new Date().toISOString();
   await repositories.matches.save(match);
   await activeMatchState.set(match, 60 * 60);
@@ -181,8 +227,14 @@ async function submitAnswerLocked(input: SubmitAnswerInput): Promise<{ match: Ma
     if (!match.duelFirstCorrect) match.duelFirstCorrect = {};
     const mult = match.economyType === 'paid' ? PZ_SCORING.paidMultiplier : 1;
     const pts = match.duelPoints[input.userId] ?? { xp: 0, cup: 0 };
+    /* Fetched for every answer now, not only the correct ones: the category is
+     * what the topic missions count, and a wrong answer still played the topic. */
+    const q = await repositories.questions.findById(input.questionId).catch(() => null);
+    if (q?.category) {
+      if (!match.duelCategories) match.duelCategories = [];
+      if (match.duelCategories.indexOf(q.category) < 0) match.duelCategories.push(q.category);
+    }
     if (input.correct) {
-      const q = await repositories.questions.findById(input.questionId).catch(() => null);
       const diff = (q && q.difficulty) ? q.difficulty : 'medium';
       const pq = PZ_SCORING.perQuestion[diff] ?? PZ_SCORING.perQuestion.medium!;
       pts.xp += pq.xp * mult; pts.cup += pq.cup * mult;
@@ -198,6 +250,10 @@ async function submitAnswerLocked(input: SubmitAnswerInput): Promise<{ match: Ma
       pts.cup += PZ_SCORING.perQuestion.wrong!.cup * mult;
     }
     match.duelPoints[input.userId] = pts;
+    /* Missions count this answer. Awaited rather than fired-and-forgotten so a
+     * player who answers and immediately opens the missions screen sees the bar
+     * that already moved; recordAnswer swallows its own failures. */
+    await missions.recordAnswer(input.userId, input.correct, match.duelStreak[input.userId] ?? 0);
   }
 
   await repositories.answers.save({ id: id(), matchId: input.matchId, userId: input.userId, questionId: input.questionId, selectedIndex: input.selectedIndex, correct: input.correct, answerTimeMs: input.answerTimeMs, idempotencyKey: input.idempotencyKey, createdAt: new Date().toISOString() });
@@ -239,17 +295,30 @@ async function submitAnswerLocked(input: SubmitAnswerInput): Promise<{ match: Ma
 async function settleDuel(match: Match, winnerUserId: string | undefined, reason: string): Promise<void> {
   if (match.duelSettled) return;
   match.duelSettled = true;
+  /* Ended before the first question — an opponent who left the ready screen, a
+   * connection that dropped, a server error. Nobody played, so nobody pays: the
+   * entry tickets go back to both players. spendHolds has not run, so there is
+   * still something to give back; after a real game this finds nothing. */
+  if (!match.startedAt) {
+    try { await refundHolds('match', match.id, reason); }
+    catch (e) { logger.error('entry_refund_failed', { matchId: match.id, reason, message: e instanceof Error ? e.message : 'unknown' }); }
+  }
   match.winnerUserId = winnerUserId;
   match.phase = 'result';
   match.updatedAt = new Date().toISOString();
 
   // Pay the WINNER (looked up directly), exactly once via reward idempotency.
+  let cashPaid = 0;
   if (match.winnerUserId && !match.winnerUserId.startsWith('bot_')) {
     const winner = await repositories.users.findById(match.winnerUserId);
     if (winner) {
       // Reward failure must never break match end, but it must be LOUD — a
       // swallowed error here means a winner silently goes unpaid.
-      try { await applyReward(winner, calculateDuelReward(match, winner), match.id); }
+      const reward = calculateDuelReward(match, winner);
+      try {
+        await applyReward(winner, reward, match.id);
+        if (reward.type === 'cash') cashPaid = Number(reward.amount) || 0;
+      }
       catch (e) { logger.error('reward_apply_failed', { matchId: match.id, winnerUserId: winner.id, message: e instanceof Error ? e.message : 'unknown' }); }
     }
   }
@@ -271,6 +340,34 @@ async function settleDuel(match: Match, winnerUserId: string | undefined, reason
       const u = await repositories.users.findById(p.userId);
       if (u) await leaderboards.updateUser(u);
     } catch { /* never let scoring break the match end */ }
+  }
+
+  /* Missions. Only a match that really started counts — a voided search or an
+   * opponent who never arrived refunded the tickets, and crediting «یک مسابقه
+   * بده» for it would let a player farm dailies by queueing and cancelling. */
+  if (match.startedAt) {
+    const humans = match.players.filter((p) => !p.userId.startsWith('bot_'));
+    for (const p of humans) {
+      const opponent = match.players.find((x) => x.userId !== p.userId);
+      const won = match.winnerUserId === p.userId;
+      const [me, them] = await Promise.all([
+        repositories.users.findById(p.userId),
+        opponent ? repositories.users.findById(opponent.userId) : Promise.resolve(null)
+      ]);
+      await missions.recordMatch({
+        userId: p.userId,
+        won,
+        paid: match.economyType === 'paid',
+        categories: match.duelCategories ?? (match.duelTopic ? [match.duelTopic] : []),
+        xp: match.duelPointsFinal?.[p.userId]?.xp ?? 0,
+        cashPrize: won ? cashPaid : 0,
+        ticketsUsed: match.economyType === 'paid' ? 1 : 0,
+        flawless: won && p.wrongAnswers === 0,
+        myLevel: Number(me?.level ?? 0),
+        opponentLevel: Number(them?.level ?? 0),
+        friendMatch: opponent ? await areFriends(p.userId, opponent.userId) : false
+      });
+    }
   }
 
   await integrity.inspectMatchFinished(match);

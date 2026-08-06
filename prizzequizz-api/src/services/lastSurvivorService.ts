@@ -311,7 +311,13 @@ export async function snapshot(roomId: string, forUserId?: string): Promise<any>
       id: room.id, topic: room.topic, status: room.status, phase: room.phase, round: room.round, totalRounds: room.totalRounds,
       capacity: room.capacity, minUsers: room.minUsers, startPct: room.startPct, manualStartEnabled: room.manualStartEnabled,
       grossPool: room.grossPool, netPool: pool.net, phaseEndsAt: room.phaseEndsAt, startsAt: room.startsAt,
-      serverNow: Date.now(), chatEnabled: room.config.features.chat, animationsEnabled: room.config.features.animations
+      serverNow: Date.now(), chatEnabled: room.config.features.chat, animationsEnabled: room.config.features.animations,
+      /* A finished room with nobody left standing: the last players all answered
+       * wrongly, so there is no winner and the pot went to nobody. Carried on the
+       * snapshot as well as the ls:ended push so a client that reconnected, or
+       * that is polling rather than on the socket, can still explain the ending
+       * instead of showing an empty podium. */
+      forfeited: room.status === 'finished' && stats.alive === 0 ? netRemaining : 0
     },
     stats: { ...stats, remainingPot: netRemaining },
     players: players.map((p) => ({ userId: p.userId, username: p.username, avatar: p.avatar, color: p.color, status: p.status, payoutCash: p.payoutCash, eliminatedRound: p.eliminatedRound, cashedOutRound: p.cashedOutRound })),
@@ -348,7 +354,18 @@ export async function snapshot(roomId: string, forUserId?: string): Promise<any>
     if (me.status === 'eliminated' && me.eliminatedRound === room.round && room.questionId && room.correctIndex != null) {
       try {
         const q = await repositories.questions.findById(room.questionId);
-        if (q) view.me.reveal = { questionId: q.id, text: q.text, options: q.options, correctIndex: room.correctIndex, yourIndex: me.answerIndex };
+        /* answerIndex is the player's LAST answer, whichever round it was for.
+         * A player who answered round 3 and then let round 4 time out was shown
+         * their round-3 pick as "your answer" on the question that knocked them
+         * out — an option they never chose for it. Only this round's answer
+         * counts; not having one is the whole point of a timeout. */
+        const answeredThis = me.answerRound === room.round;
+        if (q) view.me.reveal = {
+          questionId: q.id, text: q.text, options: q.options,
+          correctIndex: room.correctIndex,
+          yourIndex: answeredThis ? me.answerIndex : null,
+          timedOut: !answeredThis
+        };
       } catch { /* reveal is best-effort */ }
     }
   }

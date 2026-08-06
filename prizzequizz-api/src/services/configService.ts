@@ -1,5 +1,6 @@
 import { gameConfig } from '../core/config.js';
 import { getPgPool } from '../database/postgres.js';
+import { categoryImageUrls } from './categoryImageService.js';
 import { logger } from './logger.js';
 
 export interface ConfigValidationResult {
@@ -142,16 +143,33 @@ export function patchGameConfig(patch: any, updatedBy?: string): any {
 /* Public, non-sensitive slice the game client reads so live economy edits
  * (rake %, ticket prices, wallet limits, per-mode stakes) reach players without
  * a redeploy. */
-export function getPublicConfig(): any {
+/** Every playable topic the admin has configured, in display order. The one
+ *  place that reads `gameConfig.categories`, so a topic's emoji and artwork are
+ *  the same object in the duel, in Last Survivor and on the record board.
+ *  `role:'toss'` is the internal bank behind topic selection, not a topic
+ *  anybody plays, so it never appears here. */
+export function categoryList(): Array<{ name: string; icon: string; order: number }> {
+  const cats = Array.isArray((gameConfig as any).categories) ? (gameConfig as any).categories : [];
+  return cats
+    .filter((c: any) => c && c.enabled !== false && c.role !== 'toss' && String(c.name || '').trim())
+    .map((c: any) => ({ name: String(c.name).trim(), icon: String(c.icon || '❓'), order: Number(c.order) || 99 }))
+    .sort((a: any, b: any) => a.order - b.order);
+}
+
+export async function getPublicConfig(): Promise<any> {
   const e = (gameConfig as any).economy ?? {};
   const modes = (gameConfig as any).modes ?? {};
   // Only ENABLED topics reach the game, sorted by admin order — so toggling a
   // category in the panel adds/removes it from the in-game topic picker.
   const cats = Array.isArray((gameConfig as any).categories) ? (gameConfig as any).categories : [];
+  /* `image` is a URL, never the bytes: this payload is fetched by every client
+   * on boot and twenty inlined pictures would make it enormous. Empty string
+   * when the topic has no artwork, and the client falls back to the emoji. */
+  const art = await categoryImageUrls().catch(() => ({} as Record<string, string>));
   const categories = cats
     .filter((c: any) => c && c.enabled !== false && c.name)
     .sort((a: any, b: any) => (Number(a.order) || 99) - (Number(b.order) || 99))
-    .map((c: any) => ({ name: String(c.name), icon: String(c.icon || '❓') }));
+    .map((c: any) => ({ name: String(c.name), icon: String(c.icon || '❓'), image: art[String(c.name).trim()] ?? '' }));
   return {
     version: (gameConfig as any).version,
     // The platform commission is deliberately NOT published. Prize figures are

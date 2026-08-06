@@ -15,6 +15,7 @@
  * computed from how long each machine has actually been registered, so the
  * figure keeps itself up to date with no monthly data entry. */
 import { getPgPool } from '../database/postgres.js';
+import { houseRevenueSummary, type HouseRevenueSummary } from './houseRevenueService.js';
 import { id } from '../utils/id.js';
 
 export type Granularity = 'day' | 'week' | 'month';
@@ -31,6 +32,8 @@ export interface ExpenseRow {
 
 export interface RevenueByMode { modeId: string; commission: number; matches: number }
 
+export type { HouseRevenueSummary } from './houseRevenueService.js';
+
 export interface FinanceReport {
   from: string; to: string; granularity: Granularity;
   income: { commission: number; tickets: number; shop: number; penalties: number; deposits: number; total: number };
@@ -45,6 +48,15 @@ export interface FinanceReport {
   /** false → the shop has no purchase flow yet, so its income line is not "zero
    *  sales" but "not yet measurable". The panel says so instead of implying 0. */
   shopSalesTracked: boolean;
+  /** Money the company kept that never passed through a player's wallet — a Last
+   *  Survivor pot nobody won, the commission on such a pot.
+   *
+   *  NOT added to `income.total`, and that is deliberate. The money entered as
+   *  ticket sales, which `income.tickets` already counts; because no payout ever
+   *  left, it is already sitting inside `grossProfit`. Adding it again would
+   *  report a profit that was never made. This is a breakdown OF the totals, so
+   *  a forfeited pot can be pointed at per room instead of merely inferred. */
+  houseRevenue: HouseRevenueSummary;
 }
 
 function pg(): ReturnType<typeof getPgPool> | null {
@@ -216,10 +228,11 @@ export async function financeReport(opts: { from?: string; to?: string; granular
     commissionByMode: [], payouts: { prizes: 0, bonuses: 0, refunds: 0, total: 0 },
     expenses: { manual: 0, server: 0, total: 0, byCategory: [] },
     grossProfit: 0, netProfit: 0, series: [],
-    serverCost: { hourlyTotal: 0, machines: [] }, hasDatabase: false, shopSalesTracked: false
+    serverCost: { hourlyTotal: 0, machines: [] }, hasDatabase: false, shopSalesTracked: false,
+    houseRevenue: { total: 0, bySource: [], recent: [] }
   };
   const pool = pg();
-  if (!pool) return empty;
+  if (!pool) return { ...empty, houseRevenue: await houseRevenueSummary(from, to) };
   await ensureSchema(pool);
   const range = [from, to + ' 23:59:59'];
 
@@ -246,10 +259,16 @@ export async function financeReport(opts: { from?: string; to?: string; granular
         WHERE l.entry_type='fee' AND l.ref_type='match' AND l.created_at BETWEEN $1 AND $2
         GROUP BY 1 ORDER BY commission DESC`, range);
 
-    // In-game item sales, from the shop's own purchase log.
+    /* In-game item sales: the shop's own purchase log PLUS lifeline purchases,
+     * which go straight through the wallet ledger. Counting only the first
+     * would leave help sales out of revenue entirely. */
     const shopQ = pool.query(
       `SELECT coalesce(sum(price),0)::bigint AS total, count(*)::int AS n FROM shop_purchases
         WHERE currency='cash' AND created_at BETWEEN $1 AND $2`, range).catch(() => ({ rows: [{ total: 0, n: 0 }] } as any));
+    const lifelineSalesQ = pool.query(
+      `SELECT coalesce(sum(amount),0)::bigint AS total, count(*)::int AS n FROM wallet_ledger
+        WHERE entry_type='lifeline_purchase' AND created_at BETWEEN $1 AND $2`, range)
+      .catch(() => ({ rows: [{ total: 0, n: 0 }] } as any));
 
     const expQ = pool.query(
       `SELECT category, coalesce(sum(amount),0)::bigint AS amount FROM company_expenses
@@ -257,7 +276,7 @@ export async function financeReport(opts: { from?: string; to?: string; granular
 
     const seriesQ = pool.query(
       `SELECT ${BUCKET_SQL[granularity]} AS bucket,
-              coalesce(sum(amount) FILTER (WHERE entry_type IN ('fee','ticket_purchase','match_stake','penalty')),0)::bigint AS income,
+              coalesce(sum(amount) FILTER (WHERE entry_type IN ('fee','ticket_purchase','lifeline_purchase','match_stake','penalty')),0)::bigint AS income,
               coalesce(sum(amount) FILTER (WHERE entry_type IN ('match_reward','league_reward','referral_reward','bonus','refund','stake_refund')),0)::bigint AS payouts
          FROM wallet_ledger WHERE created_at BETWEEN $1 AND $2
         GROUP BY 1 ORDER BY 1`, range);
@@ -267,14 +286,15 @@ export async function financeReport(opts: { from?: string; to?: string; granular
               coalesce(sum(amount),0)::bigint AS amount
          FROM company_expenses WHERE spent_at BETWEEN $1 AND $2 GROUP BY 1`, [from, to, granularity]);
 
-    const [totalsR, byModeR, shopR, expR, seriesR, expSeriesR, srv] = await Promise.all([
-      totalsQ, byModeQ, shopQ, expQ, seriesQ, expSeriesQ, serverCost(from, to)
+    const [totalsR, byModeR, shopR, lifelineSalesR, expR, seriesR, expSeriesR, srv, house] = await Promise.all([
+      totalsQ, byModeQ, shopQ, lifelineSalesQ, expQ, seriesQ, expSeriesQ, serverCost(from, to),
+      houseRevenueSummary(from, to)
     ]);
 
     const t = totalsR.rows[0] || {};
     const n = (v: any) => Number(v ?? 0) || 0;
-    const shop = n(shopR.rows?.[0]?.total);
-    const shopTracked = n(shopR.rows?.[0]?.n) > 0;
+    const shop = n(shopR.rows?.[0]?.total) + n(lifelineSalesR.rows?.[0]?.total);
+    const shopTracked = (n(shopR.rows?.[0]?.n) + n(lifelineSalesR.rows?.[0]?.n)) > 0;
     const income = {
       commission: n(t.commission), tickets: n(t.tickets), shop, penalties: n(t.penalties),
       deposits: n(t.deposits), total: 0
@@ -308,7 +328,8 @@ export async function financeReport(opts: { from?: string; to?: string; granular
       from, to, granularity, income, payouts, expenses,
       commissionByMode: byModeR.rows.map((r: any) => ({ modeId: String(r.mode), commission: n(r.commission), matches: n(r.matches) })),
       grossProfit, netProfit: grossProfit - expenses.total, series,
-      serverCost: srv, hasDatabase: true, shopSalesTracked: shopTracked
+      serverCost: srv, hasDatabase: true, shopSalesTracked: shopTracked,
+      houseRevenue: house
     };
   } catch {
     return { ...empty, hasDatabase: true };

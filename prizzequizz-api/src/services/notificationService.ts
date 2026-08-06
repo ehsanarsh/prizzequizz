@@ -1,4 +1,5 @@
 import webPush from 'web-push';
+import { effectivePushConfig } from './pushConfigService.js';
 import { repositories } from '../repositories/index.js';
 import type { NotificationPreferences, NotificationRecord, NotificationType, PushSubscriptionRecord } from '../types/domain.js';
 import { id } from '../utils/id.js';
@@ -22,6 +23,8 @@ export interface NotificationInput {
 export interface NotificationDiagnostics {
   provider: 'log' | 'webpush';
   vapidConfigured: boolean;
+  /** 'env' = set on the container, 'db' = set in the admin panel, 'none' = unset. */
+  source: 'env' | 'db' | 'none';
   subscriptions: number;
   queued: number;
   sent: number;
@@ -43,21 +46,33 @@ class LogPushProvider implements PushProvider {
 
 class WebPushProvider implements PushProvider {
   readonly name = 'webpush' as const;
-  constructor() {
-    webPush.setVapidDetails(
-      process.env.VAPID_SUBJECT || 'mailto:admin@prizzequizz.local',
-      process.env.VAPID_PUBLIC_KEY || '',
-      process.env.VAPID_PRIVATE_KEY || ''
-    );
-  }
+  /* Keys are passed per call rather than through webPush.setVapidDetails().
+   * That setter is process-global: with keys now editable at runtime, a save
+   * would have raced with an in-flight campaign and signed some of it with the
+   * old pair. */
+  constructor(private readonly vapid: { subject: string; publicKey: string; privateKey: string }) {}
 
   async send(subscription: PushSubscriptionRecord, payload: Record<string, unknown>): Promise<void> {
-    await webPush.sendNotification({ endpoint: subscription.endpoint, keys: { p256dh: subscription.p256dh, auth: subscription.auth } }, JSON.stringify(payload));
+    await webPush.sendNotification(
+      { endpoint: subscription.endpoint, keys: { p256dh: subscription.p256dh, auth: subscription.auth } },
+      JSON.stringify(payload),
+      { vapidDetails: this.vapid }
+    );
   }
 }
 
 export class NotificationService {
-  constructor(private readonly provider: PushProvider) {}
+  /* No provider means "decide per send from the current configuration" — keys
+   * can be changed in the panel and take effect without a restart. Tests and
+   * callers that want a fixed provider still pass one in. */
+  constructor(private readonly provider?: PushProvider) {}
+
+  private async sender(): Promise<PushProvider> {
+    if (this.provider) return this.provider;
+    const cfg = await effectivePushConfig();
+    if (!cfg.configured) return new LogPushProvider();
+    return new WebPushProvider({ subject: cfg.subject, publicKey: cfg.publicKey, privateKey: cfg.privateKey });
+  }
 
   async subscribe(userId: string, input: PushSubscriptionInput, userAgent?: string): Promise<PushSubscriptionRecord> {
     if (!input.endpoint || !input.keys?.p256dh || !input.keys?.auth) throw new Error('INVALID_PUSH_SUBSCRIPTION');
@@ -136,18 +151,33 @@ export class NotificationService {
     return notification;
   }
 
-  async broadcast(input: { userIds: string[]; type: NotificationType; title: string; body: string; data?: Record<string, unknown>; push?: boolean }): Promise<{ created: number; sent: number; skipped: number }> {
+  /* One recipient must never take the campaign down with it. This loop used to
+   * let any failure escape — a stale id, a row the database rejected — so a
+   * single bad entry aborted the send and the panel showed the raw database
+   * error instead of delivering to the thousands of people who were fine.
+   * A failure is now counted and reported, and the rest still go out. */
+  async broadcast(input: { userIds: string[]; type: NotificationType; title: string; body: string; data?: Record<string, unknown>; push?: boolean }): Promise<{ created: number; sent: number; skipped: number; failed: number; errors: string[] }> {
     let created = 0;
     let sent = 0;
     let skipped = 0;
+    let failed = 0;
+    const errors: string[] = [];
     for (const userId of input.userIds) {
-      const allowed = await this.allowedByPreference(userId, input.type);
-      if (!allowed) { skipped += 1; continue; }
-      const notification = await this.create({ userId, type: input.type, title: input.title, body: input.body, data: input.data, push: input.push });
-      created += 1;
-      if (notification.status === 'sent') sent += 1;
+      try {
+        const allowed = await this.allowedByPreference(userId, input.type);
+        if (!allowed) { skipped += 1; continue; }
+        const notification = await this.create({ userId, type: input.type, title: input.title, body: input.body, data: input.data, push: input.push });
+        created += 1;
+        if (notification.status === 'sent') sent += 1;
+      } catch (e) {
+        failed += 1;
+        const msg = e instanceof Error ? e.message : 'unknown';
+        if (errors.length < 5) errors.push(msg);
+        logger.warn('notification_recipient_failed', { userId, message: msg });
+      }
     }
-    return { created, sent, skipped };
+    if (failed) logger.error('notification_broadcast_partial', { failed, created, total: input.userIds.length });
+    return { created, sent, skipped, failed, errors };
   }
 
   async diagnostics(): Promise<NotificationDiagnostics> {
@@ -165,7 +195,15 @@ export class NotificationService {
       failed += rows.filter((n) => n.status === 'failed').length;
       unread += rows.filter((n) => !n.readAt).length;
     }
-    return { provider: this.provider.name, vapidConfigured: vapidConfigured(), subscriptions, queued, sent, failed, unread };
+    const cfg = await effectivePushConfig();
+    return {
+      provider: this.provider ? this.provider.name : (cfg.configured ? 'webpush' : 'log'),
+      vapidConfigured: this.provider ? true : cfg.configured,
+      /* Where the keys came from, so the panel can tell "set in the panel" from
+       * "set in the container" — they are fixed in very different places. */
+      source: cfg.source,
+      subscriptions, queued, sent, failed, unread
+    };
   }
 
   private async dispatch(notification: NotificationRecord): Promise<void> {
@@ -180,16 +218,44 @@ export class NotificationService {
       await repositories.notifications.saveNotification(notification);
       return;
     }
-    const payload = { id: notification.id, type: notification.type, title: notification.title, body: notification.body, data: notification.data, url: notification.data.url ?? '/' };
-    try {
-      await Promise.all(subscriptions.map((sub) => this.provider.send(sub, payload)));
+    const payload = {
+      id: notification.id, type: notification.type, title: notification.title, body: notification.body,
+      data: notification.data, url: notification.data.url ?? '/',
+      /* Passed through so a campaign's picture reaches the tray as well as the
+       * in-app inbox. The worker falls back to the app icon. */
+      image: typeof notification.data.image === 'string' ? notification.data.image : undefined
+    };
+    /* Each device on its own. Promise.all marked the whole notification failed
+     * when ANY device rejected it — so one stale phone made a message that
+     * three other devices received look undelivered. And an endpoint the push
+     * service has retired (404/410) stayed on the account forever, failing every
+     * time; those are dropped here so they stop poisoning later sends. */
+    const sender = await this.sender();
+    let ok = 0, gone = 0;
+    const errors: string[] = [];
+    for (const sub of subscriptions) {
+      try { await sender.send(sub, payload); ok++; }
+      catch (error) {
+        const status = Number((error as any)?.statusCode ?? 0);
+        const msg = error instanceof Error ? error.message : 'push failed';
+        if (status === 404 || status === 410) {
+          gone++;
+          try { await repositories.notifications.revokeSubscription(sub.id, sub.userId); } catch { /* best effort */ }
+        } else if (errors.length < 3) errors.push(msg);
+      }
+    }
+    if (ok > 0) {
       notification.status = 'sent';
       notification.sentAt = new Date().toISOString();
-    } catch (error) {
+    } else if (subscriptions.length === gone) {
+      // Every device this account had is retired; it stays in the inbox.
+      notification.status = 'queued';
+    } else {
       notification.status = 'failed';
-      notification.error = error instanceof Error ? error.message : 'push failed';
+      notification.error = errors[0] ?? 'push failed';
       logger.warn('push_notification_failed', { notificationId: notification.id, userId: notification.userId, message: notification.error });
     }
+    if (gone) logger.info('push_subscriptions_pruned', { userId: notification.userId, gone });
     await repositories.notifications.saveNotification(notification);
   }
 
@@ -227,18 +293,12 @@ function parseTime(value: string): number | null {
   return h * 60 + m;
 }
 
-function vapidConfigured(): boolean {
-  return Boolean(process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY);
-}
-
 function hashEndpoint(endpoint: string): string {
   let hash = 0;
   for (const ch of endpoint) hash = ((hash << 5) - hash + ch.charCodeAt(0)) | 0;
   return Math.abs(hash).toString(16);
 }
 
-const provider: PushProvider = process.env.PUSH_PROVIDER === 'webpush' && vapidConfigured()
-  ? new WebPushProvider()
-  : new LogPushProvider();
-
-export const notifications = new NotificationService(provider);
+/* No fixed provider: the effective one is resolved per send, so keys set in the
+ * admin panel work immediately and no restart is involved. */
+export const notifications = new NotificationService();

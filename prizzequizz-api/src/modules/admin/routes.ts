@@ -19,8 +19,11 @@ import { getAccount } from '../../services/walletLedgerService.js';
 import { matchmakingQueue } from '../../services/matchmakingQueue.js';
 import { leaderboards } from '../../services/leaderboardService.js';
 import { notifications } from '../../services/notificationService.js';
+import { PushConfigError, effectivePushConfig, generateKeys, loadStoredConfig, maskPushConfig, savePushConfig } from '../../services/pushConfigService.js';
+import { RewardsError, getConfig as getRewardsConfig, saveConfig as saveRewardsConfig } from '../../services/rewardsService.js';
+import { getRecordConfig, saveRecordConfig } from '../../services/recordModeService.js';
 import { createScheduled, listScheduled, cancelScheduled } from '../../services/scheduledNotificationService.js';
-import { resolveSegment, describeSegment, type SegmentSpec } from '../../services/notificationSegmentService.js';
+import { resolveSegment, resolveRecipients, describeSegment, type SegmentSpec } from '../../services/notificationSegmentService.js';
 import { createCampaign, recordCampaignResult, listCampaigns, campaignAnalytics, campaignDashboard } from '../../services/notificationCampaignService.js';
 import { listItems as shopList, saveItem as shopSave, removeItem as shopRemove } from '../../services/shopService.js';
 import { login as adminLogin, listAccounts, createAccount, updateAccount, deleteAccount, changeOwnPassword, resolveTokenSync, ADMIN_TABS } from '../../services/adminAccountService.js';
@@ -34,6 +37,14 @@ import type { Question } from '../../types/domain.js';
 import { financeReport, listExpenses, saveExpense, deleteExpense, setServerHourlyCost, reportToCsv, reportToPdf, EXPENSE_CATEGORIES } from '../../services/accountingService.js';
 import { securityAlerts } from '../../services/securityAlertService.js';
 import { streamBackup, backupFilename, BACKUP_TABLES } from '../../services/backupService.js';
+import {
+  CATEGORY_IMAGE_MAX_BYTES, CategoryImageError, categoryImageUrls, removeCategoryImage,
+  renameCategoryImage, saveCategoryImage
+} from '../../services/categoryImageService.js';
+import {
+  MissionError, METRICS as MISSION_METRICS, deleteDef as deleteMission,
+  listDefs as listMissions, saveDef as saveMission
+} from '../../services/missionService.js';
 
 export function registerAdminRoutes(router: Router, base: string): void {
   // ===== Admin auth + accounts (per-tab access control) =====
@@ -129,6 +140,50 @@ export function registerAdminRoutes(router: Router, base: string): void {
     } catch (e) {
       return error(ctx.res, 422, 'CONFIG_INVALID', e instanceof Error ? e.message : 'Invalid config patch.');
     }
+  });
+
+  /* ---------------- TOPIC ARTWORK ----------------
+   * A picture per category, shown wherever a topic is named — the duel picker,
+   * the Last Survivor topic list, the record board. The panel shrinks the file
+   * to a small square before sending it as a data URI; this validates the type,
+   * checks the magic bytes and hard-caps the size. Stored in its own table, so
+   * the public config carries a URL and never the bytes. */
+  router.add('GET', `${base}/admin/categories/images`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    json(ctx.res, 200, { images: await categoryImageUrls(), maxBytes: CATEGORY_IMAGE_MAX_BYTES });
+  });
+
+  router.add('POST', `${base}/admin/categories/:name/image`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    const name = decodeURIComponent(ctx.params.name ?? '');
+    const b = (ctx.body ?? {}) as any;
+    try {
+      const saved = await saveCategoryImage(name, String(b.image ?? ''));
+      audit(ctx.userId, 'CATEGORY_IMAGE_SET', 'category', name, { bytes: saved.bytes, mime: saved.mime });
+      json(ctx.res, 200, { name, ...saved, maxBytes: CATEGORY_IMAGE_MAX_BYTES });
+    } catch (e) {
+      if (e instanceof CategoryImageError) return error(ctx.res, 422, e.code, e.message);
+      throw e;
+    }
+  });
+
+  router.add('DELETE', `${base}/admin/categories/:name/image`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    const name = decodeURIComponent(ctx.params.name ?? '');
+    const removed = await removeCategoryImage(name);
+    if (removed) audit(ctx.userId, 'CATEGORY_IMAGE_REMOVED', 'category', name, {});
+    json(ctx.res, 200, { name, removed });
+  });
+
+  /* Renaming a topic in the panel would otherwise orphan its picture, since the
+   * artwork is keyed by name. The panel calls this as part of saving a rename
+   * so the admin does not have to upload the same file again. */
+  router.add('POST', `${base}/admin/categories/image/rename`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    const b = (ctx.body ?? {}) as any;
+    const moved = await renameCategoryImage(String(b.from ?? ''), String(b.to ?? ''));
+    if (moved) audit(ctx.userId, 'CATEGORY_IMAGE_RENAMED', 'category', String(b.to ?? ''), { from: b.from });
+    json(ctx.res, 200, { moved });
   });
 
   router.add('GET', `${base}/admin/questions`, async (ctx) => {
@@ -579,9 +634,157 @@ export function registerAdminRoutes(router: Router, base: string): void {
   });
 
 
+  /* Daily reward + wheel. The whole prize table lives here — how many segments,
+   * what each pays, how likely it is, and how long the streak calendar runs. */
+  router.add('GET', `${base}/admin/rewards`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    json(ctx.res, 200, await getRewardsConfig());
+  });
+
+  router.add('POST', `${base}/admin/rewards`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    try { json(ctx.res, 200, await saveRewardsConfig(ctx.body ?? {})); }
+    catch (e) {
+      if (e instanceof RewardsError) return error(ctx.res, 422, e.code, e.message);
+      throw e;
+    }
+  });
+
+  /* What the wheel actually pays over many spins. Weights are relative numbers
+   * and read as nothing in particular; an operator setting a jackpot needs to
+   * see the odds and the expected cost per spin before players do. */
+  router.add('GET', `${base}/admin/rewards/odds`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    const cfg = await getRewardsConfig();
+    const live = cfg.wheel.segments.filter((s) => s.enabled && s.weight > 0);
+    const total = live.reduce((n, s) => n + s.weight, 0) || 1;
+    json(ctx.res, 200, {
+      totalWeight: total,
+      rows: cfg.wheel.segments.map((s) => ({
+        id: s.id, label: s.label, icon: s.icon, type: s.type, amount: s.amount, target: s.target,
+        weight: s.weight, enabled: s.enabled,
+        chance: s.enabled && s.weight > 0 ? s.weight / total : 0
+      })),
+      /* Split by kind: coins and cash are not the same currency and adding
+       * them together would give a meaningless number. */
+      perSpin: ['coins', 'xp', 'cash', 'ticket', 'heart', 'lifeline'].reduce((acc: any, t) => {
+        acc[t] = live.filter((s) => s.type === t).reduce((n, s) => n + (s.weight / total) * s.amount, 0);
+        return acc;
+      }, {})
+    });
+  });
+
+  /* Record mode: whether it runs at all, what entering costs, and — the point
+   * of asking — how much of the rest of the game it is allowed to move. */
+  router.add('GET', `${base}/admin/record`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    json(ctx.res, 200, await getRecordConfig());
+  });
+  router.add('POST', `${base}/admin/record`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    json(ctx.res, 200, await saveRecordConfig(ctx.body ?? {}));
+  });
+
+  /* Missions are data. Everything about one — what it counts, how much of it,
+   * what it pays, who it is offered to, when it runs — is editable here, which
+   * is the point: a new mission or a seasonal event must not need a release. */
+  router.add('GET', `${base}/admin/missions`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    json(ctx.res, 200, { rows: await listMissions(), metrics: MISSION_METRICS });
+  });
+  router.add('POST', `${base}/admin/missions`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    try { json(ctx.res, 200, await saveMission(ctx.body ?? {})); }
+    catch (e) {
+      if (e instanceof MissionError) return error(ctx.res, 422, e.code, e.message);
+      throw e;
+    }
+  });
+  router.add('DELETE', `${base}/admin/missions/:id`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    const gone = await deleteMission(ctx.params.id!);
+    if (!gone) return error(ctx.res, 404, 'MISSION_NOT_FOUND', 'این مأموریت وجود ندارد.');
+    json(ctx.res, 200, { removed: true });
+  });
+
   router.add('GET', `${base}/admin/notifications/diagnostics`, async (ctx) => {
     if (!requireAdmin(ctx)) return;
     json(ctx.res, 200, await notifications.diagnostics());
+  });
+
+  /* The push keys, manageable from the panel. They used to be environment
+   * variables only, which meant recreating the API container to change them —
+   * and a container that cannot be safely recreated made push unfixable. */
+  router.add('GET', `${base}/admin/notifications/push-config`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    const eff = await effectivePushConfig();
+    json(ctx.res, 200, {
+      ...maskPushConfig(await loadStoredConfig()),
+      source: eff.source, configured: eff.configured,
+      /* When the container sets them, panel edits are stored but ignored —
+       * say so rather than letting a save look like it did nothing. */
+      envOverride: eff.source === 'env'
+    });
+  });
+
+  router.add('POST', `${base}/admin/notifications/push-config`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    const b = (ctx.body ?? {}) as any;
+    try {
+      const saved = await savePushConfig({
+        provider: b.provider === 'webpush' || b.provider === 'log' ? b.provider : undefined,
+        publicKey: typeof b.publicKey === 'string' ? b.publicKey.trim() : undefined,
+        privateKey: typeof b.privateKey === 'string' ? b.privateKey.trim() : undefined,
+        subject: typeof b.subject === 'string' ? b.subject.trim() : undefined
+      });
+      const eff = await effectivePushConfig();
+      json(ctx.res, 200, { ...maskPushConfig(saved), source: eff.source, configured: eff.configured, envOverride: eff.source === 'env' });
+    } catch (e) {
+      if (e instanceof PushConfigError) return error(ctx.res, 422, e.code, e.message);
+      throw e;
+    }
+  });
+
+  /* Make a fresh pair. Deliberately does NOT save: changing keys invalidates
+   * every phone already registered, so the panel shows them first and the
+   * operator has to confirm by saving. */
+  router.add('POST', `${base}/admin/notifications/push-keys/generate`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    json(ctx.res, 200, { ...generateKeys(), saved: false });
+  });
+
+  /* Send one real push to one person, and report exactly what happened. Without
+   * this, checking that push works means broadcasting to everybody and hoping —
+   * and when nothing arrives there is no way to tell whether the server is
+   * unconfigured, the account has no devices, or the phone silenced it. */
+  router.add('POST', `${base}/admin/notifications/test`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    const b = (ctx.body ?? {}) as any;
+    const who = String(b.user || b.userId || '').trim();
+    if (!who) return error(ctx.res, 422, 'USER_REQUIRED', 'کاربر مقصد را وارد کن (شناسه، نام کاربری یا شماره).');
+    const { ids, unknown } = await resolveRecipients([who]);
+    if (!ids.length) return error(ctx.res, 404, 'USER_NOT_FOUND', 'این کاربر پیدا نشد: ' + unknown.join('، '));
+    const userId = ids[0]!;
+
+    const diag = await notifications.diagnostics();
+    const devices = (await repositories.notifications.listSubscriptions(userId)).length;
+    const note = await notifications.create({
+      userId, type: 'system',
+      title: String(b.title || 'پیام آزمایشی پرایز کوییز'),
+      body: String(b.body || 'اگر این را روی گوشی‌ات می‌بینی، اعلان درست کار می‌کند ✅'),
+      data: { url: '/' }, push: true
+    });
+    json(ctx.res, 200, {
+      userId, devices,
+      vapidConfigured: diag.vapidConfigured, provider: diag.provider,
+      status: note.status, error: note.error ?? null,
+      /* Said plainly, because "queued" has three very different causes. */
+      hint: !diag.vapidConfigured ? 'کلیدهای VAPID روی سرور تنظیم نشده — تا آن نباشد هیچ اعلانی به گوشی نمی‌رود.'
+        : devices === 0 ? 'این کاربر هیچ دستگاهی ثبت نکرده — باید یک بار در بازی «اعلان روی گوشی» را بزند.'
+        : note.status === 'sent' ? 'به سرویس پوش تحویل شد.'
+        : note.status === 'queued' ? 'در صندوق درون‌برنامه ثبت شد ولی به گوشی نرفت (ساعت سکوت یا تنظیمات کاربر).'
+        : ('ارسال ناموفق: ' + (note.error || 'نامشخص'))
+    });
   });
 
 
@@ -642,8 +845,8 @@ export function registerAdminRoutes(router: Router, base: string): void {
   router.add('POST', `${base}/admin/notifications/segment/preview`, async (ctx) => {
     if (!requireAdmin(ctx)) return;
     const spec = (ctx.body ?? {}) as SegmentSpec;
-    const { userIds, count } = await resolveSegment(spec);
-    json(ctx.res, 200, { count, sample: userIds.slice(0, 20), description: describeSegment(spec) });
+    const { userIds, count, unknown } = await resolveSegment(spec);
+    json(ctx.res, 200, { count, sample: userIds.slice(0, 20), description: describeSegment(spec), unknown: unknown ?? [] });
   });
 
   // Build the notification `data` payload (deep-link action + image + campaign id)
@@ -669,12 +872,18 @@ export function registerAdminRoutes(router: Router, base: string): void {
     // Back-compat: an explicit userIds array still works; otherwise resolve segment.
     const spec: SegmentSpec = (body?.segment && typeof body.segment === 'object') ? body.segment
       : (Array.isArray(body?.userIds) && body.userIds.length ? { userIds: body.userIds.map(String) } : { base: 'all' });
-    const { userIds, count } = await resolveSegment(spec);
+    const { userIds, count, unknown } = await resolveSegment(spec);
+    /* Nobody to send to is a mistake worth saying out loud, not an empty
+     * success — most often a mistyped username in the recipient box. */
+    if (!userIds.length) {
+      return error(ctx.res, 422, 'AUDIENCE_EMPTY',
+        unknown && unknown.length ? ('این کاربر پیدا نشد: ' + unknown.slice(0, 5).join('، ')) : 'هیچ کاربری با این شرایط پیدا نشد.');
+    }
     const campaign = await createCampaign({ title, body: msg, type, image: body?.image, action: body?.action, segment: spec as any, segmentDesc: describeSegment(spec), audienceCount: count, status: 'sending', createdBy: ctx.userId });
     const result = await notifications.broadcast({ userIds, type, title, body: msg, data: buildData(body, campaign.id), push: Boolean(body?.push ?? true) });
-    await recordCampaignResult(campaign.id, { created: result.created, sent: result.sent, failed: 0, status: 'sent' });
+    await recordCampaignResult(campaign.id, { created: result.created, sent: result.sent, failed: result.failed, status: 'sent' });
     audit(ctx.userId, 'NOTIFICATION_BROADCAST', 'notification', campaign.id, { ...result, type, audience: count });
-    json(ctx.res, 202, { ...result, audienceCount: count, campaignId: campaign.id });
+    json(ctx.res, 202, { ...result, audienceCount: count, campaignId: campaign.id, unknown: unknown ?? [] });
   });
 
   // Re-send a past campaign to its (freshly re-resolved) segment.

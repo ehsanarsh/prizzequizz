@@ -4,12 +4,29 @@ import { requireAdmin } from '../../services/adminGuard.js';
 import { createErrorReport, errorReportDiagnostics, listErrorReports, updateErrorReportStatus } from '../../services/errorReportService.js';
 import type { ErrorReportSeverity, ErrorReportSource, ErrorReportStatus } from '../../types/domain.js';
 import { getPublicConfig } from '../../services/configService.js';
+import { getCategoryImage } from '../../services/categoryImageService.js';
 import { bodyObject, optionalString, requiredString } from '../../utils/validation.js';
 
 export function registerMonitoringRoutes(router: Router, base: string): void {
   // Public, non-sensitive economy config so the game client uses LIVE values
   // (rake %, ticket prices, wallet limits) without a redeploy.
-  router.add('GET', `${base}/config/public`, (ctx) => json(ctx.res, 200, getPublicConfig()));
+  router.add('GET', `${base}/config/public`, async (ctx) => json(ctx.res, 200, await getPublicConfig()));
+
+  /* Topic artwork. Served from its own endpoint rather than inlined in the
+   * config so the config payload stays small: the config carries a URL with a
+   * ?v= stamp, and this answers it once with a year-long cache. */
+  router.add('GET', `${base}/categories/:name/image`, async (ctx) => {
+    const img = await getCategoryImage(decodeURIComponent(ctx.params.name ?? ''));
+    if (!img) return error(ctx.res, 404, 'CATEGORY_IMAGE_NOT_FOUND', 'تصویری برای این موضوع ثبت نشده.');
+    const inm = ctx.req.headers['if-none-match'];
+    if (inm && String(inm).replace(/"/g, '') === img.etag) { ctx.res.statusCode = 304; ctx.res.end(); return; }
+    ctx.res.statusCode = 200;
+    ctx.res.setHeader('content-type', img.mime);
+    ctx.res.setHeader('content-length', String(img.data.length));
+    ctx.res.setHeader('etag', `"${img.etag}"`);
+    ctx.res.setHeader('cache-control', 'public, max-age=31536000, immutable');
+    ctx.res.end(img.data);
+  });
 
   router.add('POST', `${base}/monitoring/reports`, async (ctx) => {
     const body = bodyObject(ctx.body);

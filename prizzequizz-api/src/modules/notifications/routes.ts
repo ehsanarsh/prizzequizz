@@ -1,6 +1,8 @@
 import type { Router } from '../../http/router.js';
 import { error, json } from '../../http/response.js';
 import { notifications } from '../../services/notificationService.js';
+import { effectivePushConfig } from '../../services/pushConfigService.js';
+import { repositories } from '../../repositories/index.js';
 import { bumpCampaignClick } from '../../services/notificationCampaignService.js';
 import { bodyObject, optionalString, requiredString } from '../../utils/validation.js';
 
@@ -11,8 +13,11 @@ export function registerNotificationRoutes(router: Router, base: string): void {
 
   // Public VAPID key the client needs to subscribe to web-push. Null when push
   // isn't configured on the server (client then falls back to in-app only).
+  // Read through the config service so a key set in the admin panel works
+  // without a restart, not only one baked into the container's environment.
   router.add('GET', `${base}/notifications/vapid-public-key`, async (ctx) => {
-    json(ctx.res, 200, { publicKey: process.env.VAPID_PUBLIC_KEY || null });
+    const cfg = await effectivePushConfig();
+    json(ctx.res, 200, { publicKey: cfg.configured ? cfg.publicKey : null });
   });
 
   // Count of unread notifications (for the header bell badge).
@@ -53,6 +58,29 @@ export function registerNotificationRoutes(router: Router, base: string): void {
       deviceLabel: optionalString(body, 'deviceLabel')
     }, String(ctx.req.headers['user-agent'] ?? 'unknown'));
     json(ctx.res, 201, subscription);
+  });
+
+  /* Everything the phone needs to explain itself. "The bell shows it but
+   * nothing appears on my screen" has four different causes — no keys on the
+   * server, this handset never registered, the account muted that kind of
+   * message, or quiet hours — and they are indistinguishable from the game
+   * screen without this. The endpoints are the caller's own, so returning them
+   * leaks nothing they did not send us. */
+  router.add('GET', `${base}/notifications/push-status`, async (ctx) => {
+    const userId = ctx.userId ?? 'u1';
+    const cfg = await effectivePushConfig();
+    const subs = await repositories.notifications.listSubscriptions(userId);
+    const prefs = await notifications.preferences(userId);
+    json(ctx.res, 200, {
+      serverConfigured: cfg.configured,
+      devices: subs.length,
+      endpoints: subs.map((s) => s.endpoint),
+      preferences: {
+        matchUpdates: prefs.matchUpdates, leaderboardUpdates: prefs.leaderboardUpdates,
+        walletUpdates: prefs.walletUpdates, promos: prefs.promos,
+        quietHoursStart: prefs.quietHoursStart ?? '', quietHoursEnd: prefs.quietHoursEnd ?? ''
+      }
+    });
   });
 
   router.add('DELETE', `${base}/notifications/push-subscriptions/:id`, async (ctx) => {

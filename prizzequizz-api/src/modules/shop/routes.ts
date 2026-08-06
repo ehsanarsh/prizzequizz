@@ -1,6 +1,7 @@
 import type { Router } from '../../http/router.js';
 import { json } from '../../http/response.js';
 import { listItems } from '../../services/shopService.js';
+import { ShopError, purchase } from '../../services/shopPurchaseService.js';
 import { ticketPrizeTable } from '../../services/prizeService.js';
 import { getPromos, updatePromos, PromoError, PROMO_IMAGE_MAX_BYTES } from '../../services/ticketPromoService.js';
 import { requireAdmin } from '../../services/adminGuard.js';
@@ -49,5 +50,26 @@ export function registerShopRoutes(router: Router, base: string): void {
       });
     }
     json(ctx.res, 200, { items: items.map((it) => ({ id: it.id, category: it.category, icon: it.icon, name: it.name, description: it.description, price: it.price, currency: it.currency, effectKey: it.effectKey, effectValue: it.effectValue, badge: it.badge })), categories });
+  });
+
+  /* The half that was missing: paying for an item and receiving it. Without
+   * this every price in the shop was decoration. */
+  router.add('POST', `${base}/shop/purchase`, async (ctx) => {
+    const b = (ctx.body ?? {}) as any;
+    try {
+      json(ctx.res, 200, await purchase({
+        userId: ctx.userId ?? 'u1',
+        itemId: String(b.itemId ?? ''),
+        qty: Number(b.qty) || 1,
+        idempotencyKey: String(b.idempotencyKey ?? '')
+      }));
+    } catch (e) {
+      if (e instanceof ShopError) {
+        const status = e.code === 'ITEM_NOT_FOUND' ? 404
+          : (e.code === 'INSUFFICIENT_FUNDS' || e.code === 'INSUFFICIENT_COINS') ? 409 : 422;
+        return error(ctx.res, status, e.code, e.message);
+      }
+      throw e;
+    }
   });
 }

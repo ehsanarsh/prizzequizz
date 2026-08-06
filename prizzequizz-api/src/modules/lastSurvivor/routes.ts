@@ -9,6 +9,8 @@ import { joinTopic, snapshot, addVote, addChat, listChat, getRoom, listAllRooms,
 import { submitAnswer, submitDecision, useLifeline } from '../../services/lastSurvivorWorker.js';
 import { requireAdmin } from '../../services/adminGuard.js';
 import { avatarUrlFor } from '../../services/avatarService.js';
+import { categoryList } from '../../services/configService.js';
+import { categoryImageUrls } from '../../services/categoryImageService.js';
 import { equippedCharacterFor } from '../../services/characterSelectionService.js';
 
 export function registerLastSurvivorRoutes(router: Router, base: string): void {
@@ -49,8 +51,14 @@ export function registerLastSurvivorRoutes(router: Router, base: string): void {
     for (const q of questions) counts.set(q.category, (counts.get(q.category) ?? 0) + 1);
     // Union of categories that have questions and topics named in config.
     const names = new Set<string>([...counts.keys(), ...Object.keys(cfg.topics || {})]);
+    /* Topic name, emoji and artwork all come from the one category list the
+     * admin edits, so a picture uploaded once shows up in every mode. */
+    const cats = new Map(categoryList().map((c) => [c.name, c]));
+    const art = await categoryImageUrls().catch(() => ({} as Record<string, string>));
     const topics = [...names].map((name) => ({
       name,
+      icon: cats.get(name)?.icon ?? '❓',
+      image: art[name] ?? '',
       questionCount: counts.get(name) ?? 0,
       playable: isTopicPlayable(cfg, name),
       comingSoon: !isTopicPlayable(cfg, name),

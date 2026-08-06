@@ -4,6 +4,7 @@ import type { GameModeId, PlanType } from '../types/domain.js';
 import { id } from '../utils/id.js';
 import { logger } from './logger.js';
 import { pickBotProfile } from './botProfiles.js';
+import { refundHolds } from './ticketHoldService.js';
 
 export type MatchmakingStatus = 'queued' | 'matched' | 'cancelled' | 'expired';
 export type MatchQuality = 'excellent' | 'good' | 'wide' | 'bot';
@@ -133,6 +134,10 @@ export class MemoryMatchmakingQueue extends BaseMatchmakingQueue {
     for (const ticket of this.tickets.values()) {
       if (ticket.status === 'queued' && now - new Date(ticket.createdAt).getTime() > maxAgeMs) {
         ticket.status = 'expired'; ticket.updatedAt = new Date().toISOString(); count += 1; this.analytics.expired += 1;
+        /* Nobody turned up. The entry ticket was never spent on a game, so it
+         * goes back — this used to depend entirely on the player's own client
+         * still being open to send a cancel. */
+        await refundHolds('queue', ticket.id, 'search_expired');
       }
     }
     return count;
@@ -220,7 +225,7 @@ export class RedisMatchmakingQueue extends BaseMatchmakingQueue {
 
   async expireOldTickets(maxAgeMs = DEFAULT_EXPIRE_MS): Promise<number> {
     const client = await this.getClient(); const keys = await client.keys('mm:ticket:*'); let count = 0; const now = Date.now();
-    for (const key of keys) { const raw = await client.get(key); if (!raw) continue; const ticket = JSON.parse(raw) as MatchmakingTicket; if (ticket.status === 'queued' && now - new Date(ticket.createdAt).getTime() > maxAgeMs) { ticket.status = 'expired'; ticket.updatedAt = new Date().toISOString(); await this.removeFromQueue(ticket); await this.saveTicket(ticket); count++; this.analytics.expired++; } }
+    for (const key of keys) { const raw = await client.get(key); if (!raw) continue; const ticket = JSON.parse(raw) as MatchmakingTicket; if (ticket.status === 'queued' && now - new Date(ticket.createdAt).getTime() > maxAgeMs) { ticket.status = 'expired'; ticket.updatedAt = new Date().toISOString(); await this.removeFromQueue(ticket); await this.saveTicket(ticket); count++; this.analytics.expired++; await refundHolds('queue', ticket.id, 'search_expired'); } }
     return count;
   }
 

@@ -3,12 +3,21 @@ import { json, error } from '../../http/response.js';
 import { getPgPool } from '../../database/postgres.js';
 import { avatarUrlsFor } from '../../services/avatarService.js';
 import { equippedCharactersFor } from '../../services/characterSelectionService.js';
+import { recordSocial } from '../../services/missionService.js';
 
 // Real, DB-backed friends system: send request → accept/reject → friends list →
 // 1:1 chat. All state lives in the `friendships` and `friend_messages` tables.
 const pool = () => getPgPool();
 /* No generated stand-in art: a player is their photo and their character, and
  * nothing else. When neither exists the client draws its own empty state. */
+
+/* A friendship is mutual, so «اولین دوست» completes for BOTH sides the moment
+ * the request is accepted — including the auto-accept path where two people
+ * happened to request each other. Only an edge that really flipped to accepted
+ * gets here, so a duplicate request cannot inflate the count. */
+async function bothGainedAFriend(a: string, b: string): Promise<void> {
+  await Promise.all([recordSocial(a, 'friendsAdded'), recordSocial(b, 'friendsAdded')]);
+}
 
 export function registerFriendRoutes(router: Router, base: string): void {
   // Accepted friends of the current user (either direction), with unread counts.
@@ -80,6 +89,7 @@ export function registerFriendRoutes(router: Router, base: string): void {
           // If THEY already requested ME, accept it now (mutual → friends).
           if (String(e.requester_id) === String(t.id)) {
             await pool().query(`UPDATE friendships SET status='accepted', updated_at=now() WHERE id=$1`, [e.id]);
+            await bothGainedAFriend(me, String(t.id));
             return json(ctx.res, 200, { status: 'accepted' });
           }
           return json(ctx.res, 200, { status: 'pending' }); // my duplicate request
@@ -97,8 +107,9 @@ export function registerFriendRoutes(router: Router, base: string): void {
   router.add('POST', `${base}/friends/requests/:id/accept`, async (ctx) => {
     const me = ctx.userId; if (!me) return error(ctx.res, 401, 'UNAUTHENTICATED', 'ابتدا وارد شو');
     try {
-      const { rows } = await pool().query(`UPDATE friendships SET status='accepted', updated_at=now() WHERE id=$1 AND addressee_id=$2 AND status='pending' RETURNING id`, [ctx.params.id, me]);
+      const { rows } = await pool().query(`UPDATE friendships SET status='accepted', updated_at=now() WHERE id=$1 AND addressee_id=$2 AND status='pending' RETURNING id, requester_id`, [ctx.params.id, me]);
       if (!rows[0]) return error(ctx.res, 404, 'NOT_FOUND', 'درخواستی پیدا نشد');
+      await bothGainedAFriend(me, String(rows[0].requester_id));
       json(ctx.res, 200, { status: 'accepted' });
     } catch { error(ctx.res, 500, 'FRIEND_ERROR', 'خطا'); }
   });

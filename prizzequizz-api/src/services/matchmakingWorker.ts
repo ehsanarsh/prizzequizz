@@ -1,5 +1,6 @@
 import { matchmakingQueue } from './matchmakingQueue.js';
 import { logger } from './logger.js';
+import { refundStaleHolds } from './ticketHoldService.js';
 
 let timer: NodeJS.Timeout | null = null;
 
@@ -12,7 +13,11 @@ export function startMatchmakingWorker(): void {
   timer = setInterval(async () => {
     try {
       const expired = await matchmakingQueue.expireOldTickets(expireMs);
-      if (expired) logger.info('matchmaking_worker_tick', { expired });
+      /* Last line of defence for entry tickets: a hold nothing ever came back
+       * for — a client that vanished between paying and being matched — is
+       * given back rather than left sitting on the player's account. */
+      const swept = await refundStaleHolds();
+      if (expired || swept) logger.info('matchmaking_worker_tick', { expired, refundedStaleHolds: swept });
     } catch (error) {
       logger.error('matchmaking_worker_error', { message: error instanceof Error ? error.message : 'unknown' });
     }

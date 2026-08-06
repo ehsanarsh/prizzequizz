@@ -30,7 +30,7 @@ export interface UserRepository {
   save(user: User): Promise<void>;
   /** Persist ONLY the lifeline inventory (kept separate from save() so the main
    *  user write never clobbers it). */
-  updateLifelines(userId: string, lifelines: { p5050: number; psecond: number; pstats: number }): Promise<void>;
+  updateLifelines(userId: string, lifelines: Record<string, number>): Promise<void>;
 }
 
 export interface QuestionRepository {

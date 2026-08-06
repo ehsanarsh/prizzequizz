@@ -13,7 +13,7 @@ function uuidOrNull(v: unknown): string | null {
 }
 
 function userFromRow(r: any): User {
-  return { id: r.id, phone: r.phone, username: r.username, displayName: r.display_name, plan: r.plan, role: r.role ?? 'user', status: r.status ?? 'active', banReason: r.ban_reason ?? undefined, bannedAt: r.banned_at?.toISOString?.() ?? r.banned_at ?? undefined, level: r.level, xp: Number(r.xp), weeklyScore: Number(r.weekly_score ?? 0), weeklyWeek: r.weekly_week ?? undefined, wallet: Number(r.wallet_balance), coins: Number(r.coins), hearts: Number(r.hearts), tickets: r.tickets ?? { bronze: 0, silver: 0, gold: 0 }, lifelines: r.lifelines ?? { p5050: 2, psecond: 1, pstats: 5 } };
+  return { id: r.id, phone: r.phone, username: r.username, displayName: r.display_name, plan: r.plan, role: r.role ?? 'user', status: r.status ?? 'active', banReason: r.ban_reason ?? undefined, bannedAt: r.banned_at?.toISOString?.() ?? r.banned_at ?? undefined, level: r.level, xp: Number(r.xp), weeklyScore: Number(r.weekly_score ?? 0), weeklyWeek: r.weekly_week ?? undefined, wallet: Number(r.wallet_balance), coins: Number(r.coins), hearts: Number(r.hearts), tickets: r.tickets ?? { bronze: 0, silver: 0, gold: 0 }, lifelines: r.lifelines ?? undefined };
 }
 
 function questionFromRow(r: any): Question {
@@ -54,7 +54,7 @@ export const postgresRepositories: RepositoryBundle = {
         on conflict(id) do update set phone=$2, username=$3, display_name=$4, plan=$5, coins=$6, hearts=$7, wallet_balance=$8, xp=$9, level=$10, weekly_score=$11, role=$12, status=$13, ban_reason=$14, banned_at=$15, updated_at=now()`,
         [user.id,user.phone,user.username,user.displayName,user.plan,user.coins,user.hearts,user.wallet,user.xp,user.level,user.weeklyScore,user.role ?? 'user',user.status ?? 'active',user.banReason ?? null,user.bannedAt ?? null]);
     },
-    async updateLifelines(userId: string, lifelines: { p5050: number; psecond: number; pstats: number }): Promise<void> {
+    async updateLifelines(userId: string, lifelines: Record<string, number>): Promise<void> {
       await pool().query('update users set lifelines=$1, updated_at=now() where id=$2', [JSON.stringify(lifelines), userId]);
     }
   },

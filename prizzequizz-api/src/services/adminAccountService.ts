@@ -185,7 +185,7 @@ export async function deleteAccount(accountId: string): Promise<boolean> {
 // The tab keys that exist in the panel (kept in sync with the admin nav).
 export const ADMIN_TABS = [
   'dashboard', 'finance', 'accounting', 'expenses', 'backup', 'security', 'users', 'matches', 'support',
-  'questions', 'qreports', 'aistudio', 'pipeline', 'categories', 'shop', 'characters', 'charboxes', 'lastsurvivor', 'sms', 'payments',
+  'questions', 'qreports', 'aistudio', 'pipeline', 'categories', 'shop', 'characters', 'charboxes', 'lifelines', 'onboarding', 'lastsurvivor', 'sms', 'payments',
   'wallet', 'withdrawals', 'rewardholds', 'tickets', 'giftcodes',
   'cfg_xp', 'cfg_level', 'cfg_cup', 'cfg_gameplay', 'leagues', 'missions', 'rewards',
   'leaderboard', 'campaign', 'events', 'banners', 'notifications',
@@ -203,6 +203,9 @@ export function tabForPath(path: string): string | null {
   // to edit artwork should not also hand them the right to run a lottery.
   if (p.includes('/admin/character-boxes')) return 'charboxes';
   if (p.includes('/admin/characters')) return 'characters';
+  if (p.includes('/admin/lifelines')) return 'lifelines';
+  if (p.includes('/admin/onboarding')) return 'onboarding';
+  if (p.includes('/admin/onboarding')) return 'onboarding';
   if (p.includes('/admin/last-survivor')) return 'lastsurvivor';
   if (p.includes('/admin/sms')) return 'sms';
   if (p.includes('/admin/payments')) return 'payments';

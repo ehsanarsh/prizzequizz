@@ -20,7 +20,7 @@ import { id } from '../utils/id.js';
 import { logger } from './logger.js';
 
 export type LedgerEntryType =
-  | 'deposit' | 'ticket_purchase' | 'match_stake' | 'stake_refund' | 'refund'
+  | 'deposit' | 'ticket_purchase' | 'lifeline_purchase' | 'shop_purchase' | 'match_stake' | 'stake_refund' | 'refund'
   | 'match_reward' | 'league_reward' | 'referral_reward' | 'bonus'
   | 'withdraw_lock' | 'withdraw_release' | 'withdraw_paid'
   | 'fee' | 'penalty' | 'adjustment' | 'transfer_in' | 'transfer_out';
@@ -546,6 +546,14 @@ export async function transitionWithdraw(reqId: string, action: 'approve' | 'rej
   }
   if (action === 'paid') {
     await postEntry({ userId: w.userId, entryType: 'withdraw_paid', kind: 'settle', amount: w.amount, idempotencyKey: `wd_paid:${reqId}`, refType: 'withdraw', refId: reqId, description: `برداشت پرداخت شد (${operator.paymentReference ?? ''})`, operatorId: operator.id });
+    /* «اولین برداشت» means money that actually reached the player's bank, not a
+     * request they filed — so it is counted here and not at request time.
+     * Imported lazily: missionService imports postEntry from this file, and a
+     * static import back would put a cycle in the middle of the money code. */
+    try {
+      const m = await import('./missionService.js');
+      await m.recordMoney(w.userId, 'withdrawal', w.amount);
+    } catch { /* missions must never block a payout */ }
   }
   const status = action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : action === 'paid' ? 'paid' : 'failed';
   const pool = pgAvailable();
