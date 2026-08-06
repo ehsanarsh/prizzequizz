@@ -31,9 +31,16 @@ for i in $(seq 1 30); do
 done
 
 echo
-echo "checking the recovered endpoints:"
-for p in /v1/missions /v1/hearts /v1/record/categories /v1/rewards/status; do
-  printf '  %-24s %s\n' "$p" "$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:3000$p")"
+# These are called WITHOUT a token, so they answer for no particular player.
+# Anything that is not a 5xx means the route is registered and served; a 404
+# here just means the anonymous id has no account, which is expected.
+echo "checking the recovered endpoints (want: not 5xx):"
+for p in /v1/missions /v1/hearts /v1/record/categories /v1/record/overview /v1/rewards/status; do
+  code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:3000$p")
+  case "$code" in
+    5*) printf '  %-26s %s  <-- FAILING\n' "$p" "$code" ;;
+    *)  printf '  %-26s %s  ok\n' "$p" "$code" ;;
+  esac
 done
 
 echo

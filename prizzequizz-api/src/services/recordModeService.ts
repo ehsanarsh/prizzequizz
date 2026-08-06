@@ -23,7 +23,7 @@ import { getPgPool } from '../database/postgres.js';
 import { repositories } from '../repositories/index.js';
 import type { Question } from '../types/domain.js';
 import { id } from '../utils/id.js';
-import { getHearts, spendHearts } from './heartService.js';
+import { HeartError, getHearts, spendHearts } from './heartService.js';
 import { record as missionRecord } from './missionService.js';
 import { categoryList } from './configService.js';
 import { getQuestionDistribution, recordQuestionAnswer } from './questionStatsService.js';
@@ -255,7 +255,20 @@ export async function startRun(userId: string, mode: RecordMode, category = ''):
     _runs.delete(r.id);
   }
 
-  if (cfg.entryHearts > 0) await spendHearts(userId, cfg.entryHearts);
+  /* The check above passed, so this only fails when a second start raced this
+   * one for the same last heart. That is still «قلب کافی نداری» to the player,
+   * not a server error — translate it rather than letting HeartError escape
+   * past the route's RecordError handler as a 500. */
+  if (cfg.entryHearts > 0) {
+    try { await spendHearts(userId, cfg.entryHearts); }
+    catch (e) {
+      if (e instanceof HeartError) {
+        throw new RecordError('INSUFFICIENT_HEARTS',
+          'برای ورود به ثبت رکورد ' + cfg.entryHearts + ' قلب لازم داری.');
+      }
+      throw e;
+    }
+  }
 
   const run: RecordRun = {
     id: id(), userId, mode, category: mode === 'category' ? cat : '',

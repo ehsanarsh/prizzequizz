@@ -7,6 +7,8 @@
  * a timestamp so it is right across a closed app, a reboot, or two devices. */
 import assert from 'node:assert/strict';
 import { HeartError, addHearts, getHeartConfig, getHearts, saveHeartConfig, spendHearts, _resetHeartMemory, _setAnchor } from '../services/heartService.js';
+import { once } from 'node:events';
+import { createApiServer } from '../app.js';
 import { repositories } from '../repositories/index.js';
 import { id } from '../utils/id.js';
 
@@ -126,6 +128,29 @@ async function run() {
     _setAnchor(uid, Date.now() - 60 * 60_000);
     assert.equal((await getHearts(uid)).hearts, 3, 'four earned in an hour, capped at three');
     await saveHeartConfig({ max: 5, rechargeMinutes: 60 });
+  });
+
+  /* The route, not just the service. On the server this endpoint answered 500
+   * for an id with no account behind it, because HeartError walked straight
+   * past the handler — and /hearts is the first call the header makes, so the
+   * crash landed on the app's opening request. */
+  await check('an id with no account behind it is a 404, not a 500', async () => {
+    process.env.REPOSITORY_DRIVER = 'memory';
+    const server = createApiServer({ attachRealtime: false });
+    server.listen(0);
+    await once(server, 'listening');
+    try {
+      const addr = server.address() as any;
+      const res = await fetch(`http://127.0.0.1:${addr.port}/v1/hearts`, {
+        headers: { 'x-user-id': 'no-such-account-' + id() }
+      });
+      assert.notEqual(res.status, 500, 'an unknown account must not crash the endpoint');
+      assert.ok(res.status === 404 || res.status === 200,
+        'expected 404 (or 200 for the dev fallback user), got ' + res.status);
+    } finally {
+      server.close();
+      await once(server, 'close');
+    }
   });
 
   console.log(`[hearts] ${passed} passed, ${failed} failed`);
