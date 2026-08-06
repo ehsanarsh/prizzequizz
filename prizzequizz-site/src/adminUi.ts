@@ -83,7 +83,7 @@ main{max-width:1000px;margin:0 auto;padding:18px}
   <b>محتوا و سئو</b>
   <span class="sub" style="margin:0">سایت معرفی — جدا از بازی</span>
   <span style="flex:1"></span>
-  <a class="btn sm" href="/" target="_blank" rel="noopener">دیدن سایت</a>
+  <a class="btn sm" id="viewSite" href="/home" target="_blank" rel="noopener">دیدن سایت</a>
   <button class="btn sm" onclick="loadAll()">↻ تازه‌سازی</button>
 </header>
 <main>
@@ -141,6 +141,12 @@ async function enter(){
                 ('خطا: '+(e&&e.message||'نامشخص'));
   }
 }
+/* The site's home is NOT '/': the game owns the root, so home lives wherever
+ * homePath says (default /home). The renderer already knew this; the panel did
+ * not, so «دیدن سایت» and the home row's «مشاهده» both opened the game. */
+function siteHome(){ return (DATA&&DATA.settings&&DATA.settings.homePath)||'/home'; }
+function pageHref(slug){ return slug==='home' ? siteHome() : '/'+slug; }
+
 async function loadAll(){
   DATA=await api('GET','all');
   try{ MEDIA=(await api('GET','media')).media||[]; }catch(e){ MEDIA=[]; }
@@ -251,6 +257,7 @@ function render(){
   else if(TAB==='media') renderMedia();
   else renderSeo();
   wirePickers();
+  const vs=$('#viewSite'); if(vs) vs.href=siteHome();
 }
 
 function renderPages(){
@@ -262,7 +269,7 @@ function renderPages(){
 function pageCard(p,i){
   return '<div class="card"><div class="row"><h3 style="flex:1">'+esc(p.title)+
     ' <span class="pill '+(p.published?'on':'off')+'">'+(p.published?'منتشرشده':'پیش‌نویس')+'</span></h3>'+
-    '<a class="btn sm" href="/'+(p.slug==='home'?'':esc(p.slug))+'" target="_blank" rel="noopener">مشاهده</a>'+
+    '<a class="btn sm" href="'+esc(pageHref(p.slug))+'" target="_blank" rel="noopener">مشاهده</a>'+
     '<button class="btn sm" onclick="togglePage('+i+')">'+(p.expanded?'بستن':'ویرایش')+'</button></div>'+
     '<p class="sub">/'+esc(p.slug==='home'?'':p.slug)+'</p>'+
     (p.expanded?pageEditor(p,i):'')+'</div>';

@@ -469,6 +469,22 @@ async function run(): Promise<void> {
     assert.equal(ok.homePath, '/home', 'a trailing slash would double up in canonicals');
   });
 
+  await check('the panel never links at the game\'s root', async () => {
+    /* The renderer learned that '/' belongs to the game; the panel did not, so
+       «دیدن سایت» and the home row's «مشاهده» both opened the game from inside
+       the content editor. Anything the panel offers as "view the site" has to
+       go to the site. */
+    const html = adminHtml();
+    const bad = [...html.matchAll(/<a[^>]*href="\/"[^>]*target="_blank"[^>]*>/g)];
+    assert.equal(bad.length, 0, 'a "view" link points at the game root: ' + bad.map((m) => m[0]).join(' | '));
+
+    const script = /<script>([\s\S]*?)<\/script>/.exec(html)![1]!;
+    assert.match(script, /function siteHome\(\)/, 'the panel needs one place that knows where home is');
+    assert.match(script, /homePath/, 'and it must read the setting, not hardcode a path');
+    /* The home row must go through the helper rather than building '/'. */
+    assert.doesNotMatch(script, /href="\/'\+\(p\.slug==='home'\?''/, 'the old home-is-root link is back');
+  });
+
   console.log(`[site] ${passed} passed, ${failed} failed`);
   if (failed) process.exit(1);
 }
