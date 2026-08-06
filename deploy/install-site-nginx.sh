@@ -102,6 +102,24 @@ out = {
 }
 if chosen is not None:
     body = '\n'.join(lines[chosen['start']:chosen['end'] + 1])
+    # If the catch-all is an SPA fallback — `try_files $uri /index.html` — it can
+    # be converted rather than refused: the same rule, with the site as the
+    # fallback instead of the game's page. Find its try_files line.
+    out['spa_line'] = None
+    for ln in chosen['locs']:
+        d = 0
+        for j in range(ln, min(ln + 40, len(lines))):
+            t = strip(lines[j])
+            d += t.count('{') - t.count('}')
+            m = re.search(r'^(\s*)try_files\s+\$uri\s+/index\.html\s*;', t)
+            if m:
+                out['spa_line'] = j + 1
+                out['spa_indent'] = m.group(1)
+                out['spa_loc_line'] = ln + 1
+            if d <= 0 and j > ln:
+                break
+        if out['spa_line']:
+            break
     out['has_catchall'] = len(chosen['locs']) > 0
     out['catchall_lines'] = [x + 1 for x in chosen['locs']]
     out['has_exact_root'] = bool(re.search(r'^\s*location\s+=\s*/\s*\{', body, re.M))
@@ -139,19 +157,24 @@ if [ -z "$CHOSEN" ] || [ "$CHOSEN" = "None" ]; then
 fi
 say "target: server block #$CHOSEN"
 
+SPA_LINE=$(get spa_line)
 if [ "$(get has_catchall)" = "True" ] && [ "$(get already)" != "True" ]; then
-  echo
-  echo "!! that block already has a catch-all 'location / { }' at line $(get catchall_lines):"
-  sudo sed -n "$(python3 -c "import json;print(json.load(open('$PLAN'))['catchall_lines'][0])")p" "$CONF" | sed 's/^/     /'
-  echo
-  echo "   nginx allows one per server block. If it serves the game, narrow it to"
-  echo "   an exact match by adding one '=' :"
-  echo
-  echo "       location = / { try_files /index.html =404; }"
-  echo
-  echo "   That keeps the game on the root and frees the catch-all for the site."
-  echo "   Nothing was changed. Re-run afterwards."
-  exit 1
+  if [ -n "$SPA_LINE" ] && [ "$SPA_LINE" != "None" ]; then
+    # The catch-all is an SPA fallback: `try_files $uri /index.html`, i.e. "a
+    # real file if there is one, otherwise the game's page". Only the FALLBACK
+    # changes — a file on disk still wins, so the eNamad file, the manifest and
+    # every asset carry on being served exactly as now.
+    say "the catch-all is an SPA fallback (line $SPA_LINE) — its fallback will point at the site"
+    CONVERT=1
+  else
+    echo
+    echo "!! that block has a catch-all 'location / { }' at line $(get catchall_lines)"
+    echo "   and it is not the SPA fallback this script knows how to convert."
+    echo "   Nothing was changed. Send me those lines and I will tailor it."
+    exit 1
+  fi
+else
+  CONVERT=0
 fi
 
 # --------------------------------------------------------------- build it ----
@@ -176,6 +199,17 @@ BLOCK=$(mktemp); trap 'rm -f "$RAW" "$PLAN" "$NEW" "$BLOCK"' EXIT INT TERM
 NGINX
   fi
   cat <<NGINX
+    # The game is one page, but push notifications deep-link into it. Before
+    # this, the catch-all's /index.html fallback answered these; now that the
+    # fallback is the site, they need saying out loud or every notification tap
+    # lands on a marketing 404.
+    location ~ ^/(wallet|shop|wheel|notifications|result|support)/?\$ {
+        add_header Cache-Control "no-store, must-revalidate" always;
+        try_files /index.html =404;
+    }
+NGINX
+  if [ "$CONVERT" != "1" ]; then
+    cat <<NGINX
     location / {
         proxy_pass http://127.0.0.1:$PORT;
         proxy_http_version 1.1;
@@ -186,6 +220,9 @@ NGINX
         proxy_connect_timeout 3s;
         proxy_read_timeout 15s;
     }
+NGINX
+  fi
+  cat <<NGINX
     location @pzsite {
         proxy_pass http://127.0.0.1:$PORT;
         proxy_set_header Host \$host;
@@ -212,10 +249,19 @@ sudo cp "$CONF" "$BACKUP"
 say "backed up to $BACKUP"
 
 INSERT_AT=$(get insert_before)
-python3 - "$RAW" "$BLOCK" "$INSERT_AT" "$MARK_BEGIN" "$MARK_END" > "$NEW" <<'PY'
+python3 - "$RAW" "$BLOCK" "$INSERT_AT" "$MARK_BEGIN" "$MARK_END" "${SPA_LINE:-}" "$CONVERT" > "$NEW" <<'PY'
 import sys
 src, blockfile, at, MB, ME = sys.argv[1], sys.argv[2], int(sys.argv[3]), sys.argv[4], sys.argv[5]
+spa_line, convert = sys.argv[6], sys.argv[7]
 lines = open(src, encoding='utf-8', errors='replace').read().split('\n')
+
+# Repoint the SPA fallback: a real file still wins, the fallback becomes the
+# site instead of the game's page. One line, in place, nothing else touched.
+if convert == '1' and spa_line and spa_line != 'None':
+    i = int(spa_line) - 1
+    indent = lines[i][:len(lines[i]) - len(lines[i].lstrip())]
+    lines[i] = indent + 'try_files $uri @pzsite;   # was: /index.html'
+
 blk = open(blockfile, encoding='utf-8').read().rstrip('\n')
 # drop any previous copy of our own block, so re-running replaces it
 out, skip = [], False
