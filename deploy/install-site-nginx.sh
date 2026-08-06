@@ -1,31 +1,33 @@
 #!/usr/bin/env bash
 # Wire the marketing site into the nginx server block that already serves the
-# game. Run on the server, in the directory holding this file.
+# game.
 #
-# Editing nginx by hand on a machine serving a live game is the risky step in
-# this whole install, so this does it the careful way: back the file up, refuse
-# a config it does not understand, and if `nginx -t` fails afterwards put the
-# original back BEFORE reloading. A bad edit can therefore never take the game
-# down — nginx keeps running the config it already had.
+#   bash install-site-nginx.sh            # show the plan, change nothing
+#   APPLY=1 bash install-site-nginx.sh    # do it
 #
-# The trap this avoids: nginx allows exactly ONE `location /` per server block.
-# A config that already serves the game defines one, so pasting a second is not
-# a merge — it is `[emerg] duplicate location "/"`, and the reload fails for the
-# whole domain. Every location below is added only if it is not already there.
+# Editing nginx on a machine serving a live game is the risky step in this
+# install, so: it shows you the plan first, backs the file up, and if `nginx -t`
+# fails afterwards it restores the original BEFORE reloading. A bad edit can
+# never take the game down — nginx keeps running the config it already had.
+#
+# Why this is not a simple paste. nginx allows exactly ONE `location /` PER
+# SERVER BLOCK, and a real config has several server blocks: the port-80
+# redirect has its own `location /`, and each TLS host has one too. Grepping the
+# whole file cannot tell them apart, so this parses the file into server blocks
+# by brace depth and works inside exactly one of them.
 set -euo pipefail
 
 CONF=${CONF:-}
 PORT=${SITE_PORT:-8090}
 GAME_ROOT=${GAME_ROOT:-/var/www/prizequiz}
+TARGET=${TARGET:-}
+APPLY=${APPLY:-0}
 MARK_BEGIN='# >>> prizzequizz-site >>>'
 MARK_END='# <<< prizzequizz-site <<<'
 
-# Progress goes to stderr, not stdout. The config block below is built by
-# redirecting a command group to a file, and a status line printed inside that
-# group lands in the middle of the nginx config — which nginx then rejects with
-# `unknown directive "==>"`.
 say() { echo "==> $*" >&2; }
 die() { echo "!! $*" >&2; exit 1; }
+command -v python3 >/dev/null || die "python3 is required to parse the nginx config safely"
 
 # ---------------------------------------------------------------- find it ----
 if [ -z "$CONF" ]; then
@@ -37,76 +39,143 @@ if [ -z "$CONF" ]; then
   done
 fi
 [ -n "$CONF" ] || die "could not find the nginx config. Re-run as: CONF=/etc/nginx/sites-enabled/yours bash $0"
-say "using config: $CONF"
+say "config: $CONF"
 
-sudo grep -q "$MARK_BEGIN" "$CONF" && ALREADY=1 || ALREADY=0
-[ "$ALREADY" = 1 ] && say "our block is already here — replacing it"
+RAW=$(mktemp); PLAN=$(mktemp); NEW=$(mktemp)
+trap 'rm -f "$RAW" "$PLAN" "$NEW"' EXIT INT TERM
+sudo cat "$CONF" > "$RAW"
 
-has_loc() { sudo grep -qE "^[[:space:]]*location[[:space:]]+$1[[:space:]]*\{" "$CONF"; }
+# ------------------------------------------------------- parse + decide ------
+python3 - "$RAW" "$PLAN" "${TARGET:-}" "$GAME_ROOT" "$PORT" "$MARK_BEGIN" "$MARK_END" <<'PY'
+import re, sys, json
 
-# A PREFIX `location /` is the one thing we cannot work around automatically:
-# it is the site's own catch-all, and only one may exist. Say what to change
-# rather than guess which of the two the operator meant to keep.
-if [ "$ALREADY" = 0 ] && has_loc '/'; then
+src, planfile, target, game_root, port, MB, ME = sys.argv[1:8]
+lines = open(src, encoding='utf-8', errors='replace').read().split('\n')
+
+def strip(l):
+    # brace counting must ignore braces inside comments
+    return l.split('#', 1)[0]
+
+# Walk the file tracking depth, recording every top-level `server { ... }`.
+blocks, depth, cur = [], 0, None
+for i, l in enumerate(lines):
+    s = strip(l)
+    if depth == 0 and re.search(r'\bserver\s*\{', s):
+        cur = {'start': i, 'locs': [], 'listen': [], 'name': '', 'ssl': False, 'redirect_only': True}
+    if cur is not None:
+        if re.search(r'^\s*location\s+/\s*\{', s):
+            cur['locs'].append(i)
+        m = re.search(r'^\s*listen\s+([^;]+);', s)
+        if m: cur['listen'].append(m.group(1).strip())
+        m = re.search(r'^\s*server_name\s+([^;]+);', s)
+        if m: cur['name'] = m.group(1).strip()
+        if 'ssl_certificate' in s: cur['ssl'] = True
+        # a block that does more than bounce traffic is a real host
+        if re.search(r'\b(root|proxy_pass|try_files|alias|index)\b', s): cur['redirect_only'] = False
+    depth += s.count('{') - s.count('}')
+    if cur is not None and depth == 0:
+        cur['end'] = i          # the line holding this block's closing brace
+        blocks.append(cur); cur = None
+
+if not blocks:
+    print('NOBLOCKS'); sys.exit(0)
+
+def is_tls(b):
+    return b['ssl'] or any('443' in x for x in b['listen'])
+
+cands = [b for b in blocks if is_tls(b) and not b['redirect_only']] or \
+        [b for b in blocks if is_tls(b)] or blocks
+
+chosen = None
+if target:
+    n = int(target) - 1
+    if 0 <= n < len(blocks): chosen = blocks[n]
+elif len(cands) == 1:
+    chosen = cands[0]
+
+out = {
+    'blocks': [{'n': i + 1, 'start': b['start'] + 1, 'end': b['end'] + 1,
+                'listen': b['listen'], 'name': b['name'], 'ssl': b['ssl'],
+                'redirect_only': b['redirect_only'],
+                'locs': [x + 1 for x in b['locs']]} for i, b in enumerate(blocks)],
+    'chosen': None if chosen is None else blocks.index(chosen) + 1,
+}
+if chosen is not None:
+    body = '\n'.join(lines[chosen['start']:chosen['end'] + 1])
+    out['has_catchall'] = len(chosen['locs']) > 0
+    out['catchall_lines'] = [x + 1 for x in chosen['locs']]
+    out['has_exact_root'] = bool(re.search(r'^\s*location\s+=\s*/\s*\{', body, re.M))
+    out['has_play'] = bool(re.search(r'^\s*location\s+=\s*/play\s*\{', body, re.M))
+    out['has_admin'] = bool(re.search(r'^\s*location\s+=\s*/pzadmin\.html\s*\{', body, re.M))
+    out['has_assets'] = bool(re.search(r'^\s*location\s+~\*?[^{\n]*\\\.\(png', body, re.M))
+    out['already'] = MB in body
+    out['insert_before'] = chosen['end'] + 1
+open(planfile, 'w').write(json.dumps(out))
+print('OK')
+PY
+
+[ -s "$PLAN" ] || die "could not parse $CONF into server blocks"
+get() { python3 -c "import json,sys;print(json.load(open('$PLAN')).get('$1',''))"; }
+
+echo
+echo "server blocks found in $CONF:"
+python3 - "$PLAN" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1]))
+for b in d['blocks']:
+    mark = '  <-- target' if d['chosen'] == b['n'] else ''
+    kind = 'redirect-only' if b['redirect_only'] else ('TLS host' if b['ssl'] or any('443' in x for x in b['listen']) else 'host')
+    print(f"  [{b['n']}] lines {b['start']}-{b['end']}  {kind}"
+          f"  listen={','.join(b['listen']) or '?'}  server_name={b['name'] or '?'}"
+          f"  location/ at {b['locs'] or 'none'}{mark}")
+PY
+echo
+
+CHOSEN=$(get chosen)
+if [ -z "$CHOSEN" ] || [ "$CHOSEN" = "None" ]; then
+  echo "!! more than one block could be the site's host — pick one and re-run:"
+  echo "     TARGET=2 APPLY=1 bash $0"
+  exit 1
+fi
+say "target: server block #$CHOSEN"
+
+if [ "$(get has_catchall)" = "True" ] && [ "$(get already)" != "True" ]; then
   echo
-  echo "!! this config already has a catch-all 'location / { }':"
-  sudo grep -nE "^[[:space:]]*location[[:space:]]+/[[:space:]]*\{" "$CONF" | sed 's/^/     /'
+  echo "!! that block already has a catch-all 'location / { }' at line $(get catchall_lines):"
+  sudo sed -n "$(python3 -c "import json;print(json.load(open('$PLAN'))['catchall_lines'][0])")p" "$CONF" | sed 's/^/     /'
   echo
-  echo "   nginx allows only one per server block. If that block serves the game,"
-  echo "   narrow it to an EXACT match by adding one '=' :"
+  echo "   nginx allows one per server block. If it serves the game, narrow it to"
+  echo "   an exact match by adding one '=' :"
   echo
   echo "       location = / { try_files /index.html =404; }"
   echo
   echo "   That keeps the game on the root and frees the catch-all for the site."
-  echo "   Then re-run this script."
+  echo "   Nothing was changed. Re-run afterwards."
   exit 1
 fi
 
-STAMP=$(date +%Y%m%d-%H%M%S)
-BACKUP="/tmp/nginx-$(basename "$CONF").$STAMP.bak"
-sudo cp "$CONF" "$BACKUP"
-say "backed up to $BACKUP"
-
 # --------------------------------------------------------------- build it ----
-BLOCK=$(mktemp); NEW=$(mktemp)
-trap 'rm -f "$BLOCK" "$NEW"' EXIT INT TERM
-
+BLOCK=$(mktemp); trap 'rm -f "$RAW" "$PLAN" "$NEW" "$BLOCK"' EXIT INT TERM
 {
-  echo "$MARK_BEGIN"
-  if has_loc '=[[:space:]]*/'; then
-    say "keeping the existing 'location = /' (the game's root)"
+  echo "    $MARK_BEGIN"
+  if [ "$(get has_exact_root)" = "True" ]; then
+    say "keeping the block's existing 'location = /' (the game's root)"
   else
-    cat <<NGINX
-    # The game keeps the root. '=' is an exact match and outranks every prefix
-    # location, so nothing below can take it.
-    location = / {
-        root $GAME_ROOT;
-        try_files /index.html =404;
-    }
-NGINX
+    printf '    location = / {\n        root %s;\n        try_files /index.html =404;\n    }\n' "$GAME_ROOT"
   fi
-  has_loc '=[[:space:]]*/play' || cat <<NGINX
-    location = /play {
-        root $GAME_ROOT;
-        try_files /index.html =404;
-    }
-NGINX
-  has_loc '=[[:space:]]*/pzadmin\.html' || cat <<NGINX
-    location = /pzadmin.html {
-        root $GAME_ROOT;
-    }
-NGINX
-  cat <<NGINX
-
-    # Game assets first; anything that is not a file on disk falls to the site.
+  [ "$(get has_play)" = "True" ] || printf '    location = /play {\n        root %s;\n        try_files /index.html =404;\n    }\n' "$GAME_ROOT"
+  [ "$(get has_admin)" = "True" ] || printf '    location = /pzadmin.html {\n        root %s;\n    }\n' "$GAME_ROOT"
+  if [ "$(get has_assets)" != "True" ]; then
+    cat <<NGINX
     location ~* \\.(png|jpe?g|webp|avif|ico|gif|woff2?|mp3)\$ {
         root $GAME_ROOT;
         try_files \$uri @pzsite;
         expires 30d;
         add_header Cache-Control "public, immutable";
     }
-
-    # Everything else is the marketing site.
+NGINX
+  fi
+  cat <<NGINX
     location / {
         proxy_pass http://127.0.0.1:$PORT;
         proxy_http_version 1.1;
@@ -122,30 +191,51 @@ NGINX
         proxy_set_header Host \$host;
         proxy_set_header X-Forwarded-Proto \$scheme;
     }
-$MARK_END
+    $MARK_END
 NGINX
 } > "$BLOCK"
 
-# --------------------------------------------------------------- apply it ----
-# Insert before the closing brace of the last server block, dropping any earlier
-# copy of our own block so re-running is idempotent.
-sudo awk -v blockfile="$BLOCK" -v b="$MARK_BEGIN" -v e="$MARK_END" '
-  BEGIN { while ((getline line < blockfile) > 0) blk = blk line "\n" }
-  index($0, b) { skip = 1 }
-  skip && index($0, e) { skip = 0; next }
-  skip { next }
-  { kept[n++] = $0 }
-  END {
-    last = -1
-    for (i = 0; i < n; i++) if (kept[i] ~ /^[[:space:]]*\}[[:space:]]*$/) last = i
-    for (i = 0; i < n; i++) { if (i == last) printf "%s", blk; print kept[i] }
-  }' "$CONF" > "$NEW"
+echo "this will be inserted into block #$CHOSEN, before its closing brace on line $(get insert_before):"
+sed 's/^/    | /' "$BLOCK"
+echo
 
-grep -q "$MARK_BEGIN" "$NEW" || die "could not place the block — is $CONF a normal server{} file?"
+if [ "$APPLY" != "1" ]; then
+  echo "Nothing was changed. To apply:"
+  echo "    APPLY=1 TARGET=$CHOSEN bash $0"
+  exit 0
+fi
+
+# --------------------------------------------------------------- apply it ----
+STAMP=$(date +%Y%m%d-%H%M%S)
+BACKUP="/tmp/nginx-$(basename "$CONF").$STAMP.bak"
+sudo cp "$CONF" "$BACKUP"
+say "backed up to $BACKUP"
+
+INSERT_AT=$(get insert_before)
+python3 - "$RAW" "$BLOCK" "$INSERT_AT" "$MARK_BEGIN" "$MARK_END" > "$NEW" <<'PY'
+import sys
+src, blockfile, at, MB, ME = sys.argv[1], sys.argv[2], int(sys.argv[3]), sys.argv[4], sys.argv[5]
+lines = open(src, encoding='utf-8', errors='replace').read().split('\n')
+blk = open(blockfile, encoding='utf-8').read().rstrip('\n')
+# drop any previous copy of our own block, so re-running replaces it
+out, skip = [], False
+for l in lines:
+    if MB in l: skip = True; continue
+    if skip:
+        if ME in l: skip = False
+        continue
+    out.append(l)
+# the closing brace moved up by however many lines we removed
+removed = len(lines) - len(out)
+idx = max(0, at - 1 - removed)
+out.insert(idx, blk)
+sys.stdout.write('\n'.join(out))
+PY
+
+grep -q "$MARK_BEGIN" "$NEW" || die "could not place the block"
 sudo cp "$NEW" "$CONF"
 say "block inserted"
 
-# ---------------------------------------------------------------- test it ----
 if ! sudo nginx -t 2>&1 | sed 's/^/    /'; then
   echo
   say "nginx REJECTED the config — restoring the original, NOT reloading"
@@ -153,7 +243,7 @@ if ! sudo nginx -t 2>&1 | sed 's/^/    /'; then
   if sudo nginx -t >/dev/null 2>&1; then
     say "original restored and valid. Nothing was reloaded; the game never changed."
   else
-    say "WARNING: the restored config also fails nginx -t. It was already failing before this script ran."
+    say "WARNING: the restored config also fails nginx -t — it was already failing before this ran."
   fi
   exit 1
 fi
@@ -161,12 +251,11 @@ fi
 sudo systemctl reload nginx
 say "nginx reloaded"
 
-# -------------------------------------------------------------- verify it ----
 echo
-say "checking through nginx (game paths must still answer):"
+say "checking through nginx:"
 for p in / /play /v1/health /about /blog /sitemap.xml /site-admin; do
   code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1$p" 2>/dev/null) || code=""
-  [ -n "$code" ] || code="—"   # curl could not connect at all
+  [ -n "$code" ] || code="—"
   printf '    %-14s %s\n' "$p" "$code"
 done
 echo
