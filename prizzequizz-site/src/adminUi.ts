@@ -106,11 +106,18 @@ function toast(m,bad){const t=$('#toast');t.textContent=m;t.style.borderColor=ba
   t.style.display='block';clearTimeout(window._tt);window._tt=setTimeout(()=>t.style.display='none',2600);}
 
 async function api(method,path,body){
-  const r=await fetch('/site-api/'+path,{method:method,
-    headers:{'content-type':'application/json','x-admin-key':KEY},
-    body:body?JSON.stringify(body):undefined});
+  let r;
+  try{
+    r=await fetch('/site-api/'+path,{method:method,
+      headers:{'content-type':'application/json','x-admin-key':KEY},
+      body:body?JSON.stringify(body):undefined});
+  }catch(e){ const err=new Error('به سرور سایت نرسیدیم'); err.status=0; throw err; }
   const j=await r.json().catch(()=>({}));
-  if(!r.ok||j.ok===false) throw new Error((j.error&&j.error.message)||('خطا '+r.status));
+  if(!r.ok||j.ok===false){
+    const err=new Error((j.error&&j.error.message)||('خطا '+r.status));
+    err.status=r.status;            // the caller needs to tell 403 from 404
+    throw err;
+  }
   return j.data;
 }
 async function enter(){
@@ -120,7 +127,19 @@ async function enter(){
     await loadAll();
     try{ sessionStorage.setItem('site_admin_key',KEY); }catch(e){}
     $('#gate').style.display='none'; $('#app').style.display='';
-  }catch(e){ $('#gateErr').textContent='کلید پذیرفته نشد.'; }
+  }catch(e){
+    /* Saying "wrong key" for every failure sends people to hunt the wrong
+     * problem: a 404 means nginx is not routing /site-api to this service, a
+     * 502 means the service is down, and neither has anything to do with the
+     * key they just typed. */
+    const s=e&&e.status;
+    $('#gateErr').textContent =
+      s===403 ? 'کلید پذیرفته نشد.' :
+      s===404 ? 'مسیر /site-api پیدا نشد — nginx درخواست را به سایت نمی‌فرستد.' :
+      s===0   ? 'به سرور سایت نرسیدیم — سرویس بالا نیست یا شبکه قطع است.' :
+      s       ? ('خطای سرور ('+s+') — کلید مشکلی ندارد.') :
+                ('خطا: '+(e&&e.message||'نامشخص'));
+  }
 }
 async function loadAll(){
   DATA=await api('GET','all');
