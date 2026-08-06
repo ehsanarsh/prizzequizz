@@ -211,6 +211,9 @@ async function advancePhase(room: RoomRow, now: number): Promise<void> {
            * Green has none and behaves exactly as it always did. */
           if ((p.shields ?? 0) > 0) {
             p.shields = (p.shields ?? 0) - 1;
+            /* Stamp the round so the player's own snapshot can say "your shield
+             * took this one" — alive alone reads as a correct answer. */
+            p.shieldRound = room.round;
             await savePlayer(p);
             shielded.push({ userId: p.userId, left: p.shields });
           } else {

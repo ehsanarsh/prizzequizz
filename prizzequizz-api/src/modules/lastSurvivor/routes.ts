@@ -7,7 +7,7 @@ import { bodyObject } from '../../utils/validation.js';
 import { getConfig, updateConfig, setTopicEnabled, isTopicPlayable, removeTopic,
          RANDOM_TOPIC, isRandomTopic } from '../../services/lastSurvivorConfig.js';
 import { joinTopic, snapshot, addVote, addChat, listChat, getRoom, saveRoom, listAllRooms, listPlayers,
-         leaveRoom, touchPlayer, sweepIdlePlayers, LastSurvivorError } from '../../services/lastSurvivorService.js';
+         leaveRoom, touchPlayer, sweepIdlePlayers, LastSurvivorError, listActiveRooms} from '../../services/lastSurvivorService.js';
 import { submitAnswer, submitDecision, useLifeline, advanceRoom } from '../../services/lastSurvivorWorker.js';
 import { requireAdmin } from '../../services/adminGuard.js';
 import { avatarUrlFor } from '../../services/avatarService.js';
@@ -143,6 +143,19 @@ export function registerLastSurvivorRoutes(router: Router, base: string): void {
      * admin edits, so a picture uploaded once shows up in every mode. */
     const cats = new Map(categoryList().map((c) => [c.name, c]));
     const art = await categoryImageUrls().catch(() => ({} as Record<string, string>));
+    /* What is actually at stake right now, per topic. Last Survivor's prize is
+     * a SHARE of the pot the entrants build — it cannot be known before they
+     * arrive — so the entry screen shows the live pot instead of a fixed
+     * figure. Without this the client had nothing true to show and fell back on
+     * the duel's number, which is a different game's arithmetic. */
+    const live = new Map<string, { pool: number; players: number }>();
+    for (const r of await listActiveRooms()) {
+      if (r.status !== 'waiting') continue;
+      const cur = live.get(r.topic) ?? { pool: 0, players: 0 };
+      cur.pool += r.grossPool;
+      cur.players += (await listPlayers(r.id)).length;
+      live.set(r.topic, cur);
+    }
     const topics = [...names].map((name) => ({
       name,
       icon: cats.get(name)?.icon ?? '❓',
@@ -151,6 +164,10 @@ export function registerLastSurvivorRoutes(router: Router, base: string): void {
        * reporting a per-category count would show 0 and read as broken. */
       questionCount: isRandomTopic(name) ? questions.length : (counts.get(name) ?? 0),
       random: isRandomTopic(name),
+      /* The waiting room's pot and head count for this topic, or zeros when
+       * nobody is waiting yet. */
+      livePool: live.get(name)?.pool ?? 0,
+      livePlayers: live.get(name)?.players ?? 0,
       playable: isTopicPlayable(cfg, name),
       comingSoon: !isTopicPlayable(cfg, name),
       minUsers: cfg.topics?.[name]?.minUsers ?? cfg.room.minUsers

@@ -321,6 +321,10 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
 .tk-prize-lbl{display:block;font-size:11.5px;font-weight:900;color:var(--muted);letter-spacing:.02em}
 .tk-prize-val{display:block;font-size:30px;font-weight:900;color:var(--bolt);line-height:1.25;margin-top:3px;text-shadow:0 2px 0 rgba(0,0,0,.45)}
 .tk-prize-tag{display:inline-block;margin-top:7px;font-size:11px;font-weight:900;color:var(--paper);background:rgba(255,210,31,.16);border:2px solid #000;border-radius:999px;padding:4px 11px;box-shadow:0 2.5px 0 #000}
+/* The one line that explains how the Last Survivor prize is actually reached,
+   sitting under the pot so the number is never read as a promise. */
+.ls-share-note{margin-top:9px;font-size:11.5px;line-height:1.85;color:#BDB6CE;background:rgba(255,255,255,.05);border:1.5px solid rgba(255,255,255,.10);border-radius:12px;padding:9px 11px}
+.ls-share-note b{color:var(--bolt,#FFD21F)}
 .lb-row .lb-av{width:24px;height:24px;border-radius:8px;border:2px solid #000;background:var(--ink-3);display:grid;place-items:center;font-size:13px;overflow:hidden;flex-shrink:0}
 
 /* ===== BOTTOM NAV ===== */
@@ -4125,6 +4129,9 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
       .ls-verdict{margin:8px 14px;padding:12px 14px;border-radius:16px;font-weight:900;font-size:14px;text-align:center;border:var(--stroke);box-shadow:var(--hard-sm);animation:lsPop .35s}
       .ls-verdict.ok{background:var(--ok-soft);color:var(--ok);border-color:var(--ok)}
       .ls-verdict.bad{background:var(--bad-soft);color:var(--bad);border-color:var(--bad)}
+      /* Saved by a shield: neither a win nor a knock-out, so neither green nor
+         red — the answer was wrong, but the player is still in the match. */
+      .ls-verdict.shield{background:rgba(93,183,236,.14);color:var(--info);border-color:var(--info);line-height:1.9}
       .ls-elim-hd{text-align:center;padding:16px 14px 4px}
       .ls-elim-hd h2{color:#ff4d4d;font-size:20px;font-weight:900;margin:0;letter-spacing:1px}
       .ls-elim-hd p{color:#c9c2b3;font-size:12px;margin:4px 0 0}
@@ -6020,11 +6027,23 @@ async function lsLeave(to,skipAsk){
 }
 function lsStopPoll(){ if(lsPoller){clearInterval(lsPoller);lsPoller=null;} }
 
+/* The last topic list we were served, by name. */
+let LS_TOPIC_ROWS={};
+/* What is actually in the pot for a topic right now. Zeros before anyone has
+   joined — which is the truth, not a placeholder. */
+function lsTopicPool(name){
+  const t=LS_TOPIC_ROWS[name]||{};
+  return { pool: Number(t.livePool||0), players: Number(t.livePlayers||0) };
+}
+
 async function lsLoadTopics(){
   const box=document.getElementById('lsTopicList'); if(box)box.innerHTML='<div style="grid-column:span 2;text-align:center;color:#8fa89a;padding:30px">در حال بارگذاری…</div>';
   const r=await pzApi('GET','/last-survivor/topics'); const d=(r&&r.data)||{};
   lsTickets=d.tickets||{};
   const topics=d.topics||[];
+  /* Kept so the entry card can show the pot waiting for the chosen topic
+     without a second request. */
+  LS_TOPIC_ROWS={}; topics.forEach(t=>{ LS_TOPIC_ROWS[t.name]=t; });
   /* The topics endpoint now carries each topic's admin-uploaded artwork, so the
      picture here is the same one the duel and the record board show. */
   pzTopicArtLearn(topics);
@@ -6053,9 +6072,21 @@ function lsRenderEntry(){
   if(tp)tp.textContent=lsEntryTopic||'موضوع';
   const card=document.getElementById('lsEntryCard'); if(!card)return;
   pzPromoRender('lastSurvivor','promoLs');
-  card.innerHTML='<div class="tk-prize"><span class="tk-prize-lbl">سهم تو از جایزه</span>'+
-      '<b class="tk-prize-val" id="lsPrizeVal">'+(pzPrizeFor(lsEntryColor)==null?'…':lsFa(pzPrizeFor(lsEntryColor))+' تومان')+'</b>'+
-      '<span class="tk-prize-tag">هرچه بیشتر بمانی، سهمت بیشتر 🏆</span></div>'+
+  /* NOT a fixed figure. This used to print the DUEL's prize — netPrize(value×2),
+     a two-player pot — which is a different game's arithmetic. Last Survivor's
+     prize is a share of whatever the entrants build, so it cannot be known
+     before they arrive. What IS true is the pot waiting right now, and how much
+     this ticket adds to it. */
+  const tinfo=(lsTickets&&lsTickets[lsEntryColor])||{};
+  const pool=lsTopicPool(lsEntryTopic);
+  card.innerHTML='<div class="tk-prize"><span class="tk-prize-lbl">'+(pool.players>0?'جایزهٔ این اتاق تا الان':'جایزهٔ اتاق')+'</span>'+
+      '<b class="tk-prize-val" id="lsPrizeVal">'+lsFa(pool.pool)+' تومان</b>'+
+      '<span class="tk-prize-tag">'+(pool.players>0
+        ? lsFa(pool.players)+' نفر منتظرند — با هر نفر بیشتر می‌شود'
+        : 'با ورود هر بازیکن بزرگ‌تر می‌شود')+'</span></div>'+
+    '<div class="ls-share-note">جایزه بین بازمانده‌ها تقسیم می‌شود، به‌نسبت <b>ضریب بلیط</b>. '+
+      'بلیط تو '+lsFa(Number(tinfo.value||0))+' تومان به این جایزه اضافه می‌کند'+
+      (tinfo.units?' و ضریب سهمت '+lsFa(tinfo.units)+' است':'')+'.</div>'+
     '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px" id="lsTkGrid"></div>';
   const g=document.getElementById('lsTkGrid');
   const have=(typeof mTickets!=='undefined'&&mTickets)||{green:0,blue:0,red:0};
@@ -6071,7 +6102,7 @@ function lsRenderEntry(){
   const btn=document.getElementById('lsEntryBtn');
   if(btn){ const n=have[lsEntryColor]||0; const nm=(typeof tDef==='function'?tDef(lsEntryColor).name:'بلیط');
     btn.textContent=n>0?('ورود با '+nm+' 🎫'):('خرید '+nm+' 🎫'); }
-  if(pzPrizeFor(lsEntryColor)==null) pzLoadPrizes().then(()=>{ const el=document.getElementById('lsPrizeVal'); const p=pzPrizeFor(lsEntryColor); if(el&&p!=null) el.textContent=lsFa(p)+' تومان'; });
+  /* The pot comes with the topic list, so there is nothing to fetch late. */
 
 }
 function lsEntryStart(){
@@ -6190,19 +6221,29 @@ function lsBuild(snap){
      dashboard on top (with the prize won so far, which grows as players drop)
      and the Squid-Game grid underneath. There is no separate dashboard screen. */
   const me=snap.me||{};
-  const myVerdict = me.status==='eliminated' && me.eliminatedRound===r.round
-    ? 'wrong' : (me.status==='alive' ? 'right' : '');
+  /* THREE outcomes, not two. Being alive no longer means you answered
+     correctly: a shield can absorb a wrong answer, and the player stays in the
+     match. Telling them «جواب شما درست بود» in that case is a lie, and it also
+     hides the fact that they just spent a shield. */
+  const myVerdict = me.shieldBroke ? 'shield'
+    : (me.status==='eliminated' && me.eliminatedRound===r.round ? 'wrong'
+    : (me.status==='alive' ? 'right' : ''));
+  /* Timed out is not the same as answered wrong, and saying "your answer was
+     X" to somebody who never touched the screen reads as the game inventing
+     a pick for them. */
+  const rv=me.reveal, correctTxt=(rv&&rv.options&&rv.options[rv.correctIndex])||'';
+  const timedOut=!!(rv&&(rv.timedOut||rv.yourIndex==null));
   let verdict='';
   if(r.phase==='elimination'&&myVerdict==='right'){
     verdict='<div class="ls-verdict ok">✅ جواب شما درست بود — تبریک! می‌تونی به مرحلهٔ بعد بری</div>';
+  } else if(r.phase==='elimination'&&myVerdict==='shield'){
+    const left=Number(me.shields||0);
+    verdict='<div class="ls-verdict shield">🛡️ '+(timedOut?'زمان شما تمام شد':'پاسخ شما اشتباه بود')+
+      ' — پاسخ درست: <b>'+(correctTxt||'—')+'</b><br>سپر شما شکست و جای شما را نجات داد؛ '+
+      (left>0?('<b>'+lsFa(left)+'</b> سپر برایتان مانده'):'دیگر سپری ندارید — اشتباه بعدی یعنی حذف')+'</div>';
   } else if(r.phase==='elimination'&&myVerdict==='wrong'){
-    const rv=me.reveal; const correct=(rv&&rv.options&&rv.options[rv.correctIndex])||'';
-    /* Timed out is not the same as answered wrong, and saying "your answer was
-       X" to somebody who never touched the screen reads as the game inventing
-       a pick for them. */
-    const timedOut=!!(rv&&(rv.timedOut||rv.yourIndex==null));
     verdict='<div class="ls-verdict bad">'+(timedOut?'⏳ زمان شما به پایان رسید — ':'❌ ')+
-      'پاسخ درست: <b>'+(correct||'—')+'</b> — شما حذف شدید</div>';
+      'پاسخ درست: <b>'+(correctTxt||'—')+'</b> — شما حذف شدید</div>';
   }
   body.innerHTML=lsDashHtml(snap,true)+verdict+
     '<div class="ls-elim-hd"><h2>'+(r.phase==='elimination'?'مرحلهٔ حذف ☠️':'وضعیت مسابقه')+'</h2><p>'+(r.phase==='elimination'?'هر کس اشتباه جواب داد، حذف می‌شود':'جایزه با حذف هر نفر بیشتر می‌شود')+'</p></div>'+
@@ -6261,7 +6302,13 @@ function lsPlayersCells(snap,markElim){
     const cls=p.status==='eliminated'?'elim':(p.status==='cashed_out'?'cash':'');
     const now=markElim&&p.status==='eliminated'&&p.eliminatedRound===snap.room.round?'ls-elim-now':'';
     const tap=`onclick="showOpponentProfileByData('${jsStr(p.userId||'')}','${jsStr(p.username||'بازیکن')}','${jsStr(p.avatar||'')}','روم آخرین بازمانده')"`;
-    return `<div class="ls-pl ${cls} ${now}" style="cursor:pointer" ${tap}><div class="av">${lsAvatarHTML(p)}${p.status==='eliminated'?'<span class="xx">✕</span>':''}${p.status==='cashed_out'?'<span class="cashb">برداشت</span>':''}<span class="dot" style="background:${col}"></span></div><small>${(p.username||'').slice(0,8)}</small></div>`;
+    /* Shields left, as pips on the card. A blue ticket carries one and a red
+       two, so «حذف شد» is not the only thing a wrong answer can mean and the
+       row has to say which it was. */
+    const sh=Number(p.shields||0);
+    const pips=sh>0&&p.status!=='eliminated'
+      ? `<span class="ls-sh" title="${sh} سپر">${'🛡️'.repeat(Math.min(sh,3))}</span>` : '';
+    return `<div class="ls-pl ${cls} ${now}" style="cursor:pointer" ${tap}><div class="av">${lsAvatarHTML(p)}${p.status==='eliminated'?'<span class="xx">✕</span>':''}${p.status==='cashed_out'?'<span class="cashb">برداشت</span>':''}${pips}<span class="dot" style="background:${col}"></span></div><small>${(p.username||'').slice(0,8)}</small></div>`;
   }).join('');
 }
 function lsGridHtml(snap,markElim){ return `<div class="ls-grid" id="lsElimGrid" style="grid-template-columns:repeat(4,1fr)">${lsPlayersCells(snap,markElim)}</div>`; }

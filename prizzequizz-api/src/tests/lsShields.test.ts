@@ -11,7 +11,7 @@ import { repositories } from '../repositories/index.js';
 import { grantTickets } from '../services/ticketService.js';
 import { getConfig, updateConfig } from '../services/lastSurvivorConfig.js';
 import { ticketShields } from '../services/lastSurvivorPrize.js';
-import { joinTopic, getRoom, saveRoom, getPlayer, listPlayers } from '../services/lastSurvivorService.js';
+import { joinTopic, getRoom, saveRoom, getPlayer, listPlayers, snapshot } from '../services/lastSurvivorService.js';
 import { advanceRoom, submitAnswer } from '../services/lastSurvivorWorker.js';
 
 const TOPIC = 'اطلاعات عمومی';
@@ -68,6 +68,31 @@ async function playWrongRound(roomId: string, users: string[]): Promise<void> {
   const r = (await getRoom(roomId))!;
   r.phaseEndsAt = 0; await saveRoom(r);
   await advanceRoom((await getRoom(roomId))!);      // question → elimination: graded here
+}
+
+/** Same, but everybody answers correctly — used to prove a flag does not linger. */
+async function playCorrectRound(roomId: string, users: string[]): Promise<void> {
+  const round = await reachQuestion(roomId);
+  if (round == null) return;
+  for (const u of [...users, ...keepers]) {
+    const p = await getPlayer(roomId, u);
+    if (p && p.status === 'alive') await submitAnswer(roomId, u, round, 0);
+  }
+  const r = (await getRoom(roomId))!;
+  r.phaseEndsAt = 0; await saveRoom(r);
+  await advanceRoom((await getRoom(roomId))!);
+}
+
+/** A room of `n` blue tickets, already running, with two always-right keepers. */
+async function runningRoom(color: string): Promise<{ roomId: string; subject: string }> {
+  await updateConfig({ room: { capacity: 3, minUsers: 3, waitSeconds: 0, manualStartEnabled: false, startPct: 70 } });
+  const s = await player(color), k1 = await player('green'), k2 = await player('green');
+  const j = await joinTopic({ id: s, username: 's' }, TOPIC, color);
+  await joinTopic({ id: k1, username: 'k1' }, TOPIC, 'green');
+  await joinTopic({ id: k2, username: 'k2' }, TOPIC, 'green');
+  await advanceRoom((await getRoom(j.room.id))!);
+  keepers = [k1, k2];
+  return { roomId: j.room.id, subject: s };
 }
 
 async function run(): Promise<void> {
@@ -156,6 +181,52 @@ async function run(): Promise<void> {
       assert.equal(p.status, 'alive');
       assert.equal(p.shields, 2, 'shields are untouched by a right answer');
     }
+  });
+
+  await check('a broken shield is reported as a WRONG answer, not a right one', async () => {
+    /* The bug this covers: a shield keeps the player 'alive', and the result
+       screen read 'alive' as "you answered correctly" — so somebody who got it
+       wrong was congratulated and never learnt they had spent a shield. */
+    const { roomId, subject } = await runningRoom('blue');
+    await playWrongRound(roomId, [subject]);
+
+    const snap = await snapshot(roomId, subject);
+    assert.equal(snap.me.status, 'alive', 'the shield keeps them in the match');
+    assert.equal(snap.me.shieldBroke, true, 'and the snapshot says a shield is why');
+    assert.equal(snap.me.shields, 0, 'the shield itself is spent');
+    assert.ok(snap.me.reveal, 'they are shown the answer they got wrong');
+    assert.equal(snap.me.reveal.correctIndex, 0);
+    assert.equal(snap.me.reveal.yourIndex, 1, 'their own wrong pick, not somebody else’s');
+    assert.equal(snap.me.reveal.timedOut, false, 'they did answer');
+
+    // The flag belongs to that round only — a clean next round must clear it.
+    await playCorrectRound(roomId, [subject]);
+    const after = await snapshot(roomId, subject);
+    assert.equal(after.me.shieldBroke, false, 'a correct round does not still say "shield broken"');
+    assert.equal(after.me.reveal, undefined, 'and a surviving player is told nothing about the answer');
+  });
+
+  await check('running out of time also spends the shield, and says so', async () => {
+    const { roomId, subject } = await runningRoom('red');
+    // The subject answers nothing at all; the keepers answer correctly.
+    await playWrongRound(roomId, []);
+
+    const snap = await snapshot(roomId, subject);
+    assert.equal(snap.me.status, 'alive', 'a shield covers a timeout too');
+    assert.equal(snap.me.shieldBroke, true);
+    assert.equal(snap.me.shields, 1, 'red spends one of its two');
+    assert.ok(snap.me.reveal, 'the correct answer is still shown');
+    assert.equal(snap.me.reveal.timedOut, true, 'not answering is a timeout, not a wrong pick');
+    assert.equal(snap.me.reveal.yourIndex, null, 'no pick may be invented for them');
+  });
+
+  await check('a player with no shield left is still told they are out', async () => {
+    const { roomId, subject } = await runningRoom('green');
+    await playWrongRound(roomId, [subject]);
+    const snap = await snapshot(roomId, subject);
+    assert.equal(snap.me.status, 'eliminated');
+    assert.equal(snap.me.shieldBroke, false, 'nothing was absorbed — they went out');
+    assert.ok(snap.me.reveal, 'the eliminated player still sees the correct answer');
   });
 
   await check('the snapshot tells the client how many shields are left', async () => {
