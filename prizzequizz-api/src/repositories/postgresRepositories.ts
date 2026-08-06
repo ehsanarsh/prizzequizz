@@ -45,7 +45,20 @@ export const postgresRepositories: RepositoryBundle = {
     async listUnlockEvents(userId: string, limit = 100): Promise<CharacterUnlockEvent[]> { const { rows } = await pool().query('select * from character_unlock_events where user_id=$1 order by created_at desc limit $2', [userId, limit]); return rows.map(characterUnlockEventFromRow); }
   },
   users: {
-    async findById(id: string): Promise<User | null> { const { rows } = await pool().query('select * from users where id=$1', [id]); return rows[0] ? userFromRow(rows[0]) : null; },
+    /* users.id is a UUID column, so an id that is not UUID text makes Postgres
+     * raise a cast error (22P02) instead of returning no rows — and that error
+     * travelled up as a 500. An id that cannot be a UUID cannot match any row,
+     * so the truthful answer is "no such user". Only 22P02 is swallowed: a real
+     * outage must still surface rather than read as a missing account. */
+    async findById(id: string): Promise<User | null> {
+      try {
+        const { rows } = await pool().query('select * from users where id=$1', [id]);
+        return rows[0] ? userFromRow(rows[0]) : null;
+      } catch (e) {
+        if ((e as { code?: string })?.code === '22P02') return null;
+        throw e;
+      }
+    },
     async findByPhone(phone: string): Promise<User | null> { const { rows } = await pool().query('select * from users where phone=$1', [phone]); return rows[0] ? userFromRow(rows[0]) : null; },
     async list(limit = 1000): Promise<User[]> { const { rows } = await pool().query('select * from users order by updated_at desc limit $1', [limit]); return rows.map(userFromRow); },
     async save(user: User): Promise<void> {

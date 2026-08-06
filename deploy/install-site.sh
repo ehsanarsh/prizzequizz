@@ -69,19 +69,40 @@ install_with_docker() {
   fi
   echo "==> using docker network: $NET"
 
+  # docker's --env-file is stricter than the shell: it rejects `export FOO=`,
+  # and it keeps quotes as part of the value. Normalise into a file it accepts
+  # rather than handing it one it will refuse — a refused run creates NO
+  # container, which is why `docker logs` had nothing to show.
+  ENVF=/tmp/pz-site.env
+  : > "$ENVF"
+  if [ -f "$ENV_SRC" ]; then
+    sed -e 's/^[[:space:]]*export[[:space:]]\+//' \
+        -e '/^[[:space:]]*#/d' -e '/^[[:space:]]*$/d' \
+        -e 's/^\([A-Za-z_][A-Za-z0-9_]*\)="\(.*\)"$/\1=\2/' \
+        -e "s/^\([A-Za-z_][A-Za-z0-9_]*\)='\(.*\)'$/\1=\2/" \
+        "$ENV_SRC" | grep -E '^[A-Za-z_][A-Za-z0-9_]*=' > "$ENVF" || true
+  fi
+  echo "SITE_PORT=$PORT" >> "$ENVF"
+  echo "NODE_ENV=production" >> "$ENVF"
+  if ! grep -q '^DATABASE_URL=' "$ENVF"; then
+    echo "!! no DATABASE_URL found in $ENV_SRC — the site cannot reach Postgres"
+    echo "   add it to $DIR/site.env and re-run, or set ENV_SRC to the right file"
+    exit 1
+  fi
+
   sudo docker rm -f pz-site >/dev/null 2>&1 || true
   # Published on loopback only: nginx is what puts it on the internet.
+  # Errors are NOT suppressed — a failed run is the thing we need to see.
   sudo docker run -d --name pz-site \
     --restart unless-stopped \
     --network "$NET" \
     -p "127.0.0.1:$PORT:$PORT" \
     -v "$DIR:/app:ro" \
     -w /app \
-    -e SITE_PORT="$PORT" \
-    -e NODE_ENV=production \
-    ${ENV_SRC:+--env-file "$ENV_SRC"} \
+    --env-file "$ENVF" \
     -m 256m \
-    "$NODE_IMAGE" node /app/dist/server.js >/dev/null
+    "$NODE_IMAGE" node /app/dist/server.js
+  rm -f "$ENVF"
   UNDO="sudo docker rm -f pz-site"
 }
 
@@ -106,7 +127,9 @@ if [ "$ok" = 1 ]; then
 else
   echo "!! the site did not answer on port $PORT. Logs:"
   sudo systemctl status pz-site --no-pager 2>/dev/null | tail -20 || true
-  sudo docker logs --tail 30 pz-site 2>/dev/null || true
+  # No 2>/dev/null here: "no such container" is itself the diagnosis.
+  sudo docker ps -a --filter name=pz-site --format 'container: {{.Status}}' || true
+  sudo docker logs --tail 40 pz-site || true
   exit 1
 fi
 

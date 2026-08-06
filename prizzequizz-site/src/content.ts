@@ -112,9 +112,33 @@ function pg(): ReturnType<typeof getPgPool> | null {
   try { return process.env.DATABASE_URL ? getPgPool() : null; } catch { return null; }
 }
 
-let _schemaReady = false;
-async function ensureSchema(pool: ReturnType<typeof getPgPool>): Promise<void> {
-  if (_schemaReady) return;
+/* Latched as a promise, not a boolean: a boolean set after the work lets every
+ * request that arrives during a cold start run the DDL at once, and CREATE
+ * TABLE IF NOT EXISTS is not concurrency-safe — two of them racing collide on
+ * pg_type and one raises a duplicate-key error. That is exactly what made the
+ * very first page load after an install answer 500 while the rest were fine. */
+let _schema: Promise<void> | null = null;
+function ensureSchema(pool: ReturnType<typeof getPgPool>): Promise<void> {
+  _schema ??= createSchema(pool).catch((e) => { _schema = null; throw e; });
+  return _schema;
+}
+
+/* Duplicate-object errors are the benign half of that race — another process
+ * (a second site instance, or a deploy overlapping the old one) created the
+ * table first, which is the outcome we wanted anyway. */
+function alreadyExists(e: unknown): boolean {
+  const code = (e as { code?: string })?.code;
+  return code === '23505' || code === '42P07' || code === '42710';
+}
+
+async function createSchema(pool: ReturnType<typeof getPgPool>): Promise<void> {
+  try { await createSchemaOnce(pool); }
+  catch (e) {
+    if (!alreadyExists(e)) throw e;
+  }
+}
+
+async function createSchemaOnce(pool: ReturnType<typeof getPgPool>): Promise<void> {
   await pool.query(`CREATE TABLE IF NOT EXISTS site_pages (
     slug TEXT PRIMARY KEY,
     title TEXT NOT NULL,
@@ -146,7 +170,6 @@ async function ensureSchema(pool: ReturnType<typeof getPgPool>): Promise<void> {
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now())`);
   await pool.query(`CREATE TABLE IF NOT EXISTS site_settings (
     id TEXT PRIMARY KEY, data JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT now())`);
-  _schemaReady = true;
 }
 
 // ----------------------------------------------------------------- memory ----
