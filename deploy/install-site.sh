@@ -115,6 +115,19 @@ install_with_docker() {
                END { for (k in last) print k "=" last[k] }' > "$ENVF" || true
   rm -f "$RAW"
 
+  # The site's ONLY admin auth is this key, and it fails closed: unset in
+  # production means /site-api refuses everything, which leaves the panel alive
+  # but unable to save a single change. The game has no master key of its own —
+  # it authenticates admins from the database — so there is nothing to inherit
+  # and the site needs one minted for it.
+  if ! grep -q '^ADMIN_KEY=' "$ENVF"; then
+    NEWKEY=$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')
+    echo "ADMIN_KEY=$NEWKEY" >> "$ENVF"
+    touch "$DIR/site.env"; chmod 600 "$DIR/site.env"
+    echo "ADMIN_KEY=$NEWKEY" >> "$DIR/site.env"
+    GENERATED_KEY=$NEWKEY
+  fi
+
   echo "SITE_PORT=$PORT" >> "$ENVF"
   echo "NODE_ENV=production" >> "$ENVF"
   echo "==> passing to the site: $(cut -d= -f1 "$ENVF" | sort | tr '\n' ' ')"
@@ -172,9 +185,21 @@ else
 fi
 
 echo
+if [ -n "${GENERATED_KEY:-}" ]; then
+  echo "================================================================"
+  echo " ADMIN KEY (write this down — it is shown once):"
+  echo
+  echo "   $GENERATED_KEY"
+  echo
+  echo " It is the password for /site-admin. Saved to $DIR/site.env (mode 600)"
+  echo " and reused on the next install, so re-running does not change it."
+  echo "================================================================"
+  echo
+fi
 echo "Done. Next:"
 echo "  1) add deploy/site-nginx.conf's blocks to your server{} and: sudo nginx -t && sudo systemctl reload nginx"
-echo "  2) open https://YOUR-DOMAIN/site-admin and set «نشانی سایت» to your real domain"
+echo "  2) open https://YOUR-DOMAIN/site-admin, enter the admin key above,"
+echo "     and set «نشانی سایت» to your real domain"
 echo
 echo "The game was not touched. To undo everything:"
 echo "  $UNDO"
