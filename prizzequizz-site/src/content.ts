@@ -84,6 +84,11 @@ export interface SiteSettings {
   logoEmoji: string;
   /** Where the «بازی کن» buttons point. */
   playUrl: string;
+  /** Where the site's own home page lives. The game owns '/' by default, so the
+   *  site's home sits at '/home'; set this to '/' if the site ever takes the
+   *  root. Canonical URLs, the sitemap and every «خانه» link read it, so the
+   *  two can never disagree. */
+  homePath: string;
   androidUrl: string;
   iosUrl: string;
   bazaarUrl: string;
@@ -189,6 +194,7 @@ export const SETTINGS_DEFAULTS: SiteSettings = {
   ogImage: '/og-cover.png',
   logoEmoji: '🎯',
   playUrl: '/play',
+  homePath: '/home',
   androidUrl: '',
   iosUrl: '',
   bazaarUrl: '',
@@ -729,6 +735,11 @@ export async function saveSettings(patch: Partial<SiteSettings>): Promise<SiteSe
   /* A trailing slash here would produce canonical URLs with a double slash,
    * which search engines treat as a different page. */
   next.baseUrl = String(next.baseUrl ?? '').trim().replace(/\/+$/, '');
+  /* Must stay a site-relative path: it is pasted straight into href and into
+   * canonical URLs, so an absolute or scheme-bearing value would point the
+   * site's own home somewhere else entirely. */
+  const home = String(next.homePath ?? '').trim();
+  next.homePath = home.startsWith('/') && !home.startsWith('//') ? home.replace(/\/+$/, '') || '/' : '/home';
   const pool = pg();
   if (pool) {
     await ensureSchema(pool);

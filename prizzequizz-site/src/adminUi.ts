@@ -437,6 +437,7 @@ function renderSeo(){
     '<div class="card"><h3>لینک بازی و دانلود</h3>'+
       '<p class="sub">هر جای سایت که نوشته شود <b>{play}</b> به همین نشانی تبدیل می‌شود، پس اگر آدرس بازی عوض شد فقط همین یک خانه را عوض کن.</p>'+
       f('نشانی بازی','playUrl')+
+      f('نشانی صفحهٔ اصلی سایت','homePath','بازی روی / است، پس خانهٔ سایت روی /home می‌نشیند. اگر ریشه را به سایت دادی، اینجا / بگذار.')+
       '<div class="grid2">'+f('لینک اندروید (APK)','androidUrl')+f('لینک iOS','iosUrl')+'</div>'+
       '<div class="grid2">'+f('کافه بازار','bazaarUrl')+f('مایکت','myketUrl')+'</div>'+
     '</div>'+
@@ -460,7 +461,7 @@ function renderSeo(){
 }
 async function saveSeo(){
   const s={};
-  ['siteName','tagline','baseUrl','keywords','logoEmoji','ogImage','playUrl','androidUrl','iosUrl',
+  ['siteName','tagline','baseUrl','keywords','logoEmoji','ogImage','playUrl','homePath','androidUrl','iosUrl',
    'bazaarUrl','myketUrl','email','phone','address','telegram','instagram','twitter','footerNote']
     .forEach((k)=>{ const el=document.getElementById('st_'+k); if(el) s[k]=el.value; });
   ['description','googleVerification','enamadHtml'].forEach((k)=>{

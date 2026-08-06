@@ -59,6 +59,14 @@ export function faDate(iso: string): string {
  *  so a link is the one place admin-entered text can still execute. Only
  *  relative paths, anchors, http(s), mailto and tel survive; anything else
  *  becomes an inert '#'. */
+/* The site's home is not necessarily '/': the game owns the root, so by default
+ * the home page lives at '/home'. Every «خانه» link, breadcrumb, canonical and
+ * sitemap entry goes through here, so the button and the canonical can never
+ * point at different pages — which is what made the home link open the game
+ * while the sitemap told Google the game WAS the home page. */
+export function homeUrl(s: SiteSettings): string { return s.homePath || '/home'; }
+function pageUrl(slug: string, s: SiteSettings): string { return slug === 'home' ? homeUrl(s) : '/' + slug; }
+
 const SAFE_SCHEME = /^(https?:|mailto:|tel:)/i;
 function href(raw: string, s: SiteSettings): string {
   const v = String(raw ?? '').trim().replace('{play}', s.playUrl || '/play');
@@ -226,19 +234,19 @@ function nav(pages: SitePage[], current: string, s: SiteSettings): string {
   const items = pages
     .filter((p) => p.showInNav && p.published)
     .map((p) => {
-      const url = p.slug === 'home' ? '/' : `/${p.slug}`;
+      const url = pageUrl(p.slug, s);
       const cur = p.slug === current ? ' aria-current="page"' : '';
       return `<li><a href="${esc(url)}"${cur}>${esc(p.navLabel || p.title)}</a></li>`;
     }).join('');
   return `<header><div class="wrap"><nav class="nav" aria-label="منوی اصلی">
-  <a class="brand" href="/"><i>${esc(s.logoEmoji || '🎯')}</i>${esc(s.siteName)}</a>
+  <a class="brand" href="${esc(homeUrl(s))}"><i>${esc(s.logoEmoji || '🎯')}</i>${esc(s.siteName)}</a>
   <ul>${items}</ul>
   <a class="btn sm" href="${esc(s.playUrl || '/play')}">🎮 بازی کن</a>
 </nav></div></header>`;
 }
 
 function footer(pages: SitePage[], s: SiteSettings): string {
-  const link = (p: SitePage) => `<li><a href="${p.slug === 'home' ? '/' : '/' + esc(p.slug)}">${esc(p.navLabel || p.title)}</a></li>`;
+  const link = (p: SitePage) => `<li><a href="${esc(pageUrl(p.slug, s))}">${esc(p.navLabel || p.title)}</a></li>`;
   const legal = pages.filter((p) => ['privacy', 'terms'].includes(p.slug));
   const rest = pages.filter((p) => p.published && p.showInNav && !['privacy', 'terms', 'home'].includes(p.slug));
   const social = [
@@ -359,7 +367,7 @@ function crumbLd(s: SiteSettings, trail: Array<{ name: string; url: string }>): 
 }
 
 export function renderPage(page: SitePage, pages: SitePage[], s: SiteSettings, posts: SitePost[] = []): string {
-  const url = page.slug === 'home' ? '/' : `/${page.slug}`;
+  const url = pageUrl(page.slug, s);
   const canonical = s.baseUrl + url;
   const ld: string[] = [];
   if (page.slug === 'home') {
@@ -370,7 +378,7 @@ export function renderPage(page: SitePage, pages: SitePage[], s: SiteSettings, p
       potentialAction: { '@type': 'SearchAction', target: `${s.baseUrl}/blog?q={search_term_string}`, 'query-input': 'required name=search_term_string' }
     }));
   } else {
-    ld.push(jsonLd(crumbLd(s, [{ name: 'خانه', url: '/' }, { name: page.title, url }])));
+    ld.push(jsonLd(crumbLd(s, [{ name: 'خانه', url: homeUrl(s) }, { name: page.title, url }])));
   }
   const f = faqLd(page.blocks);
   if (f) ld.push(jsonLd(f));
@@ -470,7 +478,7 @@ export function renderPost(post: SitePost, pages: SitePage[], s: SiteSettings, m
       ...(post.tags.length ? { keywords: post.tags.join(', ') } : {}),
       inLanguage: 'fa-IR'
     }),
-    jsonLd(crumbLd(s, [{ name: 'خانه', url: '/' }, { name: 'وبلاگ', url: '/blog' }, { name: post.title, url }]))
+    jsonLd(crumbLd(s, [{ name: 'خانه', url: homeUrl(s) }, { name: 'وبلاگ', url: '/blog' }, { name: post.title, url }]))
   ];
   const related = more.filter((p) => p.slug !== post.slug).slice(0, 3);
   return shell({
@@ -481,7 +489,7 @@ export function renderPost(post: SitePost, pages: SitePage[], s: SiteSettings, m
       canonical, ogImage: post.cover, noindex: post.noindex, s, ldJson: ld, type: 'article'
     }),
     body: `${nav(pages, 'blog', s)}<main id="main"><section><div class="wrap">
-      <div class="crumbs"><a href="/">خانه</a> › <a href="/blog">وبلاگ</a> › ${esc(post.title)}</div>
+      <div class="crumbs"><a href="${esc(homeUrl(s))}">خانه</a> › <a href="/blog">وبلاگ</a> › ${esc(post.title)}</div>
       <h1>${esc(post.title)}</h1>
       <div class="meta">${esc(faDate(post.publishedAt))}${post.author ? ' · ' + esc(post.author) : ''}</div>
       ${post.tags.length ? `<div class="tags">${post.tags.map((t) => `<span class="tag">${esc(t)}</span>`).join('')}</div>` : ''}
@@ -506,7 +514,7 @@ export function renderNotFound(pages: SitePage[], s: SiteSettings): string {
     body: `${nav(pages, '', s)}<main id="main"><section><div class="wrap"><div class="hero"><div class="in">
       <div class="eyebrow">۴۰۴</div><h1>این صفحه پیدا نشد</h1>
       <p class="lead">شاید نشانی عوض شده باشد. از منوی بالا یا دکمهٔ زیر ادامه بده.</p>
-      <div class="cta-row"><a class="btn" href="/">خانه</a><a class="btn ghost" href="/blog">وبلاگ</a></div>
+      <div class="cta-row"><a class="btn" href="${esc(homeUrl(s))}">خانه</a><a class="btn ghost" href="/blog">وبلاگ</a></div>
     </div></div></div></section></main>${footer(pages, s)}`
   });
 }
@@ -519,7 +527,7 @@ export function renderSitemap(pages: SitePage[], posts: SitePost[], s: SiteSetti
     `<changefreq>${freq}</changefreq><priority>${priority}</priority></url>`;
   const rows = [
     ...pages.filter((p) => p.published && !p.noindex)
-      .map((p) => url(p.slug === 'home' ? '/' : `/${p.slug}`, p.updatedAt, p.slug === 'home' ? '1.0' : '0.7',
+      .map((p) => url(pageUrl(p.slug, s), p.updatedAt, p.slug === 'home' ? '1.0' : '0.7',
         p.slug === 'blog' ? 'weekly' : 'monthly')),
     ...posts.filter((p) => p.published && !p.noindex)
       .map((p) => url(`/blog/${p.slug}`, p.updatedAt, '0.6', 'monthly'))

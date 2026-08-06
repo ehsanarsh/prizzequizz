@@ -78,7 +78,10 @@ async function run(): Promise<void> {
     assert.equal(count(html, /<link rel="canonical"/g), 1, 'exactly one canonical or none is right');
     assert.equal(count(html, /<title>/g), 1);
     assert.ok(/<meta name="description" content=".{40,}?">/.test(html), 'description missing or too short');
-    assert.ok(html.includes(`<link rel="canonical" href="${s.baseUrl}/">`), 'home canonical should be the bare origin');
+    /* NOT the bare origin: the game owns '/', so the site's home is '/home'
+       and the canonical has to say so — see the homePath cases below. */
+    assert.ok(html.includes(`<link rel="canonical" href="${s.baseUrl}${s.homePath}">`),
+      'home canonical should be the site home, not the game root');
     assert.ok(html.includes('lang="fa"') && html.includes('dir="rtl"'), 'a Persian page must say so');
   });
 
@@ -168,7 +171,7 @@ async function run(): Promise<void> {
   await check('the sitemap lists every published page and post, once', async () => {
     const xml = renderSitemap(pages, posts, s);
     for (const p of pages) {
-      const loc = `${s.baseUrl}${p.slug === 'home' ? '/' : '/' + p.slug}`;
+      const loc = `${s.baseUrl}${p.slug === 'home' ? s.homePath : '/' + p.slug}`;
       assert.equal(count(xml, new RegExp('<loc>' + loc.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '</loc>', 'g')), 1, 'bad entry for ' + p.slug);
     }
     for (const p of posts) assert.ok(xml.includes(`${s.baseUrl}/blog/${p.slug}`));
@@ -424,6 +427,46 @@ async function run(): Promise<void> {
       assert.match(m![1]!, new RegExp('function\\s+' + onclick[1] + '\\b'),
         'inline onclick calls ' + onclick[1] + '() but nothing defines it');
     }
+  });
+
+  await check('the site\'s home link and its canonical point at the same page', async () => {
+    /* The game owns '/', so the home page lives at '/home'. Before this the nav
+       sent «خانه» to '/' — which opened the GAME — and the canonical and the
+       sitemap said the same, telling search engines the game was the site's
+       home page. One helper feeds all three now, so they cannot disagree. */
+    const pgs = await listPages(true);
+    const home = pgs.find((p) => p.slug === 'home')!;
+    const s = { ...SETTINGS_DEFAULTS, baseUrl: 'https://prizequiz.ir' };
+    const html = renderPage(home, pgs, s, []);
+
+    assert.equal(s.homePath, '/home', 'the default must not be the game\'s root');
+    const canon = /<link rel="canonical" href="([^"]+)">/.exec(html);
+    assert.ok(canon, 'a canonical is required');
+    assert.equal(canon![1], 'https://prizequiz.ir/home');
+    assert.doesNotMatch(html, /<a class="brand" href="\/">/, 'the logo must not go to the game');
+
+    const map = renderSitemap(pgs, await listPosts(true), s);
+    assert.match(map, /<loc>https:\/\/prizequiz\.ir\/home<\/loc>/);
+    assert.doesNotMatch(map, /<loc>https:\/\/prizequiz\.ir\/<\/loc>/, 'the game root is not ours to claim');
+  });
+
+  await check('giving the site the root moves every home link with it', async () => {
+    const pgs = await listPages(true);
+    const home = pgs.find((p) => p.slug === 'home')!;
+    const s = { ...SETTINGS_DEFAULTS, baseUrl: 'https://prizequiz.ir', homePath: '/' };
+    const html = renderPage(home, pgs, s, []);
+    assert.match(html, /<link rel="canonical" href="https:\/\/prizequiz\.ir\/">/);
+    assert.match(renderSitemap(pgs, [], s), /<loc>https:\/\/prizequiz\.ir\/<\/loc>/);
+  });
+
+  await check('homePath cannot be pointed off-site', async () => {
+    _resetSiteMemory();
+    for (const bad of ['https://evil.example', '//evil.example', 'home', '']) {
+      const saved = await saveSettings({ homePath: bad } as any);
+      assert.equal(saved.homePath, '/home', bad + ' should fall back to the safe default');
+    }
+    const ok = await saveSettings({ homePath: '/home/' } as any);
+    assert.equal(ok.homePath, '/home', 'a trailing slash would double up in canonicals');
   });
 
   console.log(`[site] ${passed} passed, ${failed} failed`);
