@@ -12,7 +12,8 @@ import { realtimeRooms } from '../realtime/roomRegistry.js';
 import { logger } from './logger.js';
 import {
   listActiveRooms, listPlayers, savePlayer, saveRoom, getRoom, snapshot,
-  toPrizePlayers, payout, type RoomRow, type PlayerRow, sweepIdlePlayers} from './lastSurvivorService.js';
+  toPrizePlayers, payout, type RoomRow, type PlayerRow, sweepIdlePlayers,
+  recordRound, recordAnswerAudit} from './lastSurvivorService.js';
 import { buildPool, activeUnits, finalSplit } from './lastSurvivorPrize.js';
 import { awardScoring } from './matchEngine.js';
 import { PZ_SCORING } from './scoringConfig.js';
@@ -159,6 +160,9 @@ async function beginRound(room: RoomRow, roundNo: number, now: number): Promise<
   room.correctIndex = q?.correctIndex ?? null;
   room.phaseEndsAt = now + Math.max(3, Number(room.config.timings.readySeconds) || 5) * 1000;
   await saveRoom(room);
+  /* Keep WHAT this round asked. The room row is about to be overwritten by the
+   * next round, and without this the match cannot be reviewed afterwards. */
+  if (q) await recordRound(room.id, roundNo, q.id, q.correctIndex).catch(() => undefined);
   publish(room.id, 'ls:ready', { round: roundNo, questionId: q?.id, difficulty: q?.difficulty, endsAt: room.phaseEndsAt, serverNow: now });
   await broadcastState(room.id);
 }
@@ -431,6 +435,10 @@ export async function submitAnswer(roomId: string, userId: string, round: number
       const correct2 = room.correctIndex != null && selectedIndex === room.correctIndex;
       p.answerIndex = selectedIndex; p.answerCorrect = correct2; p.lastSeenAt = Date.now();
       await savePlayer(p);
+      /* The second chance REPLACES the first pick, so the audit has to be
+       * replaced too — otherwise the review would show a player the wrong
+       * answer they were allowed to take back. */
+      await recordAnswerAudit(roomId, room.round, userId, selectedIndex, correct2, true).catch(() => undefined);
       return { accepted: true, secondChance: true };
     }
     return { accepted: true };                        // idempotent — first answer stands
@@ -438,6 +446,10 @@ export async function submitAnswer(roomId: string, userId: string, round: number
   const correct = room.correctIndex != null && selectedIndex === room.correctIndex;
   p.answerRound = room.round; p.answerIndex = selectedIndex; p.answerCorrect = correct; p.lastSeenAt = Date.now();
   await savePlayer(p);
+  /* The player row keeps only the LAST answer, so it cannot say what was picked
+   * in round 3 once round 4 has been answered. This per-round audit is what the
+   * post-match review reads — the table existed but nothing ever wrote to it. */
+  await recordAnswerAudit(roomId, room.round, userId, selectedIndex, correct).catch(() => undefined);
   void recordQuestionAnswer(room.questionId ?? '', selectedIndex);   // global per-question tally
   // If the player armed "second chance" and this first pick is WRONG, tell them
   // to pick again — that IS the lifeline. (It reveals only that this option was

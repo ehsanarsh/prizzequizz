@@ -102,6 +102,14 @@ async function ensureSchema(pool: ReturnType<typeof getPgPool>): Promise<void> {
   await pool.query(`CREATE TABLE IF NOT EXISTS ls_chat (id TEXT PRIMARY KEY, room_id TEXT NOT NULL, user_id TEXT NOT NULL, username TEXT NOT NULL, body TEXT NOT NULL, created_at BIGINT NOT NULL)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_ls_chat_room ON ls_chat(room_id, created_at)`);
   await pool.query(`CREATE TABLE IF NOT EXISTS ls_answers (room_id TEXT NOT NULL, round INT NOT NULL, user_id TEXT NOT NULL, selected_index INT NOT NULL, correct BOOLEAN NOT NULL, created_at BIGINT NOT NULL, PRIMARY KEY(room_id,round,user_id))`);
+  /* WHICH question each round asked. The room row holds only the CURRENT one and
+   * overwrites it every round, so without this there is no way to show a player
+   * what they were asked once the match is over — the thing the duel has always
+   * been able to do. */
+  await pool.query(`CREATE TABLE IF NOT EXISTS ls_rounds (
+    room_id TEXT NOT NULL, round INT NOT NULL, question_id TEXT NOT NULL,
+    correct_index INT NOT NULL, asked_at BIGINT NOT NULL,
+    PRIMARY KEY(room_id,round))`);
   /* The table above already exists on every live server, so CREATE ... IF NOT
    * EXISTS will not add a new column to it. Rooms already in flight keep 0,
    * which is exactly the old behaviour: one wrong answer, out. */
@@ -229,9 +237,67 @@ export async function listChat(roomId: string, limit = 60): Promise<Array<{ user
   return memChat.filter((c) => c.roomId === roomId).slice(-limit).map((c) => ({ userId: c.userId, username: c.username, body: c.body, createdAt: c.createdAt }));
 }
 
-export async function recordAnswerAudit(roomId: string, round: number, userId: string, index: number, correct: boolean): Promise<void> {
+/* One row per player per round: what they picked and whether it was right.
+ *
+ * The player row keeps only their LAST answer, so it cannot say what they chose
+ * in round 3 once round 4 has been answered — which is exactly what a review
+ * needs. `replace` is for the second-chance lifeline, the one case where a pick
+ * is legitimately taken back. */
+export async function recordAnswerAudit(roomId: string, round: number, userId: string, index: number, correct: boolean, replace = false): Promise<void> {
   const pool = pg();
-  if (pool) { await ensureSchema(pool); await pool.query(`INSERT INTO ls_answers(room_id,round,user_id,selected_index,correct,created_at) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING`, [roomId, round, userId, index, correct, Date.now()]); }
+  if (pool) {
+    await ensureSchema(pool);
+    await pool.query(
+      replace
+        ? `INSERT INTO ls_answers(room_id,round,user_id,selected_index,correct,created_at) VALUES ($1,$2,$3,$4,$5,$6)
+           ON CONFLICT (room_id,round,user_id) DO UPDATE SET selected_index=$4, correct=$5, created_at=$6`
+        : `INSERT INTO ls_answers(room_id,round,user_id,selected_index,correct,created_at) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING`,
+      [roomId, round, userId, index, correct, Date.now()]);
+  } else {
+    const k = `${roomId}:${round}:${userId}`;
+    if (replace || !memAnswers.has(k)) memAnswers.set(k, { roomId, round, userId, selectedIndex: index, correct });
+  }
+}
+
+/* ---------------- what each round asked ---------------- */
+export interface RoundRow { roomId: string; round: number; questionId: string; correctIndex: number; askedAt: number; }
+const memRounds = new Map<string, RoundRow>();      // `${roomId}:${round}`
+const memAnswers = new Map<string, { roomId: string; round: number; userId: string; selectedIndex: number; correct: boolean }>();
+
+export async function recordRound(roomId: string, round: number, questionId: string, correctIndex: number): Promise<void> {
+  const row: RoundRow = { roomId, round, questionId, correctIndex, askedAt: Date.now() };
+  const pool = pg();
+  if (pool) {
+    await ensureSchema(pool);
+    /* Written once, never rewritten: if a room somehow reopens the same round,
+     * the question a player actually SAW is the first one. */
+    await pool.query(`INSERT INTO ls_rounds(room_id,round,question_id,correct_index,asked_at) VALUES ($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING`,
+      [roomId, round, questionId, correctIndex, row.askedAt]);
+  } else if (!memRounds.has(`${roomId}:${round}`)) memRounds.set(`${roomId}:${round}`, row);
+}
+
+export async function listRounds(roomId: string): Promise<RoundRow[]> {
+  const pool = pg();
+  if (pool) {
+    await ensureSchema(pool);
+    const { rows } = await pool.query(`SELECT * FROM ls_rounds WHERE room_id=$1 ORDER BY round`, [roomId]);
+    return rows.map((r: any) => ({ roomId: r.room_id, round: Number(r.round), questionId: r.question_id, correctIndex: Number(r.correct_index), askedAt: Number(r.asked_at) }));
+  }
+  return [...memRounds.values()].filter((r) => r.roomId === roomId).sort((a, b) => a.round - b.round);
+}
+
+/** Every answer THIS player gave in this room, keyed by round. */
+export async function listMyAnswers(roomId: string, userId: string): Promise<Map<number, { selectedIndex: number; correct: boolean }>> {
+  const out = new Map<number, { selectedIndex: number; correct: boolean }>();
+  const pool = pg();
+  if (pool) {
+    await ensureSchema(pool);
+    const { rows } = await pool.query(`SELECT round,selected_index,correct FROM ls_answers WHERE room_id=$1 AND user_id=$2`, [roomId, userId]);
+    for (const r of rows) out.set(Number(r.round), { selectedIndex: Number(r.selected_index), correct: !!r.correct });
+  } else {
+    for (const a of memAnswers.values()) if (a.roomId === roomId && a.userId === userId) out.set(a.round, { selectedIndex: a.selectedIndex, correct: a.correct });
+  }
+  return out;
 }
 
 // ---------------- join / matchmaking ----------------

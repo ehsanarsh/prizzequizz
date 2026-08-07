@@ -8,7 +8,8 @@ import { getConfig, updateConfig, setTopicEnabled, isTopicPlayable, isTopicHidde
          addTopic, setTopicHidden, RANDOM_TOPIC, isRandomTopic,
          type LastSurvivorConfig } from '../../services/lastSurvivorConfig.js';
 import { joinTopic, snapshot, addVote, addChat, listChat, getRoom, saveRoom, listAllRooms, listPlayers,
-         leaveRoom, touchPlayer, sweepIdlePlayers, LastSurvivorError, listActiveRooms} from '../../services/lastSurvivorService.js';
+         leaveRoom, touchPlayer, sweepIdlePlayers, LastSurvivorError, listActiveRooms,
+         getPlayer, listRounds, listMyAnswers} from '../../services/lastSurvivorService.js';
 import { submitAnswer, submitDecision, useLifeline, advanceRoom } from '../../services/lastSurvivorWorker.js';
 import { requireAdmin } from '../../services/adminGuard.js';
 import { avatarUrlFor } from '../../services/avatarService.js';
@@ -275,6 +276,53 @@ export function registerLastSurvivorRoutes(router: Router, base: string): void {
     const snap = await snapshot(roomId, ctx.userId);
     if (!snap) return error(ctx.res, 404, 'ROOM_NOT_FOUND', 'روم یافت نشد.');
     json(ctx.res, 200, snap);
+  });
+
+  /* POST-MATCH REVIEW — the same thing the duel offers: every question you were
+   * asked, what you picked, and what the answer was.
+   *
+   * Two rules keep it from becoming a cheat sheet. Only a PLAYER of the room may
+   * read it, and only once it can no longer help them: the room has finished, or
+   * they are out of it. And while a room is still running the CURRENT round is
+   * withheld — it is the one question whose answer would still be worth
+   * something to somebody. */
+  router.add('GET', `${base}/last-survivor/rooms/:id/review`, async (ctx) => {
+    if (!ctx.userId) return error(ctx.res, 401, 'UNAUTHORIZED', 'ابتدا وارد شو.');
+    const roomId = ctx.params.id!;
+    const room = await getRoom(roomId);
+    if (!room) return error(ctx.res, 404, 'ROOM_NOT_FOUND', 'روم یافت نشد.');
+    const me = await getPlayer(roomId, ctx.userId);
+    if (!me) return error(ctx.res, 403, 'NOT_A_PLAYER', 'تو در این مسابقه نبودی.');
+
+    const over = room.status === 'finished';
+    const out = me.status === 'eliminated' || me.status === 'cashed_out';
+    if (!over && !out) return error(ctx.res, 409, 'MATCH_RUNNING', 'مرور سؤال‌ها بعد از پایان مسابقه در دسترس است.');
+
+    const rounds = await listRounds(roomId);
+    const mine = await listMyAnswers(roomId, ctx.userId);
+    const visible = over ? rounds : rounds.filter((r) => r.round < room.round);
+
+    const items = [];
+    for (const r of visible) {
+      const q = await repositories.questions.findById(r.questionId).catch(() => null);
+      if (!q) continue;                       // a deleted question is skipped, not faked
+      const a = mine.get(r.round) ?? null;
+      items.push({
+        round: r.round, questionId: q.id, text: q.text, options: q.options,
+        correctIndex: r.correctIndex, difficulty: q.difficulty, category: q.category,
+        /* No answer at all means the clock ran out — a different thing from a
+         * wrong pick, and it must not be drawn as one. */
+        yourIndex: a ? a.selectedIndex : null,
+        yourCorrect: a ? a.correct : false,
+        timedOut: !a
+      });
+    }
+    json(ctx.res, 200, {
+      roomId, topic: room.topic, status: room.status,
+      totalRounds: room.totalRounds, playedRounds: rounds.length,
+      me: { status: me.status, eliminatedRound: me.eliminatedRound, payoutCash: me.payoutCash },
+      rounds: items
+    });
   });
 
   /* Leaving the lobby. The ticket goes back and the pot shrinks by its value —
