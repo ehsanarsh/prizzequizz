@@ -163,7 +163,9 @@ function bytesLabel(n){ return n>=1048576 ? (n/1048576).toFixed(1)+' MB' : Math.
 function renderMedia(){
   $('#app').innerHTML=
     '<div class="note">تصویرهای سایت اینجا نگه‌داری می‌شوند. بعد از آپلود، دکمهٔ «انتخاب» کنار هر فیلد تصویر همین‌ها را نشان می‌دهد — لازم نیست آدرس را دستی بنویسی.<br>'+
-    'قالب‌های مجاز: PNG، JPG، GIF، WebP، ICO — تا ۳ مگابایت.</div>'+
+    'قالب‌های مجاز: PNG، JPG، GIF، WebP، ICO — تا ۳ مگابایت.<br>'+
+    'هر تصویری که آپلود کنی خودکار به <b>WebP</b> تبدیل می‌شود تا سبک‌ترین حالت ممکن ذخیره شود — '+
+    'فایل ICO و GIF متحرک دست‌نخورده می‌مانند، و اگر نسخهٔ WebP از اصل بزرگ‌تر شود همان اصل نگه داشته می‌شود.</div>'+
     '<div class="card">'+
       '<h3>آپلود تصویر</h3>'+
       '<p class="sub">می‌توانی چند فایل را با هم انتخاب کنی.</p>'+
@@ -193,20 +195,90 @@ function renderMedia(){
 
 function readAsDataUrl(f){ return new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=rej; r.readAsDataURL(f); }); }
 
+/* ---------- automatic WebP conversion, before a byte leaves the browser ----------
+   The library used to store whatever was dropped on it, so a 3 MB phone JPEG
+   became a 3 MB image on every page that used it. WebP is typically a third of
+   the size at the same quality, and every browser that can run this panel can
+   both encode and display it.
+
+   Three rules keep this honest rather than merely clever:
+     • an ICO is left alone — a favicon has to stay an ICO;
+     • an ANIMATED GIF is left alone — a canvas only ever sees its first frame,
+       so "converting" it would silently throw the animation away;
+     • the WebP is kept only if it really is smaller. Small flat PNGs sometimes
+       come out bigger, and shipping a bigger file to honour the word "convert"
+       would defeat the point.
+   Anything that cannot be decoded or encoded here is uploaded untouched: the
+   server validates it either way, so the worst case is the old behaviour. */
+const WEBP_MAX_EDGE=2000;      // no page needs more; a camera photo is 3–6× this
+const WEBP_QUALITY=0.82;
+
+function canEncodeWebp(){
+  try{ const c=document.createElement('canvas'); c.width=c.height=1; return c.toDataURL('image/webp').indexOf('data:image/webp')===0; }
+  catch(e){ return false; }
+}
+/* A GIF holds one Graphic Control Extension (21 F9 04) per frame. More than one
+   means it moves, and a still copy of it would be a different file than the one
+   the operator chose. */
+function gifIsAnimated(buf){
+  const b=new Uint8Array(buf); let n=0;
+  for(let i=0;i<b.length-3;i++){ if(b[i]===0x21&&b[i+1]===0xF9&&b[i+2]===0x04){ n++; if(n>1) return true; } }
+  return false;
+}
+function decodeImage(file){
+  return new Promise((res,rej)=>{
+    const url=URL.createObjectURL(file); const im=new Image();
+    im.onload=()=>{ URL.revokeObjectURL(url); res(im); };
+    im.onerror=()=>{ URL.revokeObjectURL(url); rej(new Error('decode')); };
+    im.src=url;
+  });
+}
+/* Returns {data, filename, note} — the note is what actually happened, in words
+   the operator can check against the size shown in the library. */
+async function toWebp(file){
+  const plain=async(why)=>({data:await readAsDataUrl(file),filename:file.name,note:why});
+  const type=(file.type||'').toLowerCase();
+  if(type==='image/x-icon'||type==='image/vnd.microsoft.icon'||/\.ico$/i.test(file.name)) return plain('ICO دست‌نخورده ماند');
+  if(!canEncodeWebp()) return plain('مرورگر WebP نمی‌سازد');
+  if(type==='image/gif'){
+    try{ if(gifIsAnimated(await file.arrayBuffer())) return plain('GIF متحرک دست‌نخورده ماند'); }
+    catch(e){ return plain('GIF خوانده نشد'); }
+  }
+  let im;
+  try{ im=await decodeImage(file); }catch(e){ return plain(''); }
+  const sc=Math.min(1,WEBP_MAX_EDGE/Math.max(im.naturalWidth||im.width,im.naturalHeight||im.height));
+  const w=Math.max(1,Math.round((im.naturalWidth||im.width)*sc)), h=Math.max(1,Math.round((im.naturalHeight||im.height)*sc));
+  const cv=document.createElement('canvas'); cv.width=w; cv.height=h;
+  const ctx=cv.getContext('2d'); if(!ctx) return plain('');
+  ctx.drawImage(im,0,0,w,h);
+  let out='';
+  try{ out=cv.toDataURL('image/webp',WEBP_QUALITY); }catch(e){ return plain(''); }
+  if(out.indexOf('data:image/webp')!==0) return plain('مرورگر WebP نمی‌سازد');
+  const newBytes=Math.floor((out.length-out.indexOf(',')-1)*3/4);
+  if(newBytes>=file.size&&sc===1) return plain('نسخهٔ WebP بزرگ‌تر شد — اصل نگه داشته شد');
+  const name=file.name.replace(/\.[^.]+$/,'')+'.webp';
+  const saved=Math.max(0,Math.round((1-newBytes/Math.max(1,file.size))*100));
+  return {data:out,filename:name,note:'به WebP تبدیل شد ('+saved+'٪ کوچک‌تر'+(sc<1?('، '+w+'×'+h):'')+')'};
+}
+
 async function uploadMedia(){
   const inp=$('#mfile'); const files=[...(inp.files||[])];
   if(!files.length){ toast('فایلی انتخاب نشده.',1); return; }
-  let done=0, failed=0;
+  let done=0, failed=0; const notes=[];
   for(const f of files){
     $('#mprog').textContent='در حال آپلود '+(done+failed+1)+' از '+files.length;
     try{
-      const data=await readAsDataUrl(f);
-      await api('POST','media',{data:data,filename:f.name,alt:''});
+      const conv=await toWebp(f);
+      await api('POST','media',{data:conv.data,filename:conv.filename,alt:''});
+      if(conv.note) notes.push(f.name+': '+conv.note);
       done++;
     }catch(e){ failed++; toast(f.name+': '+e.message,1); }
   }
   $('#mprog').textContent='';
   toast(done+' تصویر آپلود شد'+(failed?('، '+failed+' ناموفق'):''),failed?1:0);
+  /* Say what was done to the files rather than leaving the operator to notice a
+     different name in the library and wonder. */
+  if(notes.length) setTimeout(()=>toast(notes.join(' — ')),900);
   await loadAll(); tab('media');
 }
 

@@ -107,6 +107,66 @@ function run(): void {
     assert.ok(!/lsDeleteTopic/.test(random), '«تصادفی» must not offer a delete the server will refuse');
   });
 
+  check('every file the panel uploads is turned into WebP first', () => {
+    /* All four upload paths already shrink and re-encode before sending, which
+     * is why the game's artwork is small. Nothing enforced it, though — a fifth
+     * upload added later would happily post a 4 MB phone photo, and nobody
+     * would notice until a player's first load. This is that enforcement.
+     *
+     * The check follows one level of calls, because the handler on the input is
+     * usually a thin wrapper around the function that does the encoding. */
+    const bodyOf = (name: string): string => {
+      const i = script.indexOf('function ' + name + '(');
+      if (i < 0) return '';
+      // Walk braces from the first { after the signature to its match.
+      const start = script.indexOf('{', i);
+      let depth = 0;
+      for (let j = start; j < script.length; j++) {
+        if (script[j] === '{') depth++;
+        else if (script[j] === '}') { depth--; if (!depth) return script.slice(start, j + 1); }
+      }
+      return script.slice(start);
+    };
+    const encodesWebp = (name: string, seen = new Set<string>()): boolean => {
+      if (seen.has(name)) return false;
+      seen.add(name);
+      const body = bodyOf(name);
+      if (!body) return false;
+      if (/toDataURL\(\s*['"]image\/webp['"]/.test(body) || /['"]image\/webp['"]/.test(body)) return true;
+      // …otherwise follow the functions this one calls.
+      for (const m of body.matchAll(/\b([a-zA-Z_$][\w$]*)\s*\(/g)) {
+        if (encodesWebp(m[1]!, seen)) return true;
+      }
+      return false;
+    };
+
+    /* Every <input type=file> in the markup, plus the one catPickImage builds
+     * at runtime — a dynamically created input is still an upload. */
+    const handlers = new Set<string>();
+    for (const m of html.matchAll(/<input[^>]*type=["']file["'][^>]*>/g)) {
+      const on = /onchange=["']([a-zA-Z_$][\w$]*)\(/.exec(m[0]);
+      assert.ok(on, 'a file input with no onchange handler: ' + m[0]);
+      handlers.add(on![1]!);
+    }
+    for (const m of script.matchAll(/inp\.type\s*=\s*'file'/g)) {
+      void m;   // the only runtime-built input belongs to catPickImage
+      handlers.add('catPickImage');
+    }
+    assert.ok(handlers.size >= 4, 'expected the panel’s upload handlers, found: ' + [...handlers].join(', '));
+    for (const h of handlers) {
+      assert.ok(encodesWebp(h), h + ' uploads without producing WebP — every upload must be converted');
+    }
+  });
+
+  check('an SVG is passed through instead of being rasterised', () => {
+    /* Converting an SVG would make it BIGGER and blurry: it is already a few
+     * hundred bytes and it scales for free. "Smallest format" means smallest,
+     * not "WebP whatever the cost". */
+    const i = script.indexOf('function catShrink(');
+    assert.ok(i > 0, 'catShrink should exist');
+    assert.match(script.slice(i, i + 400), /image\/svg\+xml/, 'catShrink must recognise SVG and leave it alone');
+  });
+
   console.log(`[adminPanelHtml] ${passed} passed, ${failed} failed`);
   if (failed) process.exit(1);
 }

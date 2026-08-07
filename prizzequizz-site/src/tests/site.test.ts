@@ -485,6 +485,117 @@ async function run(): Promise<void> {
     assert.doesNotMatch(script, /href="\/'\+\(p\.slug==='home'\?''/, 'the old home-is-root link is back');
   });
 
+  /* ---------- automatic WebP conversion on upload ---------- */
+
+  /* Load the panel's REAL conversion code and run it against a stub browser.
+     Testing a re-implementation here would prove nothing; this evaluates the
+     exact source that ships. */
+  function loadConverter(opts: { webpBytes: number; canWebp?: boolean }) {
+    const script = /<script>([\s\S]*?)<\/script>/.exec(adminHtml())![1]!;
+    const from = script.indexOf('const WEBP_MAX_EDGE');
+    const to = script.indexOf('async function uploadMedia');
+    assert.ok(from > 0 && to > from, 'the converter should be findable in the panel source');
+    const src = script.slice(from, to);
+
+    const drawn: Array<{ w: number; h: number }> = [];
+    const canWebp = opts.canWebp !== false;
+    const doc = {
+      createElement: () => ({
+        width: 0, height: 0,
+        getContext: () => ({ drawImage(_i: any, _x: number, _y: number, w: number, h: number) { if (w) drawn.push({ w, h }); } }),
+        toDataURL(type: string) {
+          if (type === 'image/webp' && !canWebp) return 'data:image/png;base64,AAAA';
+          // A payload whose decoded length is the size the case wants.
+          const payload = 'A'.repeat(Math.ceil(opts.webpBytes * 4 / 3));
+          return 'data:' + (type || 'image/png') + ';base64,' + payload;
+        }
+      })
+    };
+    let imgSize = { w: 800, h: 600 };
+    class Img {
+      onload: (() => void) | null = null; onerror: (() => void) | null = null;
+      naturalWidth = imgSize.w; naturalHeight = imgSize.h;
+      set src(_v: string) { setTimeout(() => this.onload && this.onload(), 0); }
+    }
+    const url = { createObjectURL: () => 'blob:x', revokeObjectURL: () => undefined };
+    const readAsDataUrl = async (f: any) => 'data:' + f.type + ';base64,ORIGINAL';
+    const api = new Function('document', 'URL', 'Image', 'readAsDataUrl',
+      src + '\nreturn { toWebp: toWebp, gifIsAnimated: gifIsAnimated };')(doc, url, Img, readAsDataUrl);
+    return { ...api, drawn, setImageSize: (w: number, h: number) => { imgSize = { w, h }; } };
+  }
+  const file = (name: string, type: string, size: number, bytes?: number[]) => ({
+    name, type, size,
+    arrayBuffer: async () => new Uint8Array(bytes ?? []).buffer
+  });
+
+  await check('an uploaded image is converted to WebP before it is sent', async () => {
+    /* The library used to store whatever was dropped on it — a 3 MB phone photo
+       stayed a 3 MB photo on every page that used it. */
+    const c = loadConverter({ webpBytes: 30_000 });
+    const r = await c.toWebp(file('عکس اصلی.JPG', 'image/jpeg', 300_000));
+    assert.match(r.data, /^data:image\/webp;base64,/, 'the bytes sent are WebP');
+    assert.equal(r.filename, 'عکس اصلی.webp', 'and the name says so');
+    assert.match(r.note, /۹۰|90/, 'the saving is reported honestly: ' + r.note);
+  });
+
+  await check('an ICO is left exactly as it was', async () => {
+    /* A favicon has to stay an ICO — converting it would break the thing it is
+       uploaded for. */
+    const c = loadConverter({ webpBytes: 10 });
+    const r = await c.toWebp(file('favicon.ico', 'image/x-icon', 5_000));
+    assert.equal(r.filename, 'favicon.ico');
+    assert.match(r.data, /^data:image\/x-icon/);
+  });
+
+  await check('an ANIMATED gif is left alone; a still one is converted', async () => {
+    /* A canvas only ever sees a GIF's first frame, so "converting" an animation
+       would silently throw the animation away. Frames are counted by their
+       Graphic Control Extension blocks (21 F9 04). */
+    const c = loadConverter({ webpBytes: 1_000 });
+    const gce = [0x21, 0xF9, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00];
+    assert.equal(c.gifIsAnimated(new Uint8Array([...gce, ...gce]).buffer), true, 'two frames is animated');
+    assert.equal(c.gifIsAnimated(new Uint8Array(gce).buffer), false, 'one frame is not');
+
+    const moving = await c.toWebp(file('loading.gif', 'image/gif', 40_000, [...gce, ...gce]));
+    assert.equal(moving.filename, 'loading.gif', 'the animation survives untouched');
+    const still = await c.toWebp(file('logo.gif', 'image/gif', 40_000, gce));
+    assert.equal(still.filename, 'logo.webp', 'a still GIF has nothing to lose');
+  });
+
+  await check('a WebP that came out BIGGER is thrown away', async () => {
+    /* Small flat PNGs sometimes re-encode larger. Shipping the bigger file just
+       to honour the word "convert" would defeat the whole point. */
+    const c = loadConverter({ webpBytes: 90_000 });
+    const r = await c.toWebp(file('flat.png', 'image/png', 40_000));
+    assert.equal(r.filename, 'flat.png', 'the original is kept');
+    assert.match(r.note, /بزرگ‌تر/, 'and the operator is told why: ' + r.note);
+  });
+
+  await check('a browser that cannot encode WebP still uploads the file', async () => {
+    /* Canvas silently hands back a PNG when it cannot encode the type asked
+       for, so the result has to be checked rather than assumed. */
+    const c = loadConverter({ webpBytes: 10, canWebp: false });
+    const r = await c.toWebp(file('photo.jpg', 'image/jpeg', 200_000));
+    assert.equal(r.filename, 'photo.jpg', 'upload still works — worst case is the old behaviour');
+  });
+
+  await check('an oversized photo is scaled down as well as converted', async () => {
+    const c = loadConverter({ webpBytes: 50_000 });
+    c.setImageSize(4000, 3000);
+    const r = await c.toWebp(file('camera.jpg', 'image/jpeg', 4_000_000));
+    assert.equal(c.drawn.at(-1)!.w, 2000, 'the long edge is capped at 2000px');
+    assert.equal(c.drawn.at(-1)!.h, 1500, 'and the aspect ratio is kept');
+    assert.equal(r.filename, 'camera.webp');
+  });
+
+  await check('the upload path really uses the converter', async () => {
+    /* The conversion is worthless if uploadMedia still posts the raw file. */
+    const script = /<script>([\s\S]*?)<\/script>/.exec(adminHtml())![1]!;
+    const fn = /async function uploadMedia\(\)\{[\s\S]*?\n\}/.exec(script)![0];
+    assert.match(fn, /toWebp\(f\)/, 'uploadMedia must convert before posting');
+    assert.doesNotMatch(fn, /data:\s*await readAsDataUrl\(f\)/, 'the raw-file upload is gone');
+  });
+
   console.log(`[site] ${passed} passed, ${failed} failed`);
   if (failed) process.exit(1);
 }
