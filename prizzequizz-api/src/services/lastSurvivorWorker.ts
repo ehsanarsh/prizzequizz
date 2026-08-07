@@ -420,6 +420,17 @@ export async function submitAnswer(roomId: string, userId: string, round: number
   const room = await getRoom(roomId);
   if (!room || room.status !== 'running' || room.phase !== 'question') return { accepted: false, reason: 'NOT_IN_QUESTION' };
   if (round !== room.round) return { accepted: false, reason: 'WRONG_ROUND' };
+  /* The window is CLOSED once the deadline passes, even though the phase is
+   * still 'question' until the orchestrator gets to it. Grading reads the
+   * players it fetched when it started, so an answer accepted during that gap
+   * is written and then overwritten by the grader's own save — recorded in the
+   * audit the review reads, invisible to the grading that costs a shield. That
+   * is the same contradiction the heartbeat produced, by a narrower path.
+   * A grace of one second absorbs ordinary clock skew between phone and
+   * server; anything later genuinely missed the deadline. */
+  if (room.phaseEndsAt != null && Date.now() > room.phaseEndsAt + 1000) {
+    return { accepted: false, reason: 'TOO_LATE' };
+  }
   const players = await listPlayers(roomId);
   const p = players.find((x) => x.userId === userId);
   if (!p || p.status !== 'alive') return { accepted: false, reason: 'NOT_ALIVE' };

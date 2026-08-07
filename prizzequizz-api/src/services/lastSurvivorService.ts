@@ -429,10 +429,29 @@ export async function sweepIdlePlayers(roomId: string, idleMs: number): Promise<
 /* Called on every read of a room the player is in, so simply having the screen
  * open counts as being there. */
 export async function touchPlayer(roomId: string, userId: string): Promise<void> {
-  const p = await getPlayer(roomId, userId);
-  if (!p) return;
-  p.lastSeenAt = Date.now();
-  await savePlayer(p);
+  /* ONLY last_seen_at, and by a targeted UPDATE — never read-modify-write.
+   *
+   * This used to fetch the whole row, set lastSeenAt and hand it to savePlayer,
+   * which writes EVERY column. The client polls this endpoint once a second, so
+   * a player who answered in the gap between that read and that write had their
+   * answer overwritten with the pre-answer row: answer_round, answer_index and
+   * answer_correct all went back to what they were before they pressed
+   * anything. Grading then saw no answer for the round and treated a correct
+   * answer as a wrong one — spending a shield, or eliminating a player who had
+   * no shield to spend. The per-round audit is written separately, so the
+   * post-match review still showed the answer as correct, which is exactly how
+   * the contradiction was spotted.
+   *
+   * A heartbeat has no business touching anything but the heartbeat. */
+  const now = Date.now();
+  const pool = pg();
+  if (pool) {
+    await ensureSchema(pool);
+    await pool.query(`UPDATE ls_room_players SET last_seen_at=$3 WHERE room_id=$1 AND user_id=$2`, [roomId, userId, now]);
+  } else {
+    const p = memPlayers.get(pkey(roomId, userId));
+    if (p) p.lastSeenAt = now;
+  }
 }
 
 // ---------------- payouts ----------------
