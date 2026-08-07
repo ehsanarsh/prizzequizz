@@ -317,6 +317,170 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
 .tk-promo:not(.has-img) .tk-promo-txt b{color:var(--bolt);font-size:22px;text-shadow:0 2px 0 rgba(0,0,0,.5)}
 .tk-promo:not(.has-img) .tk-promo-txt span{color:var(--muted);text-shadow:none}
 /* Ticket picker: the prize is the headline; the commission is never mentioned. */
+/* The friendly-mode profile card: a closed door with a reason on it, not an
+   error state. */
+.opp-limited .opp-lock{text-align:center;padding:14px 12px 12px;border:var(--stroke);border-radius:16px;
+  background:rgba(255,255,255,.04);box-shadow:var(--hard-sm);margin-top:10px}
+.opp-limited .opp-lock .big{display:block;font-size:34px;line-height:1;margin-bottom:8px;opacity:.9}
+.opp-limited .opp-lock b{display:block;font-size:13px;font-weight:900;line-height:1.7;margin-bottom:6px}
+.opp-limited .opp-lock p{font-size:11.5px;color:var(--muted);line-height:1.95;margin:0 0 11px}
+.opp-lock-cta{font-family:inherit;font-weight:900;font-size:12.5px;cursor:pointer;
+  padding:9px 16px;border-radius:12px;border:var(--stroke);box-shadow:0 3px 0 #000;
+  background:linear-gradient(180deg,#ffe24a,#f5b90d);color:#1a1400}
+.opp-lock-cta:active{transform:translateY(2px);box-shadow:0 1px 0 #000}
+
+/* ================= DUEL RESULT — one screen, no scroll =================
+   The old screen stacked a 150px character, a title, a subtitle, a 46px
+   scoreline, a 38px prize, four stats, a panel and four full-width buttons
+   down one column and let the page scroll. On a phone the buttons — the only
+   things you can actually DO — were the part below the fold.
+
+   Now three zones share the height: hero and actions take what they need, the
+   middle takes the rest, and every size scales with the viewport so the layout
+   keeps its shape from a small phone to a large one. */
+.res{overflow:hidden;display:flex;flex-direction:column;justify-content:space-between;
+  padding:14px 20px calc(12px + env(safe-area-inset-bottom,0px));gap:6px}
+.res-hero{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;width:100%}
+.res-char{display:flex;align-items:flex-end;justify-content:center;height:clamp(74px,17vh,148px);margin-bottom:4px}
+.res-char .mascot{width:clamp(64px,15vh,120px);height:clamp(64px,15vh,120px);border-radius:50%;overflow:hidden}
+.res-char img{width:auto;height:100%;max-width:min(46vw,160px);object-fit:contain;
+  filter:drop-shadow(0 10px 18px rgba(0,0,0,.45));animation:pzPop .5s cubic-bezier(.2,1.4,.4,1)}
+.res-title{font-size:clamp(19px,4.6vw,26px);font-weight:900;line-height:1.25}
+.res-sub{color:var(--muted);margin-top:3px;font-size:clamp(11.5px,3vw,14px);line-height:1.5}
+.res-mid{flex:1 1 auto;min-height:0;width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px}
+.res-score{width:100%}
+.res-sc{display:flex;justify-content:center;align-items:center;gap:clamp(8px,3vw,16px);direction:ltr}
+.res-sc-side{text-align:center;min-width:72px;max-width:40vw}
+.res-sc-nm{font-size:11px;font-weight:900;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.res-sc-n{font-size:clamp(30px,11vw,46px);font-weight:900;line-height:1;text-shadow:0 0 22px rgba(0,0,0,.35);direction:ltr}
+.res-sc-dash{font-size:clamp(20px,6vw,30px);font-weight:900;opacity:.35}
+.res-amt{font-size:clamp(24px,7vw,38px);font-weight:900;color:var(--green);line-height:1.1;margin:2px 0}
+.res-amt small{font-size:.42em;color:var(--muted);font-weight:800}
+.res-stats{width:100%}
+.res-actions{flex:0 0 auto;width:100%;display:flex;flex-direction:column;gap:8px}
+.res-actions #duelActions{flex-direction:column;gap:8px}
+/* Two side by side instead of two full-width rows: the same targets, half the
+   height. */
+.res-row2{display:flex;gap:8px}
+.res-row2 .btn{flex:1 1 0;min-width:0}
+/* The result screen's own button metrics — the global .btn is sized for a page
+   you can scroll. */
+.res .btn{padding:11px 12px;font-size:13.5px;border-radius:14px}
+.res .stat{padding:7px 4px}
+.res .stat b{font-size:clamp(15px,4.4vw,21px)}
+.res .stat span{font-size:10.5px}
+@media (max-height:720px){
+  .res{gap:3px;padding:10px 16px calc(10px + env(safe-area-inset-bottom,0px))}
+  .res-mid{gap:3px}
+  .res .btn{padding:9.5px 10px;font-size:12.5px}
+  .res-actions{gap:6px}
+}
+/* Very short screens: the character is the one element whose job is decoration. */
+@media (max-height:600px){
+  .res-char{height:0;overflow:hidden;margin:0}
+  .res-sub{display:none}
+}
+/* The free-plan duel prints its own full summary card in the panel, which
+   repeats «پاسخ درست» and «XP». Showing both is duplication AND overflow. */
+.res.duel-free-result .res-stats{display:none}
+.res.duel-free-result .res-amt{font-size:clamp(19px,5vw,26px);margin:0}
+.res.duel-free-result .res-char{height:clamp(0px,8vh,74px)}
+.res.duel-free-result .res-title{font-size:clamp(16px,4vw,20px)}
+.res.duel-free-result .res-sub{display:none}
+.res.duel-free-result .duel-summary-aaa{margin:2px 0 0}
+/* Its own bottom buttons already offer the way out, so «حریف جدید» below would
+   be a third way to leave the same screen. */
+.res.duel-free-result .res-row2 #resultNewBtn{display:none}
+/* Short screens: the free card is the tallest thing in the app, so it gets a
+   second pass. Everything here trims spacing and decoration — the six figures,
+   the four social actions and both buttons all stay. */
+@media (max-height:700px){
+  .res.duel-free-result .res-char{height:0;overflow:hidden;margin:0}
+  .res.duel-free-result .res-title{font-size:15px}
+  .res.duel-free-result .res-amt{display:none}          /* the card states the coins itself */
+  .res.duel-free-result .duel-summary-card{padding:7px 8px;border-radius:18px}
+  .res.duel-free-result .duel-summary-aaa{margin:0}
+  .res.duel-free-result .duel-side .av{width:38px;height:38px;border-radius:12px;font-size:20px;margin-bottom:3px}
+  .res.duel-free-result .duel-side b{font-size:11px}
+  .res.duel-free-result .duel-side span{display:none}
+  .res.duel-free-result .duel-final .score{font-size:19px}
+  .res.duel-free-result .duel-final .state{margin-bottom:3px;padding:2px 7px;font-size:10px}
+  .res.duel-free-result .duel-summary-kpis{margin-top:7px;gap:4px}
+  .res.duel-free-result .duel-kpi{padding:5px 3px}
+  .res.duel-free-result .duel-kpi b{font-size:14px}
+  .res.duel-free-result .duel-kpi span{font-size:9px}
+  .res.duel-free-result .duel-reward-strip{margin-top:7px;padding:6px 9px}
+  .res.duel-free-result .duel-reward-strip small{display:none}
+  .res.duel-free-result .duel-social-actions{margin-top:6px;gap:4px}
+  .res.duel-free-result .duel-social-actions button{padding:5px 2px;font-size:10px}
+  .res.duel-free-result .duel-bottom-actions{margin-top:7px;gap:5px}
+  .res.duel-free-result .duel-bottom-actions .btn{padding:8px 8px;font-size:12px}
+}
+
+/* ---- LAST SURVIVOR: the ticket screen fits ONE screen ----
+   overflow:hidden is the promise; the rest is what makes it keepable without
+   cutting anything off. The card is the only part allowed to give way, and it
+   gives way by tightening its own spacing rather than by hiding a row. */
+.ls-entry{overflow:hidden;display:flex;flex-direction:column;padding:16px 20px calc(14px + env(safe-area-inset-bottom,0px))}
+.ls-entry-head{flex:0 0 auto;display:flex;align-items:center;gap:11px;margin-bottom:10px}
+.ls-entry-ic{width:52px;height:52px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-size:30px;
+  background:rgba(255,255,255,.05);border:var(--stroke);border-radius:16px;box-shadow:var(--hard-sm);overflow:hidden}
+.ls-entry-ic img{width:100%;height:100%;object-fit:cover;display:block}
+.ls-entry-name{min-width:0}
+.ls-entry-name b{display:block;font-size:17px;font-weight:900;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ls-entry-name span{font-size:11.5px;color:var(--muted)}
+.ls-entry-card{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;justify-content:center;gap:2px;overflow:hidden;margin:0}
+.ls-entry-go{flex:0 0 auto;margin-top:12px}
+/* The promo is an extra, not a requirement: it keeps its place when it has
+   something to say and takes none at all when it is empty. */
+.ls-entry .tk-promo-host{flex:0 0 auto}
+.ls-entry .tk-promo-host:empty{display:none}
+@media (max-height:700px){
+  .ls-entry{padding:12px 16px calc(10px + env(safe-area-inset-bottom,0px))}
+  .ls-entry-ic{width:44px;height:44px;font-size:25px;border-radius:13px}
+  .ls-entry-name b{font-size:15.5px}
+  .ls-entry .tk-prize-val{font-size:25px}
+  .ls-entry .tk-prize{padding:2px 6px 8px}
+  .ls-entry .ls-share-note{font-size:10.5px;line-height:1.75}
+  .ls-entry-go{margin-top:9px}
+}
+@media (max-height:600px){
+  .ls-entry .tk-prize-val{font-size:22px}
+  .ls-entry .ls-share-note{display:none}   /* the tickets matter more than the note */
+  .ls-entry-head{margin-bottom:7px}
+}
+
+/* ---- THE TICKET PICKER, shared by the duel and Last Survivor ----
+   One component, so a ticket looks like itself wherever it is chosen and gains
+   its real picture in both places at once. */
+.tk-pick{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;flex:0 0 auto}
+.tk-opt{position:relative;display:flex;flex-direction:column;align-items:center;gap:2px;
+  padding:9px 5px 8px;border:2.5px solid var(--tkc,#000);border-radius:16px;background:rgba(255,255,255,.04);
+  color:inherit;font-family:inherit;font-weight:900;cursor:pointer;box-shadow:0 3px 0 #000;
+  transition:transform .12s,box-shadow .12s}
+.tk-opt:active{transform:translateY(2px);box-shadow:0 1px 0 #000}
+.tk-opt.on{color:#fff;box-shadow:0 3px 0 #000,0 0 0 3px rgba(255,255,255,.22);transform:translateY(-1px)}
+.tk-opt-art{display:flex;align-items:center;justify-content:center;height:34px;font-size:24px;line-height:1}
+.tk-opt-art img{height:34px;width:auto;max-width:100%;object-fit:contain;display:block;filter:drop-shadow(0 2px 3px rgba(0,0,0,.45))}
+.tk-opt b{font-size:12.5px;line-height:1.2}
+.tk-opt-n{font-size:10.5px;opacity:.92;font-weight:800}
+.tk-opt-meta{font-size:9px;opacity:.78;font-weight:800;display:flex;align-items:center;gap:3px;min-height:11px}
+.tk-opt-sh{font-style:normal;font-size:8.5px;letter-spacing:-1px}
+@media (max-height:700px){
+  .tk-opt{padding:6px 4px 6px}
+  .tk-opt-art,.tk-opt-art img{height:27px}
+  .tk-opt-art{font-size:20px}
+  .tk-opt b{font-size:11.5px}
+}
+/* Real art has to sit on the baseline the emoji sat on, or every pill it lives
+   in grows a few pixels and the header reflows. */
+.pzi{display:inline-flex;align-items:center;justify-content:center;font-style:normal;vertical-align:-2px}
+.pzi img{height:1.35em;width:auto;display:block}
+.pzh-pill .pzi img{height:16px}
+.r-ico .pzi img{height:22px}
+.pzh-pill img,.pzh-tickets img{height:14px;width:auto;vertical-align:-2px}
+.tk-shop-art img{height:44px;width:auto;display:inline-block}
+
 .tk-prize{text-align:center;padding:4px 6px 14px}
 .tk-prize-lbl{display:block;font-size:11.5px;font-weight:900;color:var(--muted);letter-spacing:.02em}
 .tk-prize-val{display:block;font-size:30px;font-weight:900;color:var(--bolt);line-height:1.25;margin-top:3px;text-shadow:0 2px 0 rgba(0,0,0,.45)}
@@ -4163,18 +4327,20 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
       <div class="ls-top"><div class="ls-back" onclick="lsLeave('home')">‹</div><div class="ls-ttl"><h1>آخرین بازمانده 🏆</h1><p>موضوع را انتخاب کن — بمون تا جایزه مال تو شه</p></div></div>
       <div class="ls-topics" id="lsTopicList"><div style="grid-column:span 2;text-align:center;color:#8fa89a;padding:30px">در حال بارگذاری…</div></div>
     </section>
-    <section class="screen pad" id="lsEntry">
-      <div class="topbar" style="padding:0 0 14px;background:none"><button class="iconbtn" onclick="go('lsTopics')">→</button><h1>ورود به مسابقه 🏆</h1></div>
-      <div class="card" style="text-align:center;margin-bottom:14px">
-        <div style="font-size:34px" id="lsEntryIcon">🎯</div>
-        <b style="display:block;font-size:18px;margin-top:6px" id="lsEntryTopic">موضوع</b>
-        <span style="font-size:12px;color:var(--muted)">آخرین بازمانده · حذفی</span>
+    <!-- ONE SCREEN, NO SCROLL. Everything needed to choose a ticket has to be
+         visible at once: the pot, what the ticket adds to it, the three colours
+         and the button. The topic used to sit in its own tall centred card and
+         a .grow spacer pushed the tickets off the bottom of a small phone, so
+         choosing meant scrolling past the very numbers being chosen between. -->
+    <section class="screen pad ls-entry" id="lsEntry">
+      <div class="topbar" style="padding:0 0 10px;background:none;flex:0 0 auto"><button class="iconbtn" onclick="go('lsTopics')">→</button><h1>ورود به مسابقه 🏆</h1></div>
+      <div class="ls-entry-head">
+        <div class="ls-entry-ic" id="lsEntryIcon">🎯</div>
+        <div class="ls-entry-name"><b id="lsEntryTopic">موضوع</b><span>آخرین بازمانده · حذفی</span></div>
       </div>
       <div class="tk-promo-host" id="promoLs"></div>
-      <div class="grow"></div>
-      <div class="card" id="lsEntryCard"></div>
-      <button class="btn btn-primary" style="margin-top:14px" id="lsEntryBtn" onclick="lsEntryStart()">ورود با بلیط 🎫</button>
-
+      <div class="card ls-entry-card" id="lsEntryCard"></div>
+      <button class="btn btn-primary ls-entry-go" id="lsEntryBtn" onclick="lsEntryStart()">ورود با بلیط 🎫</button>
     </section>
     <section class="screen" id="lsGame"><div id="lsBody"></div></section>
 
@@ -4194,8 +4360,8 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
           <button class="pzh-spin" onclick="openDailyRewards()" id="dailyHdrBtn">🎁</button>
         </div>
         <div class="pzh-wallets">
-          <span class="pzh-pill p-money" onclick="go('wallet')" title="کیف پول">💰<b id="hdrWallet">۰</b></span>
-          <span class="pzh-pill p-coin" onclick="showPracticeCoinInfo()" title="سکه">🪙<b id="hdrPracticeCoins">۰</b></span>
+          <span class="pzh-pill p-money" onclick="go('wallet')" title="کیف پول"><i class="pzi" data-pzicon="wallet">💰</i><b id="hdrWallet">۰</b></span>
+          <span class="pzh-pill p-coin" onclick="showPracticeCoinInfo()" title="سکه"><i class="pzi" data-pzicon="coin">🪙</i><b id="hdrPracticeCoins">۰</b></span>
           <span class="pzh-pill p-heart" onclick="showHeartInfo()" title="جان">❤️<b id="hdrHearts">۰</b><small id="heartRechargeTxt"></small></span>
           <span class="pzh-tickets" id="hdrTickets"><!-- filled by renderHeaderTickets() from real mTickets --></span>
         </div>
@@ -4497,17 +4663,28 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
     </section>
 
     <!-- ============ RESULT ============ -->
-    <section class="screen pad center" id="result">
-      <div class="grow center" style="width:100%">
-        <div id="resultCharSlot" style="display:flex;align-items:flex-end;justify-content:center;height:150px;margin-bottom:8px">
-          <div class="mascot pop" id="mascotResult" style="width:120px;height:120px;border-radius:50%;overflow:hidden"></div>
-          <img id="resultChar" alt="" style="display:none;max-width:150px;max-height:150px;width:auto;height:100%;object-fit:contain;filter:drop-shadow(0 12px 20px rgba(0,0,0,.45));animation:pzPop .5s cubic-bezier(.2,1.4,.4,1)">
+    <!-- RESULT — one screen, no scroll.
+         Three fixed zones: the hero (who won), the figures (score, prize, the
+         four stats) and the actions. Only the middle flexes, and it shrinks by
+         tightening rather than by hiding a number, so nothing a player is owed
+         ends up below the fold. Every element ID is unchanged — endGame() and
+         renderDuelResultPanel() still fill exactly what they always did. -->
+    <section class="screen pad center res" id="result">
+      <div class="res-hero">
+        <div id="resultCharSlot" class="res-char">
+          <div class="mascot pop" id="mascotResult"></div>
+          <!-- endGame() shows this with style.display='', so the hidden default
+               must stay INLINE: a stylesheet rule would win once the inline
+               value is cleared and the character would never appear. -->
+          <img id="resultChar" alt="" style="display:none">
         </div>
-        <h1 style="font-size:26px;font-weight:900" id="resultTitle">برنده شدی!</h1>
-        <p style="color:var(--muted);margin-top:6px;font-size:14px" id="resultSub">تو آخرین بازمانده بودی</p>
-        <div id="resultDuelScore" style="display:none;width:100%;margin:12px 0 6px"></div>
-        <div style="font-size:38px;font-weight:900;color:var(--green);margin:16px 0"><span id="resultAmt">+۱۸۰٬۰۰۰</span> <small style="font-size:16px;color:var(--muted)">تومان</small></div>
-        <div class="stat-grid" style="width:100%">
+        <h1 class="res-title" id="resultTitle">برنده شدی!</h1>
+        <p class="res-sub" id="resultSub">تو آخرین بازمانده بودی</p>
+      </div>
+      <div class="res-mid">
+        <div id="resultDuelScore" class="res-score" style="display:none"></div>
+        <div class="res-amt"><span id="resultAmt">+۱۸۰٬۰۰۰</span> <small>تومان</small></div>
+        <div class="stat-grid res-stats">
           <div class="stat"><b class="y" id="stat-q">۹</b><span>پاسخ درست</span></div>
           <div class="stat"><b class="g" id="stat-rank">۱</b><span>رتبه</span></div>
           <div class="stat"><b id="stat-xp">+۴۵۰</b><span>امتیاز (XP)</span></div>
@@ -4516,19 +4693,21 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
         <div class="duel-result-panel" id="duelResultPanel"></div>
         <span id="resultBadge" style="display:none"></span><span id="resultEmoji" style="display:none"></span>
       </div>
-      <div style="width:100%;display:flex;flex-direction:column;gap:10px">
-        <div id="duelActions" style="display:none;flex-direction:column;gap:10px">
+      <div class="res-actions">
+        <div id="duelActions" style="display:none">
           <button class="btn btn-ghost" id="reviewBtn" onclick="pzOpenReview()">🔍 مرور مسابقه — سؤال‌ها و پاسخ‌ها</button>
           <button class="btn btn-primary" id="rematchBtn" onclick="rematch()">🔁 بازی مجدد با همین حریف</button>
         </div>
-        <button class="btn btn-orange" id="resultNewBtn" onclick="startGame()">🆕 حریف جدید</button>
-        <button class="btn btn-primary" id="resultHomeBtn" onclick="go('home')">🏠 بازگشت به خانه</button>
+        <div class="res-row2">
+          <button class="btn btn-orange" id="resultNewBtn" onclick="startGame()">🆕 حریف جدید</button>
+          <button class="btn btn-primary" id="resultHomeBtn" onclick="go('home')">🏠 خانه</button>
+        </div>
       </div>
     </section>
 
     <!-- ============ SHOP ============ -->
     <section class="screen" id="shop">
-      <div class="topbar"><h1>فروشگاه 🛍️</h1><div class="balance"><span class="coinpill gold">🪙 ۵۸</span></div></div>
+      <div class="topbar"><h1>فروشگاه 🛍️</h1><div class="balance"><span class="coinpill gold"><i class="pzi" data-pzicon="coin">🪙</i> ۵۸</span></div></div>
       <div class="tabs" id="shopTabs">
         <button class="tab" id="shopTabTickets" onclick="shopTab(this,'tickets')">🎫 بلیط مسابقات</button>
         <button class="tab active" onclick="shopTab(this,'util')">آیتم‌های کاربردی</button>
@@ -5336,7 +5515,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
     <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px" onclick="menuGo('profile')">
       <div class="prof-av" style="width:52px;height:52px;border-radius:16px;border-width:2px"><div class="mascot" id="mascotMenu" style="width:38px;height:38px;border-radius:50%;overflow:hidden"></div></div>
       <div style="flex:1"><b style="font-size:15px" id="menuProfName">بازیکن</b><div style="color:var(--muted);font-size:12px"><span id="menuProfLvl">سطح ۱</span> · مشاهده پروفایل</div></div><span style="color:var(--muted)">‹</span></div>
-    <div class="row" onclick="menuGo('wallet')"><div class="r-ico">💳</div><div class="r-txt"><b>کیف پول</b></div><span class="r-arrow">‹</span></div>
+    <div class="row" onclick="menuGo('wallet')"><div class="r-ico"><i class="pzi" data-pzicon="wallet">💳</i></div><div class="r-txt"><b>کیف پول</b></div><span class="r-arrow">‹</span></div>
     <div class="row" onclick="closeMenu();plansBack='home';go('plans')"><div class="r-ico">👑</div><div class="r-txt"><b>پلن اشتراک</b></div><span class="r-arrow">‹</span></div>
     <div class="row" onclick="closeMenu();pzOpenGiftRedeem()"><div class="r-ico">🎁</div><div class="r-txt"><b>کد هدیه</b><span>کدت رو وارد کن و جایزه بگیر</span></div><span class="r-arrow">‹</span></div>
     <div class="row" onclick="menuGo('stats')"><div class="r-ico">📈</div><div class="r-txt"><b>آمار و ارقام</b></div><span class="r-arrow">‹</span></div>
@@ -6058,6 +6237,43 @@ async function lsLoadTopics(){
 /* Ticket selection is a full SCREEN (identical pattern to the paid-duel entry):
    the same TICKET_DEFS, the same .tab chips, and a primary button whose label
    reflects whether you own that ticket. No popup. */
+/* ---- ARTWORK SLOTS ----
+   ONE place that decides whether a ticket, a coin or the wallet is drawn as a
+   picture or as its emoji. Every screen asks through here, so replacing the
+   emoji with real art means filling in these strings — not hunting the same
+   emoji through a 2.8 MB file and missing three of them.
+
+   Empty means "no picture supplied yet" and the emoji stands in, so the game
+   looks exactly as it does today until the art arrives. The images go in as
+   data: URIs, because this client is one self-contained file that makes no
+   external requests. */
+const PZ_TICKET_ART={green:'',blue:'',red:''};
+const PZ_ICON_ART={coin:'',wallet:'',money:'',heart:''};
+function pzArtImg(src){ return '<img src="'+src+'" alt="" draggable="false">'; }
+/** A ticket's picture, or the emoji it falls back to. */
+function pzTicketArt(color,fallback){
+  const src=PZ_TICKET_ART[color];
+  return src?pzArtImg(src):(fallback||'🎫');
+}
+/** A named icon (coin, wallet, …), or its emoji. */
+function pzIcon(name,fallback){
+  const src=PZ_ICON_ART[name];
+  return src?pzArtImg(src):(fallback||'');
+}
+/* Static markup marks its icons with data-pzicon and keeps the emoji inside as
+   the fallback. This swaps every one of them in a single pass, so the header,
+   the menu and the shop cannot drift apart or be missed one by one. Safe to
+   call repeatedly: the original emoji is remembered, so a second pass never
+   eats it. */
+function pzApplyIconArt(root){
+  (root||document).querySelectorAll('[data-pzicon]').forEach(el=>{
+    if(el._pzEmoji==null) el._pzEmoji=el.textContent||'';
+    const src=PZ_ICON_ART[el.getAttribute('data-pzicon')];
+    if(src) el.innerHTML=pzArtImg(src);
+    else el.textContent=el._pzEmoji;
+  });
+}
+
 let lsEntryTopic=null, lsEntryColor='green';
 function lsChooseColor(topic){ lsEntryTopic=topic; lsEntryColor='green'; go('lsEntry'); lsRenderEntry(); }
 function lsRenderEntry(){
@@ -6065,8 +6281,11 @@ function lsRenderEntry(){
   /* The ticket screen carries the topic's picture too, so the art you tapped is
      the art you keep looking at all the way into the room. */
   if(ic){
+    /* The tile is sized by CSS now and the image just fills it, so the header
+       keeps one height whether the topic has artwork or an emoji. A header that
+       changes height is what makes a no-scroll screen scroll. */
     const url=pzTopicArtUrl(lsEntryTopic);
-    if(url){ ic.innerHTML='<img src="'+esc4(url)+'" alt="" style="width:54px;height:54px;border-radius:16px;border:2px solid #000;object-fit:cover;display:block">'; }
+    if(url){ ic.innerHTML='<img src="'+esc4(url)+'" alt="">'; }
     else ic.textContent=lsIcon(lsEntryTopic);
   }
   if(tp)tp.textContent=lsEntryTopic||'موضوع';
@@ -6087,15 +6306,24 @@ function lsRenderEntry(){
     '<div class="ls-share-note">جایزه بین بازمانده‌ها تقسیم می‌شود، به‌نسبت <b>ضریب بلیط</b>. '+
       'بلیط تو '+lsFa(Number(tinfo.value||0))+' تومان به این جایزه اضافه می‌کند'+
       (tinfo.units?' و ضریب سهمت '+lsFa(tinfo.units)+' است':'')+'.</div>'+
-    '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px" id="lsTkGrid"></div>';
+    '<div class="tk-pick" id="lsTkGrid"></div>';
   const g=document.getElementById('lsTkGrid');
   const have=(typeof mTickets!=='undefined'&&mTickets)||{green:0,blue:0,red:0};
   (typeof TICKET_DEFS!=='undefined'?TICKET_DEFS:[]).forEach(t=>{
     const units=(lsTickets[t.key]&&lsTickets[t.key].units)||0;
-    const b=document.createElement('button'); b.className='tab'+(lsEntryColor===t.key?' active':'');
-    b.style.cssText='border:2px solid '+t.color+(lsEntryColor===t.key?';background:'+t.grad+';color:#fff':'');
-    /* Count only — no price printed on the ticket. */
-    b.innerHTML=t.icon+' '+t.name.replace('بلیط ','')+'<br><small style="font-size:10.5px;opacity:.9">'+lsFa(have[t.key]||0)+' عدد</small>'+(units?'<br><small style="font-size:9px;opacity:.75">ضریب '+lsFa(units)+'</small>':'');
+    const sh=(lsTickets[t.key]&&lsTickets[t.key].shields)||0;
+    const b=document.createElement('button'); b.className='tk-opt'+(lsEntryColor===t.key?' on':'');
+    b.style.setProperty('--tkc',t.color);
+    if(lsEntryColor===t.key) b.style.backgroundImage=t.grad;
+    /* Count only — no price printed on the ticket. The art sits in its own slot
+       so a real ticket picture replaces the emoji without touching the layout
+       around it. Shields belong here too: they are what the dearer ticket
+       actually buys, and this is the screen where that choice is made. */
+    b.innerHTML='<span class="tk-opt-art">'+pzTicketArt(t.key,t.icon)+'</span>'+
+      '<b>'+t.name.replace('بلیط ','')+'</b>'+
+      '<span class="tk-opt-n">'+lsFa(have[t.key]||0)+' عدد</span>'+
+      '<span class="tk-opt-meta">'+(units?'ضریب '+lsFa(units):'')+
+        (sh?'<i class="tk-opt-sh" title="سپر">'+'🛡️'.repeat(Math.min(2,sh))+'</i>':'')+'</span>';
     b.onclick=()=>{ lsEntryColor=t.key; lsRenderEntry(); };
     g.appendChild(b);
   });
@@ -6573,6 +6801,10 @@ function lsFinish(snap){
   const me=snap.me||{}; const mine=Number(me.payoutCash||0);
   const won=mine>0;                       // cashed out OR survived with a payout
   const cashedOut=me.status==='cashed_out';
+  /* Grabbed BEFORE the reset below wipes it: the review needs the room this
+     match was played in, and by the end of this function there is no other
+     record of which one that was. */
+  const finishedRoom=lsRoomId;
   lsRoomId=null; lsSnap=null; lsLastKey='';
   ['lsColorPick','lsDead','lsCashPop'].forEach(id=>{const e=document.getElementById(id);if(e)e.remove();});
   try{ if(typeof clearInterval==='function'){ clearInterval(timer); clearInterval(dTimer); } }catch(e){}
@@ -6595,8 +6827,16 @@ function lsFinish(snap){
     if(rc){ rc.onerror=()=>{ rc.style.display='none'; if(ms)ms.style.display=''; };
       rc.onload=()=>{ rc.style.display=''; if(ms)ms.style.display='none'; };
       rc.src = won ? 'winchar.png' : 'losechar.png'; } }catch(e){}
-  // LS has no duel opponent panel / bot rematch — hide them and retarget the actions.
-  try{ const da=$id('duelActions'); if(da)da.style.display='none'; }catch(e){}
+  /* LS has no bot rematch, but it DOES have a match worth looking back at — so
+     the review button keeps its place, in the same spot the duel puts it, and
+     only the rematch beside it goes away. */
+  try{ const da=$id('duelActions'), rb=$id('reviewBtn'), mb=$id('rematchBtn');
+    if(mb) mb.style.display='none';
+    if(da&&rb&&finishedRoom){ da.style.display='flex'; rb.style.display='block';
+      rb.textContent='🔍 مرور مسابقه — سؤال‌ها و پاسخ‌ها';
+      rb.onclick=function(){ lsOpenReview(finishedRoom); }; }
+    else if(da) da.style.display='none';
+  }catch(e){}
   try{ const ds=$id('resultDuelScore'); if(ds)ds.style.display='none'; }catch(e){}
   /* The question you went out on + the CORRECT answer, shown right here so
      there is only ONE elimination screen. */
@@ -6648,6 +6888,11 @@ function lsFinish(snap){
 function lsResetResultButtons(){
   try{ const nb=document.getElementById('resultNewBtn'); if(nb){ nb.textContent='🆕 حریف جدید'; nb.onclick=function(){ startGame(); }; } }catch(e){}
   try{ const hb=document.getElementById('resultHomeBtn'); if(hb){ hb.onclick=function(){ go('home'); }; } }catch(e){}
+  /* The result screen is SHARED with the duel, so anything Last Survivor
+     retargeted has to be handed back — otherwise the next duel's review button
+     would open the last Last Survivor room. */
+  try{ const mb=document.getElementById('rematchBtn'); if(mb) mb.style.display=''; }catch(e){}
+  try{ const rb=document.getElementById('reviewBtn'); if(rb){ rb.onclick=function(){ pzOpenReview(); }; } }catch(e){}
 }
 function lsEndHtml(snap){ lsFinish(snap); return '<div class="ls-end"><div class="cup">🏁</div><h2>پایان مسابقه</h2></div>'; }
 
@@ -7890,10 +8135,13 @@ function endGame(won,amount,isWithdraw,customSub){
     const meN=((pzRt&&pzRt.myName)||window.myName||'تو'), opN=((pzRt&&pzRt.oppName)||oppName||'حریف');
     const meCol=won?'var(--ok)':'var(--red)', opCol=won?'var(--red)':'var(--ok)';
     el.style.display='';
-    el.innerHTML='<div style="display:flex;justify-content:center;align-items:center;gap:14px;direction:ltr">'+
-      '<div style="text-align:center;min-width:84px"><div style="font-size:11px;font-weight:900;color:var(--muted);max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+opN+'</div><div style="font-size:46px;font-weight:900;line-height:1;color:'+opCol+';text-shadow:0 0 22px rgba(0,0,0,.35)">'+fa(oppScore)+'</div></div>'+
-      '<div style="font-size:30px;font-weight:900;opacity:.35">-</div>'+
-      '<div style="text-align:center;min-width:84px"><div style="font-size:11px;font-weight:900;color:var(--muted);max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+meN+'</div><div style="font-size:46px;font-weight:900;line-height:1;color:'+meCol+';text-shadow:0 0 22px rgba(0,0,0,.35)">'+fa(myScore)+'</div></div>'+
+    /* Sized by CSS, not by fixed pixels: this is the biggest thing on the
+       result screen and a hard 46px is what pushed the buttons off a small
+       phone. */
+    el.innerHTML='<div class="res-sc">'+
+      '<div class="res-sc-side"><div class="res-sc-nm">'+opN+'</div><div class="res-sc-n" style="color:'+opCol+'">'+fa(oppScore)+'</div></div>'+
+      '<div class="res-sc-dash">-</div>'+
+      '<div class="res-sc-side"><div class="res-sc-nm">'+meN+'</div><div class="res-sc-n" style="color:'+meCol+'">'+fa(myScore)+'</div></div>'+
     '</div>';
   })();
   if(userPlan==='free'&&isDuel&&won&&!leagueDuelActive&&!leagueWtaActive){
@@ -8456,6 +8704,27 @@ function pzProfileBody(d,note){
   return '<div class="opp-profile">'+head+kpis+last5+modes+topics+(note||'')+'</div>';
 }
 
+/* The card a friendly-mode player gets: who it is, and an honest sentence about
+   why there is nothing else — not an error, and not a blank. */
+function pzProfileLimited(name,source){
+  return '<div class="opp-profile opp-limited">'+
+    '<div class="opp-user">@'+frEsc(name||'بازیکن')+'</div>'+
+    '<div class="opp-lock">'+
+      '<span class="big">🔒</span>'+
+      '<b>در حالت دوستانه فقط نام و تصویر نمایش داده می‌شود</b>'+
+      '<p>آمار کامل بازیکن‌ها — تعداد بازی، نرخ برد، دقت پاسخ و جایزه‌ها — بخشی از <b>رقابت اصلی</b> است. '+
+      'برای دیدن پروفایل کامل کاربران باید در رقابت اصلی باشی.</p>'+
+      '<button class="opp-lock-cta" onclick="pzGoMainCompetition()">رفتن به رقابت اصلی ←</button>'+
+    '</div>'+
+    (source?'<div class="opp-src">'+frEsc(source)+'</div>':'')+
+  '</div>';
+}
+function pzGoMainCompetition(){
+  try{ closeAaaModal(false); }catch(e){}
+  try{ plansBack='home'; }catch(e){}
+  try{ go('plans'); }catch(e){}
+}
+
 /* Opens instantly with the avatar we already have, then fills in real stats. */
 async function showPlayerProfile(userId,fb){
   fb=fb||{};
@@ -8472,6 +8741,16 @@ async function showPlayerProfile(userId,fb){
   });
   const paint=(html)=>{ if(seq!==_pzProfileSeq) return; const el=document.getElementById('aaaSub'); if(el) el.innerHTML=html; };
   if(!userId){ paint('<div class="opp-profile"><div class="opp-empty"><span class="big">🔒</span>آمار این بازیکن در دسترس نیست.</div></div>'); return; }
+  /* FRIENDLY MODE sees a name and a face, and nothing else.
+     «دوستانه» is the practice half of the game — no money moves through it — so
+     a full dossier there (win rate, accuracy, total winnings, strongest topics)
+     is both more than a practice player needs and more than the person being
+     looked at signed up for. The card is not fetched at all rather than fetched
+     and then hidden: data you must not show is data not worth asking for. */
+  if(typeof userPlan!=='undefined'&&userPlan==='free'){
+    paint(pzProfileLimited(title,fb.source));
+    return;
+  }
   const r=await pzApi('GET','/users/'+encodeURIComponent(userId)+'/profile');
   if(seq!==_pzProfileSeq) return;
   if(r&&r.ok&&r.data){
@@ -9353,7 +9632,7 @@ function renderHeaderTickets(){
   const el=document.getElementById('hdrTickets'); if(!el)return;
   /* One colored pill per MATCH-ticket type (green/blue/red), driven by real counts. */
   /* Solid dark base UNDER the colour tint so the chip reads on any wallpaper. */
-  el.innerHTML=TICKET_DEFS.map(t=>'<span class="pzh-pill p-tk" style="border-color:'+t.color+';background:linear-gradient(180deg,'+t.color+'3d,'+t.color+'1f),linear-gradient(180deg,#262730,#171820)" onclick="goShopTickets()" title="'+t.name+'">🎫<b style="color:'+t.color+'">'+fa(mTickets[t.key]||0)+'</b></span>').join('');
+  el.innerHTML=TICKET_DEFS.map(t=>'<span class="pzh-pill p-tk" style="border-color:'+t.color+';background:linear-gradient(180deg,'+t.color+'3d,'+t.color+'1f),linear-gradient(180deg,#262730,#171820)" onclick="goShopTickets()" title="'+t.name+'">'+pzTicketArt(t.key,'🎫')+'<b style="color:'+t.color+'">'+fa(mTickets[t.key]||0)+'</b></span>').join('');
 }
 function goShopTickets(){ go('shop'); setTimeout(()=>{ const tab=document.getElementById('shopTabTickets'); if(tab)shopTab(tab,'tickets'); },50); }
 function renderTicketShop(){
@@ -9363,7 +9642,7 @@ function renderTicketShop(){
   const g=document.getElementById('ticketGrid');
   TICKET_DEFS.forEach(t=>{
     const d=document.createElement('div'); d.className='item'; d.style.cssText='background:'+t.grad+';color:#fff;border:2px solid #000;text-align:center';
-    d.innerHTML='<div class="it-ico" style="font-size:34px;filter:drop-shadow(0 3px 0 rgba(0,0,0,.35));animation:tkFloat 2.4s ease-in-out infinite">🎫</div>'+
+    d.innerHTML='<div class="it-ico tk-shop-art" style="font-size:34px;filter:drop-shadow(0 3px 0 rgba(0,0,0,.35));animation:tkFloat 2.4s ease-in-out infinite">'+pzTicketArt(t.key,'🎫')+'</div>'+
       '<b style="font-size:15px">'+t.name+'</b>'+
       '<p style="color:rgba(255,255,255,.9);font-size:12px;line-height:1.6">ورودی مسابقه<br>جایزهٔ برد: <b class="tk-shop-prize" data-tier="'+t.key+'">'+(pzPrizeFor(t.key)==null?'…':fa(pzPrizeFor(t.key))+' تومان')+'</b></p>'+
       '<div class="price" style="background:rgba(0,0,0,.28);color:#fff">'+fa(t.value)+' ت · تعداد تو: '+fa(mTickets[t.key]||0)+'</div>';
@@ -9485,13 +9764,18 @@ function renderTicketSelect(){
     '<div class="tk-prize"><span class="tk-prize-lbl">جایزه این مسابقه</span>'+
       '<b class="tk-prize-val" id="tkPrizeVal">'+(prize==null?'…':fa(prize)+' تومان')+'</b>'+
       '<span class="tk-prize-tag">برنده همه‌اش را می‌برد 🏆</span></div>'+
-    '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px" id="tkSelGrid"></div>';
+    '<div class="tk-pick" id="tkSelGrid"></div>';
   const g=document.getElementById('tkSelGrid');
   TICKET_DEFS.forEach(t=>{
-    const b=document.createElement('button'); b.className='tab'+(selectedTicket===t.key?' active':'');
-    b.style.cssText='border:2px solid '+t.color+(selectedTicket===t.key?';background:'+t.grad+';color:#fff':'');
-    /* Only the count — the tier price is not shown on the ticket itself. */
-    b.innerHTML=t.icon+' '+t.name.replace('بلیط ','')+'<br><small style="font-size:10.5px;opacity:.9">'+fa(mTickets[t.key]||0)+' عدد</small>';
+    const b=document.createElement('button'); b.className='tk-opt'+(selectedTicket===t.key?' on':'');
+    b.style.setProperty('--tkc',t.color);
+    if(selectedTicket===t.key) b.style.backgroundImage=t.grad;
+    /* Only the count — the tier price is not shown on the ticket itself. The
+       SAME component Last Survivor uses, so a ticket looks like itself in both
+       modes and gains its real picture in both at once. */
+    b.innerHTML='<span class="tk-opt-art">'+pzTicketArt(t.key,t.icon)+'</span>'+
+      '<b>'+t.name.replace('بلیط ','')+'</b>'+
+      '<span class="tk-opt-n">'+fa(mTickets[t.key]||0)+' عدد</span><span class="tk-opt-meta"></span>';
     b.onclick=()=>{ selectedTicket=t.key; renderTicketSelect(); };
     g.appendChild(b);
   });
@@ -14327,6 +14611,7 @@ document.addEventListener('DOMContentLoaded',()=>{
   const splashArt=document.getElementById('splashArt');
   if(splashArt&&window.ART_FULL) splashArt.src=window.ART_FULL;
   /* Straight into the one loading screen — nothing to tap first. */
+  try{ pzApplyIconArt(); }catch(e){}
   try{ startIntroFlow(); }catch(e){}
 });
 
@@ -14426,6 +14711,66 @@ async function pzOpenReview(){
   body.innerHTML=html;
   PZ_REVIEW_MID=mid;
 }
+/* LAST SURVIVOR post-match review.
+ *
+ * Same overlay and same reporting flow as the duel, but the data has a
+ * different shape and that difference is the point: a duel review shows BOTH
+ * players because a duel has two, while a Last Survivor room can hold a
+ * hundred — so the server sends each player only their OWN answers, and this
+ * draws exactly that. Nobody's picks but yours appear here. */
+let LS_REVIEW_ROOM=null;
+async function lsOpenReview(roomId){
+  if(!roomId){ try{toast('اطلاعات مسابقه در دسترس نیست');}catch(e){} return; }
+  const ov=document.getElementById('pzReviewOverlay'), body=document.getElementById('pzReviewBody');
+  if(!ov||!body) return;
+  body.innerHTML='<p style="text-align:center;color:var(--muted);margin-top:40px">در حال بارگذاری…</p>';
+  ov.classList.add('show');
+  const r=await pzApi('GET','/last-survivor/rooms/'+encodeURIComponent(roomId)+'/review');
+  const rev=(r&&r.data)||r;
+  if(!rev||(r&&r.error)||!Array.isArray(rev.rounds)){
+    const em=(r&&r.error&&(r.error.message||r.error.code))||'پاسخی نیامد';
+    body.innerHTML='<p style="text-align:center;color:var(--muted);margin-top:40px">مروری برای این مسابقه یافت نشد.<br><span style="font-size:11px;opacity:.7">('+pzEsc(em)+')</span></p>';
+    return;
+  }
+  if(!rev.rounds.length){
+    body.innerHTML='<p style="text-align:center;color:var(--muted);margin-top:40px">هنوز سؤالی برای مرور ثبت نشده است.</p>';
+    return;
+  }
+  LS_REVIEW_ROOM=roomId;
+  const right=rev.rounds.filter(x=>x.yourCorrect).length;
+  let html='<div class="pzrv-legend">'+
+    '<span><i class="pzrv-dot" style="background:#37D67A"></i>پاسخ درست</span>'+
+    '<span><span class="pzrv-tag me">تو</span>پاسخ تو</span>'+
+    '<span style="margin-inline-start:auto;font-weight:900">'+lsFa(right)+' از '+lsFa(rev.rounds.length)+' درست</span></div>';
+  rev.rounds.forEach(rd=>{
+    const dm=(typeof pzDiffMeta==='function')?pzDiffMeta(rd.difficulty):null;
+    html+='<div class="pzrv-q"><div class="pzrv-qhead"><span class="pzrv-qnum">مرحله '+lsFa(rd.round)+'</span>'+
+      '<span class="pzrv-qcat">'+(dm?dm.icon+' ':'')+pzEsc(rd.category||'')+'</span></div>'+
+      '<div class="pzrv-qtext">'+pzEsc(rd.text||'')+'</div>';
+    (rd.options||[]).forEach((opt,oi)=>{
+      const isCorrect=oi===rd.correctIndex;
+      const meHere=rd.yourIndex===oi;
+      let cls='pzrv-opt'; if(isCorrect)cls+=' correct'; else if(meHere)cls+=' wrongpick';
+      let tags='';
+      if(isCorrect) tags+='<span class="pzrv-tag ok">✔ درست</span>';
+      if(meHere) tags+='<span class="pzrv-tag me">تو '+(rd.yourCorrect?'✅':'❌')+'</span>';
+      html+='<div class="'+cls+'"><span>'+pzEsc(opt)+'</span><span class="pzrv-ic">'+tags+'</span></div>';
+    });
+    /* Running out of time is not the same as answering wrongly, and drawing it
+       as a wrong pick would put an option in the player's mouth. */
+    if(rd.timedOut) html+='<div style="font-size:11px;color:var(--muted);margin-top:4px">⏳ به این سؤال پاسخ ندادی</div>';
+    if(rd.questionId) html+='<button class="pz-reportbtn" style="position:static;margin-top:10px;display:inline-flex" onclick="lsReportFromReview('+"'"+pzEsc(rd.questionId)+"'"+')">⚠️ گزارش این سؤال</button>';
+    html+='</div>';
+  });
+  body.innerHTML=html;
+}
+/* The report sheet is shared with the duel; matchId is a duel concept, so it is
+   left out rather than filled with a room id the backend would misread. */
+function lsReportFromReview(qid){
+  PZ_CUR_Q={id:qid, matchId:null};
+  pzOpenReport();
+}
+
 /* Report a question from the post-match review (calm, no time pressure). */
 function pzReportFromReview(qid){
   PZ_CUR_Q={id:qid, matchId:PZ_REVIEW_MID||PZ_LAST_MATCH||null};
