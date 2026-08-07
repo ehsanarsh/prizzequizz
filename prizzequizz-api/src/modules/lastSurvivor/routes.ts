@@ -4,8 +4,9 @@ import type { Router } from '../../http/router.js';
 import { error, json } from '../../http/response.js';
 import { repositories } from '../../repositories/index.js';
 import { bodyObject } from '../../utils/validation.js';
-import { getConfig, updateConfig, setTopicEnabled, isTopicPlayable, removeTopic,
-         RANDOM_TOPIC, isRandomTopic } from '../../services/lastSurvivorConfig.js';
+import { getConfig, updateConfig, setTopicEnabled, isTopicPlayable, isTopicHidden, removeTopic,
+         addTopic, setTopicHidden, RANDOM_TOPIC, isRandomTopic,
+         type LastSurvivorConfig } from '../../services/lastSurvivorConfig.js';
 import { joinTopic, snapshot, addVote, addChat, listChat, getRoom, saveRoom, listAllRooms, listPlayers,
          leaveRoom, touchPlayer, sweepIdlePlayers, LastSurvivorError, listActiveRooms} from '../../services/lastSurvivorService.js';
 import { submitAnswer, submitDecision, useLifeline, advanceRoom } from '../../services/lastSurvivorWorker.js';
@@ -19,6 +20,66 @@ import { equippedCharacterFor } from '../../services/characterSelectionService.j
  * thrown out, short enough that the list is honest. */
 const LOBBY_IDLE_MS = 45_000;
 
+/* THE topic list — one builder for both the picker and the admin panel, so the
+ * two can never disagree about what exists.
+ *
+ * A name gets on the list two ways: a category that holds approved questions
+ * (discovered), or an operator writing it into the config (custom). «تصادفی» is
+ * always there. `includeHidden` is the only difference between the two callers:
+ * players must not see what has been taken off the list, and the operator must,
+ * or they could never put it back. */
+async function buildTopics(opts: { includeHidden: boolean }): Promise<any[]> {
+  const cfg = await getConfig();
+  const questions = await repositories.questions.listApproved();
+  const counts = new Map<string, number>();
+  for (const q of questions) counts.set(q.category, (counts.get(q.category) ?? 0) + 1);
+  const names = new Set<string>([...counts.keys(), ...Object.keys(cfg.topics || {})]);
+  names.add(RANDOM_TOPIC);            // always offered, even before any category has questions
+  /* Topic name, emoji and artwork all come from the one category list the
+   * admin edits, so a picture uploaded once shows up in every mode. A custom
+   * topic has no category, so it falls back to the icon set when it was added. */
+  const cats = new Map(categoryList().map((c) => [c.name, c]));
+  const art = await categoryImageUrls().catch(() => ({} as Record<string, string>));
+  /* What is actually at stake right now, per topic. Last Survivor's prize is
+   * a SHARE of the pot the entrants build — it cannot be known before they
+   * arrive — so the entry screen shows the live pot instead of a fixed
+   * figure. Without this the client had nothing true to show and fell back on
+   * the duel's number, which is a different game's arithmetic. */
+  const live = new Map<string, { pool: number; players: number }>();
+  for (const r of await listActiveRooms()) {
+    if (r.status !== 'waiting') continue;
+    const cur = live.get(r.topic) ?? { pool: 0, players: 0 };
+    cur.pool += r.grossPool;
+    cur.players += (await listPlayers(r.id)).length;
+    live.set(r.topic, cur);
+  }
+  return [...names]
+    .filter((name) => opts.includeHidden || !isTopicHidden(cfg, name))
+    .map((name) => ({
+      name,
+      icon: cfg.topics?.[name]?.icon || cats.get(name)?.icon || '❓',
+      image: art[name] ?? '',
+      /* «تصادفی» draws from every category, so its bank is the whole bank —
+       * reporting a per-category count would show 0 and read as broken. */
+      questionCount: isRandomTopic(name) ? questions.length : (counts.get(name) ?? 0),
+      random: isRandomTopic(name),
+      /* Invented here rather than discovered from the bank — the panel needs
+       * this to say whether «حذف» really deletes or only hides. */
+      custom: cfg.topics?.[name]?.custom === true,
+      hidden: isTopicHidden(cfg, name),
+      /* The waiting room's pot and head count for this topic, or zeros when
+       * nobody is waiting yet. */
+      livePool: live.get(name)?.pool ?? 0,
+      livePlayers: live.get(name)?.players ?? 0,
+      playable: isTopicPlayable(cfg, name),
+      comingSoon: !isTopicPlayable(cfg, name),
+      minUsers: cfg.topics?.[name]?.minUsers ?? cfg.room.minUsers
+    })).sort((a, b) =>
+      a.random !== b.random ? (a.random ? -1 : 1)
+      : a.playable !== b.playable ? (a.playable ? -1 : 1)
+      : b.questionCount - a.questionCount);
+}
+
 export function registerLastSurvivorRoutes(router: Router, base: string): void {
   // ---------------- ADMIN: config + topic gating + live rooms ----------------
   router.add('GET', `${base}/admin/last-survivor/config`, async (ctx) => {
@@ -29,22 +90,71 @@ export function registerLastSurvivorRoutes(router: Router, base: string): void {
     if (!requireAdmin(ctx, { tab: 'lastsurvivor' })) return;
     json(ctx.res, 200, await updateConfig(bodyObject(ctx.body) as any));
   });
+  /* The operator's own view of the topic list: everything the picker shows PLUS
+   * the hidden ones, because a topic you cannot see is a topic you cannot put
+   * back. */
+  router.add('GET', `${base}/admin/last-survivor/topics`, async (ctx) => {
+    if (!requireAdmin(ctx, { tab: 'lastsurvivor' })) return;
+    json(ctx.res, 200, { topics: await buildTopics({ includeHidden: true }) });
+  });
+  /* Invent a topic. The Last Survivor list is no longer limited to whatever the
+   * question bank happens to hold — an operator can announce a topic here long
+   * before a single question exists for it, which is what the «به‌زودی» badge
+   * is for. It arrives disabled, so nobody can pay a ticket into an empty
+   * bank. */
+  router.add('POST', `${base}/admin/last-survivor/topics`, async (ctx) => {
+    if (!requireAdmin(ctx, { tab: 'lastsurvivor' })) return;
+    const body = bodyObject(ctx.body) as any;
+    try {
+      const cfg = await addTopic(String(body.name || ''), { icon: body.icon, minUsers: body.minUsers != null ? Number(body.minUsers) : undefined });
+      const name = String(body.name || '').trim();
+      json(ctx.res, 201, { topic: name, config: cfg.topics[name] });
+    } catch (e) {
+      return error(ctx.res, 422, 'TOPIC_INVALID', e instanceof Error ? e.message : 'موضوع اضافه نشد.');
+    }
+  });
   router.add('POST', `${base}/admin/last-survivor/topics/:topic`, async (ctx) => {
     if (!requireAdmin(ctx, { tab: 'lastsurvivor' })) return;
     const body = bodyObject(ctx.body) as any;
     const topic = decodeURIComponent(ctx.params.topic!);
-    const cfg = await setTopicEnabled(topic, !!body.enabled, body.minUsers != null ? Number(body.minUsers) : undefined);
-    json(ctx.res, 200, { topic, config: cfg.topics[topic] });
+    try {
+      /* `hidden` alone (no `enabled` key) is a pure show/hide — used by the
+       * restore button — and must not silently reset the enabled flag. */
+      let cfg: LastSurvivorConfig;
+      if (body.enabled === undefined && body.hidden !== undefined) {
+        cfg = await setTopicHidden(topic, !!body.hidden);
+      } else {
+        /* A topic with no approved questions cannot be played: every round
+         * would be void, and players would have paid a ticket for a match that
+         * eliminates nobody. «تصادفی» draws from the whole bank, so it is only
+         * empty when the bank is. */
+        if (body.enabled) {
+          const have = isRandomTopic(topic)
+            ? (await repositories.questions.listApproved()).length
+            : (await repositories.questions.listApproved()).filter((q) => q.category === topic).length;
+          if (!have) {
+            return error(ctx.res, 422, 'TOPIC_EMPTY',
+              'موضوع «' + topic + '» هیچ سؤال تأییدشده‌ای ندارد و فعال نمی‌شود؛ اول سؤال اضافه کن.');
+          }
+        }
+        cfg = await setTopicEnabled(topic, !!body.enabled, body.minUsers != null ? Number(body.minUsers) : undefined);
+        if (body.hidden !== undefined && !body.enabled) cfg = await setTopicHidden(topic, !!body.hidden);
+      }
+      json(ctx.res, 200, { topic, config: cfg.topics[topic] });
+    } catch (e) {
+      return error(ctx.res, 422, 'TOPIC_INVALID', e instanceof Error ? e.message : 'ذخیره نشد.');
+    }
   });
-  /* Forget a topic's override. A category that still has questions returns to
-   * the list gated, which is the only thing "delete" can honestly mean when the
-   * list is derived from the question bank. */
+  /* Take a topic off the list. A topic invented here is deleted outright; one
+   * that exists because its category holds questions is hidden instead, since
+   * deleting the entry would only bring it back on the next read. The response
+   * says which happened so the panel can tell the truth about the undo. */
   router.add('DELETE', `${base}/admin/last-survivor/topics/:topic`, async (ctx) => {
     if (!requireAdmin(ctx, { tab: 'lastsurvivor' })) return;
     const topic = decodeURIComponent(ctx.params.topic!);
     try {
-      const cfg = await removeTopic(topic);
-      json(ctx.res, 200, { removed: topic, topics: cfg.topics });
+      const { config, action } = await removeTopic(topic);
+      json(ctx.res, 200, { removed: topic, action, topics: config.topics });
     } catch (e) {
       return error(ctx.res, 422, 'TOPIC_PROTECTED', e instanceof Error ? e.message : 'حذف نشد.');
     }
@@ -133,49 +243,7 @@ export function registerLastSurvivorRoutes(router: Router, base: string): void {
   // Topic picker: every real category, each flagged playable or "coming soon".
   router.add('GET', `${base}/last-survivor/topics`, async (ctx) => {
     const cfg = await getConfig();
-    const questions = await repositories.questions.listApproved();
-    const counts = new Map<string, number>();
-    for (const q of questions) counts.set(q.category, (counts.get(q.category) ?? 0) + 1);
-    // Union of categories that have questions and topics named in config.
-    const names = new Set<string>([...counts.keys(), ...Object.keys(cfg.topics || {})]);
-    names.add(RANDOM_TOPIC);          // always offered, even before any category has questions
-    /* Topic name, emoji and artwork all come from the one category list the
-     * admin edits, so a picture uploaded once shows up in every mode. */
-    const cats = new Map(categoryList().map((c) => [c.name, c]));
-    const art = await categoryImageUrls().catch(() => ({} as Record<string, string>));
-    /* What is actually at stake right now, per topic. Last Survivor's prize is
-     * a SHARE of the pot the entrants build — it cannot be known before they
-     * arrive — so the entry screen shows the live pot instead of a fixed
-     * figure. Without this the client had nothing true to show and fell back on
-     * the duel's number, which is a different game's arithmetic. */
-    const live = new Map<string, { pool: number; players: number }>();
-    for (const r of await listActiveRooms()) {
-      if (r.status !== 'waiting') continue;
-      const cur = live.get(r.topic) ?? { pool: 0, players: 0 };
-      cur.pool += r.grossPool;
-      cur.players += (await listPlayers(r.id)).length;
-      live.set(r.topic, cur);
-    }
-    const topics = [...names].map((name) => ({
-      name,
-      icon: cats.get(name)?.icon ?? '❓',
-      image: art[name] ?? '',
-      /* «تصادفی» draws from every category, so its bank is the whole bank —
-       * reporting a per-category count would show 0 and read as broken. */
-      questionCount: isRandomTopic(name) ? questions.length : (counts.get(name) ?? 0),
-      random: isRandomTopic(name),
-      /* The waiting room's pot and head count for this topic, or zeros when
-       * nobody is waiting yet. */
-      livePool: live.get(name)?.pool ?? 0,
-      livePlayers: live.get(name)?.players ?? 0,
-      playable: isTopicPlayable(cfg, name),
-      comingSoon: !isTopicPlayable(cfg, name),
-      minUsers: cfg.topics?.[name]?.minUsers ?? cfg.room.minUsers
-    })).sort((a, b) =>
-      a.random !== b.random ? (a.random ? -1 : 1)
-      : a.playable !== b.playable ? (a.playable ? -1 : 1)
-      : b.questionCount - a.questionCount);
-    json(ctx.res, 200, { topics, tickets: cfg.economy.tickets });
+    json(ctx.res, 200, { topics: await buildTopics({ includeHidden: false }), tickets: cfg.economy.tickets });
   });
 
   router.add('POST', `${base}/last-survivor/join`, async (ctx) => {

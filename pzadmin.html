@@ -2000,7 +2000,10 @@ async function renderLastSurvivor(){
   try{ [cfg,rooms,topics]=await Promise.all([
     api('GET','/admin/last-survivor/config'),
     api('GET','/admin/last-survivor/rooms').catch(()=>({rows:[]})),
-    api('GET','/last-survivor/topics').catch(()=>({topics:[]}))
+    /* The ADMIN list, not the picker's: it includes the topics that have been
+       taken off the list, and a topic you cannot see is one you can never put
+       back. */
+    api('GET','/admin/last-survivor/topics').catch(()=>({topics:[]}))
   ]); }catch(e){ $('#main').innerHTML=head('آخرین بازمانده')+'<div class="card empty">'+(e.message||'خطا')+'</div>'; return; }
   _LS_CFG=cfg;
   const t=cfg.economy.tickets||{};
@@ -2028,7 +2031,9 @@ async function renderLastSurvivor(){
       st('روم‌های فعال','ok',fa((rooms.rows||[]).filter(r=>r.status!=='finished').length))+
       st('در حال اجرا','gold',fa((rooms.rows||[]).filter(r=>r.status==='running').length))+
       st('موضوعات فعال','ok',fa((topics.topics||[]).filter(t=>t.playable).length))+
-      st('مجموع موضوعات','',fa((topics.topics||[]).length))+
+      /* What PLAYERS see. The admin list also carries the ones taken off the
+         list, and counting those here would overstate the picker. */
+      st('در فهرست بازی','',fa((topics.topics||[]).filter(t=>!t.hidden).length))+
     '</div>'+
     '<div class="card"><h3>🏟️ روم</h3><div class="grid g3">'+
       '<div class="field"><label>حداکثر ظرفیت</label>'+num('ls_capacity',cfg.room.capacity)+'</div>'+
@@ -2055,16 +2060,31 @@ async function renderLastSurvivor(){
       '<div class="tbl-wrap"><table><thead><tr><th>رنگ بلیط</th><th>ارزش (تومان)</th><th>ضریب سهم (Units)</th></tr></thead><tbody>'+
       ['green','blue','red'].map(c=>{const label={green:'🟢 سبز',blue:'🔵 آبی',red:'🔴 قرمز'}[c];const tt=t[c]||{value:0,units:0};return '<tr><td><b>'+label+'</b></td><td>'+num('ls_tv_'+c,tt.value)+'</td><td>'+num('ls_tu_'+c,tt.units)+'</td></tr>';}).join('')+
       '</tbody></table></div><div class="note">استخر = مجموع ارزش بلیط‌ها؛ تقسیم جایزه بر اساس مجموع «ضریب سهم»‌ها (نه تعداد نفرات).</div></div>'+
-    '<div class="card"><h3>🏷️ فعال/غیرفعال موضوعات</h3><div class="note">فقط موضوعاتِ فعال قابل بازی‌اند؛ بقیه در بازی «به‌زودی» نمایش داده می‌شوند.</div>'+
+    '<div class="card"><h3>🏷️ موضوعات آخرین بازمانده</h3>'+
+      '<div class="note">این فهرست دستِ شماست و به بانک سؤال گره نخورده: موضوع دلخواه اضافه کنید تا با برچسب «به‌زودی» '+
+      'به بازیکن‌ها نشان داده شود، و هر موضوعی را که نمی‌خواهید از فهرست بردارید (سؤال‌هایش پاک نمی‌شود و هر وقت خواستید برمی‌گردد). '+
+      'موضوع «تصادفی» سؤالش از کل بانک می‌آید و از فهرست حذف نمی‌شود. موضوعی که هیچ سؤال تأییدشده‌ای ندارد فعال نمی‌شود.</div>'+
+      '<div class="grid g3" style="margin:10px 0 4px">'+
+        '<div class="field"><label>نام موضوع تازه</label><input id="ls_newTopic" placeholder="مثلاً فوتبال جهانی"></div>'+
+        '<div class="field"><label>ایموجی (اختیاری)</label><input id="ls_newIcon" placeholder="⚽" maxlength="4"></div>'+
+        '<div class="field"><label>&nbsp;</label><button class="btn pri" onclick="lsAddTopic()">➕ افزودن به فهرست</button></div>'+
+      '</div>'+
       '<div class="tbl-wrap"><table><thead><tr><th>موضوع</th><th>تعداد سوال</th><th>وضعیت</th><th>عملیات</th></tr></thead><tbody>'+
       (topics.topics||[]).map(tp=>{const q=JSON.stringify(tp.name).replace(/"/g,'&quot;');
-        return '<tr><td><b>'+esc(tp.name)+'</b>'+(tp.random?' <span class="pill gold">تصادفی</span>':'')+'</td>'+
+        const tags=(tp.random?' <span class="pill gold">تصادفی</span>':'')+
+                   (tp.custom?' <span class="pill">دلخواه</span>':'')+
+                   (tp.hidden?' <span class="pill bad">خارج از فهرست</span>':'');
+        return '<tr'+(tp.hidden?' style="opacity:.6"':'')+'><td><b>'+esc((tp.icon&&tp.icon!=='❓'?tp.icon+' ':'')+tp.name)+'</b>'+tags+'</td>'+
         '<td>'+fa(tp.questionCount)+(tp.random?' <span class="mono" style="opacity:.6">(کل بانک)</span>':'')+'</td>'+
-        '<td><span class="pill '+(tp.playable?'ok':'bad')+'">'+(tp.playable?'فعال':'به‌زودی')+'</span></td>'+
-        '<td><button class="btn sm '+(tp.playable?'bad':'ok')+'" onclick="lsToggleTopic('+q+','+(!tp.playable)+')">'+(tp.playable?'غیرفعال کن':'فعال کن')+'</button> '+
-        (tp.random
-          ? '<span class="mono" style="opacity:.55;font-size:11px">حذف نمی‌شود</span>'
-          : '<button class="btn sm bad" onclick="lsDeleteTopic('+q+')">حذف</button>')+
+        '<td>'+(tp.hidden
+          ? '<span class="pill bad">به بازیکن‌ها نشان داده نمی‌شود</span>'
+          : '<span class="pill '+(tp.playable?'ok':'gold')+'">'+(tp.playable?'فعال':'به‌زودی')+'</span>')+'</td>'+
+        '<td>'+(tp.hidden
+          ? '<button class="btn sm ok" onclick="lsRestoreTopic('+q+')">برگرداندن به فهرست</button>'
+          : ('<button class="btn sm '+(tp.playable?'bad':'ok')+'" onclick="lsToggleTopic('+q+','+(!tp.playable)+')">'+(tp.playable?'غیرفعال کن':'فعال کن')+'</button> '+
+             (tp.random
+               ? '<span class="mono" style="opacity:.55;font-size:11px">از فهرست حذف نمی‌شود</span>'
+               : '<button class="btn sm bad" onclick="lsDeleteTopic('+q+','+(tp.custom?'true':'false')+')">'+(tp.custom?'حذف':'برداشتن از فهرست')+'</button>')))+
         '</td></tr>';}).join('')+
       '</tbody></table></div></div>'+
     '<div class="card"><h3>📡 مسابقات</h3>'+
@@ -2092,9 +2112,33 @@ async function lsSaveConfig(){
 async function lsToggleTopic(name,enabled){
   try{await api('POST','/admin/last-survivor/topics/'+encodeURIComponent(name),{enabled});toast(enabled?'فعال شد':'غیرفعال شد','ok');render();}catch(e){toast(e.message,'bad');}
 }
-async function lsDeleteTopic(name){
-  if(!confirm('تنظیمات موضوع «'+name+'» پاک شود؟\n\nاگر این دسته سؤال داشته باشد، دوباره به‌صورت «به‌زودی» در فهرست می‌آید.')) return;
-  try{await api('DELETE','/admin/last-survivor/topics/'+encodeURIComponent(name));toast('حذف شد','ok');render();}catch(e){toast(e.message,'bad');}
+/* Add a topic of your own. The Last Survivor list is no longer whatever the
+   question bank happens to hold — a topic can be announced here long before its
+   first question exists, which is what the «به‌زودی» badge is for. */
+async function lsAddTopic(){
+  const name=((($('#ls_newTopic')||{}).value)||'').trim();
+  const icon=((($('#ls_newIcon')||{}).value)||'').trim();
+  if(!name){toast('نام موضوع را بنویس','bad');return;}
+  try{
+    await api('POST','/admin/last-survivor/topics',{name:name,icon:icon});
+    toast('«'+name+'» اضافه شد — با برچسب «به‌زودی» به بازیکن‌ها نشان داده می‌شود','ok');
+    render();
+  }catch(e){toast(e.message,'bad');}
+}
+async function lsRestoreTopic(name){
+  try{await api('POST','/admin/last-survivor/topics/'+encodeURIComponent(name),{hidden:false});toast('به فهرست برگشت','ok');render();}catch(e){toast(e.message,'bad');}
+}
+/* Two different things wear the same button. A topic invented here is deleted
+   outright; one that exists because its category holds questions is taken off
+   the list — deleting its settings would only bring it back on the next read,
+   so promising a delete would be a lie. The confirm says which one this is. */
+async function lsDeleteTopic(name,custom){
+  const msg=custom
+    ? 'موضوع «'+name+'» کامل حذف شود؟'
+    : 'موضوع «'+name+'» از فهرست بازی برداشته شود؟\n\nسؤال‌هایش پاک نمی‌شود؛ فقط دیگر به بازیکن‌ها نشان داده نمی‌شود و هر وقت خواستی برمی‌گردانی.';
+  if(!confirm(msg)) return;
+  try{const r=await api('DELETE','/admin/last-survivor/topics/'+encodeURIComponent(name));
+    toast(r&&r.action==='removed'?'حذف شد':'از فهرست برداشته شد','ok');render();}catch(e){toast(e.message,'bad');}
 }
 
 /* ---- matches ---- */

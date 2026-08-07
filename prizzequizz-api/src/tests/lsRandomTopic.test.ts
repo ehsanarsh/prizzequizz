@@ -12,8 +12,8 @@ import assert from 'node:assert/strict';
 import { repositories } from '../repositories/index.js';
 import { grantTickets } from '../services/ticketService.js';
 import {
-  getConfig, updateConfig, setTopicEnabled, removeTopic,
-  isTopicPlayable, isRandomTopic, RANDOM_TOPIC
+  getConfig, updateConfig, setTopicEnabled, removeTopic, setTopicHidden,
+  isTopicPlayable, isTopicHidden, isRandomTopic, RANDOM_TOPIC
 } from '../services/lastSurvivorConfig.js';
 import { joinTopic, getRoom, saveRoom, listActiveRooms } from '../services/lastSurvivorService.js';
 import { advanceRoom } from '../services/lastSurvivorWorker.js';
@@ -122,13 +122,23 @@ async function run(): Promise<void> {
     await setTopicEnabled(RANDOM_TOPIC, true);
   });
 
-  await check('deleting a topic forgets its override', async () => {
+  await check('deleting a category-backed topic takes it off the list for good', async () => {
+    /* This used to just forget the override, which meant the topic reappeared —
+       gated — on the very next read, because the list is derived from the
+       question bank. "Delete" that undeletes is not a delete, so a topic with a
+       category behind it is now HIDDEN, and stays off the picker until it is
+       explicitly restored. */
     await setTopicEnabled('سینما و سریال', true, 7);
     assert.equal((await getConfig()).topics['سینما و سریال']?.minUsers, 7);
-    await removeTopic('سینما و سریال');
-    const cfg = await getConfig();
-    assert.equal(cfg.topics['سینما و سریال'], undefined, 'the override is gone');
-    assert.equal(isTopicPlayable(cfg, 'سینما و سریال'), false, 'so it is coming-soon again');
+    const { config, action } = await removeTopic('سینما و سریال');
+    assert.equal(action, 'hidden', 'a category still holds its questions, so it can only be hidden');
+    assert.equal(isTopicHidden(config, 'سینما و سریال'), true, 'and it stays off the list');
+    assert.equal(isTopicPlayable(config, 'سینما و سریال'), false,
+      'hidden beats enabled — a topic off the list must not stay joinable');
+    // …and putting it back is one call, with its settings intact.
+    const back = await setTopicHidden('سینما و سریال', false);
+    assert.equal(isTopicPlayable(back, 'سینما و سریال'), true, 'restored exactly as it was');
+    assert.equal(back.topics['سینما و سریال']?.minUsers, 7, 'including its own minUsers');
   });
 
   console.log(`[lsRandomTopic] ${passed} passed, ${failed} failed`);

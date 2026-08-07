@@ -39,7 +39,24 @@ export interface LastSurvivorConfig {
   // Per-topic gating. A topic is playable only when enabled=true. Anything not
   // enabled shows the "به‌زودی…" badge in the client. minUsers can override the
   // room default per topic.
-  topics: Record<string, { enabled: boolean; comingSoon?: boolean; minUsers?: number }>;
+  topics: Record<string, TopicSettings>;
+}
+
+export interface TopicSettings {
+  enabled: boolean;
+  comingSoon?: boolean;
+  minUsers?: number;
+  /* Written here by an operator rather than discovered from the question bank.
+   * A custom topic has no category behind it, so deleting it really does delete
+   * it — that is the whole difference from a discovered one. */
+  custom?: boolean;
+  /* Taken off the picker entirely. A discovered topic cannot be deleted (the
+   * bank puts it straight back on the next read), so hiding is what "remove it
+   * from the list" honestly means for those. */
+  hidden?: boolean;
+  /* Emoji for the picker. Discovered topics inherit the category's icon; a
+   * custom topic has no category, so without this it would show «❓». */
+  icon?: string;
 }
 
 /* The topic whose questions come from every category at once. Held here rather
@@ -142,29 +159,91 @@ export async function updateConfig(patch: Partial<LastSurvivorConfig> | Record<s
 // Reset a single topic's gating (admin toggles). Convenience over updateConfig.
 export async function setTopicEnabled(topic: string, enabled: boolean, minUsers?: number): Promise<LastSurvivorConfig> {
   const cfg = await getConfig();
-  const topics = { ...cfg.topics, [topic]: { ...(cfg.topics[topic] || {}), enabled, comingSoon: !enabled, ...(minUsers != null ? { minUsers } : {}) } };
+  const topics = {
+    ...cfg.topics,
+    [topic]: {
+      ...(cfg.topics[topic] || {}), enabled, comingSoon: !enabled,
+      /* Turning a topic on means putting it in front of players, so it cannot
+       * stay hidden — otherwise the switch flips and nothing happens. */
+      ...(enabled ? { hidden: false } : {}),
+      ...(minUsers != null ? { minUsers } : {})
+    }
+  };
   return updateConfig({ topics });
 }
 
-/* Forget a topic's settings entirely.
+/* Add a topic of the operator's own choosing.
  *
- * The topic LIST is the union of the categories that have questions and the
- * names in this config, so deleting is not "make it disappear" — a category
- * with questions comes straight back, gated, on the next read. What it removes
- * is the override: the enabled flag and any per-topic minUsers. That is the
- * honest meaning of delete here, and it is why «تصادفی» refuses: it has no
- * category behind it, so forgetting it would remove the only topic that is
- * playable out of the box. */
-export async function removeTopic(topic: string): Promise<LastSurvivorConfig> {
+ * Until now the Last Survivor list could only contain what the question bank
+ * happened to hold. A topic invented here has no category behind it, which is
+ * exactly why it is marked custom: it can be deleted for real, and it stays
+ * deleted. It arrives disabled — a topic with no questions must not be
+ * playable — so the client shows it with the «به‌زودی» badge, which is what
+ * announcing something ahead of time means. */
+export async function addTopic(
+  name: string,
+  opts: { icon?: string; enabled?: boolean; minUsers?: number } = {}
+): Promise<LastSurvivorConfig> {
+  const topic = String(name || '').trim();
+  if (!topic) throw new Error('نام موضوع لازم است.');
+  if (topic.length > 60) throw new Error('نام موضوع نباید بیش از ۶۰ نویسه باشد.');
+  if (isRandomTopic(topic)) throw new Error('موضوع «' + RANDOM_TOPIC + '» از قبل وجود دارد.');
+  const cfg = await getConfig();
+  const existing = cfg.topics?.[topic];
+  /* Adding a name that is already on the list is how a hidden topic comes back,
+   * not an error — but it must never quietly re-enable something. */
+  if (existing && !existing.hidden) throw new Error('موضوع «' + topic + '» از قبل در فهرست است.');
+  const entry: TopicSettings = {
+    ...(existing || {}),
+    enabled: opts.enabled === true,
+    comingSoon: opts.enabled !== true,
+    custom: existing?.custom ?? true,
+    hidden: false,
+    ...(opts.icon ? { icon: String(opts.icon).slice(0, 8) } : {}),
+    ...(opts.minUsers != null ? { minUsers: Number(opts.minUsers) } : {})
+  };
+  return persistConfig({ ...cfg, topics: { ...cfg.topics, [topic]: entry } });
+}
+
+/** Take a topic off the picker, or put it back, without touching its settings. */
+export async function setTopicHidden(topic: string, hidden: boolean): Promise<LastSurvivorConfig> {
+  if (isRandomTopic(topic) && hidden) {
+    throw new Error('موضوع «' + RANDOM_TOPIC + '» از فهرست حذف نمی‌شود؛ می‌توانی غیرفعالش کنی.');
+  }
+  const cfg = await getConfig();
+  const entry: TopicSettings = { ...(cfg.topics[topic] || { enabled: false }), hidden };
+  return persistConfig({ ...cfg, topics: { ...cfg.topics, [topic]: entry } });
+}
+
+/* Remove a topic from the list — and say honestly which of the two things that
+ * meant.
+ *
+ * A CUSTOM topic exists only in this config, so it is deleted outright. A
+ * DISCOVERED one is only on the list because its category holds questions;
+ * dropping the config entry would put it straight back on the next read, so it
+ * is hidden instead. Either way it leaves the picker, which is what the
+ * operator asked for; only the undo differs. «تصادفی» refuses both: it has no
+ * category behind it and it is the one topic playable out of the box. */
+export async function removeTopic(topic: string): Promise<{ config: LastSurvivorConfig; action: 'removed' | 'hidden' }> {
   if (isRandomTopic(topic)) {
     throw new Error('موضوع «' + RANDOM_TOPIC + '» حذف نمی‌شود؛ می‌توانی غیرفعالش کنی.');
   }
   const cfg = await getConfig();
-  const topics = { ...cfg.topics };
-  delete topics[topic];
-  return persistConfig({ ...cfg, topics });
+  if (cfg.topics?.[topic]?.custom) {
+    const topics = { ...cfg.topics };
+    delete topics[topic];
+    return { config: await persistConfig({ ...cfg, topics }), action: 'removed' };
+  }
+  return { config: await setTopicHidden(topic, true), action: 'hidden' };
+}
+
+export function isTopicHidden(cfg: LastSurvivorConfig, topic: string): boolean {
+  return cfg.topics?.[topic]?.hidden === true;
 }
 
 export function isTopicPlayable(cfg: LastSurvivorConfig, topic: string): boolean {
+  /* Hidden wins over enabled. A topic taken off the picker must not stay
+   * joinable through a stale client or a hand-made request. */
+  if (isTopicHidden(cfg, topic)) return false;
   return cfg.topics?.[topic]?.enabled === true;
 }
