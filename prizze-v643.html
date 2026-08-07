@@ -3287,6 +3287,16 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
 </style>
 </head>
 <body>
+<!-- The three gradients the Last Survivor shield/circle badges paint with. They
+     live here, once, because an inline <svg> can only reference a fill it can
+     see in the same document — and the badges are re-rendered constantly, so
+     carrying the defs inside each one would repeat them a hundred times per
+     room. -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
+  <linearGradient id="lsGRed" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff7b6b"/><stop offset=".55" stop-color="#f0574a"/><stop offset="1" stop-color="#9e2118"/></linearGradient>
+  <linearGradient id="lsGBlue" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7cc4ff"/><stop offset=".55" stop-color="#3a9bf0"/><stop offset="1" stop-color="#13538f"/></linearGradient>
+  <linearGradient id="lsGGreen" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6ee39b"/><stop offset=".55" stop-color="#2fca77"/><stop offset="1" stop-color="#126b3d"/></linearGradient>
+</defs></svg>
 <div class="phone">
   
 <style id="pzLoadingCSS">
@@ -4228,11 +4238,40 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
       .ls-pl{display:flex;flex-direction:column;align-items:center;gap:4px;position:relative;transition:.3s}
       .ls-pl .av{width:52px;height:52px;border-radius:15px;background:var(--ink-3) center/cover;display:flex;align-items:center;justify-content:center;font-size:22px;border:2px solid #000;box-shadow:var(--hard-sm);position:relative;overflow:hidden}
       .ls-pl small{color:#c9c2b3;font-size:9px;max-width:56px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-      .ls-pl .dot{position:absolute;bottom:16px;right:6px;width:11px;height:11px;border-radius:50%;border:2px solid #0c1310}
-      .ls-pl.elim .av{filter:grayscale(1) brightness(.5)}
-      .ls-pl.elim .xx{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:30px;color:#ff3b3b;font-weight:900;text-shadow:0 2px 6px rgba(0,0,0,.6);animation:lsStamp .4s cubic-bezier(.2,1.4,.4,1)}
+      /* The badge hangs off the CORNER of the avatar rather than sitting on top
+         of it: the photo stays whole, which is the point of having a photo.
+         .av clips its contents, so the mark lives in this wrapper beside it —
+         inside .av it would simply be cut off. */
+      .ls-avwrap{position:relative;display:inline-block;line-height:0}
+      .ls-mark{position:absolute;bottom:-5px;right:-5px;width:19px;height:20px;
+        display:block;line-height:0;pointer-events:none;
+        filter:drop-shadow(0 1.5px 0 #000) drop-shadow(0 0 0 #000)}
+      .ls-mark svg{width:100%;height:100%;display:block;stroke:#0a0d0c;stroke-width:2.1;
+        paint-order:stroke fill;stroke-linejoin:round}
+      /* Red is two lives, blue is one, green is none — the same three colours the
+         tickets use, so the mark reads without a legend. */
+      .ls-mark.red svg{fill:url(#lsGRed)}
+      .ls-mark.blue svg{fill:url(#lsGBlue)}
+      .ls-mark.green svg{fill:url(#lsGGreen)}
+      /* A shield that just dropped a level is worth noticing without being a
+         performance — one short pulse, then it settles. */
+      .ls-mark{animation:lsMarkIn .32s cubic-bezier(.2,1.5,.4,1)}
+      @keyframes lsMarkIn{0%{transform:scale(.4);opacity:0}70%{transform:scale(1.14)}100%{transform:scale(1);opacity:1}}
+      /* Eliminated: a genuinely BLACK-AND-WHITE photo — grayscale alone, not
+         dimmed into a silhouette — so the red ✕ is the only colour on the card
+         and reads instantly against it. */
+      /* ONLY the photo is drained of colour. The filter is on .av alone, so the
+         ✕ above it keeps its red — the whole point of a red mark on a
+         black-and-white picture. */
+      .ls-pl.elim .av{filter:grayscale(1) contrast(1.06) brightness(.85)}
+      .ls-pl.elim .xx{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+        font-size:36px;line-height:1;color:#ff2020;font-weight:900;pointer-events:none;
+        text-shadow:0 0 4px rgba(0,0,0,.95),0 2px 8px rgba(0,0,0,.8);
+        animation:lsStamp .4s cubic-bezier(.2,1.4,.4,1)}
       .ls-pl.cash .av{filter:saturate(1.2)}
-      .ls-pl.cash .cashb{position:absolute;bottom:16px;left:4px;background:#1a8a3a;color:#fff;font-size:8px;font-weight:900;padding:1px 4px;border-radius:6px}
+      /* Bottom-LEFT, because the shield badge owns the bottom-right corner. */
+      .ls-pl.cash .cashb{position:absolute;bottom:-3px;left:-3px;background:#1a8a3a;color:#fff;font-size:8px;font-weight:900;
+        padding:1.5px 5px;border-radius:7px;border:1.5px solid #000;box-shadow:0 1.5px 0 #000;line-height:1.5}
       @keyframes lsStamp{0%{transform:scale(2.4);opacity:0}60%{transform:scale(.85);opacity:1}100%{transform:scale(1)}}
       .ls-elim-now .av{animation:lsShake .5s}
       @keyframes lsShake{0%,100%{transform:translateX(0)}20%{transform:translateX(-4px)}40%{transform:translateX(4px)}60%{transform:translateX(-3px)}80%{transform:translateX(3px)}}
@@ -6535,19 +6574,40 @@ function lsWaitHtml(snap){
 function lsAvatarHTML(p){
   return pzFaceHTML({avatar:p.avatar,character:p.character});
 }
+/* ONE badge per player, and it is a pure function of the shields they have
+   LEFT — not of the ticket they bought. That is the whole point: the mark has
+   to answer "how much protection does this person still have", which changes
+   during the match, rather than "what did they pay", which never does.
+
+     2 shields  → red shield     (a red ticket, untouched)
+     1 shield   → blue shield    (a blue ticket, or a red one that has spent one)
+     0 shields  → green circle   (a green ticket, or anyone out of shields)
+
+   So a red shield turning blue, and a blue one turning into a green circle, is
+   simply the same rule being applied after a wrong answer — there is no
+   separate "downgrade" step to keep in sync with the server. */
+function lsMarkHTML(p){
+  const sh=Math.max(0,Number(p.shields||0));
+  if(sh>=2) return `<span class="ls-mark red" title="سپر قرمز — دو اشتباه را دوام می‌آورد">${LS_SHIELD_SVG}</span>`;
+  if(sh===1) return `<span class="ls-mark blue" title="سپر آبی — یک اشتباه را دوام می‌آورد">${LS_SHIELD_SVG}</span>`;
+  return `<span class="ls-mark green" title="بدون سپر — اشتباه بعدی یعنی حذف">${LS_CIRCLE_SVG}</span>`;
+}
+const LS_SHIELD_SVG='<svg viewBox="0 0 24 26" aria-hidden="true"><path d="M12 1.2 22.2 5.4v7.1c0 6-4.4 10.2-10.2 12.3C6.2 22.7 1.8 18.5 1.8 12.5V5.4Z"/></svg>';
+const LS_CIRCLE_SVG='<svg viewBox="0 0 24 26" aria-hidden="true"><circle cx="12" cy="13" r="10.2"/></svg>';
+
 function lsPlayersCells(snap,markElim){
   return snap.players.map(p=>{
-    const col=LS_COLORS[p.color]?LS_COLORS[p.color].c:'#888';
     const cls=p.status==='eliminated'?'elim':(p.status==='cashed_out'?'cash':'');
     const now=markElim&&p.status==='eliminated'&&p.eliminatedRound===snap.room.round?'ls-elim-now':'';
     const tap=`onclick="showOpponentProfileByData('${jsStr(p.userId||'')}','${jsStr(p.username||'بازیکن')}','${jsStr(p.avatar||'')}','روم آخرین بازمانده')"`;
-    /* Shields left, as pips on the card. A blue ticket carries one and a red
-       two, so «حذف شد» is not the only thing a wrong answer can mean and the
-       row has to say which it was. */
-    const sh=Number(p.shields||0);
-    const pips=sh>0&&p.status!=='eliminated'
-      ? `<span class="ls-sh" title="${sh} سپر">${'🛡️'.repeat(Math.min(sh,3))}</span>` : '';
-    return `<div class="ls-pl ${cls} ${now}" style="cursor:pointer" ${tap}><div class="av">${lsAvatarHTML(p)}${p.status==='eliminated'?'<span class="xx">✕</span>':''}${p.status==='cashed_out'?'<span class="cashb">برداشت</span>':''}${pips}<span class="dot" style="background:${col}"></span></div><small>${(p.username||'').slice(0,8)}</small></div>`;
+    /* An eliminated player carries no mark: the ✕ has already said the only
+       thing left to say about them, and a shield beside it would read as
+       protection they no longer have. */
+    const mark=p.status==='eliminated'?'':lsMarkHTML(p);
+    /* The ✕ and the «برداشت» tag sit OUTSIDE .av. Inside it they inherited the
+       grayscale filter meant for the photo, which is why the elimination cross
+       came out grey — the one thing on that card that has to be red. */
+    return `<div class="ls-pl ${cls} ${now}" style="cursor:pointer" ${tap}><div class="ls-avwrap"><div class="av">${lsAvatarHTML(p)}</div>${p.status==='eliminated'?'<span class="xx">✕</span>':''}${p.status==='cashed_out'?'<span class="cashb">برداشت</span>':''}${mark}</div><small>${(p.username||'').slice(0,8)}</small></div>`;
   }).join('');
 }
 function lsGridHtml(snap,markElim){ return `<div class="ls-grid" id="lsElimGrid" style="grid-template-columns:repeat(4,1fr)">${lsPlayersCells(snap,markElim)}</div>`; }
