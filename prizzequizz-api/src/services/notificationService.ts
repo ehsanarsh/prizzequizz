@@ -89,8 +89,19 @@ export class NotificationService {
       updatedAt: now,
       lastSeenAt: now
     };
+    /* The browser re-registers its push subscription on every launch, and this
+     * used to greet each one with «اعلان‌ها فعال شد» — so the inbox collected
+     * a fresh copy every single time the game was opened. The storage layer
+     * upserts on the endpoint, so a re-registration is not a new device and
+     * has nothing to announce.
+     *
+     * Only a genuinely unknown endpoint is worth a word, and it is said once. */
+    const known = await repositories.notifications.listSubscriptions(userId).catch(() => []);
+    const isNewDevice = !known.some((s) => s.endpoint === input.endpoint && !s.revokedAt);
     await repositories.notifications.saveSubscription(record);
-    await this.create({ userId, type: 'system', title: 'اعلان‌ها فعال شد', body: 'از این به بعد پیام‌های مهم PrizzeQuizz را دریافت می‌کنی.', push: false });
+    if (isNewDevice) {
+      await this.create({ userId, type: 'system', title: 'اعلان‌ها فعال شد', body: 'از این به بعد پیام‌های مهم PrizzeQuizz را دریافت می‌کنی.', push: false });
+    }
     return record;
   }
 
