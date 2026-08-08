@@ -4,6 +4,12 @@ dist/
 .env
 .DS_Store
 
+# The compiled backend, packaged for deploy. It is `prizzequizz-api/dist`
+# with the contents at the root — rebuilt from source every time, and ~370KB
+# of binary that changes completely on each build. Thirteen copies of it are
+# already in this history, which is thirteen copies too many.
+pz-dist-contents.tgz
+
 # The hand-off bundle: a full `git bundle --all`, rebuilt for every delivery.
 # Committing it would store a copy of the whole repository inside the
 # repository, and a new 12MB blob every time one is sent.
