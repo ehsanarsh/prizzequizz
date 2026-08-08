@@ -4,6 +4,11 @@ dist/
 .env
 .DS_Store
 
+# The hand-off bundle: a full `git bundle --all`, rebuilt for every delivery.
+# Committing it would store a copy of the whole repository inside the
+# repository, and a new 12MB blob every time one is sent.
+prizzequizzrepo.bundle
+
 # backend src delivery tarballs (build artifacts, regenerated per deploy)
 prizzequizz-api-src.tgz
 prizzequizz-wallet-src.tgz
