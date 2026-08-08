@@ -927,6 +927,13 @@ input,textarea,select,[contenteditable="true"],.pz-selectable,.pz-selectable *{
 .wfi-sub{font-size:12px;font-weight:700;color:var(--paper);animation:askPop .4s .4s both;z-index:2;opacity:.8}
 
 /* ===== TOAST / SHEETS ===== */
+.pz-toast{position:absolute;bottom:96px;left:50%;transform:translateX(-50%) translateY(14px);
+  background:var(--ink,#1b1b20);border:2px solid #000;border-radius:16px;padding:11px 16px;
+  font-size:13px;font-weight:900;line-height:1.75;z-index:9500;opacity:0;pointer-events:none;
+  transition:opacity .22s ease,transform .22s ease;max-width:84%;text-align:center;
+  color:var(--paper,#f7f4ec);box-shadow:0 6px 0 #000,0 14px 30px rgba(0,0,0,.5)}
+.pz-toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+@media (prefers-reduced-motion:reduce){.pz-toast{transition:opacity .15s linear}}
 .toast{position:absolute;bottom:100px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--ink);border:var(--stroke);border-radius:15px;padding:12px 18px;font-size:14px;font-weight:800;z-index:100;opacity:0;transition:.3s;white-space:nowrap;box-shadow:var(--hard),0 14px 30px rgba(0,0,0,.5);max-width:88%;color:var(--paper)}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 .sheet-bg{position:absolute;inset:0;background:rgba(10,10,12,.7);z-index:50;opacity:0;visibility:hidden;transition:.25s}
@@ -7264,7 +7271,33 @@ document.querySelectorAll('.bottomnav').forEach(n=>n.innerHTML=navHTML);
 
 /* ============ TOAST ============ */
 let toastT;
-function toast(msg){try{console.debug('[toast disabled]',msg);}catch(e){}}
+/* MESSAGES THE PLAYER CAN ACTUALLY SEE.
+ *
+ * This was a no-op that logged to the console, and `.toast` also carried a
+ * `display:none!important` — so all 176 messages in the app were invisible:
+ * «۳ عدد بلیط خریداری شد» just as much as «این کمک الان قابل استفاده نیست».
+ * A silent failure is worse than a noisy one.
+ *
+ * It lives on its own class so the old suppressed rule cannot reach it, sits
+ * above the bottom bar rather than over it, shows one message at a time, and
+ * wraps instead of running off the side of a Persian sentence. */
+let _pzToastT=null;
+function toast(msg,ms){
+  try{
+    const txt=String(msg==null?'':msg);
+    if(!txt) return;
+    const host=document.getElementById('vp')||document.body;
+    let el=document.getElementById('pzToast');
+    if(!el){
+      el=document.createElement('div'); el.id='pzToast'; el.className='pz-toast';
+      host.appendChild(el);
+    }
+    el.textContent=txt;
+    el.classList.add('show');
+    clearTimeout(_pzToastT);
+    _pzToastT=setTimeout(()=>{ el.classList.remove('show'); }, Math.max(1200,Number(ms)||2600));
+  }catch(e){ try{ console.debug('[toast]',msg); }catch(_){} }
+}
 
 /* ============ MENU ============ */
 function openMenu(){const a=document.querySelector('.screen.active');if(a&&['login','otp','register','splash','intro'].indexOf(a.id)>=0)return;try{applyMyName();}catch(e){}document.getElementById('menuBg').classList.add('show');document.getElementById('menuSheet').classList.add('show');setTimeout(()=>{const s=document.getElementById('menuSheet');if(s)s.scrollTop=0;},30);}
@@ -9807,15 +9840,28 @@ function renderShop(tab){
   if(!items.length){ c.innerHTML='<div class="wallet-empty" style="text-align:center;padding:30px;color:var(--muted)"><div style="font-size:40px">🛍️</div><p style="margin-top:8px">آیتمی در این بخش نیست.</p></div>'; return; }
   c.innerHTML='<div class="shop-grid"></div>';
   const g=c.querySelector('.shop-grid');
-  items.forEach(it=>{
-    const d=document.createElement('div');d.className='item';
-    const cur=it.cur==='coins'?' 🪙':' ت';
-    d.innerHTML=(it.badge?'<span class="shop-badge" style="position:absolute;top:8px;left:8px;background:var(--bolt,#FFD21F);color:#111;font-size:9px;font-weight:900;padding:2px 7px;border-radius:20px">'+esc0(it.badge)+'</span>':'')+
-      '<div class="it-ico">'+esc0(it.i)+'</div><b>'+esc0(it.n)+'</b><p>'+esc0(it.d)+'</p><div class="price">'+fa(it.p)+cur+'</div>';
-    d.style.position='relative';
-    d.onclick=()=>buyItem(it,d);
-    g.appendChild(d);
-  });
+  items.forEach(it=>{ g.appendChild(pzShopCard(it)); });
+}
+/* ONE card for every shelf. Artwork when the operator uploaded some, the
+   emoji otherwise; and for a package, the contents listed under the name so
+   «۳ بلیط + ۴۰۰ سکه + ۲ کمک» is visible before buying, not after. */
+function pzShopContents(it){
+  const rows=Array.isArray(it.rewards)?it.rewards.filter(r=>r&&r.value>0):[];
+  if(rows.length<2) return '';        // a single reward is already the name
+  return '<div style="display:flex;flex-wrap:wrap;gap:4px;justify-content:center;margin:2px 0 4px">'+
+    rows.map(r=>'<span style="font-size:9.5px;font-weight:900;padding:2px 6px;border-radius:999px;background:rgba(255,210,31,.14);color:var(--bolt,#FFD21F);border:1px solid rgba(255,210,31,.3)">'+
+      fa(r.value)+' '+esc0(r.label||r.key)+'</span>').join('')+'</div>';
+}
+function pzShopCard(it){
+  const d=document.createElement('div');d.className='item';d.style.position='relative';
+  const cur=it.cur==='coins'?' 🪙':' ت';
+  const art=it.img
+    ? '<div class="it-ico" style="height:58px;display:flex;align-items:center;justify-content:center"><img src="'+esc0(it.img)+'" alt="" style="max-width:100%;max-height:58px;object-fit:contain"></div>'
+    : '<div class="it-ico">'+esc0(it.i)+'</div>';
+  d.innerHTML=(it.badge?'<span class="shop-badge" style="position:absolute;top:8px;left:8px;background:var(--bolt,#FFD21F);color:#111;font-size:9px;font-weight:900;padding:2px 7px;border-radius:20px">'+esc0(it.badge)+'</span>':'')+
+    art+'<b>'+esc0(it.n)+'</b>'+pzShopContents(it)+'<p>'+esc0(it.d)+'</p><div class="price">'+fa(it.p)+cur+'</div>';
+  d.onclick=()=>buyItem(it,d);
+  return d;
 }
 /* THE CHARACTER SHOP.
    The roster has always carried a price and a «خرید» unlock route with nothing
@@ -9891,9 +9937,13 @@ async function pzLoadShop(){
     const items=d&&d.items;
     if(!Array.isArray(items)||!items.length)return;
     const byCat={};
-    items.forEach(it=>{ (byCat[it.category]??=[]).push({id:it.id,i:it.icon,n:it.name,d:it.description,p:it.price,key:it.effectKey,val:it.effectValue,cur:it.currency,badge:it.badge}); });
-    // Replace non-ticket categories with server data (tickets tab stays config-driven).
-    Object.keys(byCat).forEach(cat=>{ if(cat!=='tickets') SHOP[cat]=byCat[cat]; });
+    items.forEach(it=>{ (byCat[it.category]??=[]).push({id:it.id,i:it.icon,n:it.name,d:it.description,p:it.price,key:it.effectKey,val:it.effectValue,cur:it.currency,badge:it.badge,img:it.image||'',rewards:Array.isArray(it.rewards)?it.rewards:null}); });
+    /* Tickets used to be excluded here and drawn as three big config-driven
+       cards. They are ordinary catalogue items now — same card, same buy
+       button — so the operator can price them, bundle them and give them
+       artwork like everything else. The old cards remain as a fallback for a
+       server whose catalogue has no ticket items yet. */
+    Object.keys(byCat).forEach(cat=>{ SHOP[cat]=byCat[cat]; });
     pzRebuildShopTabs(Object.keys(byCat));
     if(document.getElementById('shop')&&document.getElementById('shop').classList.contains('active')) renderShop(_shopCurTab);
   }catch(e){}
@@ -9967,10 +10017,22 @@ async function buyItem(it,el){
        it does not, so the authoritative re-read covers the rest. */
     pzRefreshHoldings();
     const k=it.key||'';
-    if(k==='heart'){ toast(faDigits(val)+' قلب اضافه شد ❤️'); try{ pzHeartsRefresh(); }catch(e){} }
-    else if(k==='coins'){ toast(faDigits(val)+' سکه اضافه شد 🪙'); }
-    else if(k==='xp'){ toast('شتاب‌دهنده XP فعال شد ⚡'); }
-    else if(k.indexOf('ticket-')===0){ toast(faDigits(val)+' بلیط اضافه شد 🎫'); try{ pzHydrateAll(); }catch(e){} }
+    /* WHAT ARRIVED, said out loud. `granted` is the server's own record of the
+       purchase — one row per thing, already multiplied by the quantity — so a
+       package reports every part of itself («۳ عدد بلیط سبز، ۴۰۰ عدد سکه و ۲
+       عدد کمک حذف دو گزینه خریداری شد») instead of one vague line. It is read
+       from the response rather than from the card, so the message can never
+       promise something the server did not actually hand over. */
+    const got=Array.isArray(d.granted)?d.granted.filter(x=>x&&x.value>0):[];
+    if(got.length){
+      const parts=got.map(x=>faDigits(x.value)+' عدد '+(x.label||x.key));
+      const list=parts.length>1 ? parts.slice(0,-1).join('، ')+' و '+parts[parts.length-1] : parts[0];
+      toast(list+' خریداری شد ✅', 3200);
+      if(got.some(x=>x.key==='heart')){ try{ pzHeartsRefresh(); }catch(e){} }
+      if(got.some(x=>String(x.key).indexOf('ticket-')===0)){ try{ pzHydrateAll(); }catch(e){} }
+      const skin=got.find(x=>String(x.key).indexOf('skin')===0);
+      if(skin){ applySkin(skin.key); }
+    }
     else if(k.indexOf('skin')===0){ applySkin(k); toast(it.n+' فعال شد!'); }
     else toast('خرید انجام شد 🎁');
     /* The flying prize animation already exists; reuse it so the player sees
@@ -10031,6 +10093,12 @@ function renderTicketShop(){
   c.innerHTML='<div class="tk-promo-host" id="promoShop"></div><div class="shop-grid" id="ticketGrid"></div>';
   pzPromoRender('shop','promoShop');
   const g=document.getElementById('ticketGrid');
+  /* The catalogue owns this shelf now: ordinary cards, admin-priced, and
+     packages allowed. The three big config cards below are what a server
+     whose catalogue has no ticket items still falls back to, so nothing goes
+     blank before the operator adds them. */
+  const cat=SHOP.tickets||[];
+  if(cat.length){ cat.forEach(it=>{ g.appendChild(pzShopCard(it)); }); return; }
   TICKET_DEFS.forEach(t=>{
     const d=document.createElement('div'); d.className='item'; d.style.cssText='background:'+t.grad+';color:#fff;border:2px solid #000;text-align:center';
     d.innerHTML='<div class="it-ico tk-shop-art" style="font-size:34px;filter:drop-shadow(0 3px 0 rgba(0,0,0,.35));animation:tkFloat 2.4s ease-in-out infinite">'+pzTicketArt(t.key,'🎫')+'</div>'+

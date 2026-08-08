@@ -120,6 +120,14 @@ const SEED: Array<Omit<ShopItem, 'id' | 'createdAt' | 'updatedAt'>> = [
   { category: 'util', icon: '❤️', name: 'یک قلب', description: 'یک قلب به موجودی‌ات اضافه می‌شود', price: 20000, currency: 'cash', effectKey: 'heart', effectValue: 1, enabled: true, sortOrder: 4 },
   { category: 'util', icon: '💖', name: 'بستهٔ ۵ قلبی', description: 'پنج قلب یک‌جا — ارزان‌تر از تکی', price: 80000, currency: 'cash', effectKey: 'heart', effectValue: 5, enabled: true, sortOrder: 5, badge: 'به‌صرفه' },
   { category: 'util', icon: '💗', name: 'بستهٔ ۱۵ قلبی', description: 'برای وقتی که می‌خواهی رکورد بزنی', price: 200000, currency: 'cash', effectKey: 'heart', effectValue: 15, enabled: true, sortOrder: 6 },
+  /* Tickets are ordinary catalogue items now, so they can be priced, bundled
+     and given artwork from the panel like everything else. Prices match the
+     three tiers the game has always charged. */
+  { category: 'tickets', icon: '🎫', name: 'بلیط سبز', description: 'ورودی یک مسابقه', price: 12500, currency: 'cash', effectKey: 'ticket-green', effectValue: 1, enabled: true, sortOrder: 1 },
+  { category: 'tickets', icon: '🎟️', name: 'بلیط آبی', description: 'ورودی یک مسابقه — سهم بیشتر و یک سپر', price: 25000, currency: 'cash', effectKey: 'ticket-blue', effectValue: 1, enabled: true, sortOrder: 2 },
+  { category: 'tickets', icon: '🎫', name: 'بلیط قرمز', description: 'ورودی یک مسابقه — بیشترین سهم و دو سپر', price: 50000, currency: 'cash', effectKey: 'ticket-red', effectValue: 1, enabled: true, sortOrder: 3, badge: 'محبوب' },
+  { category: 'tickets', icon: '🎁', name: 'بستهٔ شروع', description: '۳ بلیط سبز + ۴۰۰ سکه + ۲ کمک', price: 40000, currency: 'cash', effectKey: 'ticket-green', effectValue: 3, enabled: true, sortOrder: 4, badge: 'به‌صرفه',
+    rewards: [{ key: 'ticket-green', value: 3 }, { key: 'coins', value: 400 }, { key: 'p5050', value: 2 }] },
   { category: 'coins', icon: '🪙', name: '۵۰۰ سکه', description: 'سکه برای بازی‌های دوستانه', price: 15000, currency: 'cash', effectKey: 'coins', effectValue: 500, enabled: true, sortOrder: 1 },
   { category: 'coins', icon: '🪙', name: '۲٬۰۰۰ سکه', description: 'چهار برابر، کمی ارزان‌تر', price: 50000, currency: 'cash', effectKey: 'coins', effectValue: 2000, enabled: true, sortOrder: 2, badge: 'محبوب' },
   { category: 'coins', icon: '💰', name: '۱۰٬۰۰۰ سکه', description: 'بستهٔ بزرگ', price: 200000, currency: 'cash', effectKey: 'coins', effectValue: 10000, enabled: true, sortOrder: 3 },
