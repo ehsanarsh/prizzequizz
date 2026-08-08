@@ -7,21 +7,54 @@ import { getPgPool } from '../database/postgres.js';
 import { id } from '../utils/id.js';
 
 export type ShopCurrency = 'coins' | 'cash';
+
+/* One thing a purchase hands over. A plain item has a single reward; a bundle
+ * has several — «۳ بلیط + ۴۰۰ سکه + ۲ کمک» is three rows, not three items.
+ * The keys are the same ones effectKey has always used, so nothing new had to
+ * be taught to the granting code. */
+export interface ShopReward { key: string; value: number }
+
 export interface ShopItem {
   id: string;
-  category: string;          // tickets | util | cosmetic | gift | (custom)
+  category: string;          // tickets | coins | util | cosmetic | gift | (custom)
   icon: string;
   name: string;
   description: string;
   price: number;
   currency: ShopCurrency;
-  effectKey: string;         // p5050 | psecond | pstats | heart | xp | skin-* | gift | ticket-bronze/silver/gold | coins
+  effectKey: string;         // p5050 | psecond | pstats | heart | xp | skin-* | gift | ticket-green/blue/red | coins
   effectValue: number;       // how much the effect grants (e.g. +1 lifeline, +100 coins)
+  /* A bundle's contents. When present it REPLACES effectKey/effectValue at
+   * grant time; those two are kept in step with the first row so every older
+   * reader (and the mission counters) still sees something sensible. */
+  rewards?: ShopReward[];
+  /** Artwork, as a data: URI. Falls back to `icon` when empty. */
+  image?: string;
   badge?: string;            // e.g. «محبوب», «جدید», «٪۲۰ تخفیف»
   enabled: boolean;
   sortOrder: number;
   createdAt: string;
   updatedAt: string;
+}
+
+/* What a reward is called, for «۲ عدد بلیط آبی خریداری شد». Kept beside the
+ * keys rather than in the client, so the panel, the receipt and the game can
+ * never disagree about what an item actually gives. */
+const REWARD_LABELS: Record<string, string> = {
+  coins: 'سکه', heart: 'قلب', xp: 'XP',
+  'ticket-green': 'بلیط سبز', 'ticket-blue': 'بلیط آبی', 'ticket-red': 'بلیط قرمز',
+  'ticket-bronze': 'بلیط برنز', 'ticket-silver': 'بلیط نقره‌ای', 'ticket-gold': 'بلیط طلایی',
+  p5050: 'کمک حذف دو گزینه', psecond: 'کمک انتخاب دوم', pstats: 'کمک درصد پاسخ', ptime: 'کمک وقت اضافه',
+  gift: 'هدیه'
+};
+export function rewardLabel(key: string): string { return REWARD_LABELS[key] || key; }
+
+/** The rows a purchase should hand over, whether the item is a bundle or not. */
+export function rewardsOf(item: ShopItem): ShopReward[] {
+  const rows = Array.isArray(item.rewards) ? item.rewards.filter((r) => r && r.key && Number(r.value) > 0) : [];
+  if (rows.length) return rows.map((r) => ({ key: String(r.key), value: Math.max(0, Math.floor(Number(r.value) || 0)) }));
+  if (!item.effectKey) return [];
+  return [{ key: item.effectKey, value: Math.max(0, Math.floor(Number(item.effectValue) || 0)) || 1 }];
 }
 
 function pg(): ReturnType<typeof getPgPool> | null {
@@ -47,16 +80,32 @@ async function ensureSchema(pool: ReturnType<typeof getPgPool>): Promise<void> {
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now())`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_shop_items_cat ON shop_items(category, sort_order)`);
+  /* CREATE TABLE IF NOT EXISTS never adds a column to a table that already
+     exists, so a server created before bundles needs these explicitly. */
+  await pool.query(`ALTER TABLE shop_items ADD COLUMN IF NOT EXISTS rewards JSONB`);
+  await pool.query(`ALTER TABLE shop_items ADD COLUMN IF NOT EXISTS image TEXT`);
   _schemaReady = true;
 }
 
 const mem: ShopItem[] = [];
+
+function parseRewards(v: any): ShopReward[] | undefined {
+  let raw = v;
+  if (typeof raw === 'string') { try { raw = JSON.parse(raw); } catch { return undefined; } }
+  if (!Array.isArray(raw)) return undefined;
+  const rows = raw
+    .map((r: any) => ({ key: String(r?.key ?? '').slice(0, 32), value: Math.max(0, Math.floor(Number(r?.value) || 0)) }))
+    .filter((r) => r.key && r.value > 0)
+    .slice(0, 8);                                  // a bundle, not a shopping list
+  return rows.length ? rows : undefined;
+}
 
 function rowToItem(r: any): ShopItem {
   return {
     id: r.id, category: r.category, icon: r.icon, name: r.name, description: r.description ?? '',
     price: Number(r.price ?? 0), currency: r.currency === 'cash' ? 'cash' : 'coins',
     effectKey: r.effect_key, effectValue: Number(r.effect_value ?? 1), badge: r.badge ?? undefined,
+    rewards: parseRewards(r.rewards), image: r.image || undefined,
     enabled: r.enabled !== false, sortOrder: Number(r.sort_order ?? 0),
     createdAt: r.created_at?.toISOString?.() ?? String(r.created_at),
     updatedAt: r.updated_at?.toISOString?.() ?? String(r.updated_at)
@@ -155,6 +204,8 @@ export async function saveItem(input: Partial<ShopItem> & { name: string; catego
     currency: (input.currency ?? existing?.currency) === 'cash' ? 'cash' : 'coins',
     effectKey: String(input.effectKey ?? existing?.effectKey ?? 'gift').slice(0, 32),
     effectValue: Math.max(0, Math.round(Number(input.effectValue ?? existing?.effectValue ?? 1))),
+    rewards: input.rewards !== undefined ? parseRewards(input.rewards) : existing?.rewards,
+    image: (input.image !== undefined ? String(input.image || '') : (existing?.image || '')) || undefined,
     badge: (input.badge ?? existing?.badge) || undefined,
     enabled: input.enabled != null ? !!input.enabled : (existing?.enabled ?? true),
     sortOrder: Number(input.sortOrder ?? existing?.sortOrder ?? 0),
@@ -162,14 +213,20 @@ export async function saveItem(input: Partial<ShopItem> & { name: string; catego
     updatedAt: now
   };
   if (!item.name) throw new Error('NAME_REQUIRED');
+  /* Keep the single-effect pair pointing at the first row of a bundle. Older
+     readers — and the mission counters — still look at effectKey/effectValue,
+     and a bundle whose pair said «gift ×1» would quietly miscount. */
+  const first = item.rewards?.[0];
+  if (first) { item.effectKey = first.key; item.effectValue = first.value; }
   const pool = pg();
   if (pool) {
     await ensureSchema(pool);
     await pool.query(
-      `INSERT INTO shop_items(id,category,icon,name,description,price,currency,effect_key,effect_value,badge,enabled,sort_order,created_at,updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
-       ON CONFLICT (id) DO UPDATE SET category=$2,icon=$3,name=$4,description=$5,price=$6,currency=$7,effect_key=$8,effect_value=$9,badge=$10,enabled=$11,sort_order=$12,updated_at=$14`,
-      [item.id, item.category, item.icon, item.name, item.description, item.price, item.currency, item.effectKey, item.effectValue, item.badge ?? null, item.enabled, item.sortOrder, item.createdAt, item.updatedAt]);
+      `INSERT INTO shop_items(id,category,icon,name,description,price,currency,effect_key,effect_value,badge,enabled,sort_order,created_at,updated_at,rewards,image)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+       ON CONFLICT (id) DO UPDATE SET category=$2,icon=$3,name=$4,description=$5,price=$6,currency=$7,effect_key=$8,effect_value=$9,badge=$10,enabled=$11,sort_order=$12,updated_at=$14,rewards=$15,image=$16`,
+      [item.id, item.category, item.icon, item.name, item.description, item.price, item.currency, item.effectKey, item.effectValue, item.badge ?? null, item.enabled, item.sortOrder, item.createdAt, item.updatedAt,
+       item.rewards ? JSON.stringify(item.rewards) : null, item.image ?? null]);
   } else {
     const i = mem.findIndex((x) => x.id === item.id);
     if (i >= 0) mem[i] = item; else mem.push(item);

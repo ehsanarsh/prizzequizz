@@ -8,7 +8,7 @@
  * Every purchase carries an idempotency key. A tapped-twice button, a retried
  * request on a flaky connection, or a client that resends must charge once.
  */
-import { getItem } from './shopService.js';
+import { getItem, rewardsOf, rewardLabel } from './shopService.js';
 import { postEntry, getAccount } from './walletLedgerService.js';
 import { addHearts } from './heartService.js';
 import { grantLifeline } from './lifelineService.js';
@@ -27,6 +27,10 @@ export interface PurchaseResult {
   icon: string;
   effectKey: string;
   effectValue: number;
+  /* Exactly what this purchase handed over, in order, already multiplied by
+     the quantity — so the game can say «۳ بلیط سبز و ۴۰۰ سکه خریداری شد»
+     without knowing anything about how the item was configured. */
+  granted: Array<{ key: string; value: number; label: string }>;
   price: number;
   currency: 'coins' | 'cash';
   duplicate: boolean;
@@ -86,35 +90,50 @@ export async function purchase(input: {
     }
   }
 
-  // ---- grant ----
-  const k = item.effectKey;
-  if (k === 'heart') {
-    await addHearts(userId, value);
-  } else if (k === 'coins') {
-    const u = (await repositories.users.findById(userId))!;
-    u.coins = (Number(u.coins) || 0) + value;
-    await repositories.users.save(u);
-  } else if (k.startsWith('ticket-')) {
-    await grantTickets(userId, k.slice('ticket-'.length) || 'green', value);
-  } else if (k === 'p5050' || k === 'psecond' || k === 'pstats' || k === 'ptime') {
-    await grantLifeline(userId, k, value);
-  } else if (k === 'xp') {
-    const u = (await repositories.users.findById(userId))!;
-    u.xp = (Number(u.xp) || 0) + value;
-    await repositories.users.save(u);
+  /* ---- grant ----
+   * Every row of the item, whether it is a plain one (one row) or a bundle
+   * («۳ بلیط + ۴۰۰ سکه + ۲ کمک» — three rows). What actually lands is
+   * collected as it happens, so the receipt the player is shown is a record of
+   * what was granted rather than a re-reading of what was advertised. */
+  const granted: Array<{ key: string; value: number; label: string }> = [];
+  let ticketsGranted = 0;
+  for (const row of rewardsOf(item)) {
+    const k2 = row.key;
+    const n = Math.max(0, Math.floor(row.value)) * qty;
+    if (n <= 0) continue;
+    if (k2 === 'heart') {
+      await addHearts(userId, n);
+    } else if (k2 === 'coins') {
+      const u = (await repositories.users.findById(userId))!;
+      u.coins = (Number(u.coins) || 0) + n;
+      await repositories.users.save(u);
+    } else if (k2.startsWith('ticket-')) {
+      await grantTickets(userId, k2.slice('ticket-'.length) || 'green', n);
+      ticketsGranted += n;
+    } else if (k2 === 'p5050' || k2 === 'psecond' || k2 === 'pstats' || k2 === 'ptime') {
+      await grantLifeline(userId, k2, n);
+    } else if (k2 === 'xp') {
+      const u = (await repositories.users.findById(userId))!;
+      u.xp = (Number(u.xp) || 0) + n;
+      await repositories.users.save(u);
+    } else {
+      /* Cosmetics and gifts have no balance to move; the purchase is the
+         record. They are still listed, so the receipt is complete. */
+    }
+    granted.push({ key: k2, value: n, label: rewardLabel(k2) });
   }
-  /* Cosmetics and gifts have no balance to move; the purchase is the record. */
 
   /* Missions. Only what was really charged and really granted is reported, so
    * a failed purchase can never advance «۱۰۰۰ سکه خرج کن». */
   await recordPurchase(userId, {
     coins: item.currency === 'coins' ? price : 0,
-    tickets: k.startsWith('ticket-') ? value : 0
+    tickets: ticketsGranted
   });
 
   const result: PurchaseResult = {
     itemId: item.id, name: item.name, icon: item.icon,
     effectKey: item.effectKey, effectValue: value,
+    granted,
     price, currency: item.currency, duplicate: false,
     balances: await balancesOf(userId)
   };

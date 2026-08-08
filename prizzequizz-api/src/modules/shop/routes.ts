@@ -1,6 +1,6 @@
 import type { Router } from '../../http/router.js';
 import { json } from '../../http/response.js';
-import { listItems } from '../../services/shopService.js';
+import { listItems, rewardsOf, rewardLabel } from '../../services/shopService.js';
 import { ShopError, purchase } from '../../services/shopPurchaseService.js';
 import { ticketPrizeTable } from '../../services/prizeService.js';
 import { getPromos, updatePromos, PromoError, PROMO_IMAGE_MAX_BYTES } from '../../services/ticketPromoService.js';
@@ -46,10 +46,14 @@ export function registerShopRoutes(router: Router, base: string): void {
     for (const it of items) {
       (categories[it.category] ??= []).push({
         id: it.id, category: it.category, icon: it.icon, name: it.name, description: it.description,
-        price: it.price, currency: it.currency, effectKey: it.effectKey, effectValue: it.effectValue, badge: it.badge
+        price: it.price, currency: it.currency, effectKey: it.effectKey, effectValue: it.effectValue, badge: it.badge,
+        rewards: rewardsOf(it).map((r) => ({ ...r, label: rewardLabel(r.key) })), image: it.image
       });
     }
-    json(ctx.res, 200, { items: items.map((it) => ({ id: it.id, category: it.category, icon: it.icon, name: it.name, description: it.description, price: it.price, currency: it.currency, effectKey: it.effectKey, effectValue: it.effectValue, badge: it.badge })), categories });
+    /* `rewards` is what the card lists («۳ بلیط + ۴۰۰ سکه + ۲ کمک») and what the
+       receipt is written from. It is always present — a plain item is simply a
+       bundle of one — so the client never has to interpret effectKey itself. */
+    json(ctx.res, 200, { items: items.map((it) => ({ id: it.id, category: it.category, icon: it.icon, name: it.name, description: it.description, price: it.price, currency: it.currency, effectKey: it.effectKey, effectValue: it.effectValue, badge: it.badge, rewards: rewardsOf(it).map((r) => ({ ...r, label: rewardLabel(r.key) })), image: it.image })), categories });
   });
 
   /* The half that was missing: paying for an item and receiving it. Without
