@@ -36,9 +36,17 @@ export type { HouseRevenueSummary } from './houseRevenueService.js';
 
 export interface FinanceReport {
   from: string; to: string; granularity: Granularity;
-  income: { commission: number; tickets: number; shop: number; penalties: number; deposits: number; total: number };
+  income: { commission: number; tickets: number; shop: number; lifelines: number; penalties: number; deposits: number; total: number };
   commissionByMode: RevenueByMode[];
-  payouts: { prizes: number; bonuses: number; refunds: number; total: number };
+  /* AWARDED is what landed in players' wallets — a debt the house now owes.
+   * CASHED OUT is the only figure that is money actually gone from the
+   * company. They were conflated under one label reading «خروجی پول», which is
+   * why a dashboard showing ۸٬۰۲۹٬۳۷۴ sat next to ۹۰۰٬۰۰۰ of real payments.
+   * `liability` is the difference: winnings players are still holding. */
+  payouts: { prizes: number; bonuses: number; refunds: number; total: number; cashedOut: number; liability: number };
+  /* Manual admin credits/debits. Neither income nor a payout, and previously
+   * in no line at all — 12,000,000 of this server's ledger was invisible. */
+  adjustments: number;
   expenses: { manual: number; server: number; total: number; byCategory: Array<{ category: string; amount: number }> };
   grossProfit: number;
   netProfit: number;
@@ -224,8 +232,9 @@ export async function financeReport(opts: { from?: string; to?: string; granular
   const granularity: Granularity = (['day', 'week', 'month'] as const).includes(opts.granularity as Granularity) ? opts.granularity as Granularity : 'day';
   const empty: FinanceReport = {
     from, to, granularity,
-    income: { commission: 0, tickets: 0, shop: 0, penalties: 0, deposits: 0, total: 0 },
-    commissionByMode: [], payouts: { prizes: 0, bonuses: 0, refunds: 0, total: 0 },
+    income: { commission: 0, tickets: 0, shop: 0, lifelines: 0, penalties: 0, deposits: 0, total: 0 },
+    commissionByMode: [], payouts: { prizes: 0, bonuses: 0, refunds: 0, total: 0, cashedOut: 0, liability: 0 },
+    adjustments: 0,
     expenses: { manual: 0, server: 0, total: 0, byCategory: [] },
     grossProfit: 0, netProfit: 0, series: [],
     serverCost: { hourlyTotal: 0, machines: [] }, hasDatabase: false, shopSalesTracked: false,
@@ -244,6 +253,9 @@ export async function financeReport(opts: { from?: string; to?: string; granular
          coalesce(sum(amount) FILTER (WHERE entry_type='match_stake'),0)::bigint     AS stakes,
          coalesce(sum(amount) FILTER (WHERE entry_type='penalty'),0)::bigint         AS penalties,
          coalesce(sum(amount) FILTER (WHERE entry_type='deposit'),0)::bigint         AS deposits,
+         coalesce(sum(amount) FILTER (WHERE entry_type='lifeline_purchase'),0)::bigint AS lifelines,
+         coalesce(sum(amount) FILTER (WHERE entry_type='adjustment'),0)::bigint      AS adjustments,
+         coalesce(sum(amount) FILTER (WHERE entry_type='withdraw_paid'),0)::bigint   AS cashed_out,
          coalesce(sum(amount) FILTER (WHERE entry_type IN ('match_reward','league_reward','referral_reward')),0)::bigint AS prizes,
          coalesce(sum(amount) FILTER (WHERE entry_type='bonus'),0)::bigint           AS bonuses,
          coalesce(sum(amount) FILTER (WHERE entry_type IN ('refund','stake_refund')),0)::bigint AS refunds
@@ -296,16 +308,28 @@ export async function financeReport(opts: { from?: string; to?: string; granular
     const shop = n(shopR.rows?.[0]?.total) + n(lifelineSalesR.rows?.[0]?.total);
     const shopTracked = (n(shopR.rows?.[0]?.n) + n(lifelineSalesR.rows?.[0]?.n)) > 0;
     const income = {
-      commission: n(t.commission), tickets: n(t.tickets), shop, penalties: n(t.penalties),
-      deposits: n(t.deposits), total: 0
+      commission: n(t.commission), tickets: n(t.tickets), shop, lifelines: n(t.lifelines),
+      penalties: n(t.penalties), deposits: n(t.deposits), total: 0
     };
     // Deposits are the player's own money arriving — not revenue. Stakes are
     // returned as prizes, so they are not counted as income either; the house
     // earns the commission on them.
-    income.total = income.commission + income.tickets + income.shop + income.penalties;
+    // Helps are sold for cash exactly as shop items are, and were in no income
+    // line at all — this server had 1,950,000 of them missing from revenue.
+    income.total = income.commission + income.tickets + income.shop + income.lifelines + income.penalties;
 
-    const payouts = { prizes: n(t.prizes), bonuses: n(t.bonuses), refunds: n(t.refunds), total: 0 };
+    const payouts = {
+      prizes: n(t.prizes), bonuses: n(t.bonuses), refunds: n(t.refunds), total: 0,
+      cashedOut: n(t.cashed_out), liability: 0
+    };
+    /* `total` stays the ACCRUED figure — what the house became liable for in
+     * this period — because that is what profit must be measured against. The
+     * cash that actually left is reported beside it, never added to it: adding
+     * both would count the same win twice, once when it was awarded and again
+     * when it was withdrawn. */
     payouts.total = payouts.prizes + payouts.bonuses + payouts.refunds;
+    payouts.liability = Math.max(0, payouts.total - payouts.cashedOut);
+    const adjustments = n(t.adjustments);
 
     const byCategory = expR.rows.map((r: any) => ({ category: r.category, amount: n(r.amount) }));
     const manual = byCategory.reduce((s, e) => s + e.amount, 0);
@@ -325,7 +349,7 @@ export async function financeReport(opts: { from?: string; to?: string; granular
     });
 
     return {
-      from, to, granularity, income, payouts, expenses,
+      from, to, granularity, income, payouts, adjustments, expenses,
       commissionByMode: byModeR.rows.map((r: any) => ({ modeId: String(r.mode), commission: n(r.commission), matches: n(r.matches) })),
       grossProfit, netProfit: grossProfit - expenses.total, series,
       serverCost: srv, hasDatabase: true, shopSalesTracked: shopTracked,
@@ -355,17 +379,21 @@ export function reportToCsv(r: FinanceReport): string {
   rows.push(['کارمزد مسابقات', String(r.income.commission)]);
   rows.push(['فروش بلیط', String(r.income.tickets)]);
   rows.push(['فروش آیتم فروشگاه', String(r.income.shop)]);
+  rows.push(['فروش کمک‌ها', String(r.income.lifelines)]);
   rows.push(['جریمه‌ها', String(r.income.penalties)]);
   rows.push(['جمع درآمد', String(r.income.total)]);
   rows.push([]);
   rows.push(['کارمزد به تفکیک بازی', 'مبلغ', 'تعداد مسابقه']);
   for (const m of r.commissionByMode) rows.push([FA_MODE[m.modeId] ?? m.modeId, String(m.commission), String(m.matches)]);
   rows.push([]);
-  rows.push(['پرداختی به بازیکنان', 'مبلغ']);
+  rows.push(['جوایز واریزشده به کیف پول بازیکنان (تعهد)', 'مبلغ']);
   rows.push(['جوایز', String(r.payouts.prizes)]);
   rows.push(['بونوس', String(r.payouts.bonuses)]);
   rows.push(['بازگشت وجه', String(r.payouts.refunds)]);
-  rows.push(['جمع پرداختی', String(r.payouts.total)]);
+  rows.push(['جمع جوایز واریزشده', String(r.payouts.total)]);
+  rows.push(['برداشت نقدیِ پرداخت‌شده (خروج واقعی پول)', String(r.payouts.cashedOut)]);
+  rows.push(['مانده نزد بازیکنان (بدهی)', String(r.payouts.liability)]);
+  rows.push(['تعدیل دستی مدیر', String(r.adjustments)]);
   rows.push([]);
   rows.push(['هزینه‌ها', 'مبلغ']);
   for (const e of r.expenses.byCategory) rows.push([FA_CAT[e.category] ?? e.category, String(e.amount)]);

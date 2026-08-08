@@ -423,15 +423,26 @@ async function renderAccounting(){
       stat('کارمزد مسابقات','ok',money(r.income.commission))+
       stat('فروش بلیط','info',money(r.income.tickets))+
       stat('فروش آیتم فروشگاه','',r.shopSalesTracked?money(r.income.shop):'—')+
+      stat('فروش کمک‌ها','',money(r.income.lifelines||0))+
       stat('جمع درآمد','gold',money(r.income.total))+
     '</div>'+
     (r.shopSalesTracked?'':'<div class="note">فروش آیتم هنوز اندازه‌گیری نمی‌شود: فروشگاه فعلاً فقط کاتالوگ است و مسیر خرید آیتم ساخته نشده. جدول ثبت فروش آماده است و به‌محض ساخت خرید، این عدد پر می‌شود.</div>')+
     '<div class="grid g4" style="margin-bottom:13px">'+
-      stat('پرداختی به بازیکنان','bad',money(r.payouts.total))+
+      /* Two different things that used to share one label. «جوایز واریزشده» is
+         what landed in players' wallets — a debt, not a payment. «برداشت نقدی»
+         is the only figure that is money actually gone. */
+      stat('جوایز واریزشده به کیف پول','bad',money(r.payouts.total))+
+      stat('برداشت نقدیِ پرداخت‌شده','bad',money(r.payouts.cashedOut||0))+
       stat('هزینه‌های شرکت','bad',money(r.expenses.total))+
       stat('سود ناخالص',r.grossProfit>=0?'ok':'bad',money(r.grossProfit))+
+    '</div>'+
+    '<div class="grid g4" style="margin-bottom:13px">'+
+      stat('مانده نزد بازیکنان (بدهی)','',money(r.payouts.liability||0))+
+      stat('تعدیل دستی مدیر','',money(r.adjustments||0))+
+      stat('واریز کاربران','',money(r.income.deposits||0))+
       stat('سود خالص',r.netProfit>=0?'ok':'bad',money(r.netProfit))+
     '</div>'+
+    '<div class="note"><b>این دو عدد یکی نیستند.</b> «جوایز واریزشده» یعنی چقدر به کیف پول بازیکن‌ها اضافه شده — این پول هنوز نزد توست و فقط <b>بدهی</b> است. «برداشت نقدیِ پرداخت‌شده» تنها عددی است که واقعاً از شرکت خارج شده. سود ناخالص بر اساس <b>تعهد</b> حساب می‌شود (جوایز واریزشده)، نه برداشت‌ها؛ اگر هر دو کم می‌شدند، یک برد دو بار شمرده می‌شد.</div>'+
     '<div class="card" style="margin-bottom:13px"><b>روند مالی</b><div class="sub" style="margin-bottom:6px">'+esc(r.from)+' تا '+esc(r.to)+'</div>'+accChart(r.series)+'</div>'+
     '<div class="grid g2">'+
       '<div class="card"><b>کارمزد به تفکیک بازی</b><div class="tbl-wrap" style="margin-top:8px"><table><thead><tr><th>بازی</th><th>کارمزد</th><th>مسابقه</th></tr></thead><tbody>'+modeRows+'</tbody></table></div></div>'+
