@@ -9844,6 +9844,9 @@ async function buyItem(it,el){
     setTimeout(()=>{ if(pr)pr.textContent=priceTxt; if(el)el.classList.remove('pop'); },1400);
     try{const b=el.getBoundingClientRect(),v=document.getElementById('vp').getBoundingClientRect();burstAt(b.left-v.left+b.width/2,b.top-v.top+b.height/2);}catch(e){}
 
+    /* The purchase response carries wallet/coins/hearts; tickets and lifelines
+       it does not, so the authoritative re-read covers the rest. */
+    pzRefreshHoldings();
     const k=it.key||'';
     if(k==='heart'){ toast(faDigits(val)+' قلب اضافه شد ❤️'); try{ pzHeartsRefresh(); }catch(e){} }
     else if(k==='coins'){ toast(faDigits(val)+' سکه اضافه شد 🪙'); }
@@ -11109,6 +11112,8 @@ function pzwFinish(finalRot,out,wheel,pointer,btn){
   pzwSyncBadge(); pzwPaintButton();
   sfx('found');vib([40,60,120]);
   pzwShowPrize(out.granted||{icon:'🎁',label:(out.segment&&out.segment.label)||'جایزه',type:'coins'});
+  /* The server has already paid it; this is what makes the header agree. */
+  pzRefreshHoldings();
   const t=pzwCooldownText();
   document.getElementById('spinNote').textContent=t?('جایزه دریافت شد؛ '+t+' دیگر دوباره بچرخون 🎡'):'جایزه دریافت شد 🎡';
 }
@@ -11633,11 +11638,47 @@ function pzLeagueFromCup(cup){
 }
 /* Pull the real user + real leaderboards and paint the header/hero/home boards.
    No mock: anything the server doesn't have shows a zero / empty state. */
+/* Copy the server's holdings into the client's variables and repaint.
+   `practiceCoins` is what the header's coin pill prints, so it has to be the
+   SERVER's coin count — it used to be an independent number kept in
+   localStorage, which is why a coin won on the wheel was credited by the server
+   and never seen by the player. It is a mirror now, not a second ledger. */
+function pzApplyBalances(b){
+  if(!b||typeof b!=='object') return;
+  if(typeof b.wallet==='number'){ wallet=b.wallet; }
+  if(typeof b.hearts==='number'){ hearts=b.hearts; }
+  if(typeof b.coins==='number'){
+    coins=b.coins;
+    practiceCoins=b.coins;
+    try{ savePracticeCoins(); }catch(e){}   /* keep the cache in step, not in charge */
+  }
+  if(b.tickets&&typeof b.tickets==='object'&&typeof mTickets!=='undefined'){
+    ['green','blue','red'].forEach(k=>{ if(typeof b.tickets[k]==='number') mTickets[k]=b.tickets[k]; });
+  }
+  try{ updateWalletUI(); }catch(e){}
+  try{ renderHeaderTickets(); }catch(e){}
+}
+/* Re-read what the player owns, straight from the server. Called after
+   ANYTHING that grants: the wheel, the daily reward, a shop purchase, a gift
+   code. Showing a prize without doing this is how a player "wins" something
+   that never arrives. */
+async function pzRefreshHoldings(){
+  try{
+    const r=await pzApi('GET','/users/me');
+    if(r&&r.ok&&r.data){ _usr=r.data; pzApplyBalances(r.data.balances); }
+  }catch(e){}
+  try{ await pzApplyServerTickets(); }catch(e){}
+}
 async function pzHydrateAll(){
   try{
     const r=await pzApi('GET','/users/me');
     if(r&&r.ok&&r.data){
       const u=r.data; _usr=u; try{ localStorage.setItem('pz_usr',JSON.stringify(u)); }catch(e){}
+      /* THE BALANCES. /users/me has always returned them and the client has
+         always thrown them away, so anything the server credited — a wheel
+         prize, a daily reward, a shop purchase — never reached the header.
+         The server is the only place these numbers really live. */
+      try{ pzApplyBalances(u.balances); }catch(e){}
       try{ pzApplyMyAvatar(u.avatar||''); }catch(e){}   /* real profile photo, if uploaded */
       try{ pzApplyMyCharacter(u.character||null); }catch(e){}
       try{ pzLoadNotifPrefs(); }catch(e){}   /* reflect server notification prefs in settings */
@@ -11841,6 +11882,7 @@ async function claimDailyReward(){
        it, so the player sees what they got and where it went. */
     const from=document.getElementById('dailyHdrBtn')||document.getElementById('hdrWallet');
     setTimeout(()=>pzwFlyPrize(out.granted,from),220);
+    pzRefreshHoldings();
     setTimeout(()=>{ try{ hydrateFromApi&&hydrateFromApi(); }catch(e){}
                      try{ pzLLRefresh&&pzLLRefresh(); }catch(e){} },1800);
   }catch(e){
