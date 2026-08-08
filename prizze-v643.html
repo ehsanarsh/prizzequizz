@@ -476,7 +476,7 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
    in grows a few pixels and the header reflows. */
 /* The weekly rail, restyled to match the stepped bars: same gold, same black
    outline, and the player's face as the token instead of a bullet. */
-.wpl-marker .wpl-face{width:26px;height:26px;border-radius:50%;overflow:hidden;display:block;
+.wpl-marker .wpl-face{width:38px;height:38px;border-radius:50%;overflow:hidden;display:block;
   border:2.5px solid #000;box-shadow:0 2px 0 #000,0 0 0 2.5px rgba(255,231,117,.5);
   background:radial-gradient(circle at 34% 26%,#FFF3AE,#FFD21F 45%,#D9930A 100%)}
 .wpl-marker .wpl-face>*{width:100%;height:100%;display:block}
@@ -501,9 +501,11 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
   background:linear-gradient(180deg,#3a3320,#241f13);border:2px solid #000;overflow:hidden;box-shadow:inset 0 2px 4px rgba(0,0,0,.55)}
 /* The travelled part. Grows from the RIGHT because the game is right-to-left:
    step one is the first thing the eye meets. */
-.pzsb-track>i{position:absolute;inset:0 0 0 auto;width:0;border-radius:99px;
+/* Left to right: step one is on the left and the climb moves right, which is
+   how a progress bar is read even in a right-to-left interface. */
+.pzsb-track>i{position:absolute;inset:0 auto 0 0;width:0;border-radius:99px;
   background:linear-gradient(180deg,#FFE775,#F5C21A 55%,#C98B00);transition:width .45s cubic-bezier(.3,1.1,.4,1)}
-.pzsb-stops{position:relative;display:flex;justify-content:space-between;align-items:center;gap:2px}
+.pzsb-stops{position:relative;display:flex;flex-direction:row;justify-content:space-between;align-items:center;gap:2px;direction:ltr}
 .pzsb-stop{position:relative;flex:1 1 0;min-width:0;height:30px;display:flex;align-items:center;justify-content:center}
 /* A stop not yet reached: dark and quiet. */
 .pzsb-stop b{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;
@@ -6357,6 +6359,17 @@ async function lsLoadTopics(){
    `current` is the step the player is ON (1-based). Everything before it is
    done; the step itself carries the player's own character instead of a number,
    which is what makes the bar say "you are here" rather than "N of M". */
+/* The player's CHARACTER, never their photo. Progress tokens are a game piece:
+   the same little figure has to be recognisable on every rail, and a profile
+   photo cropped to 26px is neither recognisable nor the thing being asked for.
+   Falls back to the neutral silhouette when no character is chosen. */
+function pzCharacterOnlyHTML(){
+  try{
+    const ch=window.PZ_MY_CHARACTER||null;
+    if(ch) return pzFaceHTML({avatar:'',character:ch});
+  }catch(e){}
+  try{ return '<div class="pz-avc solo">'+PZ_FACE_EMPTY()+'</div>'; }catch(e){ return ''; }
+}
 function pzStepBarHTML(opts){
   opts=opts||{};
   const n=Math.max(1,Math.floor(Number(opts.steps)||1));
@@ -6364,7 +6377,7 @@ function pzStepBarHTML(opts){
   /* The fill stops at the CENTRE of the step reached, so the rail ends under
      the player rather than past them. */
   const pct=n<=1?(cur?100:0):Math.max(0,Math.min(100,((cur-0.5)/n)*100));
-  const face=(typeof pzMyAvHTML==='function')?pzMyAvHTML():'';
+  const face=pzCharacterOnlyHTML();
   let stops='';
   for(let i=1;i<=n;i++){
     if(i===cur) stops+='<span class="pzsb-stop now"><span class="pzsb-face">'+face+'</span></span>';
@@ -6707,7 +6720,10 @@ function lsBuild(snap){
       'پاسخ درست: <b>'+(correctTxt||'—')+'</b> — شما حذف شدید</div>';
   }
   body.innerHTML=lsDashHtml(snap,true)+verdict+
-    '<div class="ls-elim-hd"><h2>'+(r.phase==='elimination'?'مرحلهٔ حذف ☠️':'وضعیت مسابقه')+'</h2><p>'+(r.phase==='elimination'?'هر کس اشتباه جواب داد، حذف می‌شود':'جایزه با حذف هر نفر بیشتر می‌شود')+'</p></div>'+
+    /* The elimination screen says nothing: the grid is already showing who went
+       out, and a heading over it only repeats what the cards are saying. The
+       other phases keep their line. */
+    (r.phase==='elimination'?'':'<div class="ls-elim-hd"><h2>وضعیت مسابقه</h2><p>جایزه با حذف هر نفر بیشتر می‌شود</p></div>')+
     lsGridHtml(snap,r.phase==='elimination');
   if(r.phase==='elimination') lsAnimateElimination(snap);
 }
@@ -11589,7 +11605,10 @@ function renderWeeklyProgress(){
      on every score update. */
   try{
     const fc=document.getElementById('wpFace');
-    if(fc){ const html=(typeof pzMyAvHTML==='function')?pzMyAvHTML():''; if(fc.dataset.h!==html){ fc.innerHTML=html; fc.dataset.h=html; } }
+    /* The CHARACTER only — not the profile photo. pzMyAvHTML draws whichever
+       the player has, and on this rail it has to be the character every time so
+       the token is the same little figure that rides the stepped bars. */
+    if(fc){ const html=pzCharacterOnlyHTML(); if(fc.dataset.h!==html){ fc.innerHTML=html; fc.dataset.h=html; } }
   }catch(e){}
   const max=leagueTargets.gold;
   const pct=Math.max(3,Math.min(96,(weeklyScore/max)*93+3));
