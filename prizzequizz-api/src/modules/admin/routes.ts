@@ -492,7 +492,12 @@ export function registerAdminRoutes(router: Router, base: string): void {
         id: b.id || undefined, category: String(b.category || 'util'), icon: b.icon, name: String(b.name),
         description: b.description, price: Number(b.price ?? 0), currency: b.currency === 'cash' ? 'cash' : 'coins',
         effectKey: b.effectKey, effectValue: Number(b.effectValue ?? 1), badge: b.badge,
-        enabled: b.enabled != null ? !!b.enabled : true, sortOrder: Number(b.sortOrder ?? 0)
+        enabled: b.enabled != null ? !!b.enabled : true, sortOrder: Number(b.sortOrder ?? 0),
+        /* Passed through only when the panel actually sent them. `undefined`
+           means "leave as it was"; an empty array or an empty string means
+           "the operator cleared it", and those must not be confused. */
+        ...(b.rewards !== undefined ? { rewards: b.rewards } : {}),
+        ...(b.image !== undefined ? { image: String(b.image || '') } : {})
       });
       audit(ctx.userId, b.id ? 'SHOP_ITEM_UPDATED' : 'SHOP_ITEM_CREATED', 'shop_item', item.id, { name: item.name, price: item.price });
       json(ctx.res, 201, item);

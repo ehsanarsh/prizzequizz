@@ -1672,16 +1672,78 @@ function shopEdit(id){
       '<div class="field"><label>مقدار اثر</label><input id="sh_effval" type="number" value="'+(it.effectValue||1)+'"></div>'+
       '<div class="field"><label>ترتیب نمایش</label><input id="sh_order" type="number" value="'+(it.sortOrder||0)+'"></div>'+
     '</div>'+
+    /* A PACKAGE. Leave it empty and the item behaves exactly as before, with
+       the single effect above; add rows and they replace it — «۳ بلیط + ۴۰۰
+       سکه + ۲ کمک» is three rows of one item, not three items. */
+    '<div class="card" style="margin:4px 0 10px;background:rgba(255,255,255,.03)">'+
+      '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+
+        '<b>محتویات بسته</b><span class="sub" style="flex:1;min-width:180px">اگر خالی بماند، همان «اثر خرید» بالا اعمال می‌شود. برای بستهٔ چندتایی ردیف اضافه کن.</span>'+
+        '<button class="btn sm ok" onclick="shopRewardAdd()">➕ ردیف</button>'+
+      '</div>'+
+      '<div id="sh_rewards" style="margin-top:8px"></div>'+
+    '</div>'+
+    /* Artwork. The card falls back to the emoji when there is none. */
+    '<div class="grid g2" style="align-items:start">'+
+      '<div class="field"><label>عکس آیتم (اختیاری)</label>'+
+        '<button class="btn" onclick="shopPickImage()">🖼️ انتخاب عکس</button> '+
+        '<button class="btn sm bad" onclick="shopClearImage()">حذف عکس</button>'+
+        '<div class="sub" style="margin-top:6px">به WebP فشرده می‌شود؛ اگر عکسی نباشد همان ایموجی نشان داده می‌شود.</div></div>'+
+      '<div class="field"><label>پیش‌نمایش</label><div id="sh_img_prev" style="min-height:74px;display:flex;align-items:center;justify-content:center;border:1px dashed var(--line);border-radius:12px;padding:6px"></div></div>'+
+    '</div>'+
     '<div class="grid g2"><div class="field"><label>برچسب (اختیاری)</label><input id="sh_badge" value="'+esc(it.badge||'')+'" placeholder="مثلاً محبوب / ٪۲۰ تخفیف"></div>'+
     '<div class="field"><label>وضعیت</label><select id="sh_enabled"><option value="1"'+(it.enabled!==false?' selected':'')+'>فعال</option><option value="0"'+(it.enabled===false?' selected':'')+'>غیرفعال</option></select></div></div>'+
     '<button class="btn pri" onclick="shopSaveItem(\''+(id||'')+'\')">💾 ذخیره</button>');
+  window._SH_IMG=it.image||'';
+  window._SH_REWARDS=Array.isArray(it.rewards)?it.rewards.map(r=>({key:r.key,value:r.value})):[];
+  shopRewardsRender(); shopImgRender();
+}
+/* ---- package rows ---- */
+function shopRewardsRender(){
+  const box=$('#sh_rewards'); if(!box)return;
+  const rows=window._SH_REWARDS||[];
+  if(!rows.length){ box.innerHTML='<div class="sub">ردیفی نیست — این آیتم فقط همان «اثر خرید» بالا را می‌دهد.</div>'; return; }
+  box.innerHTML=rows.map(function(r,i){
+    const opts=Object.keys(SHOP_EFFECTS).map(k=>'<option value="'+k+'"'+(r.key===k?' selected':'')+'>'+esc(SHOP_EFFECTS[k])+'</option>').join('');
+    return '<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">'+
+      '<select onchange="shopRewardSet('+i+',\'key\',this.value)" style="flex:1">'+opts+'</select>'+
+      '<input type="number" min="1" value="'+(Number(r.value)||1)+'" onchange="shopRewardSet('+i+',\'value\',this.value)" style="width:110px">'+
+      '<button class="btn sm bad" onclick="shopRewardDel('+i+')">حذف</button></div>';
+  }).join('');
+}
+function shopRewardAdd(){ (window._SH_REWARDS=window._SH_REWARDS||[]).push({key:Object.keys(SHOP_EFFECTS)[0],value:1}); shopRewardsRender(); }
+function shopRewardDel(i){ window._SH_REWARDS.splice(i,1); shopRewardsRender(); }
+function shopRewardSet(i,f,v){ window._SH_REWARDS[i][f]=(f==='value'?Math.max(1,Number(v)||1):v); if(f==='value')shopRewardsRender(); }
+/* ---- artwork ---- */
+function shopImgRender(){
+  const b=$('#sh_img_prev'); if(!b)return;
+  b.innerHTML=window._SH_IMG
+    ? '<img src="'+esc(window._SH_IMG)+'" style="max-width:100%;max-height:70px;object-fit:contain">'
+    : '<span class="sub">بدون عکس</span>';
+}
+function shopClearImage(){ window._SH_IMG=''; shopImgRender(); }
+function shopPickImage(){
+  const inp=document.createElement('input');
+  inp.type='file'; inp.accept='image/png,image/jpeg,image/webp,image/avif,image/svg+xml';
+  inp.onchange=async()=>{
+    const f=inp.files&&inp.files[0]; if(!f)return;
+    /* Reuses the same shrink-to-WebP path the topic art uses — one code path,
+       one behaviour, and no second place to keep in step. */
+    try{ window._SH_IMG=await catShrink(f); shopImgRender(); toast('عکس آماده شد — برای ثبت، ذخیره را بزن','ok'); }
+    catch(e){ toast(e.message||'عکس خوانده نشد','bad'); }
+  };
+  inp.click();
 }
 async function shopSaveItem(id){
   let cat=$('#sh_cat').value; if(cat==='__custom')cat=($('#sh_cat_custom').value||'').trim()||'util';
   const name=$('#sh_name').value.trim(); if(!name)return toast('نام آیتم لازم است','bad');
   const body={id:id||undefined,icon:$('#sh_icon').value.trim()||'🛍️',name,description:$('#sh_desc').value.trim(),category:cat,
     price:Number($('#sh_price').value||0),currency:$('#sh_cur').value,effectKey:$('#sh_eff').value,effectValue:Number($('#sh_effval').value||1),
-    sortOrder:Number($('#sh_order').value||0),badge:$('#sh_badge').value.trim(),enabled:$('#sh_enabled').value==='1'};
+    sortOrder:Number($('#sh_order').value||0),badge:$('#sh_badge').value.trim(),enabled:$('#sh_enabled').value==='1',
+    /* Always sent, both of them: leaving a field out means "keep what was
+       there", so an emptied package or a removed picture would survive a save
+       that was meant to clear it. */
+    rewards:(window._SH_REWARDS||[]).filter(r=>r&&r.key&&Number(r.value)>0),
+    image:window._SH_IMG||''};
   try{await api('POST','/admin/shop/items',body);toast('ذخیره شد ✅','ok');document.querySelector('.modal-bg').remove();render();}catch(e){toast(e.message,'bad');}
 }
 async function shopSeedMissing(){
