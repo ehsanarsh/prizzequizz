@@ -287,18 +287,23 @@ async function dashLoadServers(){
       '<button class="btn sm" onclick="dashLoadServers()">↻</button></div>'+
     rows.map(function(x){
       const m=x.latest||{}; const on=x.online;
-      const memPct=m.memTotalMB?Math.round((m.memUsedMB/m.memTotalMB)*100):0;
-      const dskPct=m.diskTotalGB?Math.round((m.diskUsedGB/m.diskTotalGB)*100):0;
+      /* The API sends raw BYTES as memUsed/memTotal/diskUsed/diskTotal. This
+         card used to read memUsedMB/memTotalMB/diskUsedGB/diskTotalGB, which
+         no endpoint has ever produced — so every one of them was undefined and
+         both gauges sat at ۰٪ / ۰ MB while the machine was healthy. CPU worked
+         only because `cpuPercent` happens to be the real name. */
+      const memPct=m.memTotal?Math.round((m.memUsed/m.memTotal)*100):0;
+      const dskPct=m.diskTotal?Math.round((m.diskUsed/m.diskTotal)*100):0;
       return '<div style="border-top:1px solid var(--line);padding:10px 0">'+
         '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">'+
           '<span class="pill '+(on?'ok':'bad')+'">'+(on?'آنلاین':'آفلاین')+'</span>'+
           '<b>'+esc(x.server.name)+'</b><span class="sub">'+esc(x.server.host||'')+'</span></div>'+
-        (on?'<div style="display:flex;flex-wrap:wrap;gap:6px">'+
+        (x.latest?'<div style="display:flex;flex-wrap:wrap;gap:6px">'+
             g('CPU',null,null,m.cpuPercent,'#5db7ec')+
-            g('RAM',fa(Math.round(m.memUsedMB||0)),' MB',memPct,'#2ecc71')+
-            g('دیسک',fa(Math.round(m.diskUsedGB||0)),' GB',dskPct,'#f39c12')+
+            g('RAM',monBytes(m.memUsed),'',memPct,'#2ecc71')+
+            g('دیسک',monBytes(m.diskUsed),'',dskPct,'#f39c12')+
           '</div>'
-          :'<div class="sub">داده‌ای دریافت نشده</div>')+
+          :'<div class="sub">هنوز گزارشی از این سرور نرسیده</div>')+
       '</div>';
     }).join('')+'</div>';
 }
