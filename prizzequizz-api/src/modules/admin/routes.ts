@@ -28,6 +28,7 @@ import { createCampaign, recordCampaignResult, listCampaigns, campaignAnalytics,
 import { listItems as shopList, saveItem as shopSave, removeItem as shopRemove, seedMissing as shopSeedMissing } from '../../services/shopService.js';
 import { login as adminLogin, listAccounts, createAccount, updateAccount, deleteAccount, changeOwnPassword, resolveTokenSync, ADMIN_TABS } from '../../services/adminAccountService.js';
 import { currentAdmin } from '../../services/adminGuard.js';
+import { getPolicy, setPolicy, NOTIFICATION_TYPES, NOTIFICATION_TYPE_LABELS } from '../../services/notificationPolicyService.js';
 import { financeDiagnostics, listWithdrawals, reviewWithdrawal, transactionsToCsv } from '../../services/financeService.js';
 import { listRewardHolds, rewardHoldDiagnostics, reviewRewardHold } from '../../services/rewardReviewService.js';
 import { integrity } from '../../services/integrityService.js';
@@ -512,6 +513,20 @@ export function registerAdminRoutes(router: Router, base: string): void {
    * completely empty. This tops it up on request. It is a button rather than a
    * boot step on purpose: run automatically, it would resurrect whatever an
    * operator had deliberately deleted, every restart. */
+  /* WHAT THE GAME IS ALLOWED TO SEND. The other half of the players' own
+     preferences: this one is game-wide, and a muted type is never written to
+     an inbox at all. */
+  router.add('GET', `${base}/admin/notification-policy`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    json(ctx.res, 200, { policy: await getPolicy(), types: NOTIFICATION_TYPES, labels: NOTIFICATION_TYPE_LABELS });
+  });
+  router.add('PUT', `${base}/admin/notification-policy`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    const b = (ctx.body ?? {}) as any;
+    const policy = await setPolicy({ types: b.types });
+    audit(ctx.userId, 'NOTIFICATION_POLICY_UPDATED', 'config', 'notification_policy', { types: policy.types });
+    json(ctx.res, 200, { policy });
+  });
   router.add('POST', `${base}/admin/shop/seed-missing`, async (ctx) => {
     if (!requireAdmin(ctx)) return;
     const { added, skipped } = await shopSeedMissing();

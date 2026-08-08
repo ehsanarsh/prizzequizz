@@ -1290,13 +1290,43 @@ let NT_TAB='compose';
 const NT_LINKS={'':'— بدون مقصد —','/home':'🏠 خانه','/shop':'🛒 فروشگاه','/wallet':'👛 کیف پول','/match':'⚔️ شروع مسابقه','/league':'🛡️ لیگ','/rewards':'🎡 جوایز و گردونه','/profile':'👤 پروفایل','/notifications':'🔔 صندوق پیام'};
 async function renderNotifications(){
   const tab=(k,label)=>'<button class="btn sm '+(NT_TAB===k?'pri':'')+'" onclick="NT_TAB=\''+k+'\';render()">'+label+'</button>';
-  const tabs=tab('dashboard','📊 داشبورد')+' '+tab('compose','✍️ ارسال پیام')+' '+tab('history','🗂️ کمپین‌ها و آنالیز')+' '+tab('scheduled','⏰ زمان‌بندی‌شده')+' '+tab('push','📲 وضعیت پوش');
+  const tabs=tab('dashboard','📊 داشبورد')+' '+tab('compose','✍️ ارسال پیام')+' '+tab('history','🗂️ کمپین‌ها و آنالیز')+' '+tab('scheduled','⏰ زمان‌بندی‌شده')+' '+tab('push','📲 وضعیت پوش')+' '+tab('policy','🎛️ چه چیزی فرستاده شود');
   $('#main').innerHTML=head('مرکز اعلان‌ها','ارسال هدفمند به بخش واقعیِ کاربران، زمان‌بندی، و آنالیزِ باز/کلیک',tabs)+'<div id="ntBody"><div class="empty">در حال بارگذاری…</div></div>';
   if(NT_TAB==='dashboard')return ntRenderDashboard();
   if(NT_TAB==='history')return ntRenderHistory();
   if(NT_TAB==='scheduled')return ntRenderScheduled();
   if(NT_TAB==='push')return ntRenderPush();
+  if(NT_TAB==='policy')return ntRenderPolicy();
   return ntRenderCompose();
+}
+
+/* WHAT THE GAME IS ALLOWED TO SEND AT ALL.
+   The players each have their own preferences; this is the game-wide switch.
+   A category turned off here never reaches an inbox — not muted push, not
+   written and hidden: never created. That is the difference that stops a bell
+   filling up. */
+async function ntRenderPolicy(){
+  const box=$('#ntBody'); if(!box)return;
+  let d; try{ d=await api('GET','/admin/notification-policy'); }
+  catch(e){ box.innerHTML='<div class="card empty">'+(e.message||'خطا')+'</div>'; return; }
+  const pol=(d.policy&&d.policy.types)||{}, labels=d.labels||{};
+  window._NT_POLICY={...pol};
+  box.innerHTML='<div class="card">'+
+    '<b>چه اعلان‌هایی فرستاده شود</b>'+
+    '<div class="sub" style="margin:6px 0 12px">هر دسته‌ای که خاموش کنی، دیگر <b>ساخته هم نمی‌شود</b> — نه در زنگولهٔ بازیکن می‌نشیند و نه روی گوشی می‌رود. کاربران جدا هم تنظیم خودشان را دارند؛ این کلیدِ کل بازی است.</div>'+
+    (d.types||[]).map(function(t){
+      const on=pol[t]!==false;
+      return '<label style="display:flex;align-items:center;gap:10px;padding:10px;border-top:1px solid var(--line)">'+
+        '<input type="checkbox" '+(on?'checked':'')+' onchange="window._NT_POLICY[\''+t+'\']=this.checked">'+
+        '<div style="flex:1"><b>'+esc(labels[t]||t)+'</b><div class="sub mono" style="font-size:11px">'+esc(t)+'</div></div>'+
+        '</label>';
+    }).join('')+
+    '<div style="margin-top:12px"><button class="btn pri" onclick="ntSavePolicy()">💾 ذخیره</button></div>'+
+  '</div>';
+}
+async function ntSavePolicy(){
+  try{ await api('PUT','/admin/notification-policy',{types:window._NT_POLICY||{}}); toast('ذخیره شد ✅','ok'); }
+  catch(e){ toast(e.message,'bad'); }
 }
 
 /* Whether a message actually reaches a phone, and a way to prove it on one

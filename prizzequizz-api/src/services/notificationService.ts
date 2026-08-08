@@ -2,6 +2,7 @@ import webPush from 'web-push';
 import { effectivePushConfig } from './pushConfigService.js';
 import { repositories } from '../repositories/index.js';
 import type { NotificationPreferences, NotificationRecord, NotificationType, PushSubscriptionRecord } from '../types/domain.js';
+import { typeAllowed } from './notificationPolicyService.js';
 import { id } from '../utils/id.js';
 import { logger } from './logger.js';
 
@@ -146,6 +147,10 @@ export class NotificationService {
   }
 
   async create(input: NotificationInput): Promise<NotificationRecord> {
+    /* The operator's game-wide switch. A type turned off is not written to
+     * anybody's inbox and not pushed — gating only the push would leave the
+     * bell filling up exactly as before, which is the whole complaint. */
+    const allowed = await typeAllowed(input.type).catch(() => true);
     const notification: NotificationRecord = {
       id: id(),
       userId: input.userId,
@@ -157,6 +162,12 @@ export class NotificationService {
       status: 'queued',
       createdAt: new Date().toISOString()
     };
+    if (!allowed) {
+      /* Returned, not thrown: every caller treats a notification as a
+         side-effect and none of them should fail because the operator muted a
+         category. It simply never existed. */
+      return { ...notification, status: 'failed' };
+    }
     await repositories.notifications.saveNotification(notification);
     if (input.push !== false) await this.dispatch(notification);
     return notification;

@@ -15484,9 +15484,56 @@ async function pzEnablePush(interactive){
     if(interactive) pzPushSay('❌','فعال‌سازی اعلان انجام نشد','یک بار دیگر امتحان کن. اگر باز هم نشد، این پیام را به پشتیبانی بگو:<br><span dir="ltr" style="opacity:.75;font-size:12px">'+String((e&&e.message)||e||'').slice(0,160)+'</span>');
     return false; }
 }
+/* ASKING FOR NOTIFICATIONS AT THE RIGHT MOMENT.
+ *
+ * The permission used to be reachable only by digging into تنظیمات, so almost
+ * nobody ever granted it. It belongs where the player has just shown they want
+ * the game: right after installing it / adding it to the home screen.
+ *
+ * It is a card with a button rather than a silent request, and that is not
+ * decoration — browsers only honour Notification.requestPermission() inside a
+ * user gesture, and the prompt can be spent exactly once. Asking without a tap
+ * would either be ignored or would burn the single chance on a player who was
+ * not looking. The tap on «فعال کن» IS the gesture.
+ *
+ * Asked at most twice, never on a login screen, and never again once the
+ * answer is known — a nag is how people end up blocking a site for good. */
+const PZ_ASK_KEY='pz_push_asked';
+function pzPushAskCount(){ try{ return Number(localStorage.getItem(PZ_ASK_KEY)||0)||0; }catch(e){ return 99; } }
+function pzPushMarkAsked(){ try{ localStorage.setItem(PZ_ASK_KEY,String(pzPushAskCount()+1)); }catch(e){} }
+function pzShouldAskPush(){
+  try{
+    if(!_tok) return false;                                   // not signed in yet
+    if(typeof Notification==='undefined') return false;
+    if(Notification.permission!=='default') return false;     // already answered
+    if(!pzIsInstalled()) return false;                        // only once installed
+    if(pzPushAskCount()>=2) return false;                     // asked enough
+    const a=document.querySelector('.screen.active');
+    if(a&&['login','otp','register','splash','intro'].indexOf(a.id)>=0) return false;
+    return true;
+  }catch(e){ return false; }
+}
+function pzAskPushOnInstall(){
+  if(!pzShouldAskPush()) return;
+  pzPushMarkAsked();
+  try{
+    showAaaModal({icon:'🔔',title:'خبرها را روی گوشی‌ات بگیر',
+      sub:'حالا که پرایز کوییز روی صفحهٔ اصلی‌ات هست، می‌توانیم شروع مسابقه، نتیجه و جایزه‌ها را همان‌جا خبرت کنیم — حتی وقتی بازی باز نیست.',
+      primaryText:'فعال کن', secondaryText:'بعداً',
+      onPrimary:()=>{ closeAaaModal(true); setTimeout(()=>{ pzEnablePush(true); },150); },
+      onSecondary:()=>closeAaaModal(false)});
+  }catch(e){}
+}
+/* Freshly installed in this very session — ask as soon as the player lands. */
+try{ window.addEventListener('appinstalled',()=>{ setTimeout(pzAskPushOnInstall,1200); }); }catch(e){}
+
 /* On load: register SW; if the user already granted permission, re-subscribe
-   silently so the server always has a fresh subscription for this device. */
-try{ setTimeout(()=>{ pzRegisterSW().then(()=>{ if(_tok && typeof Notification!=='undefined' && Notification.permission==='granted') pzEnablePush(false); }); }, 3000); }catch(e){}
+   silently so the server always has a fresh subscription for this device.
+   And if the game is running installed but has never been asked, ask now. */
+try{ setTimeout(()=>{ pzRegisterSW().then(()=>{
+  if(_tok && typeof Notification!=='undefined' && Notification.permission==='granted') pzEnablePush(false);
+  else pzAskPushOnInstall();
+}); }, 3000); }catch(e){}
 /* Keep the header bell badge fresh (new server messages arrive between opens). */
 try{ setInterval(()=>{ try{ if(_tok) pzInboxBadge(); }catch(e){} }, 45000); }catch(e){}
 
