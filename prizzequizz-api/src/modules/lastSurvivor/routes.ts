@@ -16,6 +16,7 @@ import { avatarUrlFor } from '../../services/avatarService.js';
 import { categoryList } from '../../services/configService.js';
 import { categoryImageUrls } from '../../services/categoryImageService.js';
 import { equippedCharacterFor } from '../../services/characterSelectionService.js';
+import { useLifeline as spendLifeline, LifelineError } from '../../services/lifelineService.js';
 
 /* Two lobby polls of grace. Long enough that a slow phone or a tunnel is not
  * thrown out, short enough that the list is honest. */
@@ -353,9 +354,27 @@ export function registerLastSurvivorRoutes(router: Router, base: string): void {
   router.add('POST', `${base}/last-survivor/rooms/:id/lifeline`, async (ctx) => {
     const body = bodyObject(ctx.body) as any;
     if (!ctx.userId) return error(ctx.res, 401, 'UNAUTHORIZED', 'ابتدا وارد شو.');
-    const res = await useLifeline(ctx.params.id!, ctx.userId, String(body.type || ''));
-    if (!res.ok) return error(ctx.res, 409, res.reason || 'LIFELINE_REJECTED', 'این کمک الان قابل استفاده نیست.');
-    json(ctx.res, 200, res);
+    const roomId = ctx.params.id!;
+    const type = String(body.type || '');
+    /* The stock is debited HERE, inside the same call that decides whether the
+     * help may be used at all — the client no longer spends first and asks
+     * afterwards. See useLifeline: nothing is taken until the room has said
+     * yes and worked out what the help delivers. */
+    const key = ({ '5050': 'p5050', second: 'psecond', stats: 'pstats' } as Record<string, string>)[type] || type;
+    try {
+      const res = await useLifeline(roomId, ctx.userId, type, async (round) => {
+        const spent = await spendLifeline(ctx.userId!, key, `ls:${roomId}:${round}`);
+        return { remaining: spent.remaining };
+      });
+      if (!res.ok) return error(ctx.res, 409, res.reason || 'LIFELINE_REJECTED', 'این کمک الان قابل استفاده نیست.');
+      json(ctx.res, 200, res);
+    } catch (e) {
+      /* A refusal from the stock (none left, already used this round, switched
+       * off) is the player's answer, not a server fault — and because it is
+       * thrown from inside `charge`, nothing has been applied in the room. */
+      if (e instanceof LifelineError) return error(ctx.res, 409, e.code, e.message);
+      throw e;
+    }
   });
 
   router.add('POST', `${base}/last-survivor/rooms/:id/decision`, async (ctx) => {

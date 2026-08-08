@@ -6942,16 +6942,16 @@ async function lsUsePower(type,el){
   if(lsAnswered){ toast('جوابت ثبت شده'); return; }
   if(lsPuUsed[type]){ toast('قبلاً استفاده شده'); return; }
   const key={'5050':'p5050','second':'psecond','stats':'pstats'}[type]||type;
-  /* The stock is the same one the duel spends from, so it is debited through
-     the same server endpoint. The room's own call still does the game work
-     (which options to grey out, the real answer distribution). */
-  const spend=await pzApi('POST','/lifelines/'+encodeURIComponent(key)+'/use',
-    {scopeId:'ls:'+lsRoomId+':'+((lsSnap&&lsSnap.room&&lsSnap.room.round)||0)});
-  if(!spend||!spend.ok){ toast((spend&&spend.error&&spend.error.message)||'الان قابل استفاده نیست',2600); return; }
+  /* ONE call. The room endpoint debits the stock itself, and only after it has
+     agreed the help can be used — so a refusal (wrong phase, already answered,
+     no question yet) costs nothing. This used to be two calls with the debit
+     first, which meant every refusal ate a help the player had bought and
+     burned its once-per-round slot, so trying again said «قبلاً استفاده
+     کرده‌ای». */
   const r=await pzApi('POST','/last-survivor/rooms/'+lsRoomId+'/lifeline',{type});
-  if(!r||r.ok===false){ toast((r&&r.error&&r.error.message)||'الان قابل استفاده نیست'); return; }
-  if(pzLL&&pzLL.inv) pzLL.inv[key]=spend.data.remaining;
+  if(!r||r.ok===false){ toast((r&&r.error&&r.error.message)||'الان قابل استفاده نیست',2600); return; }
   const d=r.data||{};
+  if(pzLL&&pzLL.inv&&typeof d.remaining==='number') pzLL.inv[key]=d.remaining;
   if(type==='5050'&&Array.isArray(d.removeIndexes)){
     const opts=document.getElementById('lsOpts');
     if(opts) d.removeIndexes.forEach(i=>{ const b=opts.querySelector('.ans[data-i="'+i+'"]'); if(b){ b.classList.add('dim','pz-removed','ls-gone'); b.disabled=true; } });
@@ -6973,6 +6973,13 @@ async function lsUsePower(type,el){
         requestAnimationFrame(()=>{ f.style.width=pct+'%'; });
       });
       toast(d.sample>0?('آمار کل: '+lsFa(d.sample)+' نفر تا امروز به این سؤال جواب داده‌اند'):'هنوز کسی به این سؤال جواب نداده',2400);
+    }
+    /* Nobody has answered this question yet, so the help delivered nothing and
+       the server did not take it. Leave it in the player's pocket rather than
+       marking it used. */
+    if(d.charged===false){
+      toast('هنوز کسی به این سؤال جواب نداده — کمکت مصرف نشد',2600);
+      lsBindPowerups(); return;
     }
   }
   lsPuUsed[type]=true;

@@ -8,6 +8,7 @@ import { rateLimit } from '../middleware/rateLimiter.js';
 import { logger } from '../services/logger.js';
 import { recordHttpRequest } from '../services/metrics.js';
 import { observeRequestDevice } from '../services/deviceRiskService.js';
+import { touchPresence } from '../services/presenceService.js';
 
 type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 type Handler = (ctx: RequestContext) => Promise<void> | void;
@@ -57,6 +58,11 @@ export class Router {
         const body = await parseBody(req);
         const auth = readAuth(req);
         const device = auth.userId ? await observeDeviceSafely(req, auth.userId) : null;
+        /* Presence, recorded from the one place every authenticated request
+         * passes through. Deliberately not awaited: the dashboard's "online"
+         * figure must never add latency to a game call, and touchPresence
+         * throttles and swallows its own failures. */
+        if (auth.userId) void touchPresence(auth.userId);
         await route.handler({ req, res, params, query: url.searchParams, body, userId: auth.userId, role: auth.role, deviceId: device?.device.id, riskScore: device?.riskProfile.riskScore });
       } catch (e) {
         const appError = toAppError(e);

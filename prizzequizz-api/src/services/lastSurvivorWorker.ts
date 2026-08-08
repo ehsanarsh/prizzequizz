@@ -379,13 +379,34 @@ const secondChanceArmed = new Set<string>();       // `${roomId}:${round}:${user
 const secondChanceUsed = new Set<string>();
 const scKey = (roomId: string, round: number, userId: string) => `${roomId}:${round}:${userId}`;
 
-export async function useLifeline(roomId: string, userId: string, type: string): Promise<{ ok: boolean; reason?: string; removeIndexes?: number[]; armed?: boolean; percents?: number[]; sample?: number }> {
+/* USING A HELP IN A ROOM.
+ *
+ * `charge` is what actually takes the help off the player's stock. It is called
+ * ONLY after this function has decided the help can be used and has worked out
+ * what it delivers — never before.
+ *
+ * That ordering is the whole point. The client used to debit the stock first
+ * and then ask the room to act; every rejection here (wrong phase, already
+ * answered, no question yet) therefore cost the player a help they had bought
+ * and gave them nothing, and because the debit also claims a once-per-round
+ * slot, tapping again answered «قبلاً استفاده کرده‌ای». Deciding first and
+ * charging second makes a refused help free, which is the only honest way for
+ * it to fail.
+ */
+export async function useLifeline(
+  roomId: string,
+  userId: string,
+  type: string,
+  charge?: (round: number) => Promise<{ remaining: number }>
+): Promise<{ ok: boolean; reason?: string; removeIndexes?: number[]; armed?: boolean; percents?: number[]; sample?: number; remaining?: number; charged?: boolean }> {
   const room = await getRoom(roomId);
   // Usable during the ready gate too, so a player can plan before the timer runs.
   if (!room || room.status !== 'running' || (room.phase !== 'question' && room.phase !== 'ready')) return { ok: false, reason: 'NOT_IN_QUESTION' };
   const p = (await listPlayers(roomId)).find((x) => x.userId === userId);
   if (!p || p.status !== 'alive') return { ok: false, reason: 'NOT_ALIVE' };
   if (p.answerRound === room.round) return { ok: false, reason: 'ALREADY_ANSWERED' };
+  const take = async (): Promise<number | undefined> =>
+    charge ? (await charge(room.round)).remaining : undefined;
 
   if (type === '5050') {
     if (room.correctIndex == null || !room.questionId) return { ok: false, reason: 'NO_QUESTION' };
@@ -395,13 +416,16 @@ export async function useLifeline(roomId: string, userId: string, type: string):
     for (let i = 0; i < optionCount; i++) if (i !== room.correctIndex) wrong.push(i);
     // Remove two of the wrong ones (random), leaving the correct one + one wrong.
     for (let i = wrong.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [wrong[i], wrong[j]] = [wrong[j]!, wrong[i]!]; }
-    return { ok: true, removeIndexes: wrong.slice(0, Math.max(0, optionCount - 2)) };
+    const remaining = await take();
+    return { ok: true, removeIndexes: wrong.slice(0, Math.max(0, optionCount - 2)), remaining, charged: true };
   }
   if (type === 'second') {
     const k = scKey(roomId, room.round, userId);
     if (secondChanceUsed.has(k)) return { ok: false, reason: 'ALREADY_USED' };
+    if (secondChanceArmed.has(k)) return { ok: false, reason: 'ALREADY_ARMED' };
+    const remaining = await take();
     secondChanceArmed.add(k);
-    return { ok: true, armed: true };
+    return { ok: true, armed: true, remaining, charged: true };
   }
   if (type === 'stats') {
     // GLOBAL distribution: how EVERY player who has ever answered this question
@@ -411,7 +435,12 @@ export async function useLifeline(roomId: string, userId: string, type: string):
     let optionCount = 4;
     try { const q = await repositories.questions.findById(room.questionId); if (q?.options?.length) optionCount = q.options.length; } catch { /* default 4 */ }
     const { percents, sample } = await getQuestionDistribution(room.questionId, optionCount);
-    return { ok: true, percents, sample };
+    /* Nobody has answered this question yet, so there is nothing to show. Four
+     * bars reading ۰٪ is not a hint, and charging for it is charging for
+     * nothing — so the help stays in the player's pocket. */
+    if (!sample) return { ok: true, percents, sample: 0, charged: false };
+    const remaining = await take();
+    return { ok: true, percents, sample, remaining, charged: true };
   }
   return { ok: false, reason: 'UNKNOWN_LIFELINE' };
 }

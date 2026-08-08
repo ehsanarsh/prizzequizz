@@ -7,6 +7,7 @@ import { calculateUserRisk } from './deviceRiskService.js';
 import { getAccount } from './walletLedgerService.js';
 import { activeMatchState } from './matchStateStore.js';
 import { logger } from './logger.js';
+import { onlineCount, activeTodayCount } from './presenceService.js';
 
 function pg() { try { return process.env.DATABASE_URL ? getPgPool() : null; } catch { return null; } }
 
@@ -190,7 +191,10 @@ export async function dashboardMetrics(): Promise<Record<string, unknown>> {
   if (!pool) {
     const users = await repositories.users.list(1000).catch(() => []);
     return {
-      registeredUsers: users.length, onlineUsers: 0, dau: 0, newUsersToday: 0,
+      registeredUsers: users.length,
+      onlineUsers: await onlineCount(5).catch(() => 0),
+      dau: await activeTodayCount().catch(() => 0),
+      newUsersToday: 0,
       matchesToday: 0, runningMatches: runningCount, avgMatchSec: 0, todayRevenue: 0,
       pendingWithdrawals: 0, pendingWithdrawAmount: 0, openTickets: 0,
       usersSeries: [], matchesSeries: [], liveFeed: [], system: sys,
@@ -209,8 +213,11 @@ export async function dashboardMetrics(): Promise<Record<string, unknown>> {
   ] = await Promise.all([
     one(`SELECT count(*)::int c FROM users`),
     one(`SELECT count(*)::int c FROM users WHERE created_at >= current_date`),
-    one(`SELECT count(DISTINCT user_id)::int c FROM game_sessions WHERE last_seen_at >= current_date`),
-    one(`SELECT count(DISTINCT user_id)::int c FROM game_sessions WHERE last_seen_at >= now() - interval '5 minutes'`),
+    /* Both of these used to read `game_sessions`, which nothing has ever
+     * written to — so they were always 0 no matter how many people were
+     * playing. They now read the presence table the router keeps up to date. */
+    activeTodayCount().catch(() => 0),
+    onlineCount(5).catch(() => 0),
     one(`SELECT count(*)::int c FROM matches WHERE created_at >= current_date`),
     one(`SELECT coalesce(avg(extract(epoch from (updated_at - created_at))),0)::int c FROM matches WHERE status IN ('result','finished') AND updated_at >= now() - interval '7 days'`),
     q(`SELECT count(*)::int n, coalesce(sum(amount),0)::bigint amt FROM withdraw_requests WHERE status='pending'`),

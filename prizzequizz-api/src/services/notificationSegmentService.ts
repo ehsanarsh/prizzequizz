@@ -128,7 +128,10 @@ export async function resolveSegment(spec: SegmentSpec, cap = 100000): Promise<{
     if (num(s.inactiveDays) != null) add(`(s.ls IS NULL OR s.ls < now() - ($? || ' days')::interval)`, String(num(s.inactiveDays)));
     if (s.base === 'offline') where.push(`(s.ls IS NULL OR s.ls < now() - interval '5 minutes')`);
 
-    const join = needSession ? `LEFT JOIN (SELECT user_id, max(last_seen_at) ls FROM game_sessions GROUP BY user_id) s ON s.user_id = u.id` : '';
+    /* Last-seen comes from user_presence, which the router keeps current.
+     * `game_sessions` was never written to, so an «آنلاین» segment matched
+     * nobody and an «آفلاین» one matched everybody. */
+    const join = needSession ? `LEFT JOIN (SELECT user_id, last_seen_at ls FROM user_presence) s ON s.user_id = u.id::text` : '';
     const sql = `SELECT u.id FROM users u ${join} ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY u.updated_at DESC LIMIT ${cap}`;
     let ids: string[] = [];
     try { const { rows } = await pool.query(sql, args); ids = rows.map((r: any) => r.id); }
