@@ -57,8 +57,14 @@ const rightIndexFor = async (qId: string): Promise<number> =>
 async function run(): Promise<void> {
   _resetRecordMemory(); _resetHeartMemory();
   const cats = recordCategories();
-  if (!cats.length) { console.log('[recordHelps] no categories configured'); process.exit(1); }
+  if (cats.length < 3) { console.log('[recordHelps] needs at least three categories configured'); process.exit(1); }
   await seed(cats.slice(0, 2).map((c) => c.name));
+  /* Reserved for the empty-sample case, and deliberately NOT seeded yet: a
+     'global' run draws from the whole bank, so questions that exist while the
+     earlier tests run can be answered by them no matter which category they
+     sit in. They are created further down, after those tests, which is what
+     actually makes them untouched. */
+  const virginCat = cats[2]!.name;
 
   // ------------------------------------------------------------- ۵۰:۵۰ ----
 
@@ -171,8 +177,12 @@ async function run(): Promise<void> {
     /* This is the case the client refuses to spend the help on: four bars all
        reading ۰٪ is not a hint. Inventing an even 25/25/25/25 would be worse —
        it would look like real data. */
+    /* Created here, after every test above has finished answering, and played
+       in category mode — so the question really is untouched rather than
+       probably untouched. */
+    await seed([virginCat]);
     const uid = await makeUser();
-    const s = await startRun(uid, 'global');
+    const s = await startRun(uid, 'category', virginCat);
     const st = await answerStats(s.run.id, uid);
     assert.equal(st.sample, 0, 'a fresh question has no answers behind it');
     assert.deepEqual(st.percents, [0, 0, 0, 0]);

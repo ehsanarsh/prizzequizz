@@ -83,6 +83,33 @@ const SEED: Array<Omit<ShopItem, 'id' | 'createdAt' | 'updatedAt'>> = [
   { category: 'gift', icon: '🎁', name: 'جعبهٔ سورپرایز', description: 'هدیهٔ شانسی', price: 80000, currency: 'cash', effectKey: 'gift', effectValue: 1, enabled: true, sortOrder: 3 }
 ];
 
+/* Add any built-in item the catalogue is missing, and report what was added.
+ *
+ * seedIfEmpty only fills a table that is COMPLETELY empty, which is right for a
+ * fresh install and useless for an existing one: a server seeded before the
+ * coin packs existed will never get them, and the shop's coins tab stays empty
+ * forever with no way to explain why.
+ *
+ * This is deliberately NOT automatic. Running it on every boot would resurrect
+ * anything an operator had chosen to delete; it is a button in the panel, so
+ * adding the missing items is a decision rather than a surprise.
+ *
+ * Identity is (category, effectKey, effectValue) — the triple that says what an
+ * item DOES. Editing a seeded item's name or price therefore does not make a
+ * duplicate appear. */
+export async function seedMissing(): Promise<{ added: ShopItem[]; skipped: number }> {
+  const existing = await listAllRaw();
+  const key = (x: { category: string; effectKey: string; effectValue: number }) =>
+    x.category + '|' + x.effectKey + '|' + (Number(x.effectValue) || 1);
+  const have = new Set(existing.map((x) => key(x)));
+  const added: ShopItem[] = [];
+  for (const s of SEED) {
+    if (have.has(key(s))) continue;
+    added.push(await saveItem({ ...s }));
+  }
+  return { added, skipped: SEED.length - added.length };
+}
+
 let _seeded = false;
 async function seedIfEmpty(): Promise<void> {
   if (_seeded) return;

@@ -1531,7 +1531,10 @@ function qrEdit(qid){
 
 /* ================= SHOP (catalog CRUD) ================= */
 let SHOP_CAT='';
-const SHOP_CATS={tickets:'🎫 بلیط مسابقات',util:'🧰 کاربردی',cosmetic:'✨ تزئینی',gift:'🎁 هدیه'};
+/* «سکه» was missing here, so the category the backend has always sold coin
+   packs under could not be picked from the dropdown — an operator had to know
+   to type it into the custom-category box, spelled exactly. */
+const SHOP_CATS={tickets:'🎫 بلیط مسابقات',coins:'🪙 سکه',util:'🧰 کاربردی',cosmetic:'✨ تزئینی',gift:'🎁 هدیه'};
 const SHOP_EFFECTS={p5050:'کمکی: حذف دو گزینه',psecond:'کمکی: حق دو انتخاب',pstats:'کمکی: درصد پاسخ',heart:'جان اضافی (❤️)',xp:'شتاب‌دهنده XP',coins:'سکه هدیه',
   'ticket-bronze':'بلیط برنز','ticket-silver':'بلیط نقره','ticket-gold':'بلیط طلا','skin-gold':'اسکین طلایی','skin-neon':'اسکین نئون','skin-rainbow':'اسکین رنگین‌کمان',gift:'هدیه به دوست'};
 /* ---- Banners on the three ticket screens ----
@@ -1613,6 +1616,14 @@ async function renderShopAdmin(){
       '<div class="sub" style="margin-bottom:12px">هر سه صفحه‌ای که بلیط دارند یک بنر یکسان نشان می‌دهند؛ متن و تصویر هرکدام را جدا تنظیم کن.</div>'+
       PROMO_SLOTS.map(function(sl){return promoCard(sl[0],sl[1],(_PROMOS||{})[sl[0]]);}).join('')+
       '<button class="btn ok" onclick="promoSave()">ذخیره تبلیغ‌ها</button></div>'+
+    /* A catalogue built before a category existed never receives it — the coin
+       packs are the case that showed up: the shop's «سکه» tab was empty and
+       nothing in the panel explained why. This adds only what is missing, and
+       only when asked. */
+    '<div class="card" style="margin-bottom:14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">'+
+      '<div style="flex:1;min-width:220px"><b>آیتم‌های پیش‌فرض</b><div class="sub">اگر فروشگاهت پیش از اضافه‌شدن یک دسته ساخته شده باشد (مثلاً بسته‌های سکه)، آن آیتم‌ها هیچ‌وقت خودبه‌خود اضافه نمی‌شوند. این دکمه فقط چیزهای <b>جا افتاده</b> را می‌سازد و به آنچه خودت ساخته یا حذف کرده‌ای دست نمی‌زند.</div></div>'+
+      '<button class="btn ok" onclick="shopSeedMissing()">➕ افزودن آیتم‌های جا افتاده</button>'+
+    '</div>'+
     catTabs+
     '<div class="tbl-wrap"><table><thead><tr>'+['','نام','دسته','قیمت','ارز','اثر','ترتیب','وضعیت','عملیات'].map(c=>'<th>'+c+'</th>').join('')+'</tr></thead><tbody>'+
     (list.length?list.map(it=>'<tr>'+
@@ -1657,6 +1668,14 @@ async function shopSaveItem(id){
     sortOrder:Number($('#sh_order').value||0),badge:$('#sh_badge').value.trim(),enabled:$('#sh_enabled').value==='1'};
   try{await api('POST','/admin/shop/items',body);toast('ذخیره شد ✅','ok');document.querySelector('.modal-bg').remove();render();}catch(e){toast(e.message,'bad');}
 }
+async function shopSeedMissing(){
+  try{
+    const r=await api('POST','/admin/shop/seed-missing',{});
+    const n=(r&&r.addedCount)||0;
+    toast(n?(fa(n)+' آیتم اضافه شد ✅'):'چیزی جا نیفتاده بود — همه‌چیز کامل است', n?'ok':'');
+    render();
+  }catch(e){ toast(e.message,'bad'); }
+}
 async function shopToggle(id){const it=(window._SHOP_ROWS||{})[id];if(!it)return;try{await api('POST','/admin/shop/items',{...it,enabled:!it.enabled});toast(it.enabled?'غیرفعال شد':'فعال شد','ok');render();}catch(e){toast(e.message,'bad');}}
 async function shopDelete(id){if(!confirm('این آیتم حذف شود؟'))return;try{await api('DELETE','/admin/shop/items/'+id);toast('حذف شد','ok');render();}catch(e){toast(e.message,'bad');}}
 
@@ -1674,16 +1693,26 @@ async function renderCharacters(){
   const rows=d.characters||[]; window._CH_ROWS={}; rows.forEach(c=>window._CH_ROWS[c.id]=c);
   window._CH_MAXKB=Math.round((d.imageMaxBytes||600*1024)/1024);
 
-  const counts={all:rows.length,normal:rows.filter(c=>c.kind==='normal').length,vip:rows.filter(c=>c.kind==='vip').length,off:rows.filter(c=>!c.enabled).length};
+  /* «در فروشگاه» is exactly what the game's characters tab shows: enabled AND
+     marked purchasable. The two conditions were only visible by opening each
+     character, so a shop that looked empty gave the operator nothing to go on. */
+  const inShop=c=>c.enabled&&c.viaPurchase;
+  const counts={all:rows.length,shop:rows.filter(inShop).length,normal:rows.filter(c=>c.kind==='normal').length,vip:rows.filter(c=>c.kind==='vip').length,off:rows.filter(c=>!c.enabled).length};
   const tabs='<div class="subtabs">'+
-    [['all','همه'],['normal','معمولی'],['vip','VIP'],['off','غیرفعال']].map(([k,n])=>
+    [['all','همه'],['shop','در فروشگاه'],['normal','معمولی'],['vip','VIP'],['off','غیرفعال']].map(([k,n])=>
       '<button class="'+(CHAR_FILTER===k?'active':'')+'" onclick="CHAR_FILTER=\''+k+'\';render()">'+n+' ('+fa(counts[k])+')</button>').join('')+'</div>';
+  /* Said only when it is true, and it says what to do about it. */
+  const shopHint=counts.shop?'':'<div class="card" style="margin-bottom:12px;border-right:4px solid #E0A93B">'+
+    '<b>تب «کاراکترها»ی فروشگاه الان خالی است</b>'+
+    '<div class="sub">کاراکتر وقتی در فروشگاه بازی دیده می‌شود که هم <b>فعال</b> باشد و هم گزینهٔ <b>خرید</b> در «ویرایش» تیک خورده باشد و برایش <b>قیمت</b> (به سکه) گذاشته باشی. '+
+    (rows.length?'الان '+fa(rows.length)+' کاراکتر داری ولی هیچ‌کدام این دو شرط را با هم ندارند.':'هنوز هیچ کاراکتری نساخته‌ای — با دکمهٔ «افزودن کاراکتر» شروع کن.')+'</div></div>';
 
-  const list=rows.filter(c=>CHAR_FILTER==='all'?true:CHAR_FILTER==='off'?!c.enabled:c.kind===CHAR_FILTER);
+  const list=rows.filter(c=>CHAR_FILTER==='all'?true:CHAR_FILTER==='shop'?inShop(c):CHAR_FILTER==='off'?!c.enabled:c.kind===CHAR_FILTER);
 
   $('#main').innerHTML=head('کاراکترها',
       'هر کاراکتر یک تصویر کامل PNG است. تعداد کاراکترها نامحدود است و افزودن کاراکتر جدید هیچ تغییری در برنامه لازم ندارد. حداکثر حجم تصویر '+fa(window._CH_MAXKB)+' کیلوبایت (تصویر بزرگ خودکار فشرده می‌شود).',
       '<button class="btn pri" onclick="chEdit()">➕ افزودن کاراکتر</button>')
+    +shopHint
     +tabs
     +'<div class="tbl-wrap"><table><thead><tr>'+['','نام','نوع','آزادسازی','دارندگان','در حال استفاده','از قرعه','از جایزه','محبوبیت','وضعیت','عملیات'].map(c=>'<th>'+c+'</th>').join('')+'</tr></thead><tbody>'
     +(list.length?list.map(c=>{
@@ -1693,12 +1722,16 @@ async function renderCharacters(){
       if(c.viaReward)ways.push('جایزه');
       if(c.viaEvent)ways.push('رویداد');
       if(c.viaRandom)ways.push('قرعه');
-      if(c.viaPurchase)ways.push('خرید'+(c.price?' '+fa(c.price):''));
+      if(c.viaPurchase)ways.push('خرید'+(c.price?' '+fa(c.price)+' سکه':' رایگان'));
+      /* Purchasable but switched off never reaches the shop, so say that here
+         rather than letting the «خرید» line imply it is on the shelf. */
+      const shopPill=inShop(c)?'<span class="pill ok" style="margin-inline-start:6px">در فروشگاه</span>'
+        :(c.viaPurchase?'<span class="pill bad" style="margin-inline-start:6px">غیرفعال — در فروشگاه نیست</span>':'');
       return '<tr>'
         +'<td>'+chThumb(c.image,46)+'</td>'
         +'<td><b>'+esc(c.name)+'</b>'+(c.description?'<div class="note" style="max-width:220px">'+esc(c.description.slice(0,60))+'</div>':'')+'</td>'
         +'<td>'+(c.kind==='vip'?'<span class="pill" style="background:linear-gradient(135deg,#FFE9A8,#E0A93B);color:#3A2A00">VIP</span>':'<span class="pill">معمولی</span>')+'</td>'
-        +'<td>'+(ways.length?esc(ways.join(' • ')):'<span class="note">—</span>')+'</td>'
+        +'<td>'+(ways.length?esc(ways.join(' • ')):'<span class="note">—</span>')+shopPill+'</td>'
         +'<td>'+fa(st.owners||0)+'</td>'
         +'<td>'+fa(st.equipped||0)+'</td>'
         +'<td>'+fa(st.fromRandom||0)+'</td>'

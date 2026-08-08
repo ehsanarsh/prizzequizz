@@ -25,7 +25,7 @@ import { getRecordConfig, saveRecordConfig } from '../../services/recordModeServ
 import { createScheduled, listScheduled, cancelScheduled } from '../../services/scheduledNotificationService.js';
 import { resolveSegment, resolveRecipients, describeSegment, type SegmentSpec } from '../../services/notificationSegmentService.js';
 import { createCampaign, recordCampaignResult, listCampaigns, campaignAnalytics, campaignDashboard } from '../../services/notificationCampaignService.js';
-import { listItems as shopList, saveItem as shopSave, removeItem as shopRemove } from '../../services/shopService.js';
+import { listItems as shopList, saveItem as shopSave, removeItem as shopRemove, seedMissing as shopSeedMissing } from '../../services/shopService.js';
 import { login as adminLogin, listAccounts, createAccount, updateAccount, deleteAccount, changeOwnPassword, resolveTokenSync, ADMIN_TABS } from '../../services/adminAccountService.js';
 import { currentAdmin } from '../../services/adminGuard.js';
 import { financeDiagnostics, listWithdrawals, reviewWithdrawal, transactionsToCsv } from '../../services/financeService.js';
@@ -499,6 +499,19 @@ export function registerAdminRoutes(router: Router, base: string): void {
     } catch (e) {
       return error(ctx.res, 422, 'SHOP_SAVE_FAILED', e instanceof Error ? e.message : 'ذخیره ناموفق بود.');
     }
+  });
+  /* Add the built-in items this catalogue is missing.
+   *
+   * A server seeded before a category existed — the coin packs, for instance —
+   * never receives it, because the automatic seed only fills a table that is
+   * completely empty. This tops it up on request. It is a button rather than a
+   * boot step on purpose: run automatically, it would resurrect whatever an
+   * operator had deliberately deleted, every restart. */
+  router.add('POST', `${base}/admin/shop/seed-missing`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    const { added, skipped } = await shopSeedMissing();
+    audit(ctx.userId, 'SHOP_SEED_MISSING', 'shop_item', '', { added: added.length, skipped });
+    json(ctx.res, 200, { added: added.map((i) => ({ id: i.id, name: i.name, category: i.category })), addedCount: added.length, skipped });
   });
   router.add('DELETE', `${base}/admin/shop/items/:id`, async (ctx) => {
     if (!requireAdmin(ctx)) return;
