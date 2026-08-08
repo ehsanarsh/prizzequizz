@@ -4484,7 +4484,8 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
           <div class="wpl-flag silver" id="wpSilver"><em>🏁</em><small>Silver<br>۱۵۰۰</small></div>
           <div class="wpl-flag gold" id="wpGold"><em>🏁</em><small>Gold<br>۳۰۰۰</small></div>
         </div>
-        <div class="wpl-next" id="wpNext">تا Silver <b>۶۸۰</b> امتیاز باقی مانده</div>
+        <!-- The «تا Silver …» line is gone: the flags on the rail already say
+             where the next target is, and the token says how far along it is. -->
       </div>
       <div class="pad" style="padding-top:6px">
         <div class="hero">
@@ -9766,6 +9767,7 @@ function pzLLShopItems(){
 function renderShop(tab){
   _shopCurTab=tab||_shopCurTab;
   if(_shopCurTab==='tickets'){ renderTicketShop(); return; }
+  if(_shopCurTab==='characters'){ renderCharacterShop(); return; }
   const c=document.getElementById('shopContent');if(!c)return;
   /* Helps are prepended from the admin catalogue, with their own prices and
      the player's current count shown on the card. */
@@ -9783,6 +9785,65 @@ function renderShop(tab){
     g.appendChild(d);
   });
 }
+/* THE CHARACTER SHOP.
+   The roster has always carried a price and a «خرید» unlock route with nothing
+   able to take the money. It is a real shelf now: the ones marked for sale are
+   listed with their price in coins, and buying goes to the server, which
+   charges and unlocks. Everything else about a character — how it looks, what
+   else unlocks it — still comes from the roster. */
+async function renderCharacterShop(){
+  const c=document.getElementById('shopContent'); if(!c) return;
+  c.innerHTML='<div style="text-align:center;color:var(--muted);padding:26px;font-weight:800">در حال بارگذاری…</div>';
+  let roster=null;
+  try{ const r=await pzApi('GET','/characters'); roster=(r&&r.data)||null; }catch(e){}
+  if(!roster||!Array.isArray(roster.characters)){
+    c.innerHTML='<div class="wallet-empty" style="text-align:center;padding:30px;color:var(--muted)"><div style="font-size:40px">🦸</div><p style="margin-top:8px">فهرست کاراکترها در دسترس نیست.</p></div>';
+    return;
+  }
+  /* On sale = the operator marked it purchasable. Ones already owned are shown
+     too, marked as owned, so the shelf does not silently shrink as you buy. */
+  const list=roster.characters.filter(x=>x.viaPurchase);
+  if(!list.length){
+    c.innerHTML='<div class="wallet-empty" style="text-align:center;padding:30px;color:var(--muted)"><div style="font-size:40px">🦸</div><p style="margin-top:8px">فعلاً کاراکتری برای فروش نیست.</p></div>';
+    return;
+  }
+  c.innerHTML='<div class="note" style="margin-bottom:10px">کاراکترها با <b>سکه</b> خریداری می‌شوند. بعد از خرید، از بخش «کاراکتر من» می‌توانی فعالش کنی.</div><div class="shop-grid"></div>';
+  const g=c.querySelector('.shop-grid');
+  list.forEach(ch=>{
+    const d=document.createElement('div'); d.className='item'; d.style.position='relative';
+    const owned=!!ch.unlocked;
+    const price=Math.max(0,Number(ch.price)||0);
+    d.innerHTML=(ch.isNew?'<span class="shop-badge" style="position:absolute;top:8px;left:8px;background:var(--bolt,#FFD21F);color:#111;font-size:9px;font-weight:900;padding:2px 7px;border-radius:8px">تازه</span>':'')+
+      '<div class="it-ico" style="height:64px;display:flex;align-items:center;justify-content:center">'+pzFaceHTML({avatar:'',character:ch})+'</div>'+
+      '<b>'+esc0(ch.name||'کاراکتر')+'</b>'+
+      '<p>'+esc0(ch.description||'')+'</p>'+
+      '<div class="price">'+(owned?'✓ داری':(price>0?fa(price)+' 🪙':'رایگان'))+'</div>';
+    if(!owned) d.onclick=()=>buyCharacter(ch,d);
+    else d.style.opacity='.72';
+    g.appendChild(d);
+  });
+}
+async function buyCharacter(ch,el){
+  if(el&&el._busy) return; if(el)el._busy=true;
+  const r=await pzApi('POST','/characters/'+encodeURIComponent(ch.id)+'/purchase',{});
+  if(el)el._busy=false;
+  if(!r||!r.ok){
+    const err=(r&&r.error)||{};
+    if(err.code==='INSUFFICIENT_COINS'){
+      showAaaModal({icon:'🪙',title:'سکهٔ کافی نداری',sub:esc4(err.message||''),
+        primaryText:'خرید سکه',secondaryText:'بعداً',
+        onPrimary:()=>{ closeAaaModal(true); go('shop'); setTimeout(()=>{ const t=[...document.querySelectorAll('#shopTabs .tab')].find(b=>/سکه/.test(b.textContent)); if(t)shopTab(t,'coins'); },60); }});
+    } else toast(err.message||'خرید انجام نشد');
+    return;
+  }
+  sfx('correct'); vib([30]);
+  toast(esc0(ch.name||'کاراکتر')+' خریداری شد ✅');
+  /* The server charged real coins, so the header has to be re-read — the same
+     rule every other grant follows. */
+  pzRefreshHoldings();
+  renderCharacterShop();
+}
+
 /* Load the admin-managed catalog from the server; rebuild tabs + items. Falls
    back to the built-in SHOP if the server is unreachable. */
 async function pzLoadShop(){
@@ -9800,12 +9861,16 @@ async function pzLoadShop(){
   }catch(e){}
 }
 /* Rebuild the shop tab bar so admin-added custom categories appear too. */
-const _SHOP_TAB_LABELS={tickets:'🎫 بلیط مسابقات',util:'🧰 آیتم‌های کاربردی',cosmetic:'✨ آیتم‌های تزئینی',gift:'🎁 هدیه به دوست'};
+const _SHOP_TAB_LABELS={tickets:'🎫 بلیط مسابقات',coins:'🪙 سکه',characters:'🦸 کاراکترها',
+  util:'🧰 آیتم‌های کاربردی',cosmetic:'✨ آیتم‌های تزئینی',gift:'🎁 هدیه به دوست'};
 function pzRebuildShopTabs(serverCats){
   const bar=document.getElementById('shopTabs');if(!bar)return;
-  const order=['tickets','util','cosmetic','gift'];
+  /* Tickets and characters are not in the /shop/items catalogue — tickets come
+     from the game config and characters from their own roster — so both are
+     always offered, and the rest appear when the server has something in them. */
+  const order=['tickets','coins','characters','util','cosmetic','gift'];
   (serverCats||[]).forEach(c=>{if(order.indexOf(c)<0)order.push(c);});
-  const cats=order.filter(c=>c==='tickets'||(SHOP[c]&&SHOP[c].length));
+  const cats=order.filter(c=>c==='tickets'||c==='characters'||(SHOP[c]&&SHOP[c].length));
   bar.innerHTML=cats.map((c,i)=>'<button class="tab'+(c===_shopCurTab?' active':'')+'" onclick="shopTab(this,\''+c+'\')">'+esc0(_SHOP_TAB_LABELS[c]||c)+'</button>').join('');
 }
 /* A help is bought on the SERVER: it takes the money from the wallet ledger and
@@ -11625,7 +11690,10 @@ function renderWeeklyProgress(){
   if(weeklyScore<leagueTargets.bronze){nextName='Bronze';left=leagueTargets.bronze-weeklyScore;}
   else if(weeklyScore<leagueTargets.silver){nextName='Silver';left=leagueTargets.silver-weeklyScore;}
   else if(weeklyScore<leagueTargets.gold){nextName='Gold';left=leagueTargets.gold-weeklyScore;}
-  document.getElementById('wpNext').innerHTML=left>0?'تا '+nextName+' <b>'+fa(left)+'</b> کاپ (🏆) باقی مانده':'همه هدف‌های هفتگی کامل شد!';
+  /* The caption element no longer exists; guarded so this stays safe if it ever
+     comes back rather than throwing here. */
+  { const nx=document.getElementById('wpNext');
+    if(nx) nx.innerHTML=left>0?'تا '+nextName+' <b>'+fa(left)+'</b> کاپ باقی مانده':'همه هدف‌های هفتگی کامل شد!'; }
   requestAnimationFrame(()=>{fill.style.width=(pct-3)+'%';marker.style.left=pct+'%';});
 }
 /* ===== REAL data hydration (header XP bar + hero rank/league + boards) ===== */

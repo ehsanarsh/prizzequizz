@@ -10,7 +10,8 @@ import { bodyObject } from '../../utils/validation.js';
 import {
   buildRoster, equipCharacter, listCharacters, saveCharacter, deleteCharacter,
   getCharacter, characterStats, grantToUsers, allUserIds, CharacterError,
-  UNLOCK_SOURCES, CHARACTER_IMAGE_MAX_BYTES
+  UNLOCK_SOURCES, CHARACTER_IMAGE_MAX_BYTES,
+  purchaseCharacter, CharacterPurchaseError
 } from '../../services/characterSelectionService.js';
 import type { UnlockSource } from '../../services/characterSelectionService.js';
 import {
@@ -50,6 +51,25 @@ export function registerCharacterRoutes(router: Router, base: string): void {
 
   /* Boxes a player may open right now. Weights and odds are NOT published —
    * knowing the exact table would let someone farm a box. */
+  /* Buy a character with coins. The roster has always advertised a price and a
+   * «خرید» unlock route with nothing behind it; this is that half. */
+  router.add('POST', `${base}/characters/:id/purchase`, async (ctx) => {
+    if (!ctx.userId) return error(ctx.res, 401, 'UNAUTHORIZED', 'ابتدا وارد شو.');
+    try {
+      const out = await purchaseCharacter(ctx.userId, ctx.params.id!);
+      /* The whole roster comes back so the client repaints from the server
+       * rather than guessing what changed. */
+      json(ctx.res, 200, { ...out, roster: await buildRoster(ctx.userId) });
+    } catch (e) {
+      if (e instanceof CharacterPurchaseError) {
+        const status = e.code === 'CHARACTER_NOT_FOUND' || e.code === 'USER_NOT_FOUND' ? 404
+          : e.code === 'INSUFFICIENT_COINS' ? 409 : 422;
+        return error(ctx.res, status, e.code, e.message);
+      }
+      throw e;
+    }
+  });
+
   router.add('GET', `${base}/characters/boxes`, async (ctx) => {
     if (!ctx.userId) return error(ctx.res, 401, 'UNAUTHORIZED', 'ابتدا وارد شو.');
     const now = Date.now();

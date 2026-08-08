@@ -319,6 +319,56 @@ export async function grantCharacter(userId: string, characterId: string, source
   return true;
 }
 
+export class CharacterPurchaseError extends Error {
+  constructor(public code: string, message: string) { super(message); }
+}
+
+/* BUYING a character with coins.
+ *
+ * The roster has advertised a price and a «خرید (N سکه)» unlock line since it
+ * was written, and there was no way to pay it — the price was decoration. This
+ * is the missing half.
+ *
+ * Coins live on the user row (users.coins), the same balance the wheel and the
+ * shop credit, so the charge happens there and the unlock is recorded with
+ * source 'purchase'. Already owning it is not an error worth charging for: the
+ * money is only taken when something is actually granted. */
+export async function purchaseCharacter(userId: string, characterId: string): Promise<{
+  characterId: string; charged: number; coins: number; alreadyOwned: boolean;
+}> {
+  await ensureSchema();
+  const c = await getCharacter(characterId);
+  if (!c || c.enabled === false) throw new CharacterPurchaseError('CHARACTER_NOT_FOUND', 'این کاراکتر پیدا نشد.');
+  if (!c.viaPurchase) throw new CharacterPurchaseError('NOT_FOR_SALE', 'این کاراکتر فروشی نیست.');
+  const price = Math.max(0, Math.floor(Number(c.price) || 0));
+
+  const user: any = await repositories.users.findById(userId);
+  if (!user) throw new CharacterPurchaseError('USER_NOT_FOUND', 'کاربر پیدا نشد.');
+
+  /* Owned already — through a box, a reward or a previous purchase. Say so and
+   * charge nothing, so a double tap cannot buy the same character twice. */
+  const owned = await ownedMap(userId);
+  if (owned.has(characterId)) {
+    return { characterId, charged: 0, coins: Number(user.coins) || 0, alreadyOwned: true };
+  }
+
+  const coins = Number(user.coins) || 0;
+  if (coins < price) {
+    throw new CharacterPurchaseError('INSUFFICIENT_COINS',
+      'سکهٔ کافی نداری — ' + price.toLocaleString('fa-IR') + ' سکه لازم است.');
+  }
+
+  /* Grant FIRST, then charge. If the grant fails nothing has been taken; if the
+   * charge fails the player keeps a character they did not pay for, which is
+   * the kinder way for it to break. */
+  const granted = await grantCharacter(userId, characterId, 'purchase');
+  if (!granted) return { characterId, charged: 0, coins, alreadyOwned: true };
+
+  user.coins = coins - price;
+  await repositories.users.save(user);
+  return { characterId, charged: price, coins: user.coins, alreadyOwned: false };
+}
+
 // ---------------------------------------------------------------------------
 // The roster, as one player sees it
 // ---------------------------------------------------------------------------
