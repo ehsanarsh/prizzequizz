@@ -1581,8 +1581,19 @@ let SHOP_CAT='';
    packs under could not be picked from the dropdown — an operator had to know
    to type it into the custom-category box, spelled exactly. */
 const SHOP_CATS={tickets:'🎫 بلیط مسابقات',coins:'🪙 سکه',util:'🧰 کاربردی',cosmetic:'✨ تزئینی',gift:'🎁 هدیه'};
-const SHOP_EFFECTS={p5050:'کمکی: حذف دو گزینه',psecond:'کمکی: حق دو انتخاب',pstats:'کمکی: درصد پاسخ',heart:'جان اضافی (❤️)',xp:'شتاب‌دهنده XP',coins:'سکه هدیه',
-  'ticket-bronze':'بلیط برنز','ticket-silver':'بلیط نقره','ticket-gold':'بلیط طلا','skin-gold':'اسکین طلایی','skin-neon':'اسکین نئون','skin-rainbow':'اسکین رنگین‌کمان',gift:'هدیه به دوست'};
+/* The MATCH tiers are green/blue/red — those are the ones the game charges,
+   grants and counts. Only bronze/silver/gold used to be listed here, so there
+   was no way to configure a real match ticket at all: an operator building one
+   kept the first entry in this list (حذف دو گزینه) without noticing, and the
+   game then correctly announced «یک کمک خریداری شد». Real tiers first, legacy
+   ones kept and labelled so old items keep reading sensibly. */
+const SHOP_EFFECTS={'ticket-green':'🎫 بلیط سبز (مسابقه)','ticket-blue':'🎫 بلیط آبی (مسابقه)','ticket-red':'🎫 بلیط قرمز (مسابقه)',
+  coins:'🪙 سکه',heart:'❤️ جان اضافی',xp:'⚡ شتاب‌دهنده XP',
+  p5050:'کمکی: حذف دو گزینه',psecond:'کمکی: حق دو انتخاب',pstats:'کمکی: درصد پاسخ',
+  'ticket-bronze':'بلیط برنز (قدیمی)','ticket-silver':'بلیط نقره (قدیمی)','ticket-gold':'بلیط طلا (قدیمی)',
+  'skin-gold':'اسکین طلایی','skin-neon':'اسکین نئون','skin-rainbow':'اسکین رنگین‌کمان',gift:'هدیه به دوست'};
+/* Which effects actually hand over a match ticket. */
+const SHOP_TICKET_EFFECTS=['ticket-green','ticket-blue','ticket-red','ticket-bronze','ticket-silver','ticket-gold'];
 /* ---- Banners on the three ticket screens ----
    The duel entry, the Last Survivor entry and the shop's ticket tab each carry
    one admin-owned banner: image + headline + a line of text. They render through
@@ -1678,7 +1689,18 @@ async function renderShopAdmin(){
       '<td>'+esc(SHOP_CATS[it.category]||it.category)+'</td>'+
       '<td><b>'+fa(it.price)+'</b></td>'+
       '<td>'+(it.currency==='cash'?'تومان':'سکه')+'</td>'+
-      '<td>'+esc(SHOP_EFFECTS[it.effectKey]||it.effectKey)+(it.effectValue>1?' ×'+fa(it.effectValue):'')+'</td>'+
+      /* A ticket-category item that hands over something else is exactly the
+         mix-up that made a bought ticket announce itself as a help. Flagged in
+         the list so it can be spotted without opening every row. */
+      '<td>'+(function(){
+        const rows=Array.isArray(it.rewards)?it.rewards:[];
+        const gives=rows.length?rows.map(r=>r.key):[it.effectKey];
+        const txt=rows.length
+          ? rows.map(r=>fa(r.value)+'× '+esc(SHOP_EFFECTS[r.key]||r.key)).join('<br>')
+          : esc(SHOP_EFFECTS[it.effectKey]||it.effectKey)+(it.effectValue>1?' ×'+fa(it.effectValue):'');
+        const bad=it.category==='tickets'&&!gives.some(k=>SHOP_TICKET_EFFECTS.indexOf(k)>=0);
+        return txt+(bad?'<div><span class="pill bad" style="margin-top:4px">بلیط نمی‌دهد!</span></div>':'');
+      })()+'</td>'+
       '<td>'+fa(it.sortOrder)+'</td>'+
       '<td><span class="pill '+(it.enabled?'ok':'bad')+'">'+(it.enabled?'فعال':'غیرفعال')+'</span></td>'+
       '<td><button class="btn sm" onclick="shopEdit(\''+it.id+'\')">ویرایش</button> <button class="btn sm '+(it.enabled?'':'ok')+'" onclick="shopToggle(\''+it.id+'\')">'+(it.enabled?'خاموش':'روشن')+'</button> <button class="btn sm bad" onclick="shopDelete(\''+it.id+'\')">حذف</button></td>'+
@@ -1687,7 +1709,11 @@ async function renderShopAdmin(){
 function shopEdit(id){
   const it=(window._SHOP_ROWS||{})[id]||{};
   const catOpts=Object.keys(SHOP_CATS).map(k=>'<option value="'+k+'"'+(it.category===k?' selected':'')+'>'+esc(SHOP_CATS[k])+'</option>').join('')+'<option value="__custom">دستهٔ دلخواه…</option>';
-  const effOpts=Object.keys(SHOP_EFFECTS).map(k=>'<option value="'+k+'"'+(it.effectKey===k?' selected':'')+'>'+esc(SHOP_EFFECTS[k])+'</option>').join('');
+  /* A brand-new item in the tickets category defaults to a ticket. Falling
+     back to "whatever is first in the list" is precisely how an item meant to
+     sell a ticket ended up granting a help. */
+  const defEff=it.effectKey||((it.category||'')==='tickets'?'ticket-green':'p5050');
+  const effOpts=Object.keys(SHOP_EFFECTS).map(k=>'<option value="'+k+'"'+(defEff===k?' selected':'')+'>'+esc(SHOP_EFFECTS[k])+'</option>').join('');
   modal(id?'ویرایش آیتم':'افزودن آیتم',
     '<div class="grid g3"><div class="field"><label>آیکون (ایموجی)</label><input id="sh_icon" value="'+esc(it.icon||'🛍️')+'" style="text-align:center;font-size:20px"></div>'+
     '<div class="field" style="grid-column:span 2"><label>نام آیتم</label><input id="sh_name" value="'+esc(it.name||'')+'"></div></div>'+
@@ -1774,6 +1800,16 @@ async function shopSaveItem(id){
        that was meant to clear it. */
     rewards:(window._SH_REWARDS||[]).filter(r=>r&&r.key&&Number(r.value)>0),
     image:window._SH_IMG||''};
+  /* The mismatch that caused «یک کمک خریداری شد» on a ticket: an item sitting
+     in the tickets category whose effect hands over something else. It is a
+     legitimate thing to want (a bundle can live there), so this asks rather
+     than refuses — but it never happens silently again. */
+  const rows=body.rewards||[];
+  const gives=rows.length?rows.map(r=>r.key):[body.effectKey];
+  if(cat==='tickets'&&!gives.some(k=>SHOP_TICKET_EFFECTS.indexOf(k)>=0)){
+    const what=gives.map(k=>SHOP_EFFECTS[k]||k).join('، ');
+    if(!confirm('این آیتم در دستهٔ «بلیط مسابقات» است ولی بلیطی نمی‌دهد — چیزی که می‌دهد: '+what+'\n\nبازیکن بعد از خرید همان را می‌بیند. ذخیره شود؟')) return;
+  }
   try{await api('POST','/admin/shop/items',body);toast('ذخیره شد ✅','ok');document.querySelector('.modal-bg').remove();render();}catch(e){toast(e.message,'bad');}
 }
 async function shopSeedMissing(){
