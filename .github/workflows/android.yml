@@ -27,6 +27,10 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # The `secrets` context cannot be used in an `if:` condition, so it is read
+    # into the environment once and the conditions test that instead.
+    env:
+      KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
     steps:
       - uses: actions/checkout@v4
 
@@ -44,13 +48,13 @@ jobs:
       # Present only when the three secrets are set. Absent → debug build.
       - name: Restore the signing key
         id: keystore
-        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+        if: env.KEYSTORE_B64 != ''
         run: |
-          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > "$RUNNER_TEMP/pz.jks"
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/pz.jks"
           echo "path=$RUNNER_TEMP/pz.jks" >> "$GITHUB_OUTPUT"
 
       - name: Build signed AAB + APK
-        if: ${{ steps.keystore.outputs.path != '' }}
+        if: env.KEYSTORE_B64 != ''
         working-directory: android
         run: |
           ./gradlew --no-daemon bundleRelease assembleRelease \
@@ -62,14 +66,14 @@ jobs:
             -PpzVersionCode="${{ inputs.versionCode }}"
 
       - name: Build a debug APK (no signing key configured)
-        if: ${{ steps.keystore.outputs.path == '' }}
+        if: env.KEYSTORE_B64 == ''
         working-directory: android
         run: ./gradlew --no-daemon assembleDebug
 
       # The fingerprint that must appear in assetlinks.json on the domain.
       # Without it Android shows a URL bar and the app looks like a browser.
       - name: Print the signing fingerprint for assetlinks.json
-        if: ${{ steps.keystore.outputs.path != '' }}
+        if: env.KEYSTORE_B64 != ''
         run: |
           keytool -list -v -keystore "${{ steps.keystore.outputs.path }}" \
             -alias "${{ secrets.ANDROID_KEY_ALIAS }}" \
