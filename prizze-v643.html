@@ -3381,9 +3381,13 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
 /* Result (end-of-game) screen must be fully scrollable so the character + score +
    actions are never clipped on shorter screens. */
 #result.center{justify-content:flex-start!important;overflow-y:auto!important;-webkit-overflow-scrolling:touch;padding-top:14px;padding-bottom:22px}
-#result #resultCharSlot{height:118px!important;flex-shrink:0}
-#result #resultChar{max-height:112px!important}
-@media(max-height:680px){#result #resultCharSlot{height:92px!important}#result #resultChar{max-height:88px!important}}
+/* The winner/loser mascot, larger — it is the point of the screen. The result
+   screen still has to fit a phone without scrolling, so the short-screen step
+   below stays and is what protects it. */
+#result #resultCharSlot{height:172px!important;flex-shrink:0}
+#result #resultChar{max-height:168px!important;width:auto}
+@media(max-height:760px){#result #resultCharSlot{height:140px!important}#result #resultChar{max-height:136px!important}}
+@media(max-height:680px){#result #resultCharSlot{height:108px!important}#result #resultChar{max-height:104px!important}}
 @keyframes pzGainIn{0%{opacity:0;transform:translateY(14px) scale(.7)}100%{opacity:1;transform:translateY(0) scale(1)}}
 </style>
 </head>
@@ -3855,6 +3859,21 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
 .mw-base{position:relative;width:min(260px,80vw);margin:-6px auto 0;height:26px;
   background:linear-gradient(180deg,var(--mw-wood),var(--mw-wood-2));border:3px solid #3A2411;
   border-radius:8px;box-shadow:0 6px 0 #2A1A0C,0 12px 20px rgba(0,0,0,.45)}
+/* The spin button with a mascot on each side. The row is the positioning
+   context; the button itself is untouched so its size, shadow and animation
+   stay exactly as they were. */
+.mw-spinrow{position:relative;display:block}
+.mw-side{position:absolute;top:50%;transform:translateY(-50%);width:96px;height:auto;
+  pointer-events:none;user-select:none;z-index:2;
+  filter:drop-shadow(0 6px 10px rgba(0,0,0,.45));
+  animation:mwSideFloat 3.2s ease-in-out infinite}
+.mw-side-r{right:2px}
+.mw-side-l{left:2px;animation-delay:1.6s}
+@keyframes mwSideFloat{0%,100%{transform:translateY(-50%)}50%{transform:translateY(calc(-50% - 7px))}}
+@media (prefers-reduced-motion:reduce){.mw-side{animation:none}}
+/* Narrow phones: the circle needs the middle, so the mascots step back. */
+@media (max-width:360px){.mw-side{width:72px}}
+@media (max-width:320px){.mw-side{display:none}}
 .mw-spinbtn{position:relative;display:block;margin:14px auto 4px;width:118px;height:118px;border-radius:50%;
   border:none;padding:0;cursor:pointer;font-family:inherit;background:transparent;
   -webkit-tap-highlight-color:transparent}
@@ -5581,7 +5600,15 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
       <div class="mw-pointer" id="mwPointer"><i></i><b></b></div>
     </div>
     <div class="mw-base"></div>
-    <button class="mw-spinbtn" id="spinBtn" onclick="spinWheel()"><i></i><span>شروع<br>چرخاندن</span></button>
+    <!-- The button keeps its own centring; the two mascots are absolutely
+         placed beside it so nothing about the circle's geometry changes. Each
+         hides itself if its file is not on the server yet, so a missing upload
+         leaves the wheel exactly as it was rather than showing a broken image. -->
+    <div class="mw-spinrow">
+      <img class="mw-side mw-side-r" id="wheelCharDice"  src="wheeldice.png"  alt="" onerror="this.style.display='none'">
+      <button class="mw-spinbtn" id="spinBtn" onclick="spinWheel()"><i></i><span>شروع<br>چرخاندن</span></button>
+      <img class="mw-side mw-side-l" id="wheelCharMeter" src="wheelmeter.png" alt="" onerror="this.style.display='none'">
+    </div>
     <div class="spin-result" id="spinResult"><span class="sr-ico" id="spinResultIcon">🎁</span><b id="spinResultTitle">جایزه</b><p id="spinResultSub">به حسابت اضافه شد</p></div>
     <div class="spin-note" id="spinNote">بعد از چرخش، جایزه با موشن به هدر منتقل می‌شود.</div>
     <button class="btn btn-ghost spin-bottom-close" onclick="forceCloseSpin()">بستن گردونه</button>
