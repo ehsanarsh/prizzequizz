@@ -1715,6 +1715,52 @@ input,textarea,select,[contenteditable="true"],.pz-selectable,.pz-selectable *{
 
 
 
+/* ===== WHAT IS NEW: badges, presence, pictures in chat =====
+   A badge that only ever says "something happened" makes the player hunt for
+   it. These make it followable: the nav carries a number, the tab carries its
+   share of that number, and the row carries the person's own count. */
+.fr-tab{position:relative}
+.badge-dot{padding:0 4px;box-sizing:border-box}
+/* The tab badges sit clear of the rounded corner rather than half outside it. */
+.fr-tab .badge-dot{top:-6px;right:-4px}
+/* .navitem is overflow:hidden — it has to be, to contain the tap ripple — so a
+   badge hung outside the button was sliced in half and the NUMBER inside it was
+   cut away entirely. Tucked inside the corner it stays whole and readable. */
+.navitem .badge-dot{top:3px;right:3px;min-width:17px;height:17px;font-size:10px;border-width:1.5px}
+.friend-card.has-unread{box-shadow:var(--hard-sm),0 0 0 2px rgba(255,90,72,.28)}
+/* Online: the green light. Steady, not blinking — a friends list that flashes
+   is noise, and the dot on the avatar already reads at a glance. */
+.fr-live{color:var(--ok);font-weight:900}
+.mini-badge.live{background:var(--ok-soft);color:var(--ok);border-color:#000}
+/* `.friend-card .info span` is a DESCENDANT selector carrying nowrap + ellipsis,
+   so it was silently clipping the chips in the badge row too — «۲ ساعت پیش»
+   came out as «۲ ساع…». The row wraps; the chips inside it must not be cut. */
+.friend-card .info .meta span{display:inline-flex;align-items:center;width:auto;overflow:visible;text-overflow:clip;line-height:1.7}
+/* On a 390px phone the three action buttons sat in one unshrinkable row and
+   left the info column THIRTY-FIVE pixels wide — the name and the username
+   were already being ellipsised to nothing there, long before any chip was
+   added. Below 370px a media query stacks the buttons and the row is fine;
+   this gives the same breathing room to the sizes in between, by taking back
+   padding the buttons did not need rather than by doubling the row's height. */
+.fr-actions .btn{padding:8px 7px;font-size:11px}
+.friend-card .info{min-width:0;flex:1 1 auto}
+/* Trimming the padding alone still left ~60px for the name on a 390px phone,
+   because .fr-actions does not shrink. Below 370px the buttons already stack
+   into a column and the row reads perfectly; every phone gets that same
+   arrangement now. Taller cards, but a name column that can hold a name. */
+@media(max-width:480px){
+  .friend-card{align-items:flex-start}
+  .fr-actions{flex-direction:column;align-items:stretch}
+  .fr-actions .chat-unread{align-self:center}
+}
+.friend-card .fav .on,.chat-head .fav .on{box-shadow:0 0 0 2px rgba(51,217,124,.35),0 0 9px rgba(51,217,124,.55)}
+.chat-head .fav{position:relative}
+.chat-head .fav .on{position:absolute;bottom:-3px;left:-3px;width:13px;height:13px;border-radius:50%;background:var(--ok);border:2px solid #000}
+/* A photo in a bubble is the photo, at a size a thumb can actually see. */
+.msg-img{display:block;max-width:100%;width:190px;height:auto;border-radius:12px;border:2px solid #000;box-shadow:0 3px 0 #000;cursor:zoom-in;background:#0c0c10}
+.msg .msg-link{color:#1b5fbf;text-decoration:underline;word-break:break-all}
+.msg.them .msg-link{color:#12459a}
+
 /* ===== SUPPORT CENTER v10 ===== */
 .sup-hero{display:flex;align-items:center;gap:12px;margin-bottom:12px;padding:15px;border:var(--stroke);border-radius:20px;background:linear-gradient(135deg,#233042,#14171d);box-shadow:var(--hard-sm);position:relative;overflow:hidden}.sup-hero::after{content:"🎧";position:absolute;left:-8px;top:-18px;font-size:86px;opacity:.07}.sup-hero .ico{width:54px;height:54px;border-radius:18px;border:2.5px solid #000;background:linear-gradient(180deg,#7fd0fb,#3f9fd8);display:grid;place-items:center;font-size:28px;box-shadow:0 4px 0 #000}.sup-hero b{font-size:16px;font-weight:900}.sup-hero p{font-size:12px;color:var(--muted);font-weight:700;line-height:1.65;margin-top:2px}.sup-statline{display:flex;gap:7px;flex-wrap:wrap;margin-top:8px}.sup-stat{font-size:10.5px;font-weight:900;padding:4px 8px;border-radius:999px;border:2px solid #000;background:var(--ink-3);color:var(--paper)}.sup-stat.ok{color:var(--ok);background:var(--ok-soft)}.sup-tabs{display:grid;grid-template-columns:repeat(5,1fr);gap:7px;margin:10px 0 12px}.sup-tab{border:2px solid #000;border-radius:13px;background:var(--ink-2);color:var(--muted);font-family:inherit;font-size:10.5px;font-weight:900;padding:9px 2px;box-shadow:var(--hard-sm);cursor:pointer}.sup-tab.active{background:linear-gradient(180deg,#FFE24A,var(--bolt-2));color:#141414}.sup-card{background:var(--ink-2);border:var(--stroke);border-radius:18px;padding:14px;margin-bottom:11px;box-shadow:var(--hard-sm)}.sup-card h3{font-size:15px;font-weight:900;margin-bottom:5px}.sup-card p{font-size:12px;color:var(--muted);line-height:1.75;font-weight:700}.sup-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.sup-actions .btn{width:auto;padding:10px 12px;font-size:12px;border-radius:13px;box-shadow:var(--hard-sm)}.ticket-card{display:flex;gap:11px;align-items:flex-start;background:var(--ink-2);border:var(--stroke);border-radius:18px;padding:13px;margin-bottom:10px;box-shadow:var(--hard-sm)}.ticket-icon{width:44px;height:44px;border-radius:14px;background:var(--ink-3);border:2px solid #000;display:grid;place-items:center;font-size:22px;flex-shrink:0}.ticket-info{flex:1;min-width:0}.ticket-info b{display:block;font-size:14px;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ticket-info span{font-size:11px;color:var(--muted);font-weight:700;line-height:1.7}.ticket-badge{display:inline-flex;margin-top:6px;font-size:10px;font-weight:900;border:1.8px solid #000;border-radius:999px;padding:3px 8px}.ticket-badge.open{background:rgba(255,210,31,.16);color:var(--bolt)}.ticket-badge.answered{background:var(--ok-soft);color:var(--ok)}.ticket-badge.closed{background:rgba(255,255,255,.08);color:var(--muted)}.faq-item{background:var(--ink-2);border:var(--stroke);border-radius:17px;margin-bottom:10px;box-shadow:var(--hard-sm);overflow:hidden}.faq-q{width:100%;display:flex;align-items:center;gap:9px;padding:13px;background:transparent;color:var(--paper);border:0;font-family:inherit;text-align:right;cursor:pointer}.faq-q b{flex:1;font-size:13px;font-weight:900}.faq-q span{color:var(--bolt);font-weight:900}.faq-a{display:none;padding:0 14px 14px;color:var(--muted);font-size:12px;line-height:1.8;font-weight:700}.faq-item.open .faq-a{display:block}.status-row{display:flex;align-items:center;gap:11px;padding:13px;background:var(--ink-2);border:var(--stroke);border-radius:17px;margin-bottom:10px;box-shadow:var(--hard-sm)}.status-dot{width:14px;height:14px;border-radius:50%;border:2px solid #000;background:var(--ok);box-shadow:0 0 12px rgba(51,217,124,.7);flex-shrink:0}.status-dot.warn{background:var(--bolt)}.status-row b{font-size:13px}.status-row span{font-size:11px;color:var(--muted)}.sup-chat{display:flex;flex-direction:column;height:calc(100vh - 225px);min-height:430px;background:var(--ink-2);border:var(--stroke);border-radius:20px;box-shadow:var(--hard-sm);overflow:hidden}.sup-chat-head{display:flex;align-items:center;gap:10px;padding:12px;border-bottom:2px solid #000;background:linear-gradient(180deg,#24242b,#19191f)}.agent-av{width:42px;height:42px;border-radius:14px;background:linear-gradient(180deg,#7fd0fb,#3f9fd8);border:2px solid #000;display:grid;place-items:center;font-size:22px}.sup-chat-body{flex:1;overflow-y:auto;padding:14px 12px;display:flex;flex-direction:column;gap:9px}.sup-msg{max-width:82%;padding:10px 12px;border:2px solid #000;border-radius:16px;font-size:12.5px;font-weight:800;line-height:1.7;box-shadow:0 3px 0 #000}.sup-msg.me{align-self:flex-start;background:linear-gradient(180deg,#FFE24A,var(--bolt-2));color:#141414;border-bottom-left-radius:6px}.sup-msg.agent{align-self:flex-end;background:var(--paper);color:#141414;border-bottom-right-radius:6px}.sup-msg small{display:block;font-size:9px;opacity:.62;margin-top:3px}.sup-chat-send{display:flex;gap:8px;padding:10px;border-top:2px solid #000;background:#111116}.sup-chat-send .input{height:46px;padding:11px 13px}.sup-chat-send .btn{width:58px;border-radius:14px;padding:0}.sup-quick{display:flex;gap:7px;overflow-x:auto;padding:8px 10px;border-top:2px solid #000;background:#17171d}.sup-quick button{flex-shrink:0;border:2px solid #000;border-radius:999px;background:var(--ink-3);color:var(--paper);font-family:inherit;font-size:11px;font-weight:900;padding:7px 10px}.contact-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.contact-card{border:var(--stroke);border-radius:17px;background:var(--ink-2);padding:14px 10px;text-align:center;box-shadow:var(--hard-sm);cursor:pointer}.contact-card .ci{font-size:28px;display:block;margin-bottom:6px}.contact-card b{font-size:13px}.contact-card span{display:block;font-size:10.5px;color:var(--muted);margin-top:3px;line-height:1.5}.sup-empty{padding:22px 14px;text-align:center;border:var(--stroke);border-radius:20px;background:var(--ink-2);box-shadow:var(--hard-sm);color:var(--muted);font-size:13px;font-weight:800;line-height:1.8}.sup-empty .big{font-size:42px;display:block;margin-bottom:6px}
 @media(max-width:370px){.sup-tabs{grid-template-columns:repeat(3,1fr)}.sup-tab{font-size:10px}.sup-chat{height:calc(100vh - 205px);min-height:390px}.contact-grid{grid-template-columns:1fr}.sup-hero{padding:13px}.sup-actions .btn{width:100%}}
@@ -8951,7 +8997,7 @@ function settingAction(icon,title,sub,fn,cls){return '<div class="row '+(cls||''
 function choiceBtn(key,val,label){return '<button class="choice '+(appSettings[key]===val?'active':'')+'" onclick="setChoice(\''+key+'\',\''+val+'\')">'+label+'</button>';}
 function openSettingDetail(type){renderSettingDetail(type);go('setting-detail');}
 function toggleSetting(key){appSettings[key]=!appSettings[key];saveSettings();const active=document.querySelector('.screen.active');if(active&&active.id==='setting-detail')renderSettingDetail(active.dataset.type);sfx('select');
-  if(key==='notifications'||key==='notifMatch'||key==='notifLeague'||key==='notifRewards'){try{pzSyncNotifPrefs();}catch(e){}}
+  if(key==='notifications'||key==='notifMatch'||key==='notifLeague'||key==='notifRewards'||key==='notifFriends'){try{pzSyncNotifPrefs();}catch(e){}}
 }
 function setChoice(key,val){appSettings[key]=val;saveSettings();const active=document.querySelector('.screen.active');if(active&&active.id==='setting-detail')renderSettingDetail(active.dataset.type);toast('تنظیمات ذخیره شد ✅');}
 function renderSettingDetail(type){
@@ -8968,7 +9014,7 @@ function renderSettingDetail(type){
     html+=settingSwitch('notifMatch','یادآوری مسابقه','دعوت به دوئل، شروع روم و نوبت بازی');
     html+=settingSwitch('notifLeague','لیگ هفتگی','صعود، بلیت جدید و پایان هفته لیگ');
     html+=settingSwitch('notifRewards','جوایز و کیف پول','واریز جایزه، برداشت و گردونه شانس');
-    html+=settingSwitch('notifFriends','دوستان','دعوت دوستان، پیام و درخواست بازی');
+    html+=settingSwitch('notifFriends','پیام دوستان','وقتی دوستی در چت پیام می‌دهد، روی گوشی خبر بده');
     html+='<div class="set-group-title">ساعت سکوت</div><div class="choice-grid">'+choiceBtn('quietHours','off','خاموش')+choiceBtn('quietHours','night','۲۳ تا ۸')+choiceBtn('quietHours','work','۹ تا ۱۷')+choiceBtn('quietHours','custom','سفارشی')+'</div>';
     html+=settingAction('🔔','تست اعلان','یک اعلان آزمایشی نمایش بده','testNotification()');
   }else if(type==='audio'){
@@ -9029,6 +9075,10 @@ function pzMapNotifPrefs(){
     matchUpdates: on && appSettings.notifMatch!==false,
     leaderboardUpdates: on && appSettings.notifLeague!==false,
     walletUpdates: on && appSettings.notifRewards!==false,
+    /* The «دوستان» switch was drawn on this screen but never sent anywhere, so
+       turning it off changed nothing. It is what decides whether a friend's
+       chat message reaches the phone. */
+    friendMessages: on && appSettings.notifFriends!==false,
     promos: on   /* master on → also receive general/announcement messages */
   };
 }
@@ -9044,7 +9094,8 @@ async function pzLoadNotifPrefs(){
       appSettings.notifMatch=p.matchUpdates!==false;
       appSettings.notifLeague=p.leaderboardUpdates!==false;
       appSettings.notifRewards=p.walletUpdates!==false;
-      appSettings.notifications=(p.matchUpdates||p.leaderboardUpdates||p.walletUpdates||p.promos)!==false;
+      appSettings.notifFriends=p.friendMessages!==false;
+      appSettings.notifications=(p.matchUpdates||p.leaderboardUpdates||p.walletUpdates||p.friendMessages||p.promos)!==false;
       try{saveSettings();}catch(e){}
     }
   }catch(e){}
@@ -9544,13 +9595,56 @@ function openFriendTab(tab){frActiveTab=tab;frActiveChat=null;document.querySele
 function filterFriends(){renderFriendsHub();}
 function clearFriendSearch(){const i=document.getElementById('frSearch');if(i){i.value='';i.focus();}renderFriendsHub();}
 /* ===== Real, DB-backed friends + chat (server is the source of truth) ===== */
-let _frOutgoing=[], _frChatPoll=null, _frLoading=false;
+let _frOutgoing=[], _frChatPoll=null, _frLoading=false, _frLoadedOnce=false;
+/* Filled by pzFriendsBadge() — see there for why the breakdown is per-friend.
+   Declared here because the friends screen renders during start-up, before the
+   badge section is reached, and a `let` read ahead of its declaration throws. */
+let PZ_UNREAD_BY_FRIEND={}, PZ_REQ_COUNT=0;
 function frEsc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 function frTime(iso){ try{ const d=new Date(iso); if(isNaN(d))return 'الان'; return fa(('0'+d.getHours()).slice(-2))+':'+fa(('0'+d.getMinutes()).slice(-2)); }catch(e){ return 'الان'; } }
+/* «آفلاین» on its own tells a player nothing. When the server knows when
+   somebody was last here, say it — and keep it coarse, because a chat does not
+   need to broadcast anyone's exact movements. */
+/* Kept SHORT on purpose. The first version of this said «آخرین بازدید ۲ ساعت
+   پیش» on the username line, where the row is nowrap with an ellipsis — so the
+   whole thing was cut to «…» and the player learned nothing. It is now a chip
+   in the badge row, which wraps, and the words are few enough to fit. */
+function frSeenText(iso){
+  if(!iso) return 'آفلاین';
+  const d=new Date(iso); if(isNaN(d)) return 'آفلاین';
+  const mins=Math.floor((Date.now()-d.getTime())/60000);
+  if(mins<60) return fa(Math.max(1,mins))+' دقیقه پیش';
+  const hrs=Math.floor(mins/60);
+  if(hrs<24) return fa(hrs)+' ساعت پیش';
+  const days=Math.floor(hrs/24);
+  if(days<30) return fa(days)+' روز پیش';
+  return 'آفلاین';
+}
 function mapFriend(sf){
+  const prev=FRIENDS_DATA.find(x=>x.id===sf.id)||{};
   return { id:sf.id, a:sf.avatar||'', ch:sf.character||null, n:sf.displayName||sf.username, u:sf.username, lvl:sf.level||1,
-           on:!!sf.online, unread:sf.unread||0, fav:false, s:(sf.online?'آنلاین':'آفلاین'),
-           league:'سطح '+fa(sf.level||1), last:sf.lastMessage||'', m:(FRIENDS_DATA.find(x=>x.id===sf.id)||{}).m||[] };
+           on:!!sf.online, seen:sf.lastSeenAt||null, unread:sf.unread||0, fav:false,
+           s:(sf.online?'آنلاین':frSeenText(sf.lastSeenAt)),
+           league:'سطح '+fa(sf.level||1), last:sf.lastMessage||'', m:prev.m||[] };
+}
+/* The badge, one level in: the چت tab carries the unread messages and the
+   درخواست‌ها tab carries the pending requests, so the dot on the nav leads
+   somewhere instead of just announcing itself. */
+function frRenderTabBadges(){
+  const unread=FRIENDS_DATA.reduce((s,f)=>s+(Number(f.unread)||0),0);
+  /* Before the list has ever loaded the poller's figure is all we have; after
+     it has, the list is the truth — otherwise rejecting the last request would
+     leave a stale number sitting on the tab for half a minute. */
+  const pairs=[['chats',unread],['requests',_frLoadedOnce?FRIEND_REQUESTS.length:PZ_REQ_COUNT]];
+  pairs.forEach(([tab,n])=>{
+    const el=document.querySelector('#frTabs .fr-tab[data-tab="'+tab+'"]');
+    if(!el) return;
+    el.classList.add('has-badge');
+    let d=el.querySelector('.badge-dot');
+    if(!d){ d=document.createElement('span'); d.className='badge-dot badge-pulse'; el.appendChild(d); }
+    d.textContent=badgeText(n);
+    el.classList.toggle('show-badge',n>0);
+  });
 }
 function mapReq(r){ return { id:r.id, userId:r.userId, a:r.avatar||'', ch:r.character||null, n:r.displayName||r.username, u:r.username, lvl:r.level||1, mutual:0, msg:'می‌خواهد با تو دوست شود' }; }
 async function friendsLoad(){
@@ -9558,19 +9652,49 @@ async function friendsLoad(){
   try{
     const [fr,rq]=await Promise.all([pzApi('GET','/friends'),pzApi('GET','/friends/requests')]);
     if(fr&&fr.ok&&Array.isArray(fr.data)){ const mapped=fr.data.map(mapFriend); FRIENDS_DATA.length=0; mapped.forEach(x=>FRIENDS_DATA.push(x)); }
-    if(rq&&rq.ok&&rq.data){ FRIEND_REQUESTS=(rq.data.incoming||[]).map(mapReq); _frOutgoing=(rq.data.outgoing||[]).map(mapReq); }
-    /* keep the nav red-dot in sync with real requests + unread messages */
-    try{ const unread=FRIENDS_DATA.reduce((s,f)=>s+(Number(f.unread)||0),0); badges.friends=(unread>0||FRIEND_REQUESTS.length>0); saveBadges(); renderBadges(); }catch(e){}
+    if(rq&&rq.ok&&rq.data){ FRIEND_REQUESTS=(rq.data.incoming||[]).map(mapReq); _frOutgoing=(rq.data.outgoing||[]).map(mapReq); _frLoadedOnce=true; }
+    /* keep the nav count in sync with real requests + unread messages */
+    try{ const unread=FRIENDS_DATA.reduce((s,f)=>s+(Number(f.unread)||0),0); badges.friends=unread+FRIEND_REQUESTS.length; saveBadges(); renderBadges(); }catch(e){}
   }catch(e){}
   _frLoading=false;
   renderFriendsHub();
+}
+/* A PICTURE IN A MESSAGE IS A PICTURE.
+ *
+ * Every message body was escaped and dropped in as text, so sending a photo
+ * put its web address in the bubble instead of the photo. A body that is
+ * nothing but the address of an image is now shown as the image — tapping it
+ * opens the existing lightbox — and an ordinary link inside a sentence becomes
+ * a link. Anything else is escaped exactly as before: this must never become a
+ * way for one player to put markup into another player's screen.
+ */
+function frIsImageUrl(s){
+  return /^https?:\/\/[^\s]+\.(png|jpe?g|gif|webp|avif|bmp|svg)(\?[^\s]*)?$/i.test(s)
+      || /^\/(uploads|media|img|images)\/[^\s]+$/i.test(s)
+      || /^data:image\/(png|jpe?g|gif|webp|avif);base64,[A-Za-z0-9+/=]+$/.test(s);
+}
+function frMsgHTML(body){
+  const raw=String(body==null?'':body).trim();
+  if(frIsImageUrl(raw)){
+    /* jsStr for the JavaScript string, frEsc for the attribute it sits in —
+       one without the other leaves a way out of the quotes. */
+    return '<img class="msg-img" src="'+frEsc(raw)+'" alt="تصویر" loading="lazy" onclick="pzOpenPhoto(\''+frEsc(jsStr(raw))+'\')">';
+  }
+  /* Escape FIRST, then linkify what is left — the other order would let a
+     crafted address smuggle an attribute out of the href. */
+  return frEsc(raw).replace(/(https?:\/\/[^\s<]+)/g, (u)=>'<a class="msg-link" href="'+u+'" target="_blank" rel="noopener noreferrer">'+u+'</a>');
 }
 async function frLoadMessages(id){
   const f=FRIENDS_DATA.find(x=>x.id===id); if(!f) return;
   const r=await pzApi('GET','/friends/'+id+'/messages');
   if(r&&r.ok&&r.data&&Array.isArray(r.data.messages)){
-    f.m=r.data.messages.map(m=>[m.mine?'me':'them', frEsc(m.body), frTime(m.at)]);
+    f.m=r.data.messages.map(m=>[m.mine?'me':'them', frMsgHTML(m.body), frTime(m.at)]);
     f.unread=0;
+    /* Reading them here is what clears the count on the server too, so the
+       badge must be recomputed rather than left showing what it just read. */
+    try{ if(PZ_UNREAD_BY_FRIEND) delete PZ_UNREAD_BY_FRIEND[String(id)]; }catch(e){}
+    try{ const n=FRIENDS_DATA.reduce((s,x)=>s+(Number(x.unread)||0),0)+(_frLoadedOnce?FRIEND_REQUESTS.length:PZ_REQ_COUNT);
+         badges.friends=n; saveBadges(); renderBadges(); frRenderTabBadges(); }catch(e){}
   }
 }
 /* Update ONLY the message list — never the input — so typing is never disturbed. */
@@ -9592,6 +9716,7 @@ function frStartChatPoll(id){
 }
 function renderFriendsHub(){
   renderFriendStats();
+  try{ frRenderTabBadges(); }catch(e){}
   const sec=document.getElementById('friends');if(sec)sec.classList.toggle('chat-mode',!!frActiveChat);
   const c=document.getElementById('friendsContent');if(!c)return;
   if(frActiveChat){renderChatView(frActiveChat);return;}
@@ -9606,11 +9731,17 @@ function friendCard(f,mode){
   const star=f.fav?'<span class="star">⭐</span>':'';
   let actions='';
   const isChat=mode==='chat';
-  if(mode==='friend')actions='<button class="btn btn-primary btn-sm" onclick="openFriendChat(\''+f.id+'\')">چت</button><button class="btn btn-ghost btn-sm" onclick="inviteFriend(\''+f.id+'\')">دعوت</button><button class="btn btn-ghost btn-sm profile-btn" onclick="showFriendProfile(\''+f.id+'\')">پروفایل</button>';
+  /* The badge follows the player all the way down to the person who wrote:
+     the count sits on their row in BOTH lists, not only in the چت tab, so
+     «کی پیام داده؟» is answered without opening anything. */
+  if(mode==='friend')actions=unread+'<button class="btn btn-primary btn-sm" onclick="openFriendChat(\''+f.id+'\')">چت</button><button class="btn btn-ghost btn-sm" onclick="inviteFriend(\''+f.id+'\')">دعوت</button><button class="btn btn-ghost btn-sm profile-btn" onclick="showFriendProfile(\''+f.id+'\')">پروفایل</button>';
   else if(isChat)actions=unread;
   const cardClick=isChat?'onclick="openFriendChat(\''+f.id+'\')"':'';
   const profileClick=isChat?'':'onclick="event.stopPropagation();showFriendProfile(\''+f.id+'\')"';
-  return '<div class="friend-card '+(f.on?'online':'')+'" '+cardClick+'><div class="fav" '+profileClick+'>'+pzFaceHTML({avatar:f.a,character:f.ch})+star+(f.on?'<span class="on"></span>':'')+'</div><div class="info" '+profileClick+'><b>'+f.n+'</b><span>@'+f.u+' · '+f.s+'</span><div class="meta"><span class="mini-badge ok">لول '+fa(f.lvl)+'</span><span class="mini-badge y">'+f.league+'</span></div></div><div class="fr-actions">'+actions+'</div></div>';
+  /* Presence lives in the badge row, not on the username line: that line is
+     nowrap+ellipsis, so anything appended to it is the first thing thrown away. */
+  const pres=(f.on?'<span class="mini-badge live">● آنلاین</span>':'<span class="mini-badge">'+frEsc(f.s)+'</span>');
+  return '<div class="friend-card '+(f.on?'online':'')+(f.unread?' has-unread':'')+'" '+cardClick+'><div class="fav" '+profileClick+'>'+pzFaceHTML({avatar:f.a,character:f.ch})+star+(f.on?'<span class="on"></span>':'')+'</div><div class="info" '+profileClick+'><b>'+frEsc(f.n)+'</b><span>@'+frEsc(f.u)+'</span><div class="meta">'+pres+'<span class="mini-badge ok">لول '+fa(f.lvl)+'</span><span class="mini-badge y">'+f.league+'</span></div></div><div class="fr-actions">'+actions+'</div></div>';
 }
 function renderFriendsList(c,q){
   const list=FRIENDS_DATA.filter(f=>friendMatch(f,q)).sort((a,b)=>(b.fav-a.fav)||(b.on-a.on));
@@ -9633,11 +9764,16 @@ function renderAddFriend(c,q){
 async function openFriendChat(id){frActiveChat=id;frActiveTab='chats';document.querySelectorAll('#frTabs .fr-tab').forEach(b=>b.classList.toggle('active',b.dataset.tab==='chats'));const f=FRIENDS_DATA.find(x=>x.id===id);if(f)f.unread=0;renderFriendsHub();await frLoadMessages(id);if(frActiveChat===id)renderChatView(id);frStartChatPoll(id);}
 function renderChatView(id){
   const c=document.getElementById('friendsContent'),f=FRIENDS_DATA.find(x=>x.id===id);if(!c||!f)return;
-  c.innerHTML='<div class="chat-view"><div class="chat-head"><button class="iconbtn" style="width:38px;height:38px;border-radius:12px" onclick="frActiveChat=null;renderFriendsHub()">→</button><div class="fav" onclick="showFriendProfile(\''+f.id+'\')">'+f.a+'</div><div style="flex:1" onclick="showFriendProfile(\''+f.id+'\')"><b>'+f.n+'</b><span>'+f.s+' · @'+f.u+'</span></div><button class="iconbtn" style="width:38px;height:38px;border-radius:12px" onclick="friendMore(\''+f.id+'\')">⋯</button></div><div class="chat-body" id="chatBody">'+f.m.map(m=>'<div class="msg '+m[0]+'">'+m[1]+'<small>'+m[2]+'</small></div>').join('')+'</div><div class="chat-send"><input class="input" id="chatInput" placeholder="پیام بنویس..." onkeydown="if(event.key===\'Enter\')sendChatMsg()"><button class="btn btn-primary" onclick="sendChatMsg()">➤</button></div></div>';
+  /* The avatar used to be dropped in as f.a — but an avatar is a URL, so the
+     chat header showed the ADDRESS of the picture where the picture belonged.
+     pzFaceHTML is what every other list already uses. */
+  const _head='<div class="fav" onclick="showFriendProfile(\''+f.id+'\')">'+pzFaceHTML({avatar:f.a,character:f.ch})+(f.on?'<span class="on"></span>':'')+'</div>';
+  const _st=(f.on?'<span class="fr-live">● آنلاین</span>':frEsc(f.s));
+  c.innerHTML='<div class="chat-view"><div class="chat-head"><button class="iconbtn" style="width:38px;height:38px;border-radius:12px" onclick="frActiveChat=null;renderFriendsHub()">→</button>'+_head+'<div style="flex:1" onclick="showFriendProfile(\''+f.id+'\')"><b>'+frEsc(f.n)+'</b><span>'+_st+' · @'+frEsc(f.u)+'</span></div><button class="iconbtn" style="width:38px;height:38px;border-radius:12px" onclick="friendMore(\''+f.id+'\')">⋯</button></div><div class="chat-body" id="chatBody">'+f.m.map(m=>'<div class="msg '+m[0]+'">'+m[1]+'<small>'+m[2]+'</small></div>').join('')+'</div><div class="chat-send"><input class="input" id="chatInput" placeholder="پیام بنویس..." onkeydown="if(event.key===\'Enter\')sendChatMsg()"><button class="btn btn-primary" onclick="sendChatMsg()">➤</button></div></div>';
   const b=document.getElementById('chatBody'); if(b){b.dataset.sig=f.m.length+'|'+(((f.m[f.m.length-1]||[])[1])||'');}
   setTimeout(()=>{const bb=document.getElementById('chatBody');if(bb)bb.scrollTop=bb.scrollHeight;},60);
 }
-async function sendChatMsg(){const i=document.getElementById('chatInput'),id=frActiveChat,f=FRIENDS_DATA.find(x=>x.id===id);if(!i||!f)return;const txt=i.value.trim();if(!txt)return;i.value='';f.m.push(['me',frEsc(txt),'الان']);f.last=txt;renderChatMessages(id);i.focus();const r=await pzApi('POST','/friends/'+id+'/messages',{body:txt});if(!r||!r.ok){toast((r&&r.error&&r.error.message)||'پیام ارسال نشد');}await frLoadMessages(id);if(frActiveChat===id)renderChatMessages(id);}
+async function sendChatMsg(){const i=document.getElementById('chatInput'),id=frActiveChat,f=FRIENDS_DATA.find(x=>x.id===id);if(!i||!f)return;const txt=i.value.trim();if(!txt)return;i.value='';f.m.push(['me',frMsgHTML(txt),'الان']);f.last=txt;renderChatMessages(id);i.focus();const r=await pzApi('POST','/friends/'+id+'/messages',{body:txt});if(!r||!r.ok){toast((r&&r.error&&r.error.message)||'پیام ارسال نشد');}await frLoadMessages(id);if(frActiveChat===id)renderChatMessages(id);}
 function inviteFriend(id){const f=FRIENDS_DATA.find(x=>x.id===id);if(!f)return;toast('دعوت بازی برای '+f.n+' ارسال شد 🎮');sfx('found');}
 async function sendFriendRequest(){const i=document.getElementById('friendAddInput');const v=(i?.value||'').trim();if(!v){toast('یوزرنیم دوستت رو وارد کن');return;}const r=await pzApi('POST','/friends/requests',{username:v.replace(/^@/,'')});if(r&&r.ok){const st=r.data&&r.data.status;toast(st==='accepted'?'حالا دوست شدید ✅':'درخواست دوستی ارسال شد 🤝');recordMissionEvent('social',1);if(i)i.value='';friendsLoad();}else{toast((r&&r.error&&r.error.message)||'خطا در ارسال درخواست');}}
 async function addSuggestedFriend(id){const s=(typeof FRIEND_SUGGESTIONS!=='undefined'?FRIEND_SUGGESTIONS.find(x=>x.id===id):null);if(!s)return;const r=await pzApi('POST','/friends/requests',{username:s.u});if(r&&r.ok){toast('درخواست دوستی ارسال شد 🤝');recordMissionEvent('social',1);friendsLoad();}else{toast((r&&r.error&&r.error.message)||'خطا');}}
@@ -9646,7 +9782,9 @@ async function declineFriendRequest(id){const r=await pzApi('POST','/friends/req
 function copyInviteLink(){try{navigator.clipboard&&navigator.clipboard.writeText('https://prizze.quiz/invite/PQ-SHAHAB-9865');}catch(e){}recordMissionEvent('social',1);toast('لینک دعوت کپی شد 🎁');}
 function sortFriendsOnline(){FRIENDS_DATA.sort((a,b)=>(b.on-a.on));renderFriendsHub();}
 function showFavoritesOnly(){const i=document.getElementById('frSearch');if(i)i.value='⭐';const c=document.getElementById('friendsContent');const list=FRIENDS_DATA.filter(f=>f.fav);c.innerHTML=list.length?list.map(f=>friendCard(f,'friend')).join(''):'<div class="fr-empty"><span class="big">⭐</span>هنوز دوست محبوب نداری.</div>';}
-function friendMore(id){const f=FRIENDS_DATA.find(x=>x.id===id);if(!f)return;showAaaModal({icon:f.a,title:f.n,sub:'چه کاری انجام بدیم؟',primaryText:f.fav?'حذف از محبوب‌ها':'افزودن به محبوب‌ها',secondaryText:'حذف دوست',primaryClass:'btn-primary',secondaryClass:'btn-red',onPrimary:()=>{f.fav=!f.fav;closeAaaModal(false);renderChatView(id);toast('ذخیره شد ⭐');},onSecondary:()=>{closeAaaModal(false);removeFriend(id);}});}
+/* icon:f.a printed the avatar's URL into the modal — iconHTML is the slot that
+   takes real markup, and pzProfileIcon is what draws a face. */
+function friendMore(id){const f=FRIENDS_DATA.find(x=>x.id===id);if(!f)return;showAaaModal({iconHTML:pzProfileIcon(f.a||'',f.ch||null),icon:'👤',title:f.n,sub:'چه کاری انجام بدیم؟',primaryText:f.fav?'حذف از محبوب‌ها':'افزودن به محبوب‌ها',secondaryText:'حذف دوست',primaryClass:'btn-primary',secondaryClass:'btn-red',onPrimary:()=>{f.fav=!f.fav;closeAaaModal(false);renderChatView(id);toast('ذخیره شد ⭐');},onSecondary:()=>{closeAaaModal(false);removeFriend(id);}});}
 function removeFriend(id){const f=FRIENDS_DATA.find(x=>x.id===id);if(!f)return;showAaaModal({icon:'🗑️',title:'حذف دوست؟',sub:'آیا '+f.n+' از لیست دوستان حذف شود؟ گفتگوی شما هم پاک می‌شود.',primaryText:'حذف',secondaryText:'انصراف',primaryClass:'btn-red',onPrimary:async()=>{clearInterval(_frChatPoll);frActiveChat=null;closeAaaModal(false);const r=await pzApi('DELETE','/friends/'+id,{});toast(r&&r.ok?'دوست حذف شد':'خطا در حذف');friendsLoad();},onSecondary:()=>closeAaaModal(false)});}
 renderFriendStats();renderFriendsHub();
 
@@ -12061,31 +12199,72 @@ const BADGE_KEY='pq_badges_v1';
 let badges={missions:true,shop:true,friends:false,wheel:true,daily:true,rankings:false,events:true,battle:false};
 try{badges={...badges,...JSON.parse(localStorage.getItem(BADGE_KEY)||'{}')};}catch(e){}
 function saveBadges(){try{localStorage.setItem(BADGE_KEY,JSON.stringify(badges));}catch(e){}}
-function attachBadge(el,key,count){if(!el||el.querySelector('.badge-dot'))return;el.classList.add('has-badge');const d=document.createElement('span');d.className='badge-dot badge-pulse';d.textContent=count||'';el.appendChild(d);el.dataset.badgeKey=key;}
+/* A badge is attached once and then kept up to date in place — re-creating it
+   on every render would restart the pulse animation and make it flicker. The
+   value is allowed to be a NUMBER as well as a flag: a plain dot says "there
+   is something", a number says how much, which is what a chat needs. */
+function attachBadge(el,key){
+  if(!el) return null;
+  el.classList.add('has-badge'); el.dataset.badgeKey=key;
+  let d=el.querySelector('.badge-dot');
+  if(!d){ d=document.createElement('span'); d.className='badge-dot badge-pulse'; el.appendChild(d); }
+  return d;
+}
+/* Persian digits, and a cap so a runaway count cannot stretch the nav. */
+function badgeText(v){ const n=Number(v)||0; return n<=0?'':(n>99?'۹۹+':fa(n)); }
 function renderBadges(){
-  attachBadge(document.getElementById('spinHdrBtn'),'wheel','');
-  attachBadge(document.querySelector('#nav-home .navitem[data-t="shop"]'),'shop','');
-  attachBadge(document.querySelector('#nav-home .navitem[data-t="friends"]'),'friends','');
-  attachBadge(document.querySelector('#nav-home .navitem[data-t="rankings"]'),'rankings','');
+  attachBadge(document.getElementById('spinHdrBtn'),'wheel');
+  /* EVERY bottom bar, not just the home one. Each screen renders its own copy
+     of the nav, so badging only #nav-home meant the count vanished the moment
+     the player walked into the shop — the one place a "you have a message"
+     mark most needs to keep following them. */
+  ['shop','friends','rankings'].forEach(k=>{
+    document.querySelectorAll('.bottomnav .navitem[data-t="'+k+'"]').forEach(el=>attachBadge(el,k));
+  });
   /* The daily card is gone; its badge lives on the header button now and is
      driven by the server's claimed-today flag rather than a local flag. */
   try{ pzDailySyncBadge(); }catch(e){}
-  document.querySelectorAll('[data-badge-key]').forEach(el=>el.classList.toggle('show-badge',!!badges[el.dataset.badgeKey]));
+  document.querySelectorAll('[data-badge-key]').forEach(el=>{
+    const v=badges[el.dataset.badgeKey];
+    const numeric=(typeof v==='number');
+    el.classList.toggle('show-badge', numeric ? v>0 : !!v);
+    const d=el.querySelector('.badge-dot');
+    if(d) d.textContent = numeric ? badgeText(v) : '';
+  });
 }
 function markBadgeViewed(key){badges[key]=false;saveBadges();renderBadges();}
-/* Real friends indicator: red dot when there are pending friend requests OR
-   unread messages. Polled in the background so it shows anywhere in the app. */
+
+/* WHAT IS NEW, AND WHERE.
+ *
+ * One cheap call gives the total, and — importantly — WHICH friend each unread
+ * message came from. That is what lets the badge be followed inward: the nav
+ * carries the total, the چت tab carries the messages, the درخواست‌ها tab
+ * carries the requests, and the friend's own row carries their count. Without
+ * the per-friend breakdown the player is told something arrived but not from
+ * whom, which is the complaint this answers.
+ *
+ * It is kept in a module-level map so any screen can read it without another
+ * request, and it is written back onto FRIENDS_DATA so the list is already
+ * correct the moment it opens. */
 async function pzFriendsBadge(){
   if(typeof _tok==='undefined'||!_tok) return;
   try{
-    const [fr,rq]=await Promise.all([pzApi('GET','/friends'),pzApi('GET','/friends/requests')]);
-    let unread=0,reqs=0;
-    if(fr&&fr.ok&&Array.isArray(fr.data)) unread=fr.data.reduce((s,f)=>s+(Number(f.unread)||0),0);
-    if(rq&&rq.ok&&rq.data) reqs=((rq.data.incoming)||[]).length;
-    badges.friends=(unread>0||reqs>0); saveBadges(); renderBadges();
+    const r=await pzApi('GET','/friends/summary');
+    if(!r||!r.ok||!r.data) return;
+    const d=r.data;
+    const per={}; (d.perFriend||[]).forEach(f=>{ per[String(f.id)]=Number(f.unread)||0; });
+    PZ_UNREAD_BY_FRIEND=per; PZ_REQ_COUNT=Number(d.requests)||0;
+    /* Keep the already-loaded list honest, but never re-flag a chat that is
+       open right now — its messages are being marked read as they arrive. */
+    try{ FRIENDS_DATA.forEach(f=>{ if(f.id!==frActiveChat) f.unread=per[String(f.id)]||0; }); }catch(e){}
+    badges.friends=Number(d.total)||0; saveBadges(); renderBadges();
+    try{ frRenderTabBadges(); }catch(e){}
   }catch(e){}
 }
 try{ setInterval(pzFriendsBadge,30000); setTimeout(pzFriendsBadge,3500); }catch(e){}
+/* The bell was counted once at start-up and then never again, so a message
+   that arrived while the game was open left the bell blank. */
+try{ setInterval(()=>{ try{ if(_tok) pzInboxBadge(); }catch(e){} },30000); }catch(e){}
 /* ── DAILY REWARD ─────────────────────────────────────────────────────────
    Was a fifteen-entry array in this file, a streak that started at day 4 for
    everybody, and a claim that handed out 100 practice coins locally no matter
@@ -15391,19 +15570,28 @@ async function pzInboxTap(id){
   /* Track click (also marks read) — CTR + open analytics for the admin. */
   try{ pzApi('POST','/notifications/'+id+'/click',{}); }catch(e){}
   const url=n&&n.data&&n.data.url;
-  if(url){ pzCloseInbox(); pzNotifNav(url); }
+  if(url){ pzCloseInbox(); pzNotifNav(url, n&&n.data); }
   else { if(n)n.readAt=new Date().toISOString(); pzOpenInbox(); }
   try{ pzInboxBadge(); }catch(e){}
 }
 async function pzInboxReadAll(){ try{ await pzApi('POST','/notifications/read-all',{}); }catch(e){} _pzInbox.forEach(n=>n.readAt=n.readAt||new Date().toISOString()); pzOpenInbox(); try{pzInboxBadge();}catch(e){} }
 /* Map a notification deep-link to an in-app screen (best-effort, safe). */
-function pzNotifNav(url){
-  const map={'/home':'home','/shop':'shop','/wallet':'wallet','/profile':'profile','/notifications':null,'/match':'home','/league':'home','/rewards':'home'};
+function pzNotifNav(url,data){
+  const map={'/home':'home','/shop':'shop','/wallet':'wallet','/profile':'profile','/notifications':null,'/match':'home','/league':'home','/rewards':'home','/friends':'friends'};
   const scr=(url in map)?map[url]:'home';
   if(url==='/notifications'){ setTimeout(pzOpenInbox,150); return; }
   try{ if(scr&&typeof go==='function') go(scr); }catch(e){}
   /* Fire the natural entry action for a couple of destinations. */
   try{ if(url==='/wallet'&&typeof renderWallet==='function') renderWallet(); }catch(e){}
+  /* A chat notification carries WHO wrote, so it opens that conversation
+     rather than dropping the player on a list to go and find it. */
+  if(url==='/friends'){
+    const fid=data&&data.friendId;
+    setTimeout(async()=>{
+      try{ await friendsLoad(); }catch(e){}
+      try{ if(fid&&FRIENDS_DATA.some(x=>String(x.id)===String(fid))) openFriendChat(String(fid)); else openFriendTab('chats'); }catch(e){}
+    },200);
+  }
 }
 /* Unread badge on the bell (if present). */
 async function pzInboxBadge(){

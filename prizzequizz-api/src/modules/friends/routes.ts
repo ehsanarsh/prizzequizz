@@ -4,6 +4,48 @@ import { getPgPool } from '../../database/postgres.js';
 import { avatarUrlsFor } from '../../services/avatarService.js';
 import { equippedCharactersFor } from '../../services/characterSelectionService.js';
 import { recordSocial } from '../../services/missionService.js';
+import { lastSeenFor, isOnline } from '../../services/presenceService.js';
+import { notifications } from '../../services/notificationService.js';
+import { repositories } from '../../repositories/index.js';
+import { logger } from '../../services/logger.js';
+
+/* A MESSAGE HAS TO REACH THE PHONE.
+ *
+ * Chat only ever wrote a row; the friend found out when they next opened the
+ * game, which for a message is the same as not being told. It now goes out as
+ * a real push — subject, as everything is, to the player's own switch and the
+ * operator's game-wide one.
+ *
+ * A conversation is a burst, not a series of announcements: twenty messages in
+ * a minute must not be twenty buzzes. One per sender per COALESCE_MS, and the
+ * unread count in the app carries the rest. The window is per (sender →
+ * recipient) so two different friends never silence each other.
+ */
+const COALESCE_MS = 60_000;
+const lastPing = new Map<string, number>();
+function shouldPing(from: string, to: string): boolean {
+  const key = from + '>' + to;
+  const now = Date.now();
+  const prev = lastPing.get(key) ?? 0;
+  if (now - prev < COALESCE_MS) return false;
+  lastPing.set(key, now);
+  /* The map is bounded by active conversations, but a long-running process
+   * should not keep a row for a chat that ended last week. */
+  if (lastPing.size > 5000) {
+    for (const [k, t] of lastPing) if (now - t > COALESCE_MS * 10) lastPing.delete(k);
+  }
+  return true;
+}
+/** Test seam: forget the coalescing window. */
+export function _resetChatPing(): void { lastPing.clear(); }
+
+/* What the tray shows. A picture's URL is not a message anybody wants to read
+ * on a lock screen, so it is described instead. */
+function pushPreview(body: string): string {
+  const t = String(body ?? '').trim();
+  if (/^https?:\/\/\S+\.(png|jpe?g|gif|webp|avif|bmp)(\?\S*)?$/i.test(t) || /^\/(uploads|media|img|images)\/\S+$/i.test(t)) return '📷 عکس فرستاد';
+  return t.length > 120 ? t.slice(0, 117) + '…' : t;
+}
 
 // Real, DB-backed friends system: send request → accept/reject → friends list →
 // 1:1 chat. All state lives in the `friendships` and `friend_messages` tables.
@@ -17,6 +59,33 @@ const pool = () => getPgPool();
  * gets here, so a duplicate request cannot inflate the count. */
 async function bothGainedAFriend(a: string, b: string): Promise<void> {
   await Promise.all([recordSocial(a, 'friendsAdded'), recordSocial(b, 'friendsAdded')]);
+}
+
+/* Sends the message on to the friend's phone. Never throws: a chat message is
+ * saved either way, and a push service having a bad day must not turn a
+ * delivered message into a 500. */
+export async function notifyFriendOfMessage(from: string, to: string, body: string): Promise<boolean> {
+  try {
+    if (!from || !to || from === to) return false;
+    if (!shouldPing(from, to)) return false;
+    /* Through the repository, not a raw query: this has to work on the memory
+     * store too, and a name lookup failing must never be the reason a friend
+     * is not told they have a message. */
+    const sender = await repositories.users.findById(from).catch(() => null);
+    const name = sender?.displayName || sender?.username || 'یک دوست';
+    const n = await notifications.create({
+      userId: to,
+      type: 'friend_message',
+      title: String(name),
+      body: pushPreview(body),
+      /* Tapping it should land on the conversation, not the home screen. */
+      data: { url: '/friends', friendId: String(from), kind: 'friend_message' }
+    });
+    return n.status === 'sent';
+  } catch (e) {
+    logger.warn('friend_message_notify_failed', { to, message: e instanceof Error ? e.message : 'unknown' });
+    return false;
+  }
 }
 
 export function registerFriendRoutes(router: Router, base: string): void {
@@ -36,14 +105,51 @@ export function registerFriendRoutes(router: Router, base: string): void {
         [me]
       );
       const fids = rows.map((r) => String(r.id));
-      const [photos, characters] = await Promise.all([avatarUrlsFor(fids), equippedCharactersFor(fids)]);
-      json(ctx.res, 200, rows.map((r) => ({
-        id: r.id, username: r.username, displayName: r.display_name || r.username,
-        avatar: photos.get(String(r.id)) ?? '', character: characters.get(String(r.id)) ?? null,
-        level: r.level, online: false, unread: Number(r.unread || 0),
-        lastMessage: r.last_body || '', lastAt: r.last_at?.toISOString?.() ?? r.last_at ?? null
-      })));
+      /* `online` was the literal `false` for every friend since this endpoint
+       * was written, so the green light could never come on for anybody. It is
+       * now the real thing: presence is written by every authenticated request. */
+      const [photos, characters, seen] = await Promise.all([
+        avatarUrlsFor(fids), equippedCharactersFor(fids), lastSeenFor(fids)
+      ]);
+      json(ctx.res, 200, rows.map((r) => {
+        const at = seen.get(String(r.id)) ?? null;
+        return {
+          id: r.id, username: r.username, displayName: r.display_name || r.username,
+          avatar: photos.get(String(r.id)) ?? '', character: characters.get(String(r.id)) ?? null,
+          level: r.level, online: isOnline(at), lastSeenAt: at ? at.toISOString() : null,
+          unread: Number(r.unread || 0),
+          lastMessage: r.last_body || '', lastAt: r.last_at?.toISOString?.() ?? r.last_at ?? null
+        };
+      }));
     } catch { json(ctx.res, 200, []); }
+  });
+
+  /* JUST THE NUMBERS BEHIND THE BADGES.
+   *
+   * The badge poller used to call GET /friends every thirty seconds, which
+   * drags an avatar lookup, a character lookup and a presence lookup along for
+   * two integers. This is the same information in one query, so the dot can be
+   * kept honest everywhere in the app without that cost.
+   *
+   * `perFriend` is what lets the badge point at WHO: the nav shows the total,
+   * the chat tab shows the messages, and each row shows its own count.
+   */
+  router.add('GET', `${base}/friends/summary`, async (ctx) => {
+    const me = ctx.userId;
+    const empty = { unread: 0, requests: 0, total: 0, perFriend: [] as Array<{ id: string; unread: number }> };
+    if (!me) return json(ctx.res, 200, empty);
+    try {
+      const [msgs, reqs] = await Promise.all([
+        pool().query(
+          `SELECT sender_id, count(*)::int c FROM friend_messages
+           WHERE recipient_id = $1 AND read_at IS NULL GROUP BY sender_id`, [me]),
+        pool().query(`SELECT count(*)::int c FROM friendships WHERE addressee_id = $1 AND status = 'pending'`, [me])
+      ]);
+      const perFriend = msgs.rows.map((r: any) => ({ id: String(r.sender_id), unread: Number(r.c) || 0 }));
+      const unread = perFriend.reduce((s, f) => s + f.unread, 0);
+      const requests = Number(reqs.rows[0]?.c ?? 0) || 0;
+      json(ctx.res, 200, { unread, requests, total: unread + requests, perFriend });
+    } catch { json(ctx.res, 200, empty); }
   });
 
   // Incoming pending requests (I am the addressee) + my outgoing pending.
@@ -158,6 +264,10 @@ export function registerFriendRoutes(router: Router, base: string): void {
       if (!fr.rows[0]) return error(ctx.res, 403, 'NOT_FRIENDS', 'فقط با دوستان می‌تونی چت کنی');
       const { rows } = await pool().query(`INSERT INTO friend_messages(sender_id, recipient_id, body) VALUES($1,$2,$3) RETURNING id, created_at`, [me, other, text]);
       json(ctx.res, 201, { id: rows[0].id, mine: true, body: text, at: rows[0].created_at?.toISOString?.() ?? rows[0].created_at });
+      /* AFTER the reply, and never awaited: the person typing should not wait
+       * on a push service, and a push that fails must not lose the message
+       * that is already saved. */
+      void notifyFriendOfMessage(me, other, text);
     } catch { error(ctx.res, 500, 'FRIEND_ERROR', 'خطا در ارسال پیام'); }
   });
 }

@@ -90,5 +90,52 @@ export async function activeTodayCount(): Promise<number> {
   return n;
 }
 
+/* HOW RECENTLY EACH OF THESE PEOPLE WAS HERE.
+ *
+ * The friends list needs this per-person, not as a total. Presence is written
+ * at most once every THROTTLE_MS, so a green light must tolerate a gap that
+ * size — ONLINE_MINUTES is comfortably larger, and anyone genuinely gone drops
+ * off within five minutes of closing the game.
+ *
+ * Ids that have never been seen are simply absent from the map; the caller
+ * reads that as offline, which is what it means.
+ */
+export const ONLINE_MINUTES = 5;
+
+export async function lastSeenFor(userIds: string[]): Promise<Map<string, Date>> {
+  const out = new Map<string, Date>();
+  const ids = Array.from(new Set(userIds.map((i) => String(i)).filter(Boolean)));
+  if (!ids.length) return out;
+  const pool = pg();
+  if (pool) {
+    try {
+      await ensureSchema(pool);
+      const { rows } = await pool.query(
+        `SELECT user_id, last_seen_at FROM user_presence WHERE user_id = ANY($1::text[])`, [ids]);
+      for (const r of rows) {
+        const d = r.last_seen_at instanceof Date ? r.last_seen_at : new Date(r.last_seen_at);
+        if (!isNaN(d.getTime())) out.set(String(r.user_id), d);
+      }
+      return out;
+    } catch (e) {
+      /* Falling through to memory would report everyone offline on a database
+       * that is merely slow; saying so is better than a silently dark list. */
+      logger.warn('presence_read_failed', { message: e instanceof Error ? e.message : 'unknown' });
+      return out;
+    }
+  }
+  for (const id of ids) { const t = memSeen.get(id); if (t) out.set(id, new Date(t)); }
+  return out;
+}
+
+/** Is a last-seen stamp recent enough to call someone online? */
+export function isOnline(seen: Date | null | undefined, minutes = ONLINE_MINUTES): boolean {
+  if (!seen) return false;
+  return Date.now() - seen.getTime() <= minutes * 60_000;
+}
+
 /** Test seam. */
 export function _resetPresence(): void { memSeen.clear(); lastWrite.clear(); }
+
+/** Test seam: pretend someone was seen at a given moment. */
+export function _seed(userId: string, at: Date = new Date()): void { memSeen.set(userId, at.getTime()); }

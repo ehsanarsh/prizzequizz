@@ -165,8 +165,8 @@ export const postgresRepositories: RepositoryBundle = {
     async listSubscriptions(userId: string): Promise<PushSubscriptionRecord[]> { const { rows } = await pool().query('select * from push_subscriptions where user_id=$1 and revoked_at is null order by updated_at desc', [userId]); return rows.map(subscriptionFromRow); },
     async saveSubscription(s: PushSubscriptionRecord): Promise<void> { await pool().query(`insert into push_subscriptions(id,user_id,endpoint,p256dh,auth,user_agent,device_label,created_at,updated_at,last_seen_at,revoked_at) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) on conflict(endpoint) do update set user_id=$2,p256dh=$4,auth=$5,user_agent=$6,device_label=$7,updated_at=$9,last_seen_at=$10,revoked_at=$11`, [s.id,s.userId,s.endpoint,s.p256dh,s.auth,s.userAgent??null,s.deviceLabel??null,s.createdAt,s.updatedAt,s.lastSeenAt,s.revokedAt??null]); },
     async revokeSubscription(subscriptionId: string, userId: string): Promise<boolean> { const { rowCount } = await pool().query('update push_subscriptions set revoked_at=now(), updated_at=now() where id=$1 and user_id=$2 and revoked_at is null', [subscriptionId,userId]); return Number(rowCount) > 0; },
-    async getPreferences(userId: string): Promise<NotificationPreferences | null> { const { rows } = await pool().query('select * from notification_preferences where user_id=$1', [userId]); return rows[0] ? preferencesFromRow(rows[0]) : null; },
-    async savePreferences(prefs: NotificationPreferences): Promise<void> { await pool().query(`insert into notification_preferences(user_id,match_updates,leaderboard_updates,wallet_updates,promos,quiet_hours_start,quiet_hours_end,updated_at) values($1,$2,$3,$4,$5,$6,$7,$8) on conflict(user_id) do update set match_updates=$2,leaderboard_updates=$3,wallet_updates=$4,promos=$5,quiet_hours_start=$6,quiet_hours_end=$7,updated_at=$8`, [prefs.userId,prefs.matchUpdates,prefs.leaderboardUpdates,prefs.walletUpdates,prefs.promos,prefs.quietHoursStart??null,prefs.quietHoursEnd??null,prefs.updatedAt]); },
+    async getPreferences(userId: string): Promise<NotificationPreferences | null> { await ensureFriendMessagePref(); const { rows } = await pool().query('select * from notification_preferences where user_id=$1', [userId]); return rows[0] ? preferencesFromRow(rows[0]) : null; },
+    async savePreferences(prefs: NotificationPreferences): Promise<void> { await ensureFriendMessagePref(); await pool().query(`insert into notification_preferences(user_id,match_updates,leaderboard_updates,wallet_updates,promos,friend_messages,quiet_hours_start,quiet_hours_end,updated_at) values($1,$2,$3,$4,$5,$6,$7,$8,$9) on conflict(user_id) do update set match_updates=$2,leaderboard_updates=$3,wallet_updates=$4,promos=$5,friend_messages=$6,quiet_hours_start=$7,quiet_hours_end=$8,updated_at=$9`, [prefs.userId,prefs.matchUpdates,prefs.leaderboardUpdates,prefs.walletUpdates,prefs.promos,prefs.friendMessages!==false,prefs.quietHoursStart??null,prefs.quietHoursEnd??null,prefs.updatedAt]); },
     async listNotifications(userId: string, limit = 50): Promise<NotificationRecord[]> { const { rows } = await pool().query('select * from notifications where user_id=$1 order by created_at desc limit $2', [userId, limit]); return rows.map(notificationFromRow); },
     async saveNotification(n: NotificationRecord): Promise<void> { await pool().query(`insert into notifications(id,user_id,type,title,body,data,channel,status,created_at,sent_at,read_at,error) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) on conflict(id) do update set status=$8,sent_at=$10,read_at=$11,error=$12`, [n.id,n.userId,n.type,n.title,n.body,JSON.stringify(n.data),n.channel,n.status,n.createdAt,n.sentAt??null,n.readAt??null,n.error??null]); },
     async markRead(notificationId: string, userId: string): Promise<boolean> { const { rowCount } = await pool().query("update notifications set read_at=coalesce(read_at,now()), status='read' where id=$1 and user_id=$2", [notificationId,userId]); return Number(rowCount) > 0; },
@@ -175,7 +175,24 @@ export const postgresRepositories: RepositoryBundle = {
 };
 
 function subscriptionFromRow(r: any): PushSubscriptionRecord { return { id:r.id, userId:r.user_id, endpoint:r.endpoint, p256dh:r.p256dh, auth:r.auth, userAgent:r.user_agent ?? undefined, deviceLabel:r.device_label ?? undefined, createdAt:r.created_at?.toISOString?.() ?? r.created_at, updatedAt:r.updated_at?.toISOString?.() ?? r.updated_at, lastSeenAt:r.last_seen_at?.toISOString?.() ?? r.last_seen_at, revokedAt:r.revoked_at?.toISOString?.() ?? r.revoked_at ?? undefined }; }
-function preferencesFromRow(r: any): NotificationPreferences { return { userId:r.user_id, matchUpdates:r.match_updates, leaderboardUpdates:r.leaderboard_updates, walletUpdates:r.wallet_updates, promos:r.promos, quietHoursStart:r.quiet_hours_start ?? undefined, quietHoursEnd:r.quiet_hours_end ?? undefined, updatedAt:r.updated_at?.toISOString?.() ?? r.updated_at }; }
+/* CREATE TABLE IF NOT EXISTS never adds a column to a table that already
+ * exists, so a database created before this column existed would keep failing
+ * every read and write of preferences. The migration file adds it for a fresh
+ * install; this adds it for the ones already out there, once per process. */
+let _friendPrefReady: Promise<void> | null = null;
+function ensureFriendMessagePref(): Promise<void> {
+  if (!_friendPrefReady) {
+    _friendPrefReady = pool()
+      .query('alter table notification_preferences add column if not exists friend_messages boolean not null default true')
+      .then(() => undefined)
+      .catch((e) => { _friendPrefReady = null; throw e; });
+  }
+  return _friendPrefReady;
+}
+/* An older row has no friend_messages value at all; absent must read as ON,
+ * because silently withholding a message is worse than one the player can
+ * switch off. */
+function preferencesFromRow(r: any): NotificationPreferences { return { userId:r.user_id, matchUpdates:r.match_updates, leaderboardUpdates:r.leaderboard_updates, walletUpdates:r.wallet_updates, promos:r.promos, friendMessages:r.friend_messages !== false, quietHoursStart:r.quiet_hours_start ?? undefined, quietHoursEnd:r.quiet_hours_end ?? undefined, updatedAt:r.updated_at?.toISOString?.() ?? r.updated_at }; }
 function notificationFromRow(r: any): NotificationRecord { return { id:r.id, userId:r.user_id, type:r.type, title:r.title, body:r.body, data:r.data ?? {}, channel:r.channel, status:r.status, createdAt:r.created_at?.toISOString?.() ?? r.created_at, sentAt:r.sent_at?.toISOString?.() ?? r.sent_at ?? undefined, readAt:r.read_at?.toISOString?.() ?? r.read_at ?? undefined, error:r.error ?? undefined }; }
 
 

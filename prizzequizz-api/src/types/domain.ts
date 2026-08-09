@@ -229,7 +229,7 @@ export interface IntegritySignal {
   reviewedBy?: UUID | 'system';
 }
 
-export type NotificationType = 'match_update' | 'leaderboard_update' | 'wallet_update' | 'system' | 'promo';
+export type NotificationType = 'match_update' | 'leaderboard_update' | 'wallet_update' | 'system' | 'promo' | 'friend_message';
 export type NotificationChannel = 'in_app' | 'push';
 export type NotificationStatus = 'queued' | 'sent' | 'failed' | 'read';
 
@@ -253,6 +253,9 @@ export interface NotificationPreferences {
   leaderboardUpdates: boolean;
   walletUpdates: boolean;
   promos: boolean;
+  /* A message from a friend. Its own switch, because "someone is talking to
+   * you" is not the same kind of interruption as a league result. */
+  friendMessages: boolean;
   quietHoursStart?: string;
   quietHoursEnd?: string;
   updatedAt: string;

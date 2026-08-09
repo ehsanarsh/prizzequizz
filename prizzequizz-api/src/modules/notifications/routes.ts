@@ -44,6 +44,7 @@ export function registerNotificationRoutes(router: Router, base: string): void {
       leaderboardUpdates: typeof body.leaderboardUpdates === 'boolean' ? body.leaderboardUpdates : undefined,
       walletUpdates: typeof body.walletUpdates === 'boolean' ? body.walletUpdates : undefined,
       promos: typeof body.promos === 'boolean' ? body.promos : undefined,
+      friendMessages: typeof body.friendMessages === 'boolean' ? body.friendMessages : undefined,
       quietHoursStart: optionalString(body, 'quietHoursStart'),
       quietHoursEnd: optionalString(body, 'quietHoursEnd')
     }));

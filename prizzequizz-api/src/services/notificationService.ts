@@ -126,6 +126,7 @@ export class NotificationService {
       leaderboardUpdates: patch.leaderboardUpdates ?? current.leaderboardUpdates,
       walletUpdates: patch.walletUpdates ?? current.walletUpdates,
       promos: patch.promos ?? current.promos,
+      friendMessages: patch.friendMessages ?? current.friendMessages,
       quietHoursStart: typeof patch.quietHoursStart === 'string' ? patch.quietHoursStart : current.quietHoursStart,
       quietHoursEnd: typeof patch.quietHoursEnd === 'string' ? patch.quietHoursEnd : current.quietHoursEnd,
       updatedAt: new Date().toISOString()
@@ -288,12 +289,13 @@ export class NotificationService {
     if (type === 'leaderboard_update') return prefs.leaderboardUpdates;
     if (type === 'wallet_update') return prefs.walletUpdates;
     if (type === 'promo') return prefs.promos;
+    if (type === 'friend_message') return prefs.friendMessages !== false;
     return true;
   }
 }
 
 function defaultPreferences(userId: string): NotificationPreferences {
-  return { userId, matchUpdates: true, leaderboardUpdates: true, walletUpdates: true, promos: false, updatedAt: new Date().toISOString() };
+  return { userId, matchUpdates: true, leaderboardUpdates: true, walletUpdates: true, promos: false, friendMessages: true, updatedAt: new Date().toISOString() };
 }
 
 function inQuietHours(prefs: NotificationPreferences): boolean {

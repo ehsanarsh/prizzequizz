@@ -15,7 +15,7 @@
 import { getPgPool } from '../database/postgres.js';
 import type { NotificationType } from '../types/domain.js';
 
-export const NOTIFICATION_TYPES: NotificationType[] = ['match_update', 'leaderboard_update', 'wallet_update', 'system', 'promo'];
+export const NOTIFICATION_TYPES: NotificationType[] = ['match_update', 'leaderboard_update', 'wallet_update', 'system', 'promo', 'friend_message'];
 
 /** What each switch covers, in the operator's language. */
 export const NOTIFICATION_TYPE_LABELS: Record<string, string> = {
@@ -23,7 +23,8 @@ export const NOTIFICATION_TYPE_LABELS: Record<string, string> = {
   leaderboard_update: 'تغییر رتبه و لیدربرد',
   wallet_update: 'کیف پول، برداشت و جایزه',
   system: 'پیام‌های سیستمی و پشتیبانی',
-  promo: 'تبلیغات و پیشنهادها'
+  promo: 'تبلیغات و پیشنهادها',
+  friend_message: 'پیام دوستان در چت'
 };
 
 export interface NotificationPolicy {
