@@ -1,0 +1,62 @@
+/* PrizzeQuizz as an Android app.
+ *
+ * This is a Trusted Web Activity: the game itself is the site at
+ * https://prizequiz.ir, and the app is a full-screen shell around it. That
+ * choice is deliberate rather than convenient — a TWA runs on the device's
+ * browser engine, so web push keeps working exactly as it does today. A plain
+ * WebView wrapper would have been simpler and would have silently killed
+ * every notification the game sends.
+ *
+ * Nothing about the game has to be rebuilt for a release: the app carries no
+ * copy of it. Deploying index.html to the server updates the app too.
+ */
+plugins { id 'com.android.application' }
+
+android {
+  namespace 'ir.prizequiz.app'
+  compileSdk 34
+
+  defaultConfig {
+    applicationId 'ir.prizequiz.app'
+    minSdk 21
+    targetSdk 34
+    versionCode  (project.findProperty('pzVersionCode') ?: '1') as Integer
+    versionName  (project.findProperty('pzVersionName') ?: '1.0.0')
+    resValue 'string', 'app_name', 'پرایز کوییز'
+    resValue 'string', 'launch_url', 'https://prizequiz.ir/'
+    resValue 'string', 'host_name',  'prizequiz.ir'
+  }
+
+  /* Signing comes from properties passed on the command line (or by the
+   * GitHub workflow, out of repository secrets). No key material lives in
+   * this repository, and none ever should: whoever holds the keystore is the
+   * only one who can ever publish an update to this app. */
+  signingConfigs {
+    release {
+      def ks = project.findProperty('pzKeystore')
+      if (ks) {
+        storeFile file(ks)
+        storePassword project.findProperty('pzStorePassword')
+        keyAlias      project.findProperty('pzKeyAlias')
+        keyPassword   project.findProperty('pzKeyPassword')
+      }
+    }
+  }
+
+  buildTypes {
+    release {
+      minifyEnabled false
+      if (project.findProperty('pzKeystore')) signingConfig signingConfigs.release
+    }
+  }
+
+  compileOptions {
+    sourceCompatibility JavaVersion.VERSION_17
+    targetCompatibility JavaVersion.VERSION_17
+  }
+}
+
+dependencies {
+  implementation 'androidx.browser:browser:1.8.0'
+  implementation 'com.google.androidbrowserhelper:androidbrowserhelper:2.5.0'
+}

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Names the site this app is allowed to open without a browser bar. The
+       domain must serve a matching .well-known/assetlinks.json, or Android
+       shows the URL bar and the app looks like a browser. -->
+  <string name="asset_statements" translatable="false">
+    [{ \"relation\": [\"delegate_permission/common.handle_all_urls\"],
+       \"target\": { \"namespace\": \"web\", \"site\": \"https://prizequiz.ir\" } }]
+  </string>
+</resources>

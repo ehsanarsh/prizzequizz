@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- The game's own background, so the splash and status bar match it. -->
+  <color name="splash_background">#151310</color>
+  <color name="ic_launcher_background">#151310</color>
+</resources>
