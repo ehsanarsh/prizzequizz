@@ -5605,9 +5605,9 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
          hides itself if its file is not on the server yet, so a missing upload
          leaves the wheel exactly as it was rather than showing a broken image. -->
     <div class="mw-spinrow">
-      <img class="mw-side mw-side-r" id="wheelCharDice"  src="wheeldice.png"  alt="" onerror="this.style.display='none'">
+      <img class="mw-side mw-side-r" id="wheelCharDice"  alt="" data-pzsrc="wheeldice">
       <button class="mw-spinbtn" id="spinBtn" onclick="spinWheel()"><i></i><span>شروع<br>چرخاندن</span></button>
-      <img class="mw-side mw-side-l" id="wheelCharMeter" src="wheelmeter.png" alt="" onerror="this.style.display='none'">
+      <img class="mw-side mw-side-l" id="wheelCharMeter" alt="" data-pzsrc="wheelmeter">
     </div>
     <div class="spin-result" id="spinResult"><span class="sr-ico" id="spinResultIcon">🎁</span><b id="spinResultTitle">جایزه</b><p id="spinResultSub">به حسابت اضافه شد</p></div>
     <div class="spin-note" id="spinNote">بعد از چرخش، جایزه با موشن به هدر منتقل می‌شود.</div>
@@ -7298,6 +7298,38 @@ document.querySelectorAll('.bottomnav').forEach(n=>n.innerHTML=navHTML);
 
 /* ============ TOAST ============ */
 let toastT;
+/* ARTWORK UPLOADED AS EITHER FORMAT.
+ *
+ * The panel's uploader converts to WebP; a file copied to the web root by
+ * hand is usually still a PNG. Rather than making the operator care which one
+ * the game expects, each picture is given a list of names and the first that
+ * actually loads is the one used. Nothing is fetched twice: the browser stops
+ * at the first success.
+ *
+ * `onDone(false)` runs only when every candidate has failed, which is what
+ * "the file has not been uploaded yet" looks like. */
+function pzTryArt(el, base, onDone){
+  if(!el) return;
+  const tries = [base + '.webp', base + '.png', base + '.jpg'];
+  let i = -1;
+  const next = () => {
+    i++;
+    if (i >= tries.length){ if (onDone) onDone(false); return; }
+    el.src = tries[i];
+  };
+  el.onerror = next;
+  el.onload  = () => { el.style.display=''; if (onDone) onDone(true, tries[i]); };
+  next();
+}
+/* Every picture on the page that names itself with data-pzsrc. Hidden when
+   none of its formats are there, so a missing upload changes nothing. */
+function pzArtBoot(){
+  document.querySelectorAll('img[data-pzsrc]').forEach(el=>{
+    pzTryArt(el, el.getAttribute('data-pzsrc'), ok => { if(!ok) el.style.display='none'; });
+  });
+}
+try{ if(document.readyState!=='loading') pzArtBoot(); else document.addEventListener('DOMContentLoaded',pzArtBoot); }catch(e){}
+
 /* MESSAGES THE PLAYER CAN ACTUALLY SEE.
  *
  * This was a no-op that logged to the console, and `.toast` also carried a
@@ -8497,12 +8529,17 @@ function endGame(won,amount,isWithdraw,customSub){
     /* If the character PNG isn't on the server (or won't render on Android), show a
        big win/lose EMOJI in its place — emoji always render, so the character is
        never blank. */
-    rc.onerror=()=>{ try{ if(ms)ms.style.display='none'; rc.style.display='none';
+    const giveUp=()=>{ try{ if(ms)ms.style.display='none'; rc.style.display='none';
       let e=document.getElementById('resultCharEmoji');
       if(!e){ e=document.createElement('div'); e.id='resultCharEmoji'; e.style.cssText='font-size:78px;line-height:1;text-align:center;animation:pzPop .5s cubic-bezier(.2,1.5,.4,1)'; rc.parentNode&&rc.parentNode.insertBefore(e,rc); }
       e.style.display=''; e.textContent=won?'🏆':'😢'; }catch(_){ rc.style.display='none'; if(ms)ms.style.display=''; } };
-    rc.onload=()=>{ rc.style.display=''; if(ms)ms.style.display='none'; const e=document.getElementById('resultCharEmoji'); if(e)e.style.display='none'; };
-    rc.src = won ? 'winchar.png' : 'losechar.png';
+    /* .webp first (what the panel's uploader produces), then .png (what a
+       hand-copied file usually is), and only if neither exists the emoji. */
+    pzTryArt(rc, won ? 'winchar' : 'losechar', ok=>{
+      if(!ok){ giveUp(); return; }
+      rc.style.display=''; if(ms)ms.style.display='none';
+      const e=document.getElementById('resultCharEmoji'); if(e)e.style.display='none';
+    });
   })();
   const badge=document.getElementById('resultBadge'),emoji=document.getElementById('resultEmoji');
   const title=document.getElementById('resultTitle'),sub=document.getElementById('resultSub'),amt=document.getElementById('resultAmt');
