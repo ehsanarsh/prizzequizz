@@ -20,8 +20,8 @@ android {
     applicationId 'ir.prizequiz.app'
     minSdk 21
     targetSdk 34
-    versionCode  (project.findProperty('pzVersionCode') ?: '1') as Integer
-    versionName  (project.findProperty('pzVersionName') ?: '1.0.0')
+    versionCode  Integer.parseInt((project.findProperty('pzVersionCode') ?: '1').toString())
+    versionName  (project.findProperty('pzVersionName') ?: '1.0.0').toString()
     resValue 'string', 'app_name', 'پرایز کوییز'
     resValue 'string', 'launch_url', 'https://prizequiz.ir/'
     resValue 'string', 'host_name',  'prizequiz.ir'

@@ -41,9 +41,12 @@ jobs:
 
       - uses: android-actions/setup-android@v3
 
-      - name: Generate the Gradle wrapper
-        working-directory: android
-        run: gradle wrapper --gradle-version 8.9
+      # A pinned Gradle, rather than whatever the runner ships. The runner's
+      # Gradle is 9.x, which the Android plugin 8.5.2 cannot be evaluated by —
+      # the build failed on the first line it read.
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
 
       # Present only when the three secrets are set. Absent → debug build.
       - name: Restore the signing key
@@ -57,7 +60,7 @@ jobs:
         if: env.KEYSTORE_B64 != ''
         working-directory: android
         run: |
-          ./gradlew --no-daemon bundleRelease assembleRelease \
+          gradle --no-daemon bundleRelease assembleRelease \
             -PpzKeystore="${{ steps.keystore.outputs.path }}" \
             -PpzStorePassword="${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" \
             -PpzKeyAlias="${{ secrets.ANDROID_KEY_ALIAS }}" \
@@ -68,7 +71,7 @@ jobs:
       - name: Build a debug APK (no signing key configured)
         if: env.KEYSTORE_B64 == ''
         working-directory: android
-        run: ./gradlew --no-daemon assembleDebug
+        run: gradle --no-daemon assembleDebug
 
       # The fingerprint that must appear in assetlinks.json on the domain.
       # Without it Android shows a URL bar and the app looks like a browser.
