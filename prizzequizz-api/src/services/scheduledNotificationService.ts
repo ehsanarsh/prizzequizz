@@ -152,13 +152,30 @@ export async function dispatchDue(now = Date.now()): Promise<number> {
     const nowIso = new Date(now).toISOString();
     let due: ScheduledNotification[] = [];
     if (pool) {
-      await ensureSchema(pool);
-      // Claim due rows atomically (pending → sending) so only one worker delivers each.
-      const { rows } = await pool.query(
-        `UPDATE scheduled_notifications SET status='sending'
-         WHERE id IN (SELECT id FROM scheduled_notifications WHERE status='pending' AND scheduled_at <= $1 ORDER BY scheduled_at ASC LIMIT 50)
-         RETURNING *`, [nowIso]);
-      due = rows.map(rowToSched);
+      /* THIS IS WHAT KILLED THE API.
+       *
+       * The claim query sat inside `try { } finally { }` with no catch, and the
+       * scheduler calls this as a floating `void dispatchDue()`. So when
+       * Postgres timed out for one moment — "Connection terminated due to
+       * connection timeout" — the rejection had nowhere to go, Node treated it
+       * as an unhandled rejection and exited(1), and the whole game was down
+       * until somebody noticed. A missed sweep is a notification twenty
+       * seconds late; an unhandled rejection is every player locked out.
+       *
+       * There is nothing to do about a momentary database blip except come
+       * back on the next tick, which is exactly what this now does. */
+      try {
+        await ensureSchema(pool);
+        // Claim due rows atomically (pending → sending) so only one worker delivers each.
+        const { rows } = await pool.query(
+          `UPDATE scheduled_notifications SET status='sending'
+           WHERE id IN (SELECT id FROM scheduled_notifications WHERE status='pending' AND scheduled_at <= $1 ORDER BY scheduled_at ASC LIMIT 50)
+           RETURNING *`, [nowIso]);
+        due = rows.map(rowToSched);
+      } catch (e) {
+        logger.warn('scheduled_dispatch_claim_failed', { message: e instanceof Error ? e.message : 'unknown' });
+        return 0;
+      }
     } else {
       due = mem.filter((s) => s.status === 'pending' && Date.parse(s.scheduledAt) <= now);
       for (const s of due) s.status = 'sending' as any;
@@ -204,8 +221,11 @@ let _timer: ReturnType<typeof setInterval> | null = null;
 export function startScheduler(): void {
   if (_timer) return;
   // First sweep shortly after boot, then every 20s.
-  setTimeout(() => { void dispatchDue(); }, 4000);
-  _timer = setInterval(() => { void dispatchDue(); }, 20_000);
+  /* Belt and braces: dispatchDue() handles its own failures now, but a floating
+   * promise from a timer must never be the thing that decides the API stays up. */
+  const sweep = () => { dispatchDue().catch((e) => logger.error('scheduled_dispatch_crashed', { message: e instanceof Error ? e.message : 'unknown' })); };
+  setTimeout(sweep, 4000);
+  _timer = setInterval(sweep, 20_000);
   if (typeof (_timer as any).unref === 'function') (_timer as any).unref();
   logger.info('scheduled_notification_scheduler_started', {});
 }
