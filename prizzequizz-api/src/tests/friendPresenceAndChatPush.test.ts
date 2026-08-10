@@ -230,6 +230,47 @@ async function run(): Promise<void> {
     _resetPolicy();
   });
 
+  /* ── the regression that broke a live game ──────────────────────────
+   *
+   * Adding a friend_messages column put a schema statement underneath
+   * getPreferences, which sits underneath notifications.create(), which is
+   * awaited WITHOUT a catch by "buy a ticket", "finish a match" and "request a
+   * withdrawal". A database that would not take the ALTER therefore made those
+   * three things return 500. These lock that door.
+   */
+  await check('a notification still goes out when preferences cannot be read', async () => {
+    const to = await withPhone();
+    const real = repositories.notifications.getPreferences;
+    repositories.notifications.getPreferences = async () => { throw new Error('permission denied for table notification_preferences'); };
+    try {
+      const n = await notifications.create({ userId: to, type: 'wallet_update', title: 'بلیت خریداری شد', body: 'فعال شد' });
+      assert.equal(n.status, 'sent', 'the player is still told, using the defaults');
+    } finally { repositories.notifications.getPreferences = real; }
+  });
+
+  await check('buying a ticket does not fail because a preference could not be saved', async () => {
+    /* create() is awaited bare on that path — if it throws, the purchase 500s
+       even though the ticket was already granted. */
+    const to = await player();
+    const real = repositories.notifications.savePreferences;
+    repositories.notifications.savePreferences = async () => { throw new Error('column "friend_messages" of relation "notification_preferences" does not exist'); };
+    try {
+      await notifications.create({ userId: to, type: 'wallet_update', title: 'بلیت خریداری شد', body: 'فعال شد' });
+      assert.ok(true, 'no exception escaped to the purchase');
+    } finally { repositories.notifications.savePreferences = real; }
+  });
+
+  await check('and a chat message survives the same failure', async () => {
+    _resetChatPing();
+    const from = await player(), to = await withPhone();
+    const real = repositories.notifications.getPreferences;
+    repositories.notifications.getPreferences = async () => { throw new Error('boom'); };
+    try {
+      await notifyFriendOfMessage(from, to, 'سلام');
+      assert.equal((await inbox(to)).length, 1);
+    } finally { repositories.notifications.getPreferences = real; }
+  });
+
   await check('notifying never throws, whatever it is handed', async () => {
     _resetChatPing();
     await notifyFriendOfMessage('', 'nobody', 'x');

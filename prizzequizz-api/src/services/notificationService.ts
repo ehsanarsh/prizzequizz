@@ -282,8 +282,24 @@ export class NotificationService {
     await repositories.notifications.saveNotification(notification);
   }
 
+  /* A PREFERENCE LOOKUP MUST NEVER BREAK WHAT TRIGGERED IT.
+   *
+   * create() is awaited without a catch on the paths that buy a ticket, finish
+   * a match and request a withdrawal — so anything that can throw down here
+   * could turn "you bought a ticket" into a 500. It used to be a plain SELECT
+   * and looked harmless; the moment a schema statement was added underneath it
+   * that stopped being true. Whatever the reason, an unreadable preference
+   * falls back to the defaults: the player gets the notification, which is the
+   * safe direction to fail in, and the game carries on.
+   */
   private async allowedByPreference(userId: string, type: NotificationType): Promise<boolean> {
-    const prefs = await this.preferences(userId);
+    let prefs: NotificationPreferences;
+    try {
+      prefs = await this.preferences(userId);
+    } catch (e) {
+      logger.warn('notification_preferences_unreadable', { userId, message: e instanceof Error ? e.message : 'unknown' });
+      prefs = defaultPreferences(userId);
+    }
     if (inQuietHours(prefs)) return false;
     if (type === 'match_update') return prefs.matchUpdates;
     if (type === 'leaderboard_update') return prefs.leaderboardUpdates;
