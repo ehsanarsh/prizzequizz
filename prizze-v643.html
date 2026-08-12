@@ -10659,24 +10659,35 @@ function pzBannerMount(slot,screenId){
  * WITHOUT the banner, and the banner's height becomes real scroll distance.
  * The header is sticky, so it stays put while the banner slides under it.
  */
+let PZ_HOME_BANNER_SEEN=false;   /* shown by itself once per session */
 function pzHomeBannerFit(host){
   const sc=document.getElementById('home'), stage=sc&&sc.querySelector('.hstage');
   if(!sc||!stage) return;
   const has=host.innerHTML.trim().length>0;
-  if(!has){
-    sc.classList.remove('pz-hasbanner');
-    stage.style.height='';
-    return;
-  }
-  /* The stage gets the height it would have had with NO banner: the screen
-     minus everything else on it. Measuring the stage directly does not work —
-     by the time the banner is in the DOM the stage has already been squeezed,
-     and freezing that just locks the squeeze in. */
+  if(!has){ sc.classList.remove('pz-hasbanner'); stage.style.height=''; return; }
+  /* Coming back to home, this used to run while the screen was still hidden:
+     every measurement was 0, the stage was pinned to its 140px floor, and the
+     page had nothing left to scroll. Wait for a laid-out screen. */
+  if(sc.clientHeight<200){ requestAnimationFrame(()=>pzHomeBannerFit(host)); return; }
+  /* Measure from the clean state: drop last visit's pinned height first, so
+     the figure comes from the layout as it would be with no banner rather
+     than from whatever the previous visit left behind. */
+  stage.style.height='';
+  sc.classList.remove('pz-hasbanner');
+  void sc.offsetHeight;
   let used=0;
   for(const el of sc.children){ if(el!==host&&el!==stage) used+=el.getBoundingClientRect().height; }
   const h=Math.max(140, Math.round(sc.clientHeight-used));
   stage.style.height=h+'px';
   sc.classList.add('pz-hasbanner');
+  /* Shown by itself the first time home is seen, and after that it waits above
+     the fold: home opens scrolled past it, and anyone who wants it pulls down.
+     A banner that reappears on every single visit is an advert, not a banner. */
+  requestAnimationFrame(()=>{
+    const bh=host.offsetHeight||0;
+    if(!PZ_HOME_BANNER_SEEN){ sc.scrollTop=0; PZ_HOME_BANNER_SEEN=true; }
+    else if(bh>0){ sc.scrollTop=bh; }
+  });
 }
 /* Screens with no banner code of their own get theirs when they open. */
 const PZ_BANNER_SCREENS=['home','rankings','friends','wallet','missions','profile','support'];

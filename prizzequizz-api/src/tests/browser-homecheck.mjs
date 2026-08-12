@@ -240,6 +240,55 @@ console.log('the banner is the one exception:');
   ok('removing the banner puts home back to one screen', r.afterSh <= r.afterCh + 2, r.afterSh + ' vs ' + r.afterCh);
 }
 
+console.log('leaving home and coming back:');
+{
+  /* The report: leave home, come back, and the banner can no longer be
+     scrolled away. Driven through the REAL path — the banner system mounts it
+     from inside showScreen, BEFORE the screen is made visible, so every
+     measurement taken there is 0. Calling the fit by hand on a screen that is
+     already on-screen tests nothing. */
+  const r = await page.evaluate(async () => {
+    /* Make the banner system produce a banner for the home slot. */
+    window.pzPromoHTML = () => '<div style="height:150px;background:#333">بنر</div>';
+    try { (0, eval)('pzPromoHTML=window.pzPromoHTML'); } catch (e) { /* script scope */ }
+    try { (0, eval)('PZ_HOME_BANNER_SEEN=false'); } catch (e) { /* ignore */ }
+    const home = document.getElementById('home');
+    const snap = () => ({ sh: home.scrollHeight, ch: home.clientHeight, top: home.scrollTop,
+                          stage: parseFloat((document.querySelector('.hstage') || {}).style?.height) || 0,
+                          card: Math.round((document.getElementById('mcard') || { getBoundingClientRect: () => ({ height: 0 }) }).getBoundingClientRect().height) });
+
+    (0, eval)("go('rankings')"); await new Promise((r2) => setTimeout(r2, 200));
+    (0, eval)("go('home')");    await new Promise((r2) => setTimeout(r2, 400));
+    const first = snap();
+
+    const visits = [];
+    for (let i = 0; i < 3; i++) {
+      (0, eval)("go('rankings')"); await new Promise((r2) => setTimeout(r2, 180));
+      (0, eval)("go('home')");     await new Promise((r2) => setTimeout(r2, 400));
+      visits.push(snap());
+    }
+    home.scrollTop = 0; await new Promise((r2) => setTimeout(r2, 120));
+    const host = home.querySelector('.tk-promo-host');
+    const reachable = !!host && host.getBoundingClientRect().bottom > 10;
+
+    /* Put the page back for whatever runs after this. */
+    window.pzPromoHTML = () => '';
+    try { (0, eval)('pzPromoHTML=window.pzPromoHTML'); } catch (e) { /* ignore */ }
+    (0, eval)("go('rankings')"); await new Promise((r2) => setTimeout(r2, 150));
+    (0, eval)("go('home')");     await new Promise((r2) => setTimeout(r2, 300));
+    return { first, visits, reachable };
+  });
+  const last = r.visits[r.visits.length - 1];
+  ok('the banner still scrolls after coming back', last.sh > last.ch + 100, JSON.stringify(last));
+  /* The failure mode was a stage pinned to its 140px floor, which also left
+     the card a stub — so check the card survived, not just the scroll. */
+  ok('and the card is not left a stub', r.visits.every((v) => v.card > 200), r.visits.map((v) => v.card).join(','));
+  ok('the stage keeps a real height on every visit', r.visits.every((v) => v.stage > 300), r.visits.map((v) => v.stage).join(','));
+  ok('the banner shows itself on the first sight of home', r.first.top === 0, 'scrollTop ' + r.first.top);
+  ok('and on later visits it waits above the fold', r.visits.every((v) => v.top > 100), r.visits.map((v) => v.top).join(','));
+  ok('but pulling down still brings it back', r.reachable);
+}
+
 ok('no script errors on the new home', errs.length === 0, errs.slice(0, 2).join(' | '));
 await page.screenshot({ path: '/tmp/claude-0/-home-user-prizzequizz/8e7dbfdd-7716-52fe-a640-0feaacd6599f/scratchpad/home-real.png' });
 await browser.close(); server.close();
