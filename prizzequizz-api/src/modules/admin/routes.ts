@@ -31,6 +31,7 @@ import { createCampaign, recordCampaignResult, listCampaigns, campaignAnalytics,
 import { listItems as shopList, saveItem as shopSave, removeItem as shopRemove, seedMissing as shopSeedMissing } from '../../services/shopService.js';
 import { login as adminLogin, listAccounts, createAccount, updateAccount, deleteAccount, changeOwnPassword, resolveTokenSync, ADMIN_TABS } from '../../services/adminAccountService.js';
 import { currentAdmin } from '../../services/adminGuard.js';
+import { badgeCounts, markScreenSeen, isQueueScreen } from '../../services/adminBadgeService.js';
 import { getPolicy, setPolicy, NOTIFICATION_TYPES, NOTIFICATION_TYPE_LABELS } from '../../services/notificationPolicyService.js';
 import { financeDiagnostics, listWithdrawals, reviewWithdrawal, transactionsToCsv } from '../../services/financeService.js';
 import { listRewardHolds, rewardHoldDiagnostics, reviewRewardHold } from '../../services/rewardReviewService.js';
@@ -59,7 +60,36 @@ function maskCode(code: string): string {
   return c.slice(0, 4) + '••••' + c.slice(-4);
 }
 
+/* Who is looking. The master key is one identity; every other admin is their
+ * own, so their badges are their own. */
+function badgeAdminId(ctx: any): string {
+  const who = currentAdmin(ctx);
+  return who.account?.id ? 'acc:' + who.account.id : 'master';
+}
+
 export function registerAdminRoutes(router: Router, base: string): void {
+  /* ===== What is new, and where =====
+   * Nothing on the panel moves when a payout request or a support ticket
+   * arrives, so the only way to find one was to open every tab. These two
+   * endpoints are what the sidebar counts come from.
+   *
+   * The mark is per admin account: two people share the panel, and one of them
+   * opening the finance tab must not clear the other's badge. */
+  router.add('GET', `${base}/admin/badges`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    json(ctx.res, 200, await badgeCounts(badgeAdminId(ctx), (ctx as any).adminPerms));
+  });
+  router.add('POST', `${base}/admin/badges/seen`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    const screen = String(((ctx.body ?? {}) as any).screen || '').trim().slice(0, 60);
+    if (!screen) return error(ctx.res, 422, 'SCREEN_REQUIRED', 'کدام صفحه؟');
+    /* The previous mark, not the new one — everything after it is what this
+     * admin is about to see for the first time, and that is what the table
+     * tags «جدید». Returning the new mark would tag nothing, ever. */
+    const previous = await markScreenSeen(badgeAdminId(ctx), screen);
+    json(ctx.res, 200, { screen, previous, isQueue: isQueueScreen(screen) });
+  });
+
   /* ===== The code that guards a payout =====
    * It was the constant "1234", identical for every player and never sent.
    * The operator can now switch the requirement off, change its length and

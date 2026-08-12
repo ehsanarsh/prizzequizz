@@ -32,6 +32,12 @@ aside::-webkit-scrollbar{width:6px}aside::-webkit-scrollbar-thumb{background:var
 .nav button.active{background:var(--panel2);color:var(--ink)}
 .nav button:hover{color:var(--ink)}
 .nav .ico{width:18px;text-align:center}
+/* «چه چیزِ تازه‌ای آمده» — the same count on the sidebar row, on the subtab
+   inside it, and on the row itself, so it can be followed all the way in. */
+.pzb{margin-inline-start:auto;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--bad,#e5484d);color:#fff;font-size:10.5px;font-weight:900;display:inline-flex;align-items:center;justify-content:center;line-height:1;flex:none}
+.subtabs button .pzb{margin-inline-start:6px;transform:translateY(-1px)}
+.subtabs button.active .pzb{background:#1a1400;color:var(--gold)}
+.pz-new{display:inline-block;background:var(--bad,#e5484d);color:#fff;font-size:9.5px;font-weight:900;border-radius:5px;padding:1px 5px;margin-inline-start:6px;vertical-align:middle}
 main{padding:22px 24px;overflow:auto;max-height:100vh}
 .head{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;gap:12px;flex-wrap:wrap}
 .head h2{margin:0;font-size:19px}.head .sub{color:var(--muted);font-size:12px;margin-top:2px}
@@ -151,6 +157,7 @@ async function enterPanel(){
   try{ await loadMe(); }catch(e){ showLogin((e&&e.message)||'نشست منقضی شده؛ دوباره وارد شو'); return false; }
   $('#login').classList.add('hidden');$('#shell').classList.remove('hidden');
   await loadCfg(); buildNav();
+  await badgeStart();          // counts first, so the first screen opens with them
   // land on the first tab this account may actually see
   const first=(NAV.flatMap(g=>g[1]).map(p=>p[0]).filter(canTab))[0]||'dashboard';
   go(canTab('dashboard')?'dashboard':first);
@@ -206,14 +213,75 @@ function navLeaves(){
   }));
   return out;
 }
+/* ---- What is new, and where ----
+   A payout request or a support ticket arrives and nothing on the panel moves,
+   so the only way to find one was to open every tab. The server counts what is
+   waiting per screen; this carries the number all the way in — the sidebar
+   row, the subtab inside it, then the row in the table.
+
+   Two kinds, and the difference matters: a QUEUE (pending payouts, open
+   tickets) clears when the work is done, never because somebody looked at the
+   tab; a NEW count (money movements, signups) is about arrival, so opening the
+   screen is what clears it. The server decides which is which. */
+let PZB={screens:{},total:0};      // what the server says is waiting
+const PZB_SINCE={};                // screen → when THIS admin last looked (for row tags)
+let PZB_TIMER=null;
+
+function badgeFor(key){
+  /* A merged row carries the sum of the screens behind it — otherwise a
+     payout sitting under «دریافت جایزه» would be invisible until the row was
+     opened, which is the problem this is meant to solve. */
+  if(TAB_GROUPS[key]) return groupMembers(key).reduce((n,t)=>n+badgeFor(t[0]),0);
+  const b=PZB.screens[key];
+  return b&&b.count>0?b.count:0;
+}
+function badgeHTML(key){
+  const n=badgeFor(key);
+  return n>0?'<span class="pzb">'+fa(n>99?'99+':n)+'</span>':'';
+}
+async function badgeLoad(){
+  try{
+    const d=await api('GET','/admin/badges');
+    if(d&&d.screens){ PZB=d; buildNav(); paintGroupBar(); }
+  }catch(e){ /* a badge is decoration — never let it break the panel */ }
+}
+/* Tell the server this admin has now looked, and keep the PREVIOUS mark: rows
+   newer than it are what they have not seen, and get a «جدید» tag. */
+async function badgeSeen(screen){
+  try{
+    const r=await api('POST','/admin/badges/seen',{screen});
+    if(r&&'previous' in r) PZB_SINCE[screen]=r.previous||null;
+  }catch(e){ /* ignore */ }
+}
+/** «جدید» for a row that arrived since this admin last opened the screen. */
+function newTag(screen,at){
+  const since=PZB_SINCE[screen];
+  if(!since||!at)return '';
+  return (new Date(at).getTime()>new Date(since).getTime())?'<span class="pz-new">جدید</span>':'';
+}
+function paintGroupBar(){
+  document.querySelectorAll('#main .pz-groupbar button[data-sub]').forEach(b=>{
+    const old=b.querySelector('.pzb'); if(old)old.remove();
+    b.insertAdjacentHTML('beforeend',badgeHTML(b.dataset.sub));
+  });
+}
+async function badgeStart(){
+  if(PZB_TIMER)clearInterval(PZB_TIMER);
+  await badgeLoad();          // the first screen needs its counts before it draws
+  PZB_TIMER=setInterval(badgeLoad,30000);
+}
+
 function buildNav(){
   $('#nav').innerHTML=NAV.map(g=>{
     // Only show tabs this account may access; 'accounts' is owner-only.
     // A group shows when ANY of its screens is permitted.
     const items=g[1].filter(p=>(p[0]==='accounts'?IS_OWNER:canTab(p[0])));
     if(!items.length)return '';
-    return '<div class="navgroup">'+g[0]+'</div>'+items.map(p=>'<button data-p="'+p[0]+'" onclick="go(\''+p[0]+'\')"><span class="ico">'+p[1]+'</span>'+p[2]+'</button>').join('');
+    return '<div class="navgroup">'+g[0]+'</div>'+items.map(p=>'<button data-p="'+p[0]+'" onclick="go(\''+p[0]+'\')"><span class="ico">'+p[1]+'</span>'+p[2]+badgeHTML(p[0])+'</button>').join('');
   }).join('');
+  /* buildNav() rebuilds the row that was highlighted, so put it back. */
+  const active=TAB_GROUP_OF[CUR]||CUR;
+  document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('active',b.dataset.p===active));
 }
 let CUR='dashboard';
 function go(p){
@@ -234,7 +302,7 @@ function groupBar(){
      (the withdrawal states, the shop categories), and anything looking for
      the group bar must not find one of those instead. */
   const bar='<div class="subtabs pz-groupbar" style="margin-bottom:12px">'+
-    m.map(t=>'<button class="'+(t[0]===CUR?'active':'')+'" onclick="go(\''+t[0]+'\')">'+esc(t[1])+'</button>').join('')+'</div>';
+    m.map(t=>'<button data-sub="'+t[0]+'" class="'+(t[0]===CUR?'active':'')+'" onclick="go(\''+t[0]+'\')">'+esc(t[1])+badgeHTML(t[0])+'</button>').join('')+'</div>';
   const main=$('#main'); if(main)main.insertAdjacentHTML('afterbegin',bar);
 }
 function loading(){$('#main').innerHTML='<div class="skel"></div><div class="skel"></div><div class="skel"></div>';}
@@ -257,11 +325,16 @@ async function render(){
   // Access guard: block sections this account isn't permitted to see.
   if(CUR==='accounts'){ if(!IS_OWNER){$('#main').innerHTML=head('دسترسی محدود')+'<div class="card empty">فقط مدیر کل به این بخش دسترسی دارد.</div>';return;} }
   else if(!canTab(CUR)){ $('#main').innerHTML=head('دسترسی محدود')+'<div class="card empty">به این بخش دسترسی نداری. از مدیر کل بخواه دسترسی این تب را فعال کند.</div>';return; }
+  /* Mark the screen seen BEFORE it draws — the rows need to know when this
+     admin last looked, so the ones that arrived since can say «جدید». Doing it
+     afterwards would move the mark past them and tag nothing. */
+  const tracked=!!PZB.screens[CUR];
+  if(tracked) await badgeSeen(CUR);
   try{
     if(CUR==='accounts')return renderAccounts();
-    if(CONFIG_PAGES[CUR]){ await renderConfigSection(CONFIG_PAGES[CUR][0],CONFIG_PAGES[CUR][1]); return groupBar(); }
+    if(CONFIG_PAGES[CUR]){ await renderConfigSection(CONFIG_PAGES[CUR][0],CONFIG_PAGES[CUR][1]); groupBar(); if(tracked)void badgeLoad(); return; }
     const fn={dashboard:renderDashboard,finance:renderFinance,accounting:renderAccounting,expenses:renderExpenses,backup:renderBackup,users:renderUsers,matches:renderMatches,support:renderSupport,questions:renderQuestions,qreports:renderQReports,aistudio:renderAiStudio,pipeline:renderPipeline,categories:renderCategories,wallet:renderWallet,withdrawals:renderWithdrawals,payoutpartners:renderPayoutPartners,withdrawotp:renderWithdrawOtp,smsgroups:renderSmsGroups,rewardholds:renderRewardHolds,tickets:renderTickets,giftcodes:renderGiftCodes,shop:renderShopAdmin,characters:renderCharacters,charboxes:renderCharBoxes,lifelines:renderLifelines,rewards:renderRewards,missions2:renderMissions2,recordmode:renderRecordMode,onboarding:renderOnboarding,lastsurvivor:renderLastSurvivor,sms:renderSms,payments:renderPayments,leaderboard:renderLeaderboard,banners:renderBanners,notifications:renderNotifications,anticheat:renderAntiCheat,suspicious:renderSuspicious,reports:renderReports,logs:renderLogs,reset:renderReset,roles:renderRoles,rawcfg:renderRawCfg,monitoring:renderMonitoring}[CUR];
-    if(fn){ await fn(); return groupBar(); }
+    if(fn){ await fn(); groupBar(); if(tracked)void badgeLoad(); return; }
     /* No renderer for this tab. Six nav entries were in this state, and
        clicking one silently left the PREVIOUS screen's content on display —
        which is indistinguishable from a section having disappeared. Say so. */
@@ -682,7 +755,7 @@ async function renderUsers(){
       ['کاربر','لول/XP','کاپ','صندوق جایزه','وضعیت','عملیات'].map(c=>'<th>'+c+'</th>').join('')+'</tr></thead><tbody>'+
       (list.length?list.map(u=>'<tr>'+
         '<td><input type="checkbox" class="usel" value="'+u.id+'" '+(_USEL.has(u.id)?'checked':'')+' onclick="uSelOne(\''+u.id+'\',this.checked)"></td>'+
-        '<td>'+esc(u.username||'')+' <span class="mono" style="color:var(--muted)">'+String(u.id).slice(0,8)+'</span></td>'+
+        '<td>'+esc(u.username||'')+' <span class="mono" style="color:var(--muted)">'+String(u.id).slice(0,8)+'</span>'+newTag('users',u.createdAt)+'</td>'+
         '<td>'+fa(u.level)+' / '+fa(u.xp)+'</td><td>'+fa(u.weeklyScore)+'</td>'+
         '<td><b style="color:var(--ok)">'+fa(u.wallet)+'</b></td>'+
         '<td><span class="pill '+(u.status==='banned'?'bad':u.status==='limited'?'pend':'ok')+'">'+(u.status||'active')+'</span></td>'+
@@ -820,7 +893,7 @@ async function renderSupport(){
   const tabs=['open','answered','escalated','closed'].map(s=>'<button class="'+(SUP_ST===s?'active':'')+'" onclick="SUP_ST=\''+s+'\';render()">'+({open:'باز',answered:'پاسخ‌داده',escalated:'ارجاع‌شده',closed:'بسته'}[s])+'</button>').join('');
   $('#main').innerHTML=head('پشتیبانی','تیکت‌های کاربران — پاسخ و مدیریت')+'<div class="subtabs">'+tabs+'</div>'+
     tbl(['شناسه','کاربر','عنوان','دسته','وضعیت','زمان','عملیات'],(Array.isArray(list)?list:[]).map(t=>[
-      '<span class="mono">'+String(t.id).slice(0,8)+'</span>',String(t.userId||'').slice(0,8),esc(t.title||t.subject||''),esc(t.category||'—'),
+      '<span class="mono">'+String(t.id).slice(0,8)+'</span>',String(t.userId||'').slice(0,8),esc(t.title||t.subject||'')+newTag('support',t.createdAt),esc(t.category||'—'),
       '<span class="pill '+(t.status==='resolved'||t.status==='closed'?'ok':'pend')+'">'+esc(t.status)+'</span>',fmtDate(t.createdAt),
       '<button class="btn sm info" onclick="supDetail(\''+t.id+'\')">باز کردن</button>'
     ]));
@@ -1214,7 +1287,7 @@ async function renderWallet(){
   $('#main').innerHTML=head('مدیریت صندوق جایزه','موجودی کاربران، دفترکل، اصلاح دستی')+
     '<div class="toolbar"><input id="acq" placeholder="جستجو..." value="'+esc(AC_Q)+'" onkeydown="if(event.key===\'Enter\'){AC_Q=this.value.trim();render();}"><button class="btn" onclick="AC_Q=$(\'#acq\').value.trim();render()">جستجو</button> <button class="btn info" onclick="checkConsistency()">بررسی سازگاری دفترکل</button></div>'+
     tbl(['کاربر','قابل‌دریافت','بلوکه','عملیات'],(d.rows||[]).map(u=>[
-      esc(u.username||'')+' <span class="mono" style="color:var(--muted)">'+String(u.userId).slice(0,8)+'</span>',
+      esc(u.username||'')+' <span class="mono" style="color:var(--muted)">'+String(u.userId).slice(0,8)+'</span>'+newTag('suspicious',u.lastAt),
       '<b style="color:var(--ok)">'+fa(u.account.available)+'</b>',fa(u.account.locked),
       '<button class="btn sm" onclick="viewLedger(\''+u.userId+'\')">دفترکل</button> <button class="btn sm info" onclick="userDetail(\''+u.userId+'\')">مدیریت</button>'
     ]));
@@ -1235,7 +1308,9 @@ async function renderWithdrawals(){
       let a='<button class="btn sm" onclick="wdDetail(\''+w.id+'\')">جزئیات</button>';
       if(w.status==='pending')a+=' <button class="btn sm ok" onclick="wdAct(\''+w.id+'\',\'approve\')">تأیید</button> <button class="btn sm bad" onclick="wdReject(\''+w.id+'\')">رد</button>';
       else if(w.status==='approved')a+=' <button class="btn sm info" onclick="wdPaid(\''+w.id+'\')">ثبت پرداخت</button> <button class="btn sm bad" onclick="wdReject(\''+w.id+'\')">رد</button>';
-      const user='<a onclick="wdDetail(\''+w.id+'\')" style="cursor:pointer;text-decoration:none"><b>'+esc(w.displayName||w.username||'کاربر')+'</b><br><span class="mono" style="font-size:11px;color:var(--muted)">'+esc(w.phone||String(w.userId).slice(0,8))+'</span></a>';
+      /* The last step of the chase: the sidebar said three, the subtab said
+         three, and these are the three. */
+      const user='<a onclick="wdDetail(\''+w.id+'\')" style="cursor:pointer;text-decoration:none"><b>'+esc(w.displayName||w.username||'کاربر')+'</b>'+newTag('withdrawals',w.createdAt)+'<br><span class="mono" style="font-size:11px;color:var(--muted)">'+esc(w.phone||String(w.userId).slice(0,8))+'</span></a>';
       return [user,'<span class="mono">'+esc(w.nationalId||'—')+'</span>','<span class="mono" dir="ltr" style="font-size:12px">'+esc(wdFmtDest(w.destination))+'</span>','<b>'+fa(w.amount)+'</b>','<span class="pill '+(w.status==='paid'||w.status==='approved'?'ok':w.status==='rejected'||w.status==='failed'?'bad':'pend')+'">'+(st[w.status]||w.status)+'</span>',fmtDate(w.createdAt),a];
     }));
 }
@@ -1296,7 +1371,7 @@ async function renderRewardHolds(){
     (RH_ST==='pending'&&list.length?'<button class="btn ok" style="margin-bottom:12px" onclick="releaseAllHolds()">✅ تأیید و واریزِ همهٔ '+fa(list.length)+' جایزه</button>':'')+
     '<div class="subtabs">'+Object.keys(st).map(s=>'<button class="'+(RH_ST===s?'active':'')+'" onclick="RH_ST=\''+s+'\';render()">'+st[s]+'</button>').join('')+'</div>'+
     tbl(['کاربر','مسابقه','نوع','مبلغ','ریسک','دلیل','زمان','عملیات'],list.map(h=>[
-      '<span class="mono">'+String(h.userId||'').slice(0,8)+'</span>',
+      '<span class="mono">'+String(h.userId||'').slice(0,8)+'</span>'+newTag('rewardholds',h.createdAt),
       '<span class="mono">'+String(h.matchId||'').slice(0,8)+'</span>',
       esc(h.rewardType||'cash'),'<b style="color:var(--gold)">'+money(h.amount)+'</b>',
       '<b style="color:'+((h.riskScore||0)>=70?'var(--bad)':'var(--gold)')+'">'+fa(h.riskScore||0)+'</b>',
@@ -1923,7 +1998,7 @@ async function renderQReports(){
           ? '<button class="btn sm ok" onclick="qrAct(\''+r.id+'\',\'resolve\')">رسیدگی شد</button> <button class="btn sm" onclick="qrAct(\''+r.id+'\',\'dismiss\')">رد</button> <button class="btn sm" onclick="qrEdit(\''+esc(r.questionId)+'\')">ویرایش سؤال</button>'
           : '<button class="btn sm" onclick="qrEdit(\''+esc(r.questionId)+'\')">ویرایش سؤال</button>';
         const st='<span class="pill '+(r.status==='resolved'?'ok':r.status==='dismissed'?'bad':'pend')+'">'+(QR_STFA[r.status]||r.status)+'</span>';
-        const qtext='<div style="max-width:260px">'+esc(r.questionText||'—')+(r.category?'<div class="sub">'+esc(r.category)+'</div>':'')+'</div>';
+        const qtext='<div style="max-width:260px">'+esc(r.questionText||'—')+newTag('qreports',r.createdAt)+(r.category?'<div class="sub">'+esc(r.category)+'</div>':'')+'</div>';
         return [qtext,esc(r.reasonLabel||r.reason),esc(r.note||'—'),esc((r.userId||'—').slice(0,8)),fmtDate(r.createdAt),st,act];
       }))+
       ((res.rows||[]).length?'':'<div class="empty">گزارشی در این وضعیت نیست.</div>')+'</div>';
@@ -3673,7 +3748,7 @@ async function renderSuspicious(){
     '<button class="btn sm" onclick="render()">↻ بروزرسانی</button>')+
     '<div class="note">این فهرست از سیگنال‌های تقلبِ باز، سرعتِ غیرعادیِ تراکنش و درخواست‌های ناموفقِ دریافت جایزه ساخته می‌شود و بر اساسِ امتیازِ ریسک مرتب شده است. با «رسیدگی» هر هشدار را تأیید (تقلب) یا رد (بی‌خطر) کن؛ پس از رسیدگی، کاربر از فهرست خارج می‌شود.</div>'+
     tbl(['کاربر','دلیل','امتیاز ریسک','آخرین رویداد','تعداد سیگنال','عملیات'],rows.map((u,i)=>[
-      esc(u.username||'')+' <span class="mono" style="color:var(--muted)">'+String(u.userId).slice(0,8)+'</span>',
+      esc(u.username||'')+' <span class="mono" style="color:var(--muted)">'+String(u.userId).slice(0,8)+'</span>'+newTag('suspicious',u.lastAt),
       (u.reasons||[]).map(r=>'<span class="pill '+(String(r).match(/BURST|CRITICAL|multi/i)?'bad':'pend')+'">'+esc(reasonFa(r))+'</span>').join(' '),
       '<b style="color:'+(u.riskScore>=70?'var(--bad)':u.riskScore>=40?'var(--gold)':'var(--muted)')+';font-size:15px">'+fa(u.riskScore||0)+'</b>',
       fmtDate(u.lastAt),fa((u.signals||[]).length),

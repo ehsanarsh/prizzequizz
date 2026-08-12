@@ -271,6 +271,33 @@ function run(): void {
     assert.deepEqual(shadowed, [], 'these tabs can never reach their own screen');
   });
 
+  check('the panel chases what is new all the way to the row', () => {
+    /* Three places, or it is not a chase: the sidebar row, the subtab inside
+       it, and the row in the table. */
+    assert.match(script, /function badgeHTML\(/, 'the sidebar badge');
+    assert.match(script, /data-p="'\+p\[0\]\+'"[\s\S]{0,120}badgeHTML\(p\[0\]\)/, 'the sidebar row carries it');
+    assert.match(script, /data-sub="'\+t\[0\]\+'"[\s\S]{0,140}badgeHTML\(t\[0\]\)/, 'and so does the subtab');
+    assert.match(script, /function newTag\(/, 'the row tag');
+    for (const screen of ['withdrawals', 'support', 'rewardholds', 'qreports']) {
+      assert.ok(script.includes("newTag('" + screen + "'"), 'no row tag on ' + screen);
+    }
+    /* A merged row must total what is hidden behind it, or a payout stays
+       invisible until somebody opens the row it is under. */
+    assert.match(script, /if\(TAB_GROUPS\[key\]\)\s*return groupMembers\(key\)\.reduce/, 'a group row must sum its screens');
+  });
+
+  check('the screen is marked seen BEFORE it draws', () => {
+    /* Marking afterwards moves the mark past the very rows that were about to
+       be tagged, and «جدید» would never appear on anything. */
+    const i = script.indexOf('async function render(');
+    assert.ok(i > 0, 'render() exists');
+    /* Wide enough to clear the renderer map, which is one very long line. */
+    const body = script.slice(i, i + 4000);
+    const seen = body.indexOf('await badgeSeen(CUR)');
+    const draw = body.indexOf('if(fn){');
+    assert.ok(seen > 0 && draw > 0 && seen < draw, 'badgeSeen must run before the renderer');
+  });
+
   check('access is still granted one screen at a time', () => {
     /* A merged row must not become a single permission covering four screens —
        that would hand an account whatever it was not granted. */
