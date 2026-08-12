@@ -159,6 +159,7 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
   border-radius:16px;display:grid;place-items:center;background:linear-gradient(180deg,#FFD84D,#F0A400);
   border:2.5px solid #000;box-shadow:0 4px 0 #000;font-size:22px;color:#12203a;font-weight:900;cursor:pointer;padding:0}
 .mk-arrow.next{right:-2px}
+.mk-arrow svg{width:20px;height:20px;display:block}
 .mk-arrow.prev{left:-2px}
 .mk-arrow:active{transform:translateY(-50%) translateY(3px);box-shadow:0 1px 0 #000}
 /* THE ARCH.
@@ -3124,7 +3125,7 @@ body,button,input,select,textarea,.tab,#rankTabs .tab,#rankTabs .tab small,.rank
 
 
 /* ===== FEEDBACK + QUESTION SUBMIT + STATS HERO + FRIEND SNACK v35 ===== */
-.feedback-hero,.qsubmit-hero{display:flex;align-items:flex-start;gap:13px;margin-bottom:13px;padding:16px;border:var(--stroke);border-radius:21px;background:linear-gradient(135deg,#24242b,#131318);box-shadow:var(--hard-sm);position:relative;overflow:visible}.feedback-hero .ico,.qsubmit-hero .ico{width:54px;height:54px;border-radius:17px;border:2.5px solid #000;background:linear-gradient(180deg,#FFE24A,var(--bolt-2));display:grid;place-items:center;font-size:28px;box-shadow:0 4px 0 #000;flex-shrink:0}.feedback-hero b,.qsubmit-hero b{font-size:16px;font-weight:900;line-height:1.55}.feedback-hero p,.qsubmit-hero p{font-size:12px;color:var(--muted);line-height:1.8;font-weight:700;margin-top:3px}.feedback-tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:10px 0 13px}.feedback-tab{border:2px solid #000;border-radius:14px;background:var(--ink-2);color:var(--muted);font-family:inherit;font-size:12px;font-weight:900;padding:10px 4px;box-shadow:var(--hard-sm)}.feedback-tab.active{background:linear-gradient(180deg,#FFE24A,var(--bolt-2));color:#141414}.feedback-card,.qsubmit-card{background:var(--ink-2);border:var(--stroke);border-radius:18px;padding:14px;margin-bottom:11px;box-shadow:var(--hard-sm)}.feedback-card h3,.qsubmit-card h3{font-size:15px;font-weight:900;margin-bottom:6px}.feedback-card p,.qsubmit-card p{font-size:12px;color:var(--muted);line-height:1.75;font-weight:700}.rate-row{display:flex;gap:8px;justify-content:center;margin:12px 0}.rate-star{width:42px;height:42px;border-radius:14px;border:2px solid #000;background:var(--ink-3);display:grid;place-items:center;font-size:22px;box-shadow:var(--hard-sm);filter:grayscale(1);cursor:pointer}.rate-star.on{filter:none;background:linear-gradient(180deg,#FFE24A,var(--bolt-2));color:#141414}.feedback-list-item{display:flex;gap:10px;align-items:flex-start;padding:12px;border:2px solid #000;border-radius:16px;background:var(--ink-3);margin-bottom:9px}.feedback-list-item .fi{width:38px;height:38px;border-radius:12px;border:2px solid #000;background:var(--ink-2);display:grid;place-items:center;font-size:18px;flex-shrink:0}.feedback-list-item b{font-size:13px}.feedback-list-item span{font-size:11px;color:var(--muted);font-weight:800;line-height:1.6}.q-preview{background:var(--paper);color:#141414;border:var(--stroke);border-radius:18px;padding:14px;margin:12px 0;box-shadow:var(--hard-sm)}.q-preview b{font-size:14px;line-height:1.8}.q-preview ul{margin:10px 0 0;padding:0;list-style:none}.q-preview li{padding:7px 10px;border:2px solid #000;border-radius:12px;margin-top:6px;background:#fff;font-size:12px;font-weight:800}.q-preview li.ok{background:#caffdf}.qsubmit-steps{display:flex;gap:6px;margin:10px 0 14px}.qsubmit-steps i{flex:1;height:8px;border-radius:8px;border:1.5px solid #000;background:var(--ink-3)}.qsubmit-steps i.on{background:linear-gradient(90deg,var(--bolt),#fff27a)}.friend-snackbar{position:absolute;left:50%;bottom:92px;z-index:160;transform:translateX(-50%) translateY(22px);opacity:0;pointer-events:none;min-width:250px;max-width:88%;display:flex;align-items:center;gap:10px;padding:12px 14px;border:var(--stroke);border-radius:17px;background:linear-gradient(180deg,#20272b,#111519);box-shadow:var(--hard),0 18px 40px rgba(0,0,0,.45);transition:.26s cubic-bezier(.2,.9,.3,1)}.friend-snackbar.show{opacity:1;transform:translateX(-50%) translateY(0)}.friend-snackbar .fs-ico{width:36px;height:36px;border-radius:12px;border:2px solid #000;background:linear-gradient(180deg,#4ff09a,#1eaf5f);display:grid;place-items:center;font-size:18px;flex-shrink:0}.friend-snackbar b{font-size:13px}.friend-snackbar span{font-size:11px;color:var(--muted);font-weight:800}.friend-snackbar .btn{width:auto;padding:8px 10px;font-size:11px;border-radius:12px;box-shadow:var(--hard-sm)}#stats .stats-hero{display:flex!important;flex-direction:column!important;width:auto!important;min-height:142px!important;padding:18px 16px!important;overflow:visible!important}#stats .stats-hero .sh-top{align-items:flex-start!important;gap:14px!important}#stats .stats-hero .sh-ico{flex:0 0 56px!important}#stats .stats-hero b{font-size:17px!important;line-height:1.6!important;white-space:normal!important;overflow:visible!important}#stats .stats-hero p{font-size:12.5px!important;line-height:1.9!important;white-space:normal!important;overflow:visible!important;max-width:none!important}.stats-chipline{overflow:visible!important;flex-wrap:wrap!important}
+.feedback-hero,.qsubmit-hero{display:flex;align-items:flex-start;gap:13px;margin-bottom:13px;padding:16px;border:var(--stroke);border-radius:21px;background:linear-gradient(135deg,#24242b,#131318);box-shadow:var(--hard-sm);position:relative;overflow:visible}.feedback-hero .ico,.qsubmit-hero .ico{width:54px;height:54px;border-radius:17px;border:2.5px solid #000;background:linear-gradient(180deg,#FFE24A,var(--bolt-2));display:grid;place-items:center;font-size:28px;box-shadow:0 4px 0 #000;flex-shrink:0}.feedback-hero b,.qsubmit-hero b{font-size:16px;font-weight:900;line-height:1.55}.feedback-hero p,.qsubmit-hero p{font-size:12px;color:var(--muted);line-height:1.8;font-weight:700;margin-top:3px}.feedback-tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:10px 0 13px}.feedback-tab{border:2px solid #000;border-radius:14px;background:var(--ink-2);color:var(--muted);font-family:inherit;font-size:12px;font-weight:900;padding:10px 4px;box-shadow:var(--hard-sm)}.feedback-tab.active{background:linear-gradient(180deg,#FFE24A,var(--bolt-2));color:#141414}.feedback-card,.qsubmit-card{background:var(--ink-2);border:var(--stroke);border-radius:18px;padding:14px;margin-bottom:11px;box-shadow:var(--hard-sm)}.feedback-card h3,.qsubmit-card h3{font-size:15px;font-weight:900;margin-bottom:6px}.feedback-card p,.qsubmit-card p{font-size:12px;color:var(--muted);line-height:1.75;font-weight:700}.rate-row{display:flex;gap:8px;justify-content:center;margin:12px 0}.rate-star{width:42px;height:42px;border-radius:14px;border:2px solid #000;background:var(--ink-3);display:grid;place-items:center;font-size:22px;box-shadow:var(--hard-sm);filter:grayscale(1);cursor:pointer}.rate-star.on{filter:none;background:linear-gradient(180deg,#FFE24A,var(--bolt-2));color:#141414}.feedback-list-item{display:flex;gap:10px;align-items:flex-start;padding:12px;border:2px solid #000;border-radius:16px;background:var(--ink-3);margin-bottom:9px}.feedback-list-item .fi{width:38px;height:38px;border-radius:12px;border:2px solid #000;background:var(--ink-2);display:grid;place-items:center;font-size:18px;flex-shrink:0}.feedback-list-item b{font-size:13px}.feedback-list-item span{font-size:11px;color:var(--muted);font-weight:800;line-height:1.6}.q-preview{background:var(--paper);color:#141414;border:var(--stroke);border-radius:18px;padding:14px;margin:12px 0;box-shadow:var(--hard-sm)}.q-preview b{font-size:14px;line-height:1.8}.q-preview ul{margin:10px 0 0;padding:0;list-style:none}.q-preview li{padding:7px 10px;border:2px solid #000;border-radius:12px;margin-top:6px;background:#fff;font-size:12px;font-weight:800}.q-preview li.ok{background:#caffdf}.online-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;padding:12px 14px;border:var(--stroke);border-radius:18px;background:var(--ink-2);box-shadow:var(--hard-sm)}.online-head b{font-size:20px;font-weight:900;display:block;line-height:1.2}.online-head span{font-size:11px;color:var(--muted);font-weight:800}.online-head .btn{width:auto;flex-shrink:0}.online-list{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}.online-card{display:flex;flex-direction:column;align-items:center;gap:6px;padding:13px 8px;border:2px solid #000;border-radius:18px;background:var(--ink-3);box-shadow:var(--hard-sm);position:relative}.online-card .av{width:56px;height:56px;border-radius:50%;border:2.5px solid #000;background:var(--ink-2);display:grid;place-items:center;font-size:26px;overflow:hidden}.online-card .av img{width:100%;height:100%;object-fit:cover}.online-card .nm{font-size:12px;font-weight:900;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.online-card .lv{font-size:10.5px;color:var(--muted);font-weight:800}.online-card .dot{position:absolute;top:10px;left:10px;width:10px;height:10px;border-radius:50%;background:#3ddc84;border:2px solid #000}.online-empty{padding:26px 14px;text-align:center;color:var(--muted);font-size:12.5px;font-weight:800;line-height:1.9;grid-column:1/-1}.gender-pick{display:flex;gap:8px;flex-wrap:wrap}.gender-opt{flex:1;min-width:88px;padding:11px 8px;border:2px solid #000;border-radius:14px;background:var(--ink-3);color:var(--muted);font-family:inherit;font-size:12px;font-weight:900;box-shadow:var(--hard-sm)}.gender-opt.on{background:linear-gradient(180deg,#FFE24A,var(--bolt-2));color:#141414}.qs-mine-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border:2px solid #000;border-radius:14px;background:var(--ink-3);margin-top:8px}.qs-mine-t{font-size:12px;font-weight:800;line-height:1.7;flex:1;min-width:0}.qs-badge{display:inline-block;font-size:10.5px;font-weight:900;padding:4px 8px;border-radius:9px;border:1.5px solid #000;background:var(--ink-2);color:var(--muted)}.qs-badge.ok{background:#2fbf6d;color:#08210f}.qs-badge.bad{background:#e5484d;color:#fff}.qs-badge.pend{background:linear-gradient(180deg,#FFE24A,var(--bolt-2));color:#141414}.qs-prize{display:inline-block;margin-inline-start:6px;font-size:10.5px;font-weight:900;padding:4px 8px;border-radius:9px;border:1.5px solid #000;background:linear-gradient(180deg,#FFE24A,var(--bolt-2));color:#141414}.qsubmit-steps{display:flex;gap:6px;margin:10px 0 14px}.qsubmit-steps i{flex:1;height:8px;border-radius:8px;border:1.5px solid #000;background:var(--ink-3)}.qsubmit-steps i.on{background:linear-gradient(90deg,var(--bolt),#fff27a)}.friend-snackbar{position:absolute;left:50%;bottom:92px;z-index:160;transform:translateX(-50%) translateY(22px);opacity:0;pointer-events:none;min-width:250px;max-width:88%;display:flex;align-items:center;gap:10px;padding:12px 14px;border:var(--stroke);border-radius:17px;background:linear-gradient(180deg,#20272b,#111519);box-shadow:var(--hard),0 18px 40px rgba(0,0,0,.45);transition:.26s cubic-bezier(.2,.9,.3,1)}.friend-snackbar.show{opacity:1;transform:translateX(-50%) translateY(0)}.friend-snackbar .fs-ico{width:36px;height:36px;border-radius:12px;border:2px solid #000;background:linear-gradient(180deg,#4ff09a,#1eaf5f);display:grid;place-items:center;font-size:18px;flex-shrink:0}.friend-snackbar b{font-size:13px}.friend-snackbar span{font-size:11px;color:var(--muted);font-weight:800}.friend-snackbar .btn{width:auto;padding:8px 10px;font-size:11px;border-radius:12px;box-shadow:var(--hard-sm)}#stats .stats-hero{display:flex!important;flex-direction:column!important;width:auto!important;min-height:142px!important;padding:18px 16px!important;overflow:visible!important}#stats .stats-hero .sh-top{align-items:flex-start!important;gap:14px!important}#stats .stats-hero .sh-ico{flex:0 0 56px!important}#stats .stats-hero b{font-size:17px!important;line-height:1.6!important;white-space:normal!important;overflow:visible!important}#stats .stats-hero p{font-size:12.5px!important;line-height:1.9!important;white-space:normal!important;overflow:visible!important;max-width:none!important}.stats-chipline{overflow:visible!important;flex-wrap:wrap!important}
 @media(max-width:370px){.feedback-tabs{grid-template-columns:1fr}.feedback-hero,.qsubmit-hero{flex-direction:column}.rate-star{width:38px;height:38px}.friend-snackbar{bottom:82px;min-width:220px}#stats .stats-hero{min-height:auto!important}.qsubmit-card .btn,.feedback-card .btn{width:100%}}
 
 
@@ -4295,7 +4296,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
       <p style="color:var(--muted);font-size:13px;margin-bottom:20px">این اطلاعات توی پروفایل و رنکینگ نمایش داده می‌شه</p>
       <div class="field"><label>نام و نام خانوادگی</label><input class="input" id="regFullName" placeholder="نام و نام خانوادگی را به فارسی وارد کنید" oninput="clearFieldErr('regFullName')"><div class="field-err" id="errFullName"></div></div>
       <div class="field"><label>نام کاربری (یکتا)</label><input class="input" id="regUsername" placeholder="نام کاربری را با حروف انگلیسی وارد کنید" dir="ltr" oninput="clearFieldErr('regUsername')"><div class="field-err" id="errUsername"></div></div>
-      <div class="field"><label>کد معرف (اختیاری)</label><input class="input" id="regReferral" placeholder="کد دوستت رو وارد کن و جایزه بگیر" dir="ltr"></div>
+      <div class="field"><label>جنسیت</label><div class="gender-pick" id="regGender"><button type="button" class="gender-opt" data-g="male" onclick="pickGender('regGender','male')">👨 آقا</button><button type="button" class="gender-opt" data-g="female" onclick="pickGender('regGender','female')">👩 خانم</button><button type="button" class="gender-opt" data-g="other" onclick="pickGender('regGender','other')">ترجیح می‌دهم نگویم</button></div></div><div class="field"><label>کد معرف (اختیاری)</label><input class="input" id="regReferral" placeholder="کد دوستت رو وارد کن و جایزه بگیر" dir="ltr"></div>
       <div class="card" style="display:flex;gap:12px;align-items:center;background:linear-gradient(180deg,#FFDD5C,#F1B211);color:var(--gold-ink);margin-bottom:20px">
         <span style="font-size:26px">🎁</span><div style="font-size:13px;font-weight:700;line-height:1.6">با هر دوستی که دعوت کنی، هر دو <b>پاداش نقدی</b> می‌گیرید!</div></div>
       <div class="grow"></div>
@@ -4842,8 +4843,8 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
           <!-- Outside the deck on purpose: inside it, they were dragged along
                with the cards instead of staying put. They point the way you
                push, which is the same direction as the drag. -->
-          <button class="mk-arrow prev" onclick="hmGo(-1)" aria-label="قبلی">‹</button>
-          <button class="mk-arrow next" onclick="hmGo(1)" aria-label="بعدی">›</button>
+          <button class="mk-arrow prev" onclick="hmGo(-1)" aria-label="قبلی"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 4 L7 12 L15 20" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+          <button class="mk-arrow next" onclick="hmGo(1)" aria-label="بعدی"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4 L17 12 L9 20" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
           <div class="mdots" id="mdots"></div>
         </div>
         <div class="hrail" id="hrailL"></div>
@@ -5293,7 +5294,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
       <div class="pad" style="padding-top:0">
         <button class="btn btn-ghost btn-sm" style="width:100%;margin-bottom:14px" onclick="charBack='profile';go('character')">🎭 انتخاب کاراکتر</button>
         <div class="field"><label>نام و نام خانوادگی</label><input class="input" id="profEditName" placeholder="نام و نام خانوادگی"></div>
-        <div class="field"><label>نام کاربری</label><input class="input" id="profEditUsername" dir="ltr" placeholder="username"></div>
+        <div class="field"><label>نام کاربری</label><input class="input" id="profEditUsername" dir="ltr" placeholder="username"></div><div class="field"><label>جنسیت</label><div class="gender-pick" id="profGender"><button type="button" class="gender-opt" data-g="male" onclick="pickGender('profGender','male')">👨 آقا</button><button type="button" class="gender-opt" data-g="female" onclick="pickGender('profGender','female')">👩 خانم</button><button type="button" class="gender-opt" data-g="other" onclick="pickGender('profGender','other')">ترجیح می‌دهم نگویم</button></div></div>
         <button class="btn btn-primary" onclick="submitProfileEdit()">ذخیره تغییرات</button>
         <div class="card" style="display:flex;align-items:center;gap:10px;margin-top:14px;padding:13px 16px">
           <span style="font-size:22px">🎫</span><b style="flex:1;font-size:14px">بلیت‌های لیگ</b>
@@ -5362,12 +5363,23 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
       <div id="supportContent"></div>
     </section>
 
+
+    <!-- ============ ONLINE PLAYERS ============ -->
+    <section class="screen pad" id="online">
+      <div class="topbar" style="padding:0 0 14px;background:none"><button class="iconbtn" onclick="menuBack('home')">→</button><h1>افراد آنلاین 👥</h1></div>
+      <div class="online-head">
+        <div><b id="onCount">—</b><span>الان آنلاین‌اند</span></div>
+        <button class="btn btn-ghost btn-sm" id="onRefresh" onclick="onlineRefresh()">🔄 نمایش افراد دیگر</button>
+      </div>
+      <div id="onList" class="online-list"></div>
+    </section>
+
     <!-- ============ QSUBMIT ============ -->
     <section class="screen pad" id="qsubmit">
       <div class="topbar" style="padding:0 0 14px;background:none"><button class="iconbtn" onclick="menuBack('home')">→</button><h1>تولید سوال ✍️</h1></div>
       <div class="qsubmit-hero"><div class="ico">✍️</div><div><b>سؤال بساز، سریع و راحت</b><p>فقط متن سؤال، جواب درست و سه گزینه اشتباه رو وارد کن. قبل از ارسال پیش‌نمایش می‌بینی.</p></div></div>
       <div class="qsubmit-steps"><i class="on"></i><i class="on"></i><i></i></div>
-      <div class="qsubmit-card"><h3>اطلاعات سؤال</h3><div class="field"><label>دسته‌بندی</label><select class="input" id="qsCat"><option>عمومی</option><option>فیلم و سریال</option><option>ورزش</option><option>علم و دانش</option><option>موسیقی</option><option>تاریخ و فرهنگ</option><option>غذا و خوراکی</option></select></div><div class="field"><label>درجه سختی</label><select class="input" id="qsDiff"><option>آسان</option><option selected>متوسط</option><option>سخت</option></select></div><div class="field"><label>متن سؤال</label><textarea class="input" id="qsText" rows="3" style="resize:none;line-height:1.8" placeholder="مثلاً پایتخت فرانسه کدام است؟"></textarea></div><div class="field"><label>گزینه درست</label><input class="input" id="qsCorrect" placeholder="پاریس"></div><div class="field"><label>سه گزینه نادرست</label><input class="input" id="qsWrong" placeholder="رم / مادرید / لندن"></div><div style="display:flex;gap:10px"><button class="btn btn-ghost" onclick="previewQuestionSubmit()">پیش‌نمایش</button><button class="btn btn-primary" onclick="submitQuestion()">ارسال برای بررسی</button></div></div><div id="qsPreview"></div>
+      <div class="qsubmit-card"><h3>اطلاعات سؤال</h3><div class="field"><label>دسته‌بندی</label><select class="input" id="qsCat"><option>عمومی</option><option>فیلم و سریال</option><option>ورزش</option><option>علم و دانش</option><option>موسیقی</option><option>تاریخ و فرهنگ</option><option>غذا و خوراکی</option></select></div><div class="field"><label>درجه سختی</label><select class="input" id="qsDiff"><option>آسان</option><option selected>متوسط</option><option>سخت</option></select></div><div class="field"><label>متن سؤال</label><textarea class="input" id="qsText" rows="3" style="resize:none;line-height:1.8" placeholder="مثلاً پایتخت فرانسه کدام است؟"></textarea></div><div class="field"><label>گزینه درست</label><input class="input" id="qsCorrect" placeholder="پاریس"></div><div class="field"><label>سه گزینه نادرست</label><input class="input" id="qsWrong" placeholder="رم / مادرید / لندن"></div><div style="display:flex;gap:10px"><button class="btn btn-ghost" onclick="previewQuestionSubmit()">پیش‌نمایش</button><button class="btn btn-primary" onclick="submitQuestion()">ارسال برای بررسی</button></div></div><div id="qsPreview"></div><div id="qsMine"></div>
     </section>
 
     <!-- ============ RULES ============ -->
@@ -7639,7 +7651,7 @@ function toast(msg,ms){
 function openMenu(){const a=document.querySelector('.screen.active');if(a&&['login','otp','register','splash','intro'].indexOf(a.id)>=0)return;try{applyMyName();}catch(e){}document.getElementById('menuBg').classList.add('show');document.getElementById('menuSheet').classList.add('show');setTimeout(()=>{const s=document.getElementById('menuSheet');if(s)s.scrollTop=0;},30);}
 function closeMenu(){document.getElementById('menuBg').classList.remove('show');document.getElementById('menuSheet').classList.remove('show');}
 let openedFromMenu=false;
-function menuGo(id){openedFromMenu=true;closeMenu();go(id);}
+function menuGo(id){openedFromMenu=true;closeMenu();go(id);if(id==='qsubmit')qsLoadMine();}
 function menuBack(fallback){if(openedFromMenu){openedFromMenu=false;go('home');setTimeout(openMenu,80);}else go(fallback||'home');}
 
 /* ============ SPLASH -> LOGIN ============ */
@@ -9701,7 +9713,52 @@ function buildRatingStars(){const r=document.getElementById('rateRow');if(!r)ret
 function renderFeedbackList(){const l=document.getElementById('feedbackList');if(!l)return;l.innerHTML=FEEDBACKS.map(f=>'<div class="feedback-list-item"><div class="fi">'+(f.t==='bug'?'🐞':f.t==='rate'?'⭐':'💡')+'</div><div style="flex:1"><b>'+f.s+'</b><br><span>'+f.b+'</span><br><span>'+f.time+' · '+f.st+'</span></div></div>').join('');}
 function submitFeedback(){const s=document.getElementById('feedbackSubject').value.trim()|| (currentFeedbackType==='rate'?'امتیاز '+fa(currentRating)+' ستاره':'بدون عنوان'),b=document.getElementById('feedbackBody').value.trim();if(!b&&currentFeedbackType!=='rate'){showAaaModal({icon:'✍️',title:'متن نظر خالیه',sub:'برای ثبت نظر، یک توضیح کوتاه بنویس.',primaryText:'باشه',secondaryText:''});return;}FEEDBACKS.unshift({t:currentFeedbackType,s,b:currentFeedbackType==='rate'?'امتیاز '+fa(currentRating)+' از ۵ · '+(b||'بدون توضیح'):b,time:'همین حالا',st:'ثبت شد'});document.getElementById('feedbackSubject').value='';document.getElementById('feedbackBody').value='';renderFeedbackList();showAaaModal({icon:'💬',title:'نظرت ثبت شد',sub:'ممنون! بازخوردت برای تیم محصول ارسال شد.',primaryText:'عالیه',secondaryText:''});}
 function previewQuestionSubmit(){const q=document.getElementById('qsText').value.trim(),c=document.getElementById('qsCorrect').value.trim(),w=(document.getElementById('qsWrong').value||'').split('/').map(x=>x.trim()).filter(Boolean);const box=document.getElementById('qsPreview');if(!q||!c||w.length<3){box.innerHTML='<div class="qsubmit-card"><p>برای پیش‌نمایش، متن سؤال، گزینه درست و سه گزینه نادرست را کامل کن.</p></div>';return;}box.innerHTML='<div class="q-preview"><b>'+q+'</b><ul><li class="ok">✅ '+c+'</li>'+w.slice(0,3).map(x=>'<li>▫️ '+x+'</li>').join('')+'</ul><div style="font-size:11px;color:#555;margin-top:10px">دسته: '+document.getElementById('qsCat').value+' · سختی: '+document.getElementById('qsDiff').value+'</div></div>';}
-function submitQuestion(){previewQuestionSubmit();const q=document.getElementById('qsText').value.trim(),c=document.getElementById('qsCorrect').value.trim(),w=(document.getElementById('qsWrong').value||'').split('/').map(x=>x.trim()).filter(Boolean);if(!q||!c||w.length<3){showAaaModal({icon:'⚠️',title:'سؤال کامل نیست',sub:'لطفاً متن سؤال، جواب درست و سه گزینه نادرست را وارد کن.',primaryText:'باشه',secondaryText:''});return;}showAaaModal({icon:'✅',title:'سؤال برای بررسی ارسال شد',sub:'سؤال تو وارد صف بررسی محتوا شد. اگر تأیید شود، XP هدیه می‌گیری.',primaryText:'ساخت سؤال جدید',secondaryText:'بازگشت خانه',onPrimary:()=>{closeAaaModal(false);['qsText','qsCorrect','qsWrong'].forEach(id=>document.getElementById(id).value='');document.getElementById('qsPreview').innerHTML='';},onSecondary:()=>{closeAaaModal(false);go('home');}});}
+/* The question a player wrote used to end at a success message: nothing was
+   sent, nothing was stored, and the promised prize could never arrive. It now
+   goes to the server, lands in the panel's «کوییزساز» list, and pays when an
+   operator approves it. */
+const QS_DIFF={'آسان':'easy','متوسط':'medium','سخت':'hard'};
+async function submitQuestion(){
+  previewQuestionSubmit();
+  const q=document.getElementById('qsText').value.trim(),
+        c=document.getElementById('qsCorrect').value.trim(),
+        w=(document.getElementById('qsWrong').value||'').split('/').map(x=>x.trim()).filter(Boolean);
+  if(!q||!c||w.length<3){showAaaModal({icon:'⚠️',title:'سؤال کامل نیست',sub:'لطفاً متن سؤال، جواب درست و سه گزینه نادرست را وارد کن.',primaryText:'باشه',secondaryText:''});return;}
+  const btn=document.querySelector('#qsubmit .btn-primary');
+  if(btn){ if(btn.disabled) return; btn.disabled=true; btn.textContent='در حال ارسال…'; }
+  const restore=()=>{ if(btn){ btn.disabled=false; btn.textContent='ارسال برای بررسی'; } };
+  const r=await pzApi('POST','/questions/submit',{
+    text:q, options:[c,...w.slice(0,3)], correctIndex:0,
+    category:document.getElementById('qsCat').value,
+    difficulty:QS_DIFF[document.getElementById('qsDiff').value]||'medium'
+  });
+  restore();
+  if(!r||r.error||r.ok===false){
+    showAaaModal({icon:'⚠️',title:'ارسال نشد',sub:(r&&r.error&&r.error.message)||'دوباره تلاش کن.',primaryText:'باشه',secondaryText:''});
+    return;
+  }
+  showAaaModal({icon:'✅',title:'سؤال برای بررسی ارسال شد',sub:'سؤالت وارد صف بررسی شد. اگر تأیید شود، جایزه‌اش به حسابت می‌نشیند.',primaryText:'ساخت سؤال جدید',secondaryText:'سؤال‌های من',
+    onPrimary:()=>{closeAaaModal(false);['qsText','qsCorrect','qsWrong'].forEach(id=>document.getElementById(id).value='');document.getElementById('qsPreview').innerHTML='';qsLoadMine();},
+    onSecondary:()=>{closeAaaModal(false);qsLoadMine(true);}});
+  qsLoadMine();
+}
+/* What a player got for the questions they wrote — the only place the promise
+   ("if it is approved you get a prize") is ever settled. */
+const QS_ST={pending:['در انتظار بررسی','pend'],approved:['تأیید شد','ok'],rejected:['رد شد','bad']};
+async function qsLoadMine(scroll){
+  const box=document.getElementById('qsMine'); if(!box) return;
+  const r=await pzApi('GET','/questions/mine');
+  const rows=(r&&r.rows)||[];
+  if(!rows.length){ box.innerHTML=''; return; }
+  box.innerHTML='<div class="qsubmit-card"><h3>سؤال‌های من ('+fa(rows.length)+')</h3>'+
+    rows.map(x=>{
+      const st=QS_ST[x.status]||[x.status,''];
+      const rw=x.reward?'<span class="qs-prize">'+(x.reward.icon||'🎁')+' '+fa(x.reward.amount)+' '+(x.reward.label||'')+'</span>':'';
+      return '<div class="qs-mine-row"><div class="qs-mine-t">'+pzEsc(String(x.text||'').slice(0,70))+'</div>'+
+             '<div><span class="qs-badge '+st[1]+'">'+st[0]+'</span>'+rw+'</div></div>';
+    }).join('')+'</div>';
+  if(scroll) box.scrollIntoView({behavior:'smooth',block:'start'});
+}
 function showFriendRequestSnackbar(name){let s=document.getElementById('friendSnackbar');if(!s){s=document.createElement('div');s.id='friendSnackbar';s.className='friend-snackbar';document.querySelector('.phone').appendChild(s);}s.innerHTML='<div class="fs-ico">🤝</div><div style="flex:1"><b>درخواست دوستی ارسال شد</b><br><span>'+(name||'کاربر')+' درخواستت رو دریافت می‌کنه.</span></div><button class="btn btn-ghost" onclick="this.closest(\'.friend-snackbar\').classList.remove(\'show\')">باشه</button>';s.classList.add('show');clearTimeout(s._t);s._t=setTimeout(()=>s.classList.remove('show'),3200);}
 setTimeout(()=>{renderFeedbackList();buildRatingStars();},300);
 
@@ -12668,8 +12725,41 @@ function hmSwipeInit(){
    which from the outside is indistinguishable from a broken button.
    «کوییزساز» opens the question screen that already exists — its submission is
    still local, and making it reach the panel is the next piece of work. */
-function hmOnline(){ toast('فهرست بازیکنان آنلاین به‌زودی — در حال ساخت'); }
-function hmQuizMaker(){ go('qsubmit'); }
+/* WHO ELSE IS HERE.
+   The first look is free; «نمایش افراد دیگر» is the one that can cost coins,
+   and the button says the price before it is pressed rather than after. The
+   server decides both the price and who is shown — nothing here is padded out
+   with invented players, so an empty list means the game really is quiet. */
+let ONLINE_BUSY=false;
+function hmOnline(){ go('online'); onlineLoad(false); }
+async function onlineRefresh(){ onlineLoad(true); }
+async function onlineLoad(refresh){
+  const list=document.getElementById('onList'), btn=document.getElementById('onRefresh');
+  if(!list) return;
+  if(ONLINE_BUSY) return;
+  ONLINE_BUSY=true;
+  if(btn){ btn.disabled=true; }
+  if(!refresh) list.innerHTML='<div class="online-empty">در حال گرفتن فهرست…</div>';
+  const r=await pzApi('GET','/users/online'+(refresh?'?refresh=1':''));
+  ONLINE_BUSY=false;
+  if(btn) btn.disabled=false;
+  if(!r||r.error||r.ok===false){
+    const msg=(r&&r.error&&r.error.message)||'فهرست گرفته نشد';
+    if(refresh) toast(msg); else list.innerHTML='<div class="online-empty">'+pzEsc(msg)+'</div>';
+    return;
+  }
+  const cnt=document.getElementById('onCount'); if(cnt) cnt.textContent=fa(r.onlineTotal||0);
+  if(btn) btn.textContent=(r.nextCost>0)?('🔄 نمایش افراد دیگر · '+fa(r.nextCost)+' سکه'):'🔄 نمایش افراد دیگر';
+  if(r.charged>0){ toast(fa(r.charged)+' سکه کم شد'); try{ pzRefreshHoldings(); }catch(e){} }
+  const ps=r.players||[];
+  list.innerHTML=ps.length?ps.map(p=>
+    '<div class="online-card"><span class="dot"></span>'+
+      '<div class="av">'+(p.avatar?'<img src="'+pzEsc(p.avatar)+'" alt="">':(p.gender==='female'?'👩':p.gender==='male'?'👨':'👤'))+'</div>'+
+      '<div class="nm">'+pzEsc(p.displayName||p.username||'بازیکن')+'</div>'+
+      '<div class="lv">سطح '+fa(p.level||1)+'</div>'+
+    '</div>').join(''):'<div class="online-empty">الان کسی آنلاین نیست.<br>کمی بعد دوباره سر بزن.</div>';
+}
+function hmQuizMaker(){ go('qsubmit'); qsLoadMine(); }
 
 function hmBoot(){ hmRails(); hmRender(); hmSwipeInit(); }
 
@@ -13802,6 +13892,17 @@ function applyMyName(){
 /* Inline field-error helpers (red border + message under the field). */
 function setFieldErr(inputId,errId,msg){ const i=document.getElementById(inputId),e=document.getElementById(errId); if(i)i.classList.add('err'); if(e){e.textContent=msg;e.classList.add('show');} }
 function clearFieldErr(inputId){ const i=document.getElementById(inputId); if(i)i.classList.remove('err'); const e=document.getElementById('err'+inputId.replace(/^reg/,'')); if(e)e.classList.remove('show'); }
+/* Gender: three buttons, one chosen, and «ترجیح می‌دهم نگویم» is a real answer
+   rather than a way of skipping the question. Nothing is preselected — a
+   default here would record a guess as if the player had said it. */
+function pickGender(groupId,g){
+  const box=document.getElementById(groupId); if(!box)return;
+  box.querySelectorAll('.gender-opt').forEach(b=>b.classList.toggle('on',b.dataset.g===g));
+  box.dataset.value=g;
+}
+function readGender(groupId){ const box=document.getElementById(groupId); return (box&&box.dataset.value)||''; }
+function showGender(groupId,g){ const box=document.getElementById(groupId); if(!box)return; box.dataset.value=g||''; box.querySelectorAll('.gender-opt').forEach(b=>b.classList.toggle('on',!!g&&b.dataset.g===g)); }
+
 async function submitRegister(){
   const full=(document.getElementById('regFullName')?.value||'').trim();
   const uname=(document.getElementById('regUsername')?.value||'').trim();
@@ -13816,7 +13917,8 @@ async function submitRegister(){
   if(!ok){ try{sfx('wrong');vib([40,30,40]);}catch(e){} return; }
   const btn=document.querySelector('#register .btn-primary'); const _t=btn?btn.textContent:'';
   if(btn){btn.disabled=true;btn.textContent='در حال ذخیره...';}
-  const r=await pzApi('PATCH','/users/me',{displayName:full,username:uname,referralCode:ref});
+  const g=readGender('regGender');
+  const r=await pzApi('PATCH','/users/me',Object.assign({displayName:full,username:uname,referralCode:ref},g?{gender:g}:{}));
   if(btn){btn.disabled=false;btn.textContent=_t;}
   if(r.ok){
     _usr=r.data; try{localStorage.setItem('pz_usr',JSON.stringify(_usr));}catch(e){}
@@ -13829,6 +13931,7 @@ async function submitRegister(){
 function populateProfileEdit(){
   const nEl=document.getElementById('profEditName'); if(nEl) nEl.value=(_usr&&_usr.displayName&&_usr.displayName!=='بازیکن جدید')?_usr.displayName:'';
   const uEl=document.getElementById('profEditUsername'); if(uEl) uEl.value=(_usr&&_usr.username&&!/^user_\d+$/.test(_usr.username))?_usr.username:'';
+  showGender('profGender',(_usr&&_usr.gender)||'');
   try{ pzApplyMyAvatar((_usr&&_usr.avatar)||''); }catch(e){}
   try{ pzApplyMyCharacter((_usr&&_usr.character)||null); }catch(e){}
 }
@@ -13838,7 +13941,8 @@ async function submitProfileEdit(){
   if(full && full.length<2){toast('نام را کامل وارد کن');return;}
   if(uname && !/^[A-Za-z0-9_]{3,20}$/.test(uname)){toast('نام کاربری: ۳ تا ۲۰ حرف انگلیسی، عدد یا _');return;}
   const body={}; if(full)body.displayName=full; if(uname)body.username=uname;
-  if(!body.displayName&&!body.username){toast('چیزی برای تغییر نیست');return;}
+  const g=readGender('profGender'); if(g&&g!==((_usr&&_usr.gender)||'')) body.gender=g;
+  if(!body.displayName&&!body.username&&!body.gender){toast('چیزی برای تغییر نیست');return;}
   const r=await pzApi('PATCH','/users/me',body);
   if(r.ok){ _usr=r.data; try{localStorage.setItem('pz_usr',JSON.stringify(_usr));}catch(e){} applyMyName(); toast('تغییرات ذخیره شد ✅'); }
   else { toast(r.error?.message||'ذخیره نشد — شاید نام کاربری تکراری است'); }

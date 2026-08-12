@@ -1,4 +1,5 @@
 import type { Router } from '../../http/router.js';
+import { submitQuestion, mySubmissions, UserQuestionError } from '../../services/userQuestionService.js';
 import { error, json } from '../../http/response.js';
 import { nextQuestion } from '../../services/questionEngine.js';
 import { recordFeedback } from '../../services/questionPipelineService.js';
@@ -8,6 +9,34 @@ import { requireAdmin } from '../../services/adminGuard.js';
 import { getQuestionCounts, getQuestionDistribution } from '../../services/questionStatsService.js';
 
 export function registerQuestionRoutes(router: Router, base: string): void {
+  /* A player writes a question. It goes into the same pipeline the panel
+   * reviews — the screen used to show a success message and drop it. */
+  router.add('POST', `${base}/questions/submit`, async (ctx) => {
+    /* The author is paid when the question is approved, so an anonymous
+     * submission has nobody to pay — and would land in the panel with no name
+     * against it. */
+    if (!ctx.userId) return error(ctx.res, 401, 'UNAUTHORIZED', 'برای ارسال سؤال باید وارد شوی.');
+    const b = (ctx.body ?? {}) as any;
+    try {
+      const r = await submitQuestion({
+        userId: ctx.userId,
+        text: String(b.text ?? ''),
+        options: Array.isArray(b.options) ? b.options : [],
+        correctIndex: Number(b.correctIndex ?? 0),
+        category: b.category ? String(b.category) : undefined,
+        difficulty: b.difficulty ? String(b.difficulty) : undefined
+      });
+      json(ctx.res, 201, r);
+    } catch (e) {
+      if (e instanceof UserQuestionError) return error(ctx.res, 422, e.code, e.message);
+      throw e;
+    }
+  });
+  router.add('GET', `${base}/questions/mine`, async (ctx) => {
+    if (!ctx.userId) return error(ctx.res, 401, 'UNAUTHORIZED', 'Login required.');
+    json(ctx.res, 200, { rows: await mySubmissions(ctx.userId) });
+  });
+
   // Distinct categories actually present in the approved question bank, with a
   // count each, most-stocked first. The topic-pick screen shows a random subset
   // of these plus a "popular" (mixed) option, so every listed topic really has
@@ -29,10 +58,6 @@ export function registerQuestionRoutes(router: Router, base: string): void {
     const q = await nextQuestion();
     json(ctx.res, 200, { id: q.id, category: q.category, difficulty: q.difficulty, text: q.text, options: q.options, correctIndex: q.correctIndex });
   });
-  router.add('POST', `${base}/questions/submit`, (ctx) => {
-    json(ctx.res, 201, { status: 'pending', received: true });
-  });
-
   // Player feedback on a question (too hard/easy, wrong answer, duplicate,
   // report). Feeds the pipeline; a question crossing the report threshold is
   // auto-retired from the live bank for review.

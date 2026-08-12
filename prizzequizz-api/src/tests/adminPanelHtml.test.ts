@@ -319,6 +319,48 @@ function run(): void {
       'a merged row opens only when one of its own screens is permitted');
   });
 
+  /* ── کوییزساز ─────────────────────────────────────────────────────── */
+
+  check('the quiz-maker list is reachable from the questions tab', () => {
+    assert.ok(script.includes('async function renderQuizMaker('), 'the screen exists');
+    assert.match(script, /async function renderQuestions\(\)\{[\s\S]{0,120}Q_VIEW==='maker'[\s\S]{0,40}renderQuizMaker\(\)/,
+      'and the questions tab actually switches to it');
+    assert.ok(script.includes("qViewBar(badgeFor('questions'))"),
+      'the bank view shows how many player questions are waiting');
+  });
+
+  check('approving a player question is one button, not a bulk sweep', () => {
+    /* Approving one pays real money. It must never ride along with the bank
+       screen’s «تأیید همه». */
+    const i = script.indexOf('async function renderQuizMaker(');
+    const body = script.slice(i, script.indexOf('async function qmkReview('));
+    assert.ok(body.includes("qmkReview(\\'"), 'each row reviews itself');
+    assert.ok(!/qBulk\(/.test(body), 'and the bulk approver is not on this screen');
+  });
+
+  check('the review call sends an action the API accepts', () => {
+    const i = script.indexOf('async function qmkReview(');
+    const body = script.slice(i, i + 900);
+    assert.match(body, /'\/admin\/user-questions\/'\+id\+'\/review',\{action\}/, 'right endpoint and body');
+    assert.ok(body.includes("if(action==='reject'&&!confirm("), 'rejecting asks first — it cannot be undone');
+    assert.ok(body.includes('r.rewarded'), 'and the operator is told whether it paid');
+  });
+
+  check('the reward table shows the real chance, not raw weights', () => {
+    /* «وزن ۸» tells nobody whether that is 8٪ or 40٪, and this table decides
+       how often a 50,000-toman prize goes out. */
+    assert.ok(script.includes('function qmkChance('), 'the chance line exists');
+    assert.match(script, /function qmkChance\(\)\{[\s\S]{0,400}p\.weight\/tot\*1000/, 'computed from the weights actually on screen');
+    assert.match(script, /function qmkChance\(\)\{[\s\S]{0,400}tot<=0\?'⚠️/, 'and all-zero weights are called out');
+  });
+
+  check('saving the reward settings sends every field', () => {
+    const i = script.indexOf('async function qmkSaveConfig(');
+    const body = script.slice(i, i + 500);
+    for (const f of ['enabled:', 'mode:', 'n:', 'prizes:']) assert.ok(body.includes(f), 'missing ' + f);
+    assert.ok(body.includes("'PUT','/admin/user-questions/config'"), 'to the config endpoint');
+  });
+
   console.log(`[adminPanelHtml] ${passed} passed, ${failed} failed`);
   if (failed) process.exit(1);
 }

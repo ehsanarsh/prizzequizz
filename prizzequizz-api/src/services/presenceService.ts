@@ -128,6 +128,34 @@ export async function lastSeenFor(userIds: string[]): Promise<Map<string, Date>>
   return out;
 }
 
+/* WHO is here, not how many. The "افراد آنلاین" panel needs the ids themselves,
+ * and it needs MORE of them than it shows: the list is then narrowed by gender
+ * and by who the player has already seen, so asking for exactly ten would leave
+ * it short every time. */
+export async function onlineUserIds(limit = 200, minutes = ONLINE_MINUTES): Promise<string[]> {
+  const pool = pg();
+  if (pool) {
+    try {
+      await ensureSchema(pool);
+      const { rows } = await pool.query(
+        `SELECT user_id FROM user_presence
+          WHERE last_seen_at >= now() - ($1 || ' minutes')::interval
+          ORDER BY last_seen_at DESC LIMIT $2`,
+        [String(Math.max(1, Math.floor(minutes))), Math.max(1, Math.floor(limit))]);
+      return rows.map((r) => String(r.user_id));
+    } catch (e) {
+      logger.warn('presence_list_failed', { message: e instanceof Error ? e.message : 'unknown' });
+      return [];
+    }
+  }
+  const cutoff = Date.now() - minutes * 60_000;
+  return [...memSeen.entries()]
+    .filter(([, t]) => t >= cutoff)
+    .sort((x, y) => y[1] - x[1])
+    .slice(0, Math.max(1, Math.floor(limit)))
+    .map(([id]) => id);
+}
+
 /** Is a last-seen stamp recent enough to call someone online? */
 export function isOnline(seen: Date | null | undefined, minutes = ONLINE_MINUTES): boolean {
   if (!seen) return false;

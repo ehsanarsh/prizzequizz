@@ -259,8 +259,11 @@ export function dayNumber(ts: number): number {
 
 export interface Granted { type: RewardType; amount: number; target: string; label: string; icon: string }
 
-/** Pay a prize out for real. Idempotency key makes a retried claim safe. */
-async function grant(userId: string, p: { type: RewardType; amount: number; target: string; label: string; icon: string }, idemKey: string): Promise<Granted> {
+/** Pay a prize out for real. Idempotency key makes a retried claim safe.
+ *  Exported because the wheel is no longer the only thing that pays a prize —
+ *  an approved player-written question does too, and paying it any other way
+ *  would be a second, divergent copy of this. */
+export async function grantReward(userId: string, p: { type: RewardType; amount: number; target: string; label: string; icon: string }, idemKey: string): Promise<Granted> {
   const amount = Math.max(0, Math.floor(p.amount || 0));
   if (p.type !== 'nothing' && amount > 0) {
     if (p.type === 'cash') {
@@ -327,7 +330,7 @@ export async function spin(userId: string): Promise<SpinResult> {
   st.lastSpinAt = now;
   await saveState(userId, st);
 
-  const granted = await grant(userId, segment, `wheel:${userId}:${now}`);
+  const granted = await grantReward(userId, segment, `wheel:${userId}:${now}`);
   logger.info('wheel_spun', { userId, segment: segment.id, type: segment.type, amount: granted.amount });
   return { index, segment, granted, nextSpinAt: cooldownMs > 0 ? now + cooldownMs : null };
 }
@@ -404,7 +407,7 @@ export async function claimDaily(userId: string): Promise<{ day: number; granted
   st.streakDay = day;
   await saveState(userId, st);
 
-  const granted = await grant(userId, prize, `daily:${userId}:${dayNumber(now)}`);
+  const granted = await grantReward(userId, prize, `daily:${userId}:${dayNumber(now)}`);
   logger.info('daily_claimed', { userId, day, type: prize.type, amount: granted.amount });
   return { day, granted, streakDays: cfg.daily.streakDays };
 }

@@ -14,7 +14,7 @@ function uuidOrNull(v: unknown): string | null {
 }
 
 function userFromRow(r: any): User {
-  return { id: r.id, phone: r.phone, username: r.username, displayName: r.display_name, plan: r.plan, role: r.role ?? 'user', status: r.status ?? 'active', banReason: r.ban_reason ?? undefined, bannedAt: r.banned_at?.toISOString?.() ?? r.banned_at ?? undefined, level: r.level, xp: Number(r.xp), weeklyScore: Number(r.weekly_score ?? 0), weeklyWeek: r.weekly_week ?? undefined, wallet: Number(r.wallet_balance), coins: Number(r.coins), hearts: Number(r.hearts), tickets: r.tickets ?? { bronze: 0, silver: 0, gold: 0 }, lifelines: r.lifelines ?? undefined };
+  return { id: r.id, phone: r.phone, username: r.username, displayName: r.display_name, gender: r.gender ?? undefined, plan: r.plan, role: r.role ?? 'user', status: r.status ?? 'active', banReason: r.ban_reason ?? undefined, bannedAt: r.banned_at?.toISOString?.() ?? r.banned_at ?? undefined, level: r.level, xp: Number(r.xp), weeklyScore: Number(r.weekly_score ?? 0), weeklyWeek: r.weekly_week ?? undefined, wallet: Number(r.wallet_balance), coins: Number(r.coins), hearts: Number(r.hearts), tickets: r.tickets ?? { bronze: 0, silver: 0, gold: 0 }, lifelines: r.lifelines ?? undefined };
 }
 
 function questionFromRow(r: any): Question {
@@ -63,10 +63,10 @@ export const postgresRepositories: RepositoryBundle = {
     async findByPhone(phone: string): Promise<User | null> { const { rows } = await pool().query('select * from users where phone=$1', [phone]); return rows[0] ? userFromRow(rows[0]) : null; },
     async list(limit = 1000): Promise<User[]> { const { rows } = await pool().query('select * from users order by updated_at desc limit $1', [limit]); return rows.map(userFromRow); },
     async save(user: User): Promise<void> {
-      await pool().query(`insert into users(id,phone,username,display_name,plan,coins,hearts,wallet_balance,xp,level,weekly_score,role,status,ban_reason,banned_at,updated_at)
-        values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,now())
-        on conflict(id) do update set phone=$2, username=$3, display_name=$4, plan=$5, coins=$6, hearts=$7, wallet_balance=$8, xp=$9, level=$10, weekly_score=$11, role=$12, status=$13, ban_reason=$14, banned_at=$15, updated_at=now()`,
-        [user.id,user.phone,user.username,user.displayName,user.plan,user.coins,user.hearts,user.wallet,user.xp,user.level,user.weeklyScore,user.role ?? 'user',user.status ?? 'active',user.banReason ?? null,user.bannedAt ?? null]);
+      await pool().query(`insert into users(id,phone,username,display_name,plan,coins,hearts,wallet_balance,xp,level,weekly_score,role,status,ban_reason,banned_at,gender,updated_at)
+        values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,now())
+        on conflict(id) do update set phone=$2, username=$3, display_name=$4, plan=$5, coins=$6, hearts=$7, wallet_balance=$8, xp=$9, level=$10, weekly_score=$11, role=$12, status=$13, ban_reason=$14, banned_at=$15, gender=$16, updated_at=now()`,
+        [user.id,user.phone,user.username,user.displayName,user.plan,user.coins,user.hearts,user.wallet,user.xp,user.level,user.weeklyScore,user.role ?? 'user',user.status ?? 'active',user.banReason ?? null,user.bannedAt ?? null,user.gender ?? null]);
     },
     async updateLifelines(userId: string, lifelines: Record<string, number>): Promise<void> {
       await pool().query('update users set lifelines=$1, updated_at=now() where id=$2', [JSON.stringify(lifelines), userId]);

@@ -791,11 +791,25 @@ async function renderFinance(){
 /* ================= USERS ================= */
 let U_Q='';
 let _USEL=new Set();
+async function saveOnlineCfg(){
+  try{
+    await api('PUT','/admin/online-config',{size:Number($('#oc_size').value||10),refreshCost:Number($('#oc_cost').value||0),freeRefreshesPerDay:Number($('#oc_free').value||0)});
+    toast('ذخیره شد','ok'); render();
+  }catch(e){ toast(e.message,'bad'); }
+}
 async function renderUsers(){
   const rows=await api('GET','/admin/users?q='+encodeURIComponent(U_Q)+'&limit=200');
   const list=(rows.rows||rows||[]);
   window._UALL=list;
+  const oc=await api('GET','/admin/online-config').catch(()=>null);
   $('#main').innerHTML=head('مدیریت کاربران','جستجو، ویرایش، بن، بلیط، پیام، ریست + عملیاتِ گروهی')+
+    (oc?'<div class="card" style="margin-bottom:12px"><b>افراد آنلاین (صفحهٔ اصلی)</b>'+
+      '<div class="note">اولین بازکردنِ صفحه همیشه رایگان است؛ هزینه فقط برای دکمهٔ «نمایش افراد دیگر» گرفته می‌شود.</div>'+
+      '<div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-top:8px">'+
+        '<label>تعداد نمایش<input type="number" id="oc_size" min="1" max="50" value="'+(oc.size||10)+'" style="width:90px"></label>'+
+        '<label>هزینهٔ هر رفرش (سکه)<input type="number" id="oc_cost" min="0" max="1000" value="'+(oc.refreshCost||0)+'" style="width:110px"></label>'+
+        '<label>رفرش رایگان روزانه<input type="number" id="oc_free" min="0" max="100" value="'+(oc.freeRefreshesPerDay||0)+'" style="width:110px"></label>'+
+        '<button class="btn pri" onclick="saveOnlineCfg()">ذخیره</button></div></div>':'')+
     '<div class="toolbar"><input id="uq" placeholder="جستجوی نام/یوزرنیم/شناسه/شماره..." value="'+esc(U_Q)+'" onkeydown="if(event.key===\'Enter\'){U_Q=this.value.trim();render();}"><button class="btn" onclick="U_Q=$(\'#uq\').value.trim();render()">جستجو</button></div>'+
     '<div id="ubulk"></div>'+
     '<div class="tbl-wrap"><table><thead><tr><th style="width:34px"><input type="checkbox" id="uselall" onclick="uSelAll(this.checked)"></th>'+
@@ -998,7 +1012,20 @@ async function qStats(id){
     (s.correctPercent!=null&&s.correctPercent<20&&total>=20?'<div class="note" style="color:var(--bad);margin-top:8px">⚠️ کمتر از ۲۰٪ درست جواب داده‌اند — احتمالاً سؤال یا گزینهٔ درست مشکل دارد.</div>':'')+
     (s.correctPercent!=null&&s.correctPercent>90&&total>=20?'<div class="note" style="margin-top:8px">این سؤال برای اکثر کاربران خیلی آسان است.</div>':''));
 }
+/* The questions screen holds two lists that look alike but are not: the bank
+ * we wrote, and the ones players wrote in «کوییزساز». They live behind one
+ * switch because an operator reviewing questions wants both in one place —
+ * but a player's question pays real money when approved, so it never shares a
+ * bulk «تأیید همه» button with the bank. */
+let Q_VIEW='bank', Q_MK_ST='pending';
+function qViewBar(pending){
+  return '<div class="subtabs pz-qview">'+
+    '<button class="'+(Q_VIEW==='bank'?'active':'')+'" onclick="Q_VIEW=\'bank\';render()">📚 بانک سوال</button>'+
+    '<button class="'+(Q_VIEW==='maker'?'active':'')+'" onclick="Q_VIEW=\'maker\';render()">✍️ کوییزساز کاربران'+
+      (pending>0?' <span class="pz-badge">'+fa(pending)+'</span>':'')+'</button></div>';
+}
 async function renderQuestions(){
+  if(Q_VIEW==='maker') return renderQuizMaker();
   const all=await api('GET','/admin/questions').catch(()=>[]);
   const list=(Array.isArray(all)?all:(all.rows||[]));
   // category tabs derived from the real question bank
@@ -1011,6 +1038,7 @@ async function renderQuestions(){
     cats.map(c=>'<button class="'+(Q_CAT===c?'active':'')+'" onclick="Q_CAT='+JSON.stringify(c).replace(/"/g,'&quot;')+';render()">'+esc(c)+' ('+fa(catCount[c])+')</button>').join('')+'</div>';
   $('#main').innerHTML=head('مدیریت سوالات',fa(filtered.length)+' سوال'+(Q_CAT?' در «'+esc(Q_CAT)+'»':''),
     '<button class="btn pri" onclick="qAdd()">➕ افزودن</button> <button class="btn ok" onclick="qAdd(\'انتخاب موضوع\')">🎯 سؤال تعیین موضوع</button> <button class="btn info" onclick="qImport()">📥 ورود انبوه</button> <button class="btn" onclick="qSampleJson()">📄 نمونه JSON</button> <button class="btn" onclick="qExport()">CSV</button>')+
+    qViewBar(badgeFor('questions'))+
     catTabs+
     '<div class="toolbar"><input id="qsearch" placeholder="جستجوی متن سوال..." value="'+esc(Q_SEARCH)+'" onkeydown="if(event.key===\'Enter\'){Q_SEARCH=this.value;render();}"><button class="btn" onclick="Q_SEARCH=$(\'#qsearch\').value;render()">جستجو</button>'+
     '<div class="subtabs" style="margin:0">'+['','approved','pending','archived'].map(st=>'<button class="'+(Q_ST===st?'active':'')+'" onclick="Q_ST=\''+st+'\';render()">'+(st===''?'همه وضعیت‌ها':{approved:'تأییدشده',pending:'در انتظار',archived:'بایگانی'}[st])+'</button>').join('')+'</div></div>'+
@@ -1033,6 +1061,105 @@ async function renderQuestions(){
   qBulkBar();
   qLoadStats();   // fill the real «استفاده» / «٪ صحیح» columns in the background
   const qi=$('#qsearch'); if(qi&&Q_SEARCH){qi.focus();qi.setSelectionRange(qi.value.length,qi.value.length);}
+}
+/* ── کوییزساز: questions players wrote ─────────────────────────────────
+ * Approving one publishes it into the bank AND pays the author, so the button
+ * says what it will cost before it is pressed and the row shows what was paid
+ * after. */
+const QMK_PRIZE_LABEL={coins:'سکه',xp:'XP',cash:'جایزهٔ نقدی',ticket:'بلیط',lifeline:'کمک',heart:'قلب',nothing:'هیچ'};
+function qmkPrizeText(r){
+  if(!r) return '—';
+  const t=QMK_PRIZE_LABEL[r.type]||r.type;
+  return (r.icon?r.icon+' ':'')+fa(r.amount)+' '+esc(r.label||t);
+}
+async function renderQuizMaker(){
+  let d; try{ d=await api('GET','/admin/user-questions?status='+encodeURIComponent(Q_MK_ST)+'&limit=300'); }
+  catch(e){ $('#main').innerHTML=head('کوییزساز کاربران','')+qViewBar(0)+'<div class="empty">در دسترس نیست: '+esc(e.message)+'</div>'; return; }
+  const rows=d.rows||[], c=d.counts||{pending:0,approved:0,rejected:0}, cfg=d.config||{};
+  window._QMKCFG=cfg;
+  const modeTxt=!cfg.enabled?'جایزه خاموش است':(cfg.mode==='everyN'?'برای هر '+fa(cfg.n)+' سؤالِ تأییدشدهٔ هر کاربر، یک جایزه':'برای هر سؤال تأییدشده، یک جایزه');
+  const stTabs='<div class="subtabs" style="margin:0">'+[['pending','در انتظار',c.pending],['approved','تأییدشده',c.approved],['rejected','ردشده',c.rejected],['all','همه',c.pending+c.approved+c.rejected]]
+    .map(t=>'<button class="'+(Q_MK_ST===t[0]?'active':'')+'" onclick="Q_MK_ST=\''+t[0]+'\';render()">'+t[1]+' ('+fa(t[2])+')</button>').join('')+'</div>';
+  $('#main').innerHTML=head('کوییزساز کاربران',modeTxt,'<button class="btn pri" onclick="qmkConfig()">⚙️ تنظیم جایزه‌ها</button>')+
+    qViewBar(c.pending)+
+    '<div class="grid g4">'+stat('در انتظار بررسی',c.pending?'gold':'',fa(c.pending))+stat('تأییدشده','ok',fa(c.approved))+stat('ردشده','bad',fa(c.rejected))+
+      stat('جایزه‌دهی',cfg.enabled?'ok':'bad',cfg.enabled?'روشن':'خاموش')+'</div>'+
+    '<div class="toolbar">'+stTabs+'</div>'+
+    '<div class="tbl-wrap"><table><thead><tr>'+['سوال','گزینه‌ها / پاسخ درست','دسته','نویسنده','تاریخ','وضعیت','جایزه','عملیات'].map(h=>'<th>'+h+'</th>').join('')+'</tr></thead><tbody>'+
+    (rows.length?rows.map(r=>'<tr>'+
+      '<td style="max-width:280px">'+esc(String(r.text||'').slice(0,120))+'</td>'+
+      '<td>'+(r.options||[]).map((o,i)=>'<span class="pill '+(i===r.correctIndex?'ok':'')+'" style="margin:1px">'+esc(String(o).slice(0,20))+'</span>').join(' ')+'</td>'+
+      '<td>'+esc(r.category||'—')+'</td>'+
+      '<td>'+esc(r.username||r.userId||'—')+'</td>'+
+      '<td class="mono">'+esc(fmtDate(r.createdAt))+'</td>'+
+      '<td><span class="pill '+(r.status==='approved'?'ok':r.status==='rejected'?'bad':'pend')+'">'+({pending:'در انتظار',approved:'تأییدشده',rejected:'ردشده'}[r.status]||esc(r.status))+'</span></td>'+
+      '<td>'+qmkPrizeText(r.reward)+'</td>'+
+      '<td>'+(r.status==='pending'
+        ?'<button class="btn sm ok" onclick="qmkReview(\''+r.questionId+'\',\'approve\')">✅ تأیید و جایزه</button> <button class="btn sm bad" onclick="qmkReview(\''+r.questionId+'\',\'reject\')">✖ رد</button>'
+        :'<span class="note">بررسی شد</span>')+'</td>'+
+    '</tr>').join(''):'<tr><td colspan="8" class="empty">سوالی در این وضعیت نیست</td></tr>')+
+    '</tbody></table></div>';
+}
+async function qmkReview(id,action){
+  if(action==='reject'&&!confirm('این سؤال رد شود؟ به بانک سوال نمی‌رود و جایزه‌ای پرداخت نمی‌شود.'))return;
+  try{
+    const r=await api('POST','/admin/user-questions/'+id+'/review',{action});
+    if(action==='reject') toast('رد شد','ok');
+    else if(r.rewarded) toast('تأیید شد — جایزه: '+qmkPrizeText(r.reward).replace(/<[^>]*>/g,''),'ok');
+    else toast('تأیید شد — بدون جایزه ('+({REWARDS_OFF:'جایزه‌دهی خاموش است',NOT_THIS_ONE:'نوبت جایزهٔ این کاربر نیست',NO_PRIZES:'جایزه‌ای تعریف نشده',ALREADY_REWARDED:'قبلاً جایزه گرفته',ALREADY_APPROVED:'قبلاً تأیید شده'}[r.reason]||r.reason||'—')+')','ok');
+    badgeLoad();
+    render();
+  }catch(e){ toast(e.message,'bad'); }
+}
+function qmkConfig(){
+  const cfg=window._QMKCFG||{}; const prizes=cfg.prizes||[];
+  modal('تنظیم جایزهٔ کوییزساز',
+    '<label><input type="checkbox" id="qmk_on" '+(cfg.enabled?'checked':'')+'> جایزه‌دهی روشن باشد</label>'+
+    '<div style="display:flex;gap:10px;align-items:flex-end;margin:10px 0"><label>حالت<select id="qmk_mode" onchange="$(\'#qmk_nwrap\').style.display=this.value===\'everyN\'?\'\':\'none\'">'+
+      '<option value="each" '+(cfg.mode==='each'?'selected':'')+'>برای هر سؤال تأییدشده</option>'+
+      '<option value="everyN" '+(cfg.mode==='everyN'?'selected':'')+'>یکی از هر N سؤال</option></select></label>'+
+      '<label id="qmk_nwrap" style="'+(cfg.mode==='everyN'?'':'display:none')+'">N<input type="number" id="qmk_n" min="2" max="100" value="'+(cfg.n||10)+'"></label></div>'+
+    '<div class="note">جایزه به‌صورت رندوم و بر اساس وزن‌ها از جدول زیر انتخاب می‌شود. وزن صفر یعنی هرگز.</div>'+
+    '<div class="tbl-wrap"><table><thead><tr>'+['جایزه','نوع','کمینه','بیشینه','وزن'].map(h=>'<th>'+h+'</th>').join('')+'</tr></thead><tbody id="qmk_rows">'+
+      prizes.map((p,i)=>'<tr data-i="'+i+'">'+
+        '<td><input class="qmk_lbl" value="'+esc(p.label||'')+'" style="width:110px"> <input class="qmk_ico" value="'+esc(p.icon||'')+'" style="width:46px"></td>'+
+        '<td><select class="qmk_t">'+['coins','xp','cash','ticket','lifeline','heart','nothing'].map(t=>'<option value="'+t+'" '+(p.type===t?'selected':'')+'>'+QMK_PRIZE_LABEL[t]+'</option>').join('')+'</select>'+
+          '<input class="qmk_tg" placeholder="نوع بلیط/کمک" value="'+esc(p.target||'')+'" style="width:90px"></td>'+
+        '<td><input type="number" class="qmk_min" value="'+(p.min||0)+'" style="width:90px"></td>'+
+        '<td><input type="number" class="qmk_max" value="'+(p.max||0)+'" style="width:90px"></td>'+
+        '<td><input type="number" class="qmk_w" min="0" value="'+(p.weight||0)+'" style="width:70px"></td>'+
+      '</tr>').join('')+'</tbody></table></div>'+
+    '<div class="note" id="qmk_chance"></div>'+
+    '<div class="modal-actions" style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end">'+
+      '<button class="btn" onclick="this.closest(\'.modal-bg\').remove()">انصراف</button>'+
+      '<button class="btn pri" onclick="qmkSaveConfig()">ذخیره</button></div>');
+  qmkChance();
+  document.querySelectorAll('#qmk_rows .qmk_w').forEach(el=>el.addEventListener('input',qmkChance));
+}
+function qmkReadPrizes(){
+  return [...document.querySelectorAll('#qmk_rows tr')].map(tr=>({
+    type:tr.querySelector('.qmk_t').value,
+    target:tr.querySelector('.qmk_tg').value.trim()||undefined,
+    min:Number(tr.querySelector('.qmk_min').value||0),
+    max:Number(tr.querySelector('.qmk_max').value||0),
+    weight:Number(tr.querySelector('.qmk_w').value||0),
+    label:tr.querySelector('.qmk_lbl').value.trim(),
+    icon:tr.querySelector('.qmk_ico').value.trim()
+  }));
+}
+/* The weights are meaningless on their own — 8 out of what? Show the real
+ * chance so nobody sets a 50,000-toman prize to «8» thinking it is 8٪ when the
+ * other weights add up to 20. */
+function qmkChance(){
+  const el=$('#qmk_chance'); if(!el)return;
+  const ps=qmkReadPrizes(), tot=ps.reduce((s,p)=>s+Math.max(0,p.weight),0);
+  el.innerHTML=tot<=0?'⚠️ همهٔ وزن‌ها صفر است — هیچ جایزه‌ای داده نمی‌شود.':
+    'شانس هر جایزه: '+ps.filter(p=>p.weight>0).map(p=>esc(p.label||p.type)+' '+fa(Math.round(p.weight/tot*1000)/10)+'٪').join(' · ');
+}
+async function qmkSaveConfig(){
+  const body={enabled:$('#qmk_on').checked,mode:$('#qmk_mode').value,n:Number($('#qmk_n')?$('#qmk_n').value:10)||10,prizes:qmkReadPrizes()};
+  try{ await api('PUT','/admin/user-questions/config',body); toast('ذخیره شد','ok'); document.querySelector('.modal-bg').remove(); render(); }
+  catch(e){ toast(e.message,'bad'); }
 }
 let _QSEL=new Set();
 function qSelOne(id,on){ if(on)_QSEL.add(id); else _QSEL.delete(id); qBulkBar(); }

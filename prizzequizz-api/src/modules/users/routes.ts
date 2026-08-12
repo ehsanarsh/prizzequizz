@@ -6,6 +6,7 @@ import { AvatarError, AVATAR_MAX_BYTES, avatarUrlFor, getAvatar, removeAvatar, s
 import { buildUserStats } from '../../services/userStatsService.js';
 import { equippedCharacterFor } from '../../services/characterSelectionService.js';
 import { effectiveWeeklyScore } from '../../services/scoringConfig.js';
+import { listOnlinePlayers, OnlinePlayersError } from '../../services/onlinePlayersService.js';
 
 export function registerUserRoutes(router: Router, base: string): void {
   /* "Me" is whoever the token says it is — and nobody otherwise. This used to
@@ -22,6 +23,21 @@ export function registerUserRoutes(router: Router, base: string): void {
     json(ctx.res, 200, { ...toDto(user), avatar: await avatarUrlFor(user.id), character: await equippedCharacterFor(user.id) });
   });
 
+  /* The home screen's «افراد آنلاین». `refresh=1` is the button; without it
+   * this is the first look, which is free. */
+  router.add('GET', `${base}/users/online`, async (ctx) => {
+    if (!ctx.userId) return error(ctx.res, 401, 'UNAUTHORIZED', 'ابتدا وارد شو.');
+    const refresh = ctx.query.get('refresh') === '1' || ctx.query.get('refresh') === 'true';
+    try {
+      json(ctx.res, 200, await listOnlinePlayers(ctx.userId, refresh));
+    } catch (e) {
+      if (e instanceof OnlinePlayersError) {
+        return error(ctx.res, e.code === 'INSUFFICIENT_COINS' ? 402 : 404, e.code, e.message);
+      }
+      throw e;
+    }
+  });
+
   // Complete/update the player's own profile (display name + unique username).
   router.add('PATCH', `${base}/users/me`, async (ctx) => {
     if (!ctx.userId) return error(ctx.res, 401, 'UNAUTHORIZED', 'ابتدا وارد شو.');
@@ -30,6 +46,13 @@ export function registerUserRoutes(router: Router, base: string): void {
     const body = (ctx.body ?? {}) as Record<string, unknown>;
     if (typeof body.displayName === 'string' && body.displayName.trim()) user.displayName = body.displayName.trim().slice(0, 120);
     if (typeof body.username === 'string' && body.username.trim()) user.username = body.username.trim().slice(0, 64);
+    /* Gender is optional and reversible. Anything that is not one of the three
+     * answers clears it rather than being stored — a typo must not become a
+     * value the online list then filters on. */
+    if (body.gender !== undefined) {
+      const g = String(body.gender);
+      user.gender = (g === 'male' || g === 'female' || g === 'other') ? g : undefined;
+    }
     // The username column is UNIQUE — a clash surfaces as a save error → 409.
     try {
       await repositories.users.save(user);
@@ -100,5 +123,5 @@ export function registerUserRoutes(router: Router, base: string): void {
 }
 
 function toDto(user: any) {
-  return { id: user.id, username: user.username, displayName: user.displayName, plan: user.plan, level: user.level, xp: user.xp, weeklyScore: effectiveWeeklyScore(user), lifelines: user.lifelines ?? {}, balances: { wallet: user.wallet, coins: user.coins, hearts: user.hearts, tickets: user.tickets } };
+  return { id: user.id, username: user.username, displayName: user.displayName, gender: user.gender ?? null, plan: user.plan, level: user.level, xp: user.xp, weeklyScore: effectiveWeeklyScore(user), lifelines: user.lifelines ?? {}, balances: { wallet: user.wallet, coins: user.coins, hearts: user.hearts, tickets: user.tickets } };
 }

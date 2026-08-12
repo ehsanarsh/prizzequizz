@@ -32,6 +32,8 @@ import { listItems as shopList, saveItem as shopSave, removeItem as shopRemove, 
 import { login as adminLogin, listAccounts, createAccount, updateAccount, deleteAccount, changeOwnPassword, resolveTokenSync, ADMIN_TABS } from '../../services/adminAccountService.js';
 import { currentAdmin } from '../../services/adminGuard.js';
 import { badgeCounts, markScreenSeen, isQueueScreen } from '../../services/adminBadgeService.js';
+import { getOnlineConfig, setOnlineConfig } from '../../services/onlinePlayersService.js';
+import { listSubmissions as listUserQuestions, submissionCounts, reviewSubmission, getQuizMakerConfig, setQuizMakerConfig, UserQuestionError } from '../../services/userQuestionService.js';
 import { getPolicy, setPolicy, NOTIFICATION_TYPES, NOTIFICATION_TYPE_LABELS } from '../../services/notificationPolicyService.js';
 import { financeDiagnostics, listWithdrawals, reviewWithdrawal, transactionsToCsv } from '../../services/financeService.js';
 import { listRewardHolds, rewardHoldDiagnostics, reviewRewardHold } from '../../services/rewardReviewService.js';
@@ -88,6 +90,51 @@ export function registerAdminRoutes(router: Router, base: string): void {
      * tags «جدید». Returning the new mark would tag nothing, ever. */
     const previous = await markScreenSeen(badgeAdminId(ctx), screen);
     json(ctx.res, 200, { screen, previous, isQueue: isQueueScreen(screen) });
+  });
+
+  /* ===== Questions players wrote =====
+   * The «کوییزساز» screen used to throw the question away. These are the panel
+   * end: what came in, publish it or turn it down, and what approving pays. */
+  router.add('GET', `${base}/admin/user-questions`, async (ctx) => {
+    if (!requireAdmin(ctx, { tab: 'questions' })) return;
+    const status = String(ctx.query.get('status') || 'pending');
+    json(ctx.res, 200, {
+      rows: await listUserQuestions({ status, limit: Number(ctx.query.get('limit') ?? 200) }),
+      counts: await submissionCounts(),
+      config: await getQuizMakerConfig()
+    });
+  });
+  router.add('POST', `${base}/admin/user-questions/:id/review`, async (ctx) => {
+    if (!requireAdmin(ctx, { tab: 'questions' })) return;
+    const action = String(((ctx.body ?? {}) as any).action || '');
+    if (action !== 'approve' && action !== 'reject') return error(ctx.res, 422, 'ACTION_INVALID', 'تأیید یا رد؟');
+    try {
+      const r = await reviewSubmission(String(ctx.params.id), action as 'approve' | 'reject');
+      await recordAdmin({ action: 'user_question_' + action, meta: r as any });
+      json(ctx.res, 200, r);
+    } catch (e) {
+      if (e instanceof UserQuestionError) return error(ctx.res, 404, e.code, e.message);
+      throw e;
+    }
+  });
+  /* «افراد آنلاین» on the home screen: how many faces, and what looking again
+   * costs. The price was a constant nobody could change without a deploy. */
+  router.add('GET', `${base}/admin/online-config`, async (ctx) => {
+    if (!requireAdmin(ctx, { tab: 'users' })) return;
+    json(ctx.res, 200, await getOnlineConfig());
+  });
+  router.add('PUT', `${base}/admin/online-config`, async (ctx) => {
+    if (!requireAdmin(ctx, { tab: 'users' })) return;
+    const next = await setOnlineConfig((ctx.body ?? {}) as any);
+    await recordAdmin({ action: 'online_players_config', meta: next as any });
+    json(ctx.res, 200, next);
+  });
+
+  router.add('PUT', `${base}/admin/user-questions/config`, async (ctx) => {
+    if (!requireAdmin(ctx, { tab: 'questions' })) return;
+    const next = await setQuizMakerConfig((ctx.body ?? {}) as any);
+    await recordAdmin({ action: 'quiz_maker_config', meta: next as any });
+    json(ctx.res, 200, next);
   });
 
   /* ===== The code that guards a payout =====

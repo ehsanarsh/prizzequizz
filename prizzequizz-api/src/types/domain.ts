@@ -5,12 +5,15 @@ export type MatchPhase = 'created' | 'matchmaking' | 'starting' | 'question' | '
 export type RewardType = 'coins' | 'cash' | 'xp' | 'heart' | 'ticket' | 'item';
 
 export type UserStatus = 'active' | 'limited' | 'banned';
+/** What the player said, or nothing. Never inferred from a name or a photo. */
+export type Gender = 'male' | 'female' | 'other';
 
 export interface User {
   id: UUID;
   phone: string;
   username: string;
   displayName: string;
+  gender?: Gender;
   plan: PlanType;
   role?: 'user' | 'admin';
   status?: UserStatus;
