@@ -262,10 +262,35 @@ async function badgeLoad(){
 }
 function badgeStatus(){
   const el=$('#pzbStatus'); if(!el)return;
-  el.innerHTML=PZB_ERR
+  el.innerHTML=(PZB_ERR
     ? '<div class="note" style="margin:10px 0 0;font-size:10.5px;line-height:1.7">⚠️ شمارندهٔ «جدید» کار نمی‌کند<br><span class="mono" style="color:var(--muted)">'+esc(PZB_ERR)+'</span><br><span style="color:var(--muted)">اگر خطای 404 است یعنی بک‌اندِ سرور هنوز نسخهٔ قدیمی است؛ باید <span class="mono">restart api</span> شود.</span></div>'
-    : '';
-  const b=$('#pzBuild'); if(b)b.textContent='پنل: '+PANEL_BUILD;
+    : '')+
+    /* "It does not work" and "there is genuinely nothing waiting" look exactly
+       the same from outside — both are a sidebar with no numbers on it. This
+       shows what the server actually answered, so the difference is one click
+       away instead of a guess. */
+    '<div style="text-align:center;margin-top:8px"><a onclick="badgeDebug()" style="cursor:pointer;font-size:10px;color:var(--muted);text-decoration:underline">بررسی شمارنده</a></div>';
+  paintBuild();
+}
+function paintBuild(){ const b=$('#pzBuild'); if(b)b.textContent='پنل: '+PANEL_BUILD; }
+async function badgeDebug(){
+  let raw=null, err='';
+  try{ raw=await api('GET','/admin/badges'); }catch(e){ err=(e&&e.message)?e.message:'خطا'; }
+  const rows=raw&&raw.screens?Object.keys(raw.screens).map(k=>{
+    const s=raw.screens[k];
+    return '<div style="display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid var(--line)"><span class="mono">'+esc(k)+'</span>'+
+      '<b>'+fa(s.count)+'</b><span class="sub">'+(s.mode==='queue'?'در انتظارِ کار':'از آخرین بازدید')+'</span>'+
+      '<span class="sub mono">'+(s.since?fmtDate(s.since):'—')+'</span></div>';
+  }).join(''):'';
+  modal('بررسی شمارنده',
+    '<div class="card" style="margin-bottom:10px"><div style="display:flex;justify-content:space-between"><span class="sub">پنل</span><b class="mono">'+esc(PANEL_BUILD)+'</b></div>'+
+      '<div style="display:flex;justify-content:space-between"><span class="sub">آدرس سرور</span><b class="mono" dir="ltr" style="font-size:11px">'+esc(API)+'</b></div>'+
+      '<div style="display:flex;justify-content:space-between"><span class="sub">پاسخِ /admin/badges</span><b>'+(err?'<span style="color:var(--bad)">'+esc(err)+'</span>':'<span style="color:var(--ok)">دریافت شد</span>')+'</b></div></div>'+
+    (err
+      ? '<div class="note">اگر «404» یا «Route not found» است، بک‌اندِ روی سرور هنوز نسخهٔ قدیمی است و باید <span class="mono">restart</span> شود. اگر «403» است، این حساب دسترسی ندارد.</div>'
+      : (rows
+        ? '<div class="card">'+rows+'</div><div class="note">هر عددی که اینجا صفر است یعنی واقعاً چیزی در انتظار نیست — نه اینکه شمارنده خراب باشد. «از آخرین بازدید» فقط از زمانی که آن صفحه را باز کرده‌ای می‌شمارد.</div>'
+        : '<div class="note">سرور پاسخ داد ولی هیچ صفحه‌ای گزارش نکرد.</div>')));
 }
 /* Tell the server this admin has now looked, and keep the PREVIOUS mark: rows
    newer than it are what they have not seen, and get a «جدید» tag. */
@@ -3961,6 +3986,9 @@ async function saveRaw(){
 
 /* ---- boot ---- */
 $('#inApi').value=API;$('#inKey').value=KEY;
+/* Stamped before anything can fail: "the panel did not update" has to be
+   answerable even when the panel cannot reach the server at all. */
+paintBuild();
 if(KEY)enterPanel();
 </script>
 </body>
