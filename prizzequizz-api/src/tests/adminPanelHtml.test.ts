@@ -190,6 +190,32 @@ function run(): void {
     assert.ok(!/tbl\(\['دوره','شارژ'/.test(html), 'and so is the report column');
   });
 
+  check('the SMS group screen exists and adds a number on Enter', () => {
+    /* The whole interaction is the Enter key, so that binding IS the feature. */
+    assert.ok(html.includes('renderSmsGroups'), 'the screen exists');
+    assert.ok(html.includes("id=\"sgPhone\""), 'the number input exists');
+    const i = html.indexOf('id=\"sgPhone\"');
+    assert.match(html.slice(i, i + 260), /onkeydown=.*Enter.*sgAdd\(\)/, 'Enter adds the number');
+    for (const ep of ['/admin/sms/groups', "/admin/sms/groups/'+id+'/send"]) {
+      assert.ok(html.includes(ep), 'calls ' + ep);
+    }
+  });
+
+  check('adding a number does NOT re-render the screen', () => {
+    /* A full render would move focus off the input, and the next number is
+       about to be typed into it — which makes a list of a hundred impossible. */
+    const i = html.indexOf('async function sgAdd(');
+    assert.ok(i > 0, 'sgAdd exists');
+    const body = html.slice(i, i + 700);
+    assert.doesNotMatch(body, /\brender\(\)/, 'sgAdd must not call render()');
+    assert.match(body, /el\.focus\(\)/, 'and it keeps focus for the next one');
+  });
+
+  check('the withdraw-code screen exists', () => {
+    assert.ok(html.includes('renderWithdrawOtp'), 'the screen exists');
+    assert.ok(html.includes('/admin/withdraw-otp'), 'and is wired to its endpoint');
+  });
+
   console.log(`[adminPanelHtml] ${passed} passed, ${failed} failed`);
   if (failed) process.exit(1);
 }

@@ -2,7 +2,11 @@
 import type { Router } from '../../http/router.js';
 import { error, json } from '../../http/response.js';
 import { requireAdmin } from '../../services/adminGuard.js';
-import { bodyObject } from '../../utils/validation.js';
+import { bodyObject, optionalString } from '../../utils/validation.js';
+import {
+  listGroups, createGroup, renameGroup, deleteGroup,
+  addNumber, addNumbers, removeNumber, listNumbers, sendToGroup, GroupError
+} from '../../services/smsGroupService.js';
 import {
   getSmsConfig, updateSmsConfig, maskConfig, listTemplates, saveTemplate, removeTemplate,
   listLog, listBlacklist, addBlacklist, removeBlacklist, smsStats, sendSms, resend, cancelPending,
@@ -64,6 +68,59 @@ export function registerSmsRoutes(router: Router, base: string): void {
   router.add('POST', `${base}/admin/sms/log/:id/cancel`, async (ctx) => { if (!guard(ctx)) return; await cancelPending(ctx.params.id!); json(ctx.res, 200, { cancelled: true }); });
 
   router.add('GET', `${base}/admin/sms/stats`, async (ctx) => { if (!guard(ctx)) return; json(ctx.res, 200, await smsStats()); });
+
+  /* ===== Number groups: a list of people who are not players =====
+   * The panel could message registered players; it could not keep a list of
+   * leads and message that. Numbers go in one at a time — number, Enter,
+   * number, Enter — which is how somebody actually types them. */
+  router.add('GET', `${base}/admin/sms/groups`, async (ctx) => {
+    if (!guard(ctx)) return;
+    json(ctx.res, 200, await listGroups());
+  });
+  router.add('POST', `${base}/admin/sms/groups`, async (ctx) => {
+    if (!guard(ctx)) return;
+    const b = bodyObject(ctx.body);
+    try { json(ctx.res, 201, await createGroup(String(b.name ?? ''), optionalString(b, 'note'))); }
+    catch (e) { if (e instanceof GroupError) return error(ctx.res, 400, e.code, e.message); throw e; }
+  });
+  router.add('PUT', `${base}/admin/sms/groups/:id`, async (ctx) => {
+    if (!guard(ctx)) return;
+    const b = bodyObject(ctx.body);
+    try { json(ctx.res, 200, { updated: await renameGroup(ctx.params.id!, String(b.name ?? ''), optionalString(b, 'note')) }); }
+    catch (e) { if (e instanceof GroupError) return error(ctx.res, 400, e.code, e.message); throw e; }
+  });
+  router.add('DELETE', `${base}/admin/sms/groups/:id`, async (ctx) => {
+    if (!guard(ctx)) return;
+    json(ctx.res, 200, { removed: await deleteGroup(ctx.params.id!) });
+  });
+
+  router.add('GET', `${base}/admin/sms/groups/:id/numbers`, async (ctx) => {
+    if (!guard(ctx)) return;
+    json(ctx.res, 200, await listNumbers(ctx.params.id!, Number(ctx.query.get('limit') ?? 500)));
+  });
+  /* One number per call: this is the Enter key. A pasted block goes to the
+   * same place through `numbers`. */
+  router.add('POST', `${base}/admin/sms/groups/:id/numbers`, async (ctx) => {
+    if (!guard(ctx)) return;
+    const b = bodyObject(ctx.body);
+    try {
+      if (typeof b.numbers === 'string' && b.numbers.trim()) {
+        return json(ctx.res, 200, await addNumbers(ctx.params.id!, b.numbers));
+      }
+      json(ctx.res, 200, await addNumber(ctx.params.id!, String(b.phone ?? ''), optionalString(b, 'label')));
+    } catch (e) { if (e instanceof GroupError) return error(ctx.res, 400, e.code, e.message); throw e; }
+  });
+  router.add('DELETE', `${base}/admin/sms/groups/:id/numbers/:phone`, async (ctx) => {
+    if (!guard(ctx)) return;
+    json(ctx.res, 200, { removed: await removeNumber(ctx.params.id!, ctx.params.phone!) });
+  });
+
+  router.add('POST', `${base}/admin/sms/groups/:id/send`, async (ctx) => {
+    if (!guard(ctx)) return;
+    const b = bodyObject(ctx.body);
+    try { json(ctx.res, 200, await sendToGroup({ groupId: ctx.params.id!, text: String(b.text ?? ''), link: optionalString(b, 'link') })); }
+    catch (e) { if (e instanceof GroupError) return error(ctx.res, 400, e.code, e.message); throw e; }
+  });
 
   router.add('GET', `${base}/admin/sms/blacklist`, async (ctx) => { if (!guard(ctx)) return; json(ctx.res, 200, { rows: await listBlacklist() }); });
   router.add('POST', `${base}/admin/sms/blacklist`, async (ctx) => { if (!guard(ctx)) return; const b = bodyObject(ctx.body) as any; const n = String(b.number || '').trim(); if (!n) return error(ctx.res, 422, 'NUMBER_REQUIRED', 'شماره لازم است.'); await addBlacklist(n, b.reason ? String(b.reason) : undefined); json(ctx.res, 201, { added: true }); });

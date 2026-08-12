@@ -159,7 +159,7 @@ async function loadCfg(){ try{ CFG=await api('GET','/admin/config'); $('#cfgVer'
 const NAV=[
   ['اصلی',[['dashboard','📊','داشبورد'],['finance','💰','داشبورد مالی'],['accounting','🧾','حسابداری و گزارش'],['expenses','🧮','هزینه‌های شرکت'],['users','👤','کاربران'],['matches','🎮','مسابقات'],['lastsurvivor','🏆','آخرین بازمانده'],['support','🎧','پشتیبانی']]],
   ['محتوا',[['questions','❓','سوالات'],['qreports','🚩','گزارش سؤالات'],['aistudio','🤖','استودیوی سوال (AI)'],['pipeline','🔬','خط‌لولهٔ کیفیت'],['categories','🏷️','موضوعات'],['characters','🎭','کاراکترها'],['charboxes','🎲','قرعه‌کشی کاراکتر'],['lifelines','🧩','کمک‌ها'],['rewards','🎡','گردونه و جایزه روزانه'],['recordmode','🏅','ثبت رکورد'],['onboarding','👋','خوش‌آمدگویی']]],
-  ['اقتصاد',[['wallet','🏆','صندوق جایزه'],['withdrawals','💸','دریافت جایزه'],['payoutpartners','🎁','شرکای جایزه'],['withdrawotp','🔐','کد تأیید جایزه'],['rewardholds','⏳','جوایز در انتظار'],['tickets','🎫','بلیط‌ها'],['shop','🛒','فروشگاه'],['giftcodes','🎁','کدهای هدیه'],['payments','🏦','درگاه پرداخت']]],
+  ['اقتصاد',[['wallet','🏆','صندوق جایزه'],['withdrawals','💸','دریافت جایزه'],['payoutpartners','🎁','شرکای جایزه'],['withdrawotp','🔐','کد تأیید جایزه'],['smsgroups','📇','گروه‌های پیامک'],['rewardholds','⏳','جوایز در انتظار'],['tickets','🎫','بلیط‌ها'],['shop','🛒','فروشگاه'],['giftcodes','🎁','کدهای هدیه'],['payments','🏦','درگاه پرداخت']]],
   ['بالانس بازی (Data-Driven)',[['cfg_xp','✨','XP'],['cfg_level','🏅','Level'],['cfg_cup','🏆','Cup'],['cfg_gameplay','🕹️','گیم‌پلی مودها'],['leagues','🛡️','لیگ‌ها'],['missions2','🎯','مأموریت‌ها']]],
   ['رشد و تعامل',[['leaderboard','📈','لیدربرد'],['banners2','🖼️','بنرها'],['campaign','🎁','کمپین کاربر جدید'],['events','📅','رویدادها'],['banners','🖼️','بنرها'],['notifications','🔔','اعلان‌ها'],['sms','📱','پنل پیامکی']]],
   ['سیستم',[['monitoring','🖥️','مانیتورینگ سرور'],['anticheat','🛡️','ضدتقلب'],['suspicious','🚨','کاربران مشکوک'],['reports','📑','گزارش‌ها'],['logs','📝','لاگ و Audit'],['reset','♻️','ابزار ریست'],['accounts','🔐','حساب‌ها و دسترسی'],['backup','💾','پشتیبان‌گیری'],['general','⚙️','تنظیمات عمومی'],['rawcfg','🧩','ویرایش خام Config']]]
@@ -189,7 +189,7 @@ async function render(){
   try{
     if(CUR==='accounts')return renderAccounts();
     if(CONFIG_PAGES[CUR])return renderConfigSection(CONFIG_PAGES[CUR][0],CONFIG_PAGES[CUR][1]);
-    const fn={dashboard:renderDashboard,finance:renderFinance,accounting:renderAccounting,expenses:renderExpenses,backup:renderBackup,users:renderUsers,matches:renderMatches,support:renderSupport,questions:renderQuestions,qreports:renderQReports,aistudio:renderAiStudio,pipeline:renderPipeline,categories:renderCategories,wallet:renderWallet,withdrawals:renderWithdrawals,payoutpartners:renderPayoutPartners,withdrawotp:renderWithdrawOtp,rewardholds:renderRewardHolds,tickets:renderTickets,giftcodes:renderGiftCodes,shop:renderShopAdmin,characters:renderCharacters,charboxes:renderCharBoxes,lifelines:renderLifelines,rewards:renderRewards,missions2:renderMissions2,recordmode:renderRecordMode,onboarding:renderOnboarding,lastsurvivor:renderLastSurvivor,sms:renderSms,payments:renderPayments,leaderboard:renderLeaderboard,banners2:renderBanners,notifications:renderNotifications,anticheat:renderAntiCheat,suspicious:renderSuspicious,reports:renderReports,logs:renderLogs,reset:renderReset,roles:renderRoles,rawcfg:renderRawCfg,monitoring:renderMonitoring}[CUR];
+    const fn={dashboard:renderDashboard,finance:renderFinance,accounting:renderAccounting,expenses:renderExpenses,backup:renderBackup,users:renderUsers,matches:renderMatches,support:renderSupport,questions:renderQuestions,qreports:renderQReports,aistudio:renderAiStudio,pipeline:renderPipeline,categories:renderCategories,wallet:renderWallet,withdrawals:renderWithdrawals,payoutpartners:renderPayoutPartners,withdrawotp:renderWithdrawOtp,smsgroups:renderSmsGroups,rewardholds:renderRewardHolds,tickets:renderTickets,giftcodes:renderGiftCodes,shop:renderShopAdmin,characters:renderCharacters,charboxes:renderCharBoxes,lifelines:renderLifelines,rewards:renderRewards,missions2:renderMissions2,recordmode:renderRecordMode,onboarding:renderOnboarding,lastsurvivor:renderLastSurvivor,sms:renderSms,payments:renderPayments,leaderboard:renderLeaderboard,banners2:renderBanners,notifications:renderNotifications,anticheat:renderAntiCheat,suspicious:renderSuspicious,reports:renderReports,logs:renderLogs,reset:renderReset,roles:renderRoles,rawcfg:renderRawCfg,monitoring:renderMonitoring}[CUR];
     if(fn)return fn();
   }catch(e){$('#main').innerHTML=head('خطا')+'<div class="card empty">'+(e.message||'خطا')+'</div>';}
 }
@@ -1347,6 +1347,105 @@ async function bnDel(id){
    anywhere. This is where the operator turns it on or off and sees, plainly,
    whether SMS is really live — because when it is not, the test code works,
    and that must never be a surprise. */
+/* LISTS OF NUMBERS THAT ARE NOT PLAYERS.
+   Type a number, press Enter, it joins the group. Type the next, Enter. That
+   is the whole interaction, so the input keeps focus and never loses what was
+   typed — a form that clears itself between numbers is a form nobody can use
+   for a hundred of them. */
+async function renderSmsGroups(){
+  let groups=[];
+  try{ groups=await api('GET','/admin/sms/groups'); }
+  catch(e){ $('#main').innerHTML=head('گروه‌های پیامک')+'<div class="card empty">'+(e.message||'خطا')+'</div>'; return; }
+  window._SG=groups;
+  const sel=window._SGsel||(groups[0]&&groups[0].id)||'';
+  window._SGsel=sel;
+  const g=groups.find(x=>x.id===sel);
+
+  let nums=[];
+  if(sel){ try{ nums=await api('GET','/admin/sms/groups/'+sel+'/numbers?limit=1000'); }catch(e){} }
+
+  $('#main').innerHTML=head('گروه‌های پیامک')+
+    '<div class="card"><b>گروه جدید</b><div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">'+
+      '<input class="in" id="sgName" placeholder="نام گروه (مثلاً ثبت‌نام‌نکرده‌ها)" style="max-width:260px" onkeydown="if(event.key===\'Enter\')sgNew()">'+
+      '<button class="btn" onclick="sgNew()">ساختن گروه</button>'+
+    '</div></div>'+
+    '<div class="card"><b>گروه‌ها</b><div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">'+
+      (groups.length?groups.map(x=>'<button class="btn sm'+(x.id===sel?'':' ghost')+'" onclick="sgPick(\''+x.id+'\')">'+esc(x.name)+' ('+fa(x.count)+')</button>').join(''):'<span class="sub">هنوز گروهی نساخته‌ای.</span>')+
+    '</div></div>'+
+    (!g?'':
+      '<div class="card"><div style="display:flex;align-items:center;gap:8px"><b>'+esc(g.name)+'</b><span class="pill">'+fa(g.count)+' شماره</span>'+
+        '<span style="flex:1"></span><button class="btn sm" onclick="sgRename(\''+g.id+'\')">تغییر نام</button><button class="btn sm danger" onclick="sgDel(\''+g.id+'\')">حذف گروه</button></div>'+
+        '<div class="sub" style="margin:8px 0">شماره را بنویس و <b>Enter</b> بزن. شماره بعدی را بنویس و باز Enter. تکراری‌ها خودشان حذف می‌شوند و ۰۹۱۲…، +۹۸۹۱۲… و ارقام فارسی همه یک شماره حساب می‌شوند.</div>'+
+        '<div style="display:flex;gap:6px;flex-wrap:wrap">'+
+          '<input class="in" id="sgPhone" placeholder="۰۹۱۲۱۲۳۴۵۶۷ سپس Enter" dir="ltr" style="max-width:220px" onkeydown="if(event.key===\'Enter\')sgAdd()">'+
+          '<button class="btn sm" onclick="sgAdd()">افزودن</button>'+
+          '<span id="sgHint" class="sub" style="align-self:center"></span>'+
+        '</div>'+
+        '<div style="margin-top:10px"><textarea class="in" id="sgBulk" placeholder="یا یک‌جا بچسبان — هر خط یک شماره" style="width:100%;height:70px"></textarea>'+
+        '<button class="btn sm" onclick="sgBulkAdd()">افزودن گروهی</button></div>'+
+        '<div style="margin-top:10px;max-height:230px;overflow:auto">'+
+          (nums.length?nums.map(n=>'<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-top:1px solid var(--line)"><span class="mono" dir="ltr">'+esc(n.phone)+'</span><span style="flex:1"></span><button class="btn sm danger" onclick="sgRm(\''+g.id+'\',\''+n.phone+'\')">حذف</button></div>').join(''):'<span class="sub">هنوز شماره‌ای در این گروه نیست.</span>')+
+        '</div>'+
+      '</div>'+
+      '<div class="card"><b>ارسال به این گروه</b>'+
+        '<div style="display:grid;gap:6px;margin-top:8px">'+
+          '<textarea class="in" id="sgText" placeholder="متن پیام" style="width:100%;height:90px"></textarea>'+
+          '<input class="in" id="sgLink" placeholder="لینک سایت (اختیاری) — به انتهای پیام اضافه می‌شود" dir="ltr" value="https://prizequiz.ir">'+
+          '<div class="sub">اگر لینک را خودت داخل متن نوشته باشی، دوباره اضافه نمی‌شود.</div>'+
+          '<button class="btn" onclick="sgSend(\''+g.id+'\')">ارسال به '+fa(g.count)+' شماره</button>'+
+        '</div></div>');
+  const inp=$('#sgPhone'); if(inp) inp.focus();
+}
+function sgPick(id){ window._SGsel=id; render(); }
+async function sgNew(){
+  const n=($('#sgName').value||'').trim(); if(!n) return toast('نام گروه را وارد کن');
+  try{ const g=await api('POST','/admin/sms/groups',{name:n}); window._SGsel=g.id; toast('گروه ساخته شد'); render(); }
+  catch(e){ toast(e.message||'خطا'); }
+}
+async function sgRename(id){
+  const g=(window._SG||[]).find(x=>x.id===id); if(!g) return;
+  const n=prompt('نام تازه:',g.name); if(n===null) return;
+  try{ await api('PUT','/admin/sms/groups/'+id,{name:n}); render(); }catch(e){ toast(e.message||'خطا'); }
+}
+async function sgDel(id){
+  if(!confirm('حذف گروه و همهٔ شماره‌هایش؟')) return;
+  try{ await api('DELETE','/admin/sms/groups/'+id); window._SGsel=''; toast('حذف شد'); render(); }catch(e){ toast(e.message||'خطا'); }
+}
+/* Adds WITHOUT a full re-render: re-rendering would move focus away from the
+   input, and the next number is about to be typed into it. */
+async function sgAdd(){
+  const el=$('#sgPhone'), v=(el.value||'').trim(); if(!v) return;
+  const hint=$('#sgHint');
+  try{
+    const r=await api('POST','/admin/sms/groups/'+window._SGsel+'/numbers',{phone:v});
+    el.value=''; el.focus();
+    if(hint) hint.textContent=r.duplicate?('تکراری بود: '+r.phone):('اضافه شد: '+r.phone);
+    const g=(window._SG||[]).find(x=>x.id===window._SGsel); if(g&&!r.duplicate) g.count++;
+  }catch(e){
+    if(hint) hint.textContent=e.message||'خطا';
+    el.select();
+  }
+}
+async function sgBulkAdd(){
+  const t=($('#sgBulk').value||'').trim(); if(!t) return;
+  try{
+    const r=await api('POST','/admin/sms/groups/'+window._SGsel+'/numbers',{numbers:t});
+    toast(fa(r.added)+' اضافه شد'+(r.duplicates?' · '+fa(r.duplicates)+' تکراری':'')+(r.invalid&&r.invalid.length?' · '+fa(r.invalid.length)+' نامعتبر':''));
+    render();
+  }catch(e){ toast(e.message||'خطا'); }
+}
+async function sgRm(gid,phone){
+  try{ await api('DELETE','/admin/sms/groups/'+gid+'/numbers/'+encodeURIComponent(phone)); render(); }catch(e){ toast(e.message||'خطا'); }
+}
+async function sgSend(id){
+  const text=($('#sgText').value||'').trim(); if(!text) return toast('متن پیام را بنویس');
+  if(!confirm('پیام به همهٔ شماره‌های این گروه ارسال شود؟')) return;
+  try{
+    const r=await api('POST','/admin/sms/groups/'+id+'/send',{text,link:($('#sgLink').value||'').trim()});
+    toast('ارسال شد: '+fa(r.sent)+' موفق'+(r.failed?' · '+fa(r.failed)+' ناموفق':'')+(r.skipped?' · '+fa(r.skipped)+' رد شد':''));
+  }catch(e){ toast(e.message||'خطا'); }
+}
+
 async function renderWithdrawOtp(){
   let d;
   try{ d=await api('GET','/admin/withdraw-otp'); }
