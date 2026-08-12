@@ -148,6 +148,30 @@ async function run(): Promise<void> {
     assert.equal(ordered[0]!.id, 'w1', 'the preferred one is simply first');
   });
 
+  await check('when nobody of the opposite gender is here, the same gender is still shown', async () => {
+    /* The whole list going empty on a quiet evening is worse than showing the
+       "wrong" people — «حد الامکان» means prefer, not require. This one goes
+       through the real listing, not just the ordering helper. */
+    _resetPresence(); _resetOnlinePlayers();
+    await setOnlineConfig({ size: 10, refreshCost: 0, freeRefreshesPerDay: 0 });
+    const me = await player({ gender: 'male' });
+    const a = await player({ gender: 'male' });
+    const b = await player({ gender: 'male' });
+    const r = await listOnlinePlayers(me.id);
+    const ids = r.players.map((p) => p.userId).sort();
+    assert.deepEqual(ids, [a.id, b.id].sort(), 'the list came back empty instead: ' + JSON.stringify(ids));
+  });
+
+  await check('a viewer who never answered still sees everybody', async () => {
+    _resetPresence(); _resetOnlinePlayers();
+    const me = await player({});                       // no gender
+    const a = await player({ gender: 'female' });
+    const b = await player({ gender: 'male' });
+    const r = await listOnlinePlayers(me.id);
+    assert.equal(r.players.length, 2, JSON.stringify(r.players.map((p) => p.userId)));
+    assert.deepEqual(r.players.map((p) => p.userId).sort(), [a.id, b.id].sort());
+  });
+
   await check('someone who never said their gender still gets a full list', async () => {
     const pool = [{ id: 'w1', gender: 'female' }, { id: 'm1', gender: 'male' }, { id: 'x1' }] as User[];
     const ordered = orderByPreference(pool, { id: 'me' } as User);

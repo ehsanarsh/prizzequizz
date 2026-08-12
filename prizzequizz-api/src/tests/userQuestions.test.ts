@@ -250,7 +250,11 @@ async function run(): Promise<void> {
     const call = body.indexOf("'/questions/submit'");
     const okModal = body.indexOf('سؤال برای بررسی ارسال شد');
     assert.ok(call > 0 && okModal > call, 'the success message comes after the request, not instead of it');
-    assert.match(body, /if\(!r\|\|r\.error\|\|r\.ok===false\)[\s\S]{0,200}ارسال نشد/, 'a failure is shown as a failure');
+    assert.match(body, /if\(!r\|\|r\.error\|\|r\.ok===false\|\|!r\.data\)[\s\S]{0,200}ارسال نشد/, 'a failure is shown as a failure');
+    /* Every API answer is {ok,data}. Reading the fields off the top level is
+       how «افراد آنلاین» came back empty however many people were on. */
+    assert.ok(!/r\.rows/.test(client.slice(client.indexOf('async function qsLoadMine('), client.indexOf('async function qsLoadMine(') + 900)),
+      'the submissions list must read r.data.rows, not r.rows');
   });
 
   await check('the four options are sent with the right one marked', async () => {

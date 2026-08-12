@@ -47,20 +47,20 @@ await ctx.route('**/v1/**', (route) => {
     const refresh = /refresh=1/.test(p);
     onlineCall++;
     if (refresh && onlineCall > 2) return send({ ok: false, error: { code: 'INSUFFICIENT_COINS', message: 'برای رفرش ۵ سکه لازم است.', status: 402 } }, 402);
-    return send({
+    return send({ ok: true, data: {
       players: Array.from({ length: refresh ? 3 : 2 }, (_, i) => ({
         userId: 'p' + onlineCall + i, username: 'p' + i, displayName: 'بازیکن ' + (refresh ? 'ب' : 'الف') + i,
         gender: i % 2 ? 'female' : 'male', level: 5, avatar: null, lastSeen: new Date().toISOString()
       })),
       charged: refresh ? 5 : 0, coins: refresh ? 355 : 360,
       nextCost: refresh ? 5 : 0, freeLeft: refresh ? 0 : 1, onlineTotal: 47
-    });
+    } });
   }
-  if (p === '/questions/submit') { submitted = route.request().postDataJSON(); return send({ questionId: 'q-new', status: 'pending' }, 201); }
-  if (p.startsWith('/questions/mine')) return send({ rows: [
+  if (p === '/questions/submit') { submitted = route.request().postDataJSON(); return send({ ok: true, data: { questionId: 'q-new', status: 'pending' } }, 201); }
+  if (p.startsWith('/questions/mine')) return send({ ok: true, data: { rows: [
     { questionId: 'q1', text: 'پایتخت فرانسه کدام است؟', status: 'approved', reward: { type: 'coins', amount: 120, label: 'سکه', icon: '🪙' } },
     { questionId: 'q2', text: 'بلندترین کوه ایران؟', status: 'pending', reward: null }
-  ] });
+  ] } });
   if (route.request().method() === 'PATCH' && p === '/users/me') {
     patched = route.request().postDataJSON();
     return send({ ok: true, data: { id: 'u1', username: 'ehsan', displayName: 'احسان', gender: patched.gender ?? null, level: 3, xp: 120 } });
@@ -123,35 +123,61 @@ console.log('when the coins run out:');
 /* ── جنسیت ─────────────────────────────────────────────────────────── */
 console.log('gender:');
 {
-  ok('sign-up asks the question', await page.evaluate(() => !!document.getElementById('regGender')));
-  ok('and so does the profile', await page.evaluate(() => !!document.getElementById('profGender')));
-  const preset = await page.evaluate(() => document.querySelectorAll('#regGender .gender-opt.on').length);
-  ok('nothing is preselected — a default would record a guess', preset === 0, String(preset));
+  const el = await page.evaluate(() => {
+    const e = document.getElementById('regGender');
+    return e ? { tag: e.tagName, opts: [...e.options].map((o) => o.value + ':' + o.textContent) } : null;
+  });
+  ok('sign-up asks with a dropdown, not a row of buttons', el && el.tag === 'SELECT', JSON.stringify(el));
+  ok('and offers exactly آقا and خانم', el && el.opts.length === 3 && /male:آقا/.test(el.opts[1]) && /female:خانم/.test(el.opts[2]), JSON.stringify(el?.opts));
+  ok('with nothing preselected — a default would record a guess', await page.evaluate(() => document.getElementById('regGender').value) === '');
 
-  await page.evaluate(() => (0, eval)("pickGender('regGender','female')"));
-  const onNow = await page.evaluate(() => [...document.querySelectorAll('#regGender .gender-opt.on')].map((e) => e.dataset.g).join(','));
-  ok('choosing one marks exactly that one', onNow === 'female', onNow);
-
+  /* Sign-up must not go through without it. */
   patched = null;
   await page.evaluate(() => {
     document.getElementById('regFullName').value = 'احسان تست';
     document.getElementById('regUsername').value = 'ehsantest';
+    document.getElementById('regGender').value = '';
+    (0, eval)('submitRegister()');
+  });
+  await page.waitForTimeout(400);
+  ok('registering without answering is refused', patched === null, JSON.stringify(patched));
+  const errShown = await page.evaluate(() => document.getElementById('errGender')?.classList.contains('show'));
+  ok('and it says which field is missing', !!errShown);
+
+  patched = null;
+  await page.evaluate(() => {
+    document.getElementById('regGender').value = 'female';
     (0, eval)('submitRegister()');
   });
   await page.waitForTimeout(500);
-  ok('and it is sent with the rest of the sign-up', patched && patched.gender === 'female', JSON.stringify(patched));
+  ok('answering it lets sign-up through, with the answer attached', patched && patched.gender === 'female', JSON.stringify(patched));
 
-  /* Editing the profile sends the change too. */
-  await page.evaluate(() => { (0, eval)("go('profileEdit')"); });
+  /* Once answered, the profile SHOWS it — it does not offer the question again. */
+  await page.evaluate(() => { (0, eval)('_usr').gender = 'female'; (0, eval)("go('profileEdit')"); (0, eval)('renderProfileGender()'); });
+  await page.waitForTimeout(250);
+  const slot = await page.evaluate(() => ({
+    text: document.getElementById('profGenderSlot')?.textContent || '',
+    picker: !!document.getElementById('profGender')
+  }));
+  ok('the profile states the chosen gender', /خانم/.test(slot.text), slot.text);
+  ok('and does not ask again', slot.picker === false);
+
+  /* An older account that never answered still gets the chance to. */
+  await page.evaluate(() => { (0, eval)('_usr').gender = null; (0, eval)('renderProfileGender()'); });
   await page.waitForTimeout(200);
+  const old = await page.evaluate(() => {
+    const e = document.getElementById('profGender');
+    return e ? e.tagName : 'missing';
+  });
+  ok('an account from before the question can still answer it', old === 'SELECT', old);
+
   patched = null;
   await page.evaluate(() => {
-    (0, eval)("showGender('profGender','')");
-    (0, eval)("pickGender('profGender','male')");
+    document.getElementById('profGender').value = 'male';
     (0, eval)('submitProfileEdit()');
   });
   await page.waitForTimeout(400);
-  ok('a change in the profile reaches the server', patched && patched.gender === 'male', JSON.stringify(patched));
+  ok('and that answer reaches the server', patched && patched.gender === 'male', JSON.stringify(patched));
 }
 
 /* ── کوییزساز ──────────────────────────────────────────────────────── */
