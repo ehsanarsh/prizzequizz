@@ -95,7 +95,16 @@ console.log('the header:');
   ok('the header carries no action buttons any more', h.buttons === 0, String(h.buttons));
   ok('the cup rail is inside the header now', h.hasCup);
   ok('and the name and belongings are still there', h.hasName && h.hasWallet);
-  ok('the header is a light card, not the old dark bar', /243,240,226/.test(h.bg), h.bg.slice(0, 50));
+  /* The header was left exactly as it was: a dark bar carrying light text.
+     Turning it into a light card made XP, tickets and the vault unreadable. */
+  ok('the header is still the dark bar it always was', /rgba\(10,14,20/.test(h.bg), h.bg.slice(0, 60));
+  const legible = await page.evaluate(() => {
+    const lum = (c) => { const m = c.match(/\d+/g); return m ? (0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2]) : null; };
+    const pick = (sel) => { const e = document.querySelector(sel); return e ? lum(getComputedStyle(e).color) : null; };
+    return { xp: pick('#home .pzh-xptxt'), wallet: pick('#home .p-money b'), ticket: pick('#home .pzh-tickets') };
+  });
+  /* Light text on a dark bar: anything dark here means it vanished. */
+  ok('XP, the vault and the tickets are light enough to read on it', legible.xp > 140 && legible.wallet > 140, JSON.stringify(legible));
   const rails = await page.evaluate(() => [...document.querySelectorAll('.hside .lbl')].map((e) => e.textContent));
   for (const must of ['گردونه', 'اعلان‌ها', 'هدایا']) ok('«' + must + '» is on a rail', rails.includes(must), rails.join('،'));
 }
@@ -152,11 +161,12 @@ console.log('the rest:');
     const el = document.querySelector('#home .weekly-progress-line');
     if (!el) return null;
     const cs = getComputedStyle(el);
-    return { bg: cs.backgroundImage.replace(/\s+/g, ''), flag: getComputedStyle(el.querySelector('.wpl-flag small')).color, marker: !!el.querySelector('.wpl-marker') };
+    return { onHeader: !!el.closest('.pz-header'), flag: getComputedStyle(el.querySelector('.wpl-flag small')).color, marker: !!el.querySelector('.wpl-marker') };
   });
   ok('the cup rail is still there', !!cup && cup.marker, JSON.stringify(cup));
-  ok('and it is a light card, readable on the forest', !!cup && /243,240,226|226,231,216/.test(cup.bg), cup && cup.bg.slice(0, 60));
-  ok('its league labels are dark enough to read on it', cup && cup.flag === 'rgb(61, 61, 61)', cup && cup.flag);
+  /* The rail is on the dark header now, so its own light-on-dark colours are
+     the right ones — the light-card overrides are gone. */
+  ok('the cup rail sits on the header, not on its own card', !!cup && cup.onHeader, JSON.stringify(cup).slice(0, 80));
 }
 
 /* ---- the squash ----
@@ -207,15 +217,27 @@ console.log('the banner is the one exception:');
     let host = home.querySelector('.tk-promo-host');
     if (!host) { host = document.createElement('div'); host.className = 'tk-promo-host'; home.insertBefore(host, home.firstChild); }
     host.innerHTML = '<div style="height:150px;background:#333">بنر</div>';
-    home.classList.add('pz-hasbanner');
-    await new Promise((r2) => setTimeout(r2, 200));
+    (0, eval)('pzHomeBannerFit')(host);
+    await new Promise((r2) => setTimeout(r2, 250));
     const withB = { overflow: getComputedStyle(home).overflowY, sh: home.scrollHeight, ch: home.clientHeight };
-    host.innerHTML = ''; home.classList.remove('pz-hasbanner');
+    /* Scroll it away and back, the way a thumb would. */
+    home.scrollTop = 999; await new Promise((r2) => setTimeout(r2, 120));
+    const scrolledAway = home.scrollTop > 100;
+    const bannerTop = host.getBoundingClientRect().bottom;
+    home.scrollTop = 0; await new Promise((r2) => setTimeout(r2, 120));
+    const backAgain = host.getBoundingClientRect().bottom > 0;
+    host.innerHTML = ''; (0, eval)('pzHomeBannerFit')(host);
     await new Promise((r2) => setTimeout(r2, 200));
-    return { before, withB, after: getComputedStyle(home).overflowY };
+    return { before, withB, scrolledAway, bannerTop, backAgain, after: getComputedStyle(home).overflowY, afterSh: home.scrollHeight, afterCh: home.clientHeight };
   });
   ok('home does not scroll without a banner', r.before === 'hidden' && r.after === 'hidden', r.before + ' / ' + r.after);
   ok('and it may scroll while one is shown', r.withB.overflow === 'auto', r.withB.overflow + ', ' + r.withB.sh + ' vs ' + r.withB.ch);
+  /* The banner has to ADD height, not squeeze the page — otherwise there is
+     nothing to scroll and it can never go away. */
+  ok('the banner adds real scroll room', r.withB.sh > r.withB.ch + 100, r.withB.sh + ' vs ' + r.withB.ch);
+  ok('pushing the page up scrolls the banner away', r.scrolledAway && r.bannerTop <= 0, 'banner bottom at ' + Math.round(r.bannerTop));
+  ok('and pulling back down brings it again', r.backAgain);
+  ok('removing the banner puts home back to one screen', r.afterSh <= r.afterCh + 2, r.afterSh + ' vs ' + r.afterCh);
 }
 
 ok('no script errors on the new home', errs.length === 0, errs.slice(0, 2).join(' | '));

@@ -57,33 +57,21 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
 
 
 /* ============================================================
-   HOME HEADER, REBUILT.
+   HOME HEADER.
 
-   It used to carry the wheel, the bell and the daily gift as three buttons;
-   all three now live in the side rails, so the header is only WHO YOU ARE and
-   WHAT YOU HAVE — plus the cup rail, which belongs with them because it is
-   also a standing figure rather than an action.
-
-   It is a light card group like the rest of the new home, and it never
-   scrolls: home is one screen.
+   The header is the one thing here that did NOT need redesigning: it was
+   already a dark bar carrying light text over the wallpaper, and every figure
+   in it — XP, tickets, the prize vault — is tuned for that. Turning it into a
+   light card made all three unreadable, so it is left exactly as it was. The
+   only change is that the cup rail now lives INSIDE it, on the same card,
+   with its own light-on-dark styling untouched.
    ============================================================ */
-#home .pz-header{background:linear-gradient(180deg,#F3F0E2,#E2E7D8);border-bottom:2.5px solid #000;
-  box-shadow:0 4px 0 #000,0 10px 22px -10px rgba(0,0,0,.5);border-radius:0 0 20px 20px;
-  /* Clears the notch/status bar. Without this the player's name sits under it
-     on the phones that have one. */
-  padding:calc(8px + env(safe-area-inset-top,0px)) 10px 8px;gap:7px;flex:0 0 auto;color:#1A241C}
-#home .pzh-user{flex:0 0 auto}
-#home .pzh-av{border-color:#000}
-#home .pzh-nameline b{color:#1A241C;font-size:13px}
-#home .pzh-xpbar{background:#C9CFBB;border:2px solid #000}
-#home .pzh-xptxt{color:#1A241C}
-#home .pzh-pill{background:#FAF8EE;border:2.5px solid #000;box-shadow:0 3px 0 #000;color:#1A241C}
-#home .pzh-pill b{color:#1A241C}
-#home .pzh-wallets{flex-wrap:nowrap;overflow-x:auto;gap:5px;scrollbar-width:none}
+#home .pz-header{flex:0 0 auto}
+#home .pzh-wallets{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
 #home .pzh-wallets::-webkit-scrollbar{height:0}
-/* The rail sits flush inside the header, not as a card on a card. */
-#home .weekly-progress-line{flex:0 0 auto!important;background:transparent!important;border:0!important;
-  box-shadow:none!important;border-radius:0!important;margin:0!important;padding:0 4px 2px!important}
+/* Flush inside the header — the rail is part of that card, not a card on a
+   card. Its own colours are the originals: light text on the dark header. */
+#home .weekly-progress-line{flex:0 0 auto!important;margin:2px 0 0!important;padding:0 2px!important}
 
 /* HOME DOES NOT SCROLL.
    Everything is sized to the screen it is on; the only thing that may push is
@@ -91,6 +79,7 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
    a home where the start button can be below the fold. */
 #home{overflow:hidden!important}
 #home.pz-hasbanner{overflow-y:auto!important}
+#home.pz-hasbanner .hstage{flex:0 0 auto}
 #home .tk-promo-host{flex:0 0 auto;margin:0 12px}
 #home .tk-promo-host:empty{display:none}
 
@@ -108,7 +97,8 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
   -webkit-tap-highlight-color:transparent;flex:1 1 0;min-height:0}
 .hside .art{flex:0 1 auto;aspect-ratio:1;width:auto;height:100%;max-height:50px;max-width:50px;min-height:26px;
   border-radius:15px;display:grid;place-items:center;font-size:clamp(15px,3.1vh,25px);position:relative;
-  background:linear-gradient(180deg,#FFFDF6,#E7E2D2);border:2.5px solid #000;box-shadow:0 4px 0 #000;overflow:visible}
+  background:linear-gradient(180deg,rgba(46,54,42,.62),rgba(22,28,21,.70));border:2.5px solid #000;box-shadow:0 4px 0 #000;
+  backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);overflow:visible}
 .hside .art img{width:100%;height:100%;object-fit:cover;border-radius:12px}
 .hside:active .art{transform:translateY(2px);box-shadow:0 2px 0 #000}
 .hside .lbl{font-size:clamp(7px,1.15vh,8.5px);font-weight:900;text-align:center;line-height:1.2;color:#1A241C;
@@ -121,9 +111,11 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
 .hcenter{position:relative;display:flex;flex-direction:column;align-items:center;min-width:0;min-height:0}
 /* The swipe surface. touch-action tells the browser we handle the
    horizontal drag, so it never steals it for a scroll mid-gesture. */
-.mcard{width:100%;flex:1 1 auto;min-height:0;display:flex;flex-direction:column;background:linear-gradient(180deg,#F3F0E2,#DCE2D2);color:#1A241C;border:2.5px solid #000;
-  border-radius:22px;box-shadow:0 6px 0 #000,0 18px 30px -12px rgba(0,0,0,.55);padding:10px 10px 12px;text-align:center;
-  position:relative;touch-action:pan-y;user-select:none;-webkit-user-select:none}
+.mcard{width:100%;flex:1 1 auto;min-height:0;display:flex;flex-direction:column;
+  background:linear-gradient(180deg,rgba(38,44,36,.62),rgba(20,25,19,.68));color:var(--text);
+  border:2.5px solid #000;border-radius:22px;box-shadow:0 6px 0 #000,0 18px 30px -12px rgba(0,0,0,.55);
+  backdrop-filter:blur(7px) saturate(1.1);-webkit-backdrop-filter:blur(7px) saturate(1.1);
+  padding:10px 10px 12px;text-align:center;position:relative;touch-action:pan-y;user-select:none;-webkit-user-select:none}
 /* NOT «sw» — this file already has a .sw class that is a 44×44 button, and
    putting it on the card turned the whole card into one on the first touch.
    In a single-file app a two-letter class name is a collision waiting to
@@ -136,19 +128,19 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
 .mk-badge{position:absolute;top:6px;right:6px;background:rgba(13,13,16,.85);color:#fff;border:2px solid #000;
   border-radius:999px;font-size:9.5px;font-weight:900;padding:2px 8px;z-index:2}
 .mcard h2{font-size:18px;margin-top:6px;line-height:1.25}
-.mcard .msub{font-size:11px;color:#4A5A46;font-weight:800;margin-top:1px}
+.mcard .msub{font-size:11px;color:var(--muted);font-weight:800;margin-top:1px}
 .mk-rib{margin:clamp(5px,1.1vh,9px) auto 0;width:70%;background:linear-gradient(180deg,#FFDE5A,#EFAF12);color:#2A2000;border:2.5px solid #000;
   border-radius:9px;font-size:12px;font-weight:900;padding:3px 0;box-shadow:0 3px 0 #000}
 .mk-prizes{display:flex;gap:7px;justify-content:center;margin-top:clamp(4px,0.9vh,8px)}
-.mk-prz{flex:1;max-width:74px;border-radius:13px;padding:clamp(3px,0.7vh,6px) 2px;background:linear-gradient(180deg,#55684A,#33402B);border:2.5px solid #000;
-  box-shadow:0 3px 0 #000;color:#F3F0E2;padding:6px 2px;display:flex;flex-direction:column;align-items:center;gap:1px}
+.mk-prz{flex:1;max-width:74px;border-radius:13px;padding:clamp(3px,0.7vh,6px) 2px;background:rgba(255,255,255,.09);border:2px solid rgba(255,255,255,.16);
+  box-shadow:none;color:var(--text);padding:6px 2px;display:flex;flex-direction:column;align-items:center;gap:1px}
 .mk-prz .e{font-size:clamp(14px,2.5vh,19px);line-height:1}
 .mk-prz b{font-size:12px;color:var(--bolt)}
-.mk-entry{margin-top:clamp(5px,1.1vh,10px);font-size:12px;font-weight:900;color:#2A6B3C;display:flex;align-items:center;justify-content:center;gap:6px}
+.mk-entry{margin-top:clamp(5px,1.1vh,10px);font-size:12px;font-weight:900;color:var(--ok);display:flex;align-items:center;justify-content:center;gap:6px}
 .mk-entry .cost{color:#2A2000;background:#FFE066;border:2.5px solid #000;border-radius:999px;padding:1px 9px;font-size:11.5px}
 .mk-facts{display:flex;gap:5px;justify-content:center;flex-wrap:wrap;margin-top:7px}
-.mk-facts span{background:#E3E8D6;border:2px solid #000;border-radius:999px;padding:2px 8px;font-size:10px;font-weight:900;color:#2C3A28}
-.mk-live{margin-top:8px;font-size:11px;font-weight:900;color:#2A6B3C;display:flex;align-items:center;justify-content:center;gap:6px}
+.mk-facts span{background:rgba(255,255,255,.10);border:2px solid rgba(255,255,255,.16);border-radius:999px;padding:2px 8px;font-size:10px;font-weight:900;color:var(--text)}
+.mk-live{margin-top:8px;font-size:11px;font-weight:900;color:var(--ok);display:flex;align-items:center;justify-content:center;gap:6px}
 .mk-live i{width:9px;height:9px;border-radius:50%;background:var(--ok);border:1.5px solid #000;display:inline-block}
 .mk-start{margin-top:auto;width:100%;padding:10px 0;border-radius:14px;border:2.5px solid #000;
   background:linear-gradient(180deg,#4BE38B,#22A85C);color:#06301a;font-size:17px;font-weight:900;box-shadow:0 5px 0 #000}
@@ -163,38 +155,28 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
 .mdots{display:flex;gap:5px;justify-content:center;margin-top:7px}
 .mdots i{width:7px;height:7px;border-radius:50%;background:rgba(255,255,255,.4);border:1.5px solid #000;cursor:pointer}
 .mdots i.on{background:var(--bolt);width:18px;border-radius:999px}
-.mnext{margin-top:6px;font-size:10px;font-weight:900;color:#1A241C;background:#EDEADC;border:2px solid #000;
-  border-radius:999px;padding:3px 10px;box-shadow:0 2px 0 #000;cursor:pointer}
+.mnext{margin-top:6px;font-size:10px;font-weight:900;color:var(--text);background:rgba(12,16,11,.6);
+  border:2px solid rgba(255,255,255,.14);border-radius:999px;padding:3px 10px;backdrop-filter:blur(3px);cursor:pointer}
 
-.top3{flex:0 0 auto;margin:6px 12px 4px;background:linear-gradient(180deg,#F3F0E2,#E2E7D8);border:2.5px solid #000;border-radius:16px;box-shadow:0 4px 0 #000;
-  padding:8px 10px;color:#141414;cursor:pointer}
-.t3h{display:flex;justify-content:space-between;align-items:center;font-size:11.5px;font-weight:900;margin-bottom:7px}
-.t3h span{color:#8a6b00;font-size:10px}
-.t3row{display:flex;gap:6px}
-.t3empty{flex:1;text-align:center;font-size:10.5px;font-weight:800;color:#5a5a5a;padding:6px 0}
-.t3p{flex:1;min-width:0;background:#FAF8EE;border:2.5px solid #000;border-radius:12px;box-shadow:0 3px 0 #000;padding:5px 3px;
-  display:flex;flex-direction:column;align-items:center;gap:2px}
-.t3p.first{background:linear-gradient(180deg,#FFF6D8,#FFE9A8)}
-.t3p .medal{font-size:14px;line-height:1}
-.t3p .f{width:30px;height:30px;border-radius:50%;border:2px solid #000;overflow:hidden;display:grid;place-items:center;font-size:16px;
+.top3{flex:0 0 auto;margin:5px 12px 3px;background:rgba(28,32,26,.55);border:2px solid rgba(255,255,255,.14);
+  border-radius:14px;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);
+  padding:6px 8px;color:var(--text);cursor:pointer}
+.t3h{display:flex;justify-content:space-between;align-items:center;font-size:10px;font-weight:900;margin-bottom:5px}
+.t3h span{color:var(--bolt);font-size:9px}
+.t3row{display:flex;gap:5px}
+.t3empty{flex:1;text-align:center;font-size:10.5px;font-weight:800;color:var(--muted);padding:6px 0}
+.t3p{flex:1;min-width:0;background:rgba(255,255,255,.08);border:2px solid rgba(255,255,255,.14);border-radius:10px;padding:3px 4px;
+  display:grid;grid-template-columns:auto 1fr;grid-template-areas:'f n' 'a a';align-items:center;gap:1px 4px}
+.t3p.first{background:rgba(255,210,31,.18);border-color:rgba(255,210,31,.45)}
+.t3p .medal{display:none}
+.t3p .f{grid-area:f;width:20px;height:20px;border-radius:50%;border:1.5px solid #000;overflow:hidden;display:grid;place-items:center;font-size:11px;flex:none;
   background:linear-gradient(180deg,#FFE7A8,#F0B33C)}
 .t3p .f img{width:100%;height:100%;object-fit:cover}
-.t3p .n{font-size:10px;font-weight:900;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.t3p .amt{font-size:10px;font-weight:900;color:#2A6B3C;background:#DFF0DC;border:1.5px solid #000;border-radius:999px;padding:0 6px}
+.t3p .n{grid-area:n;text-align:start;font-size:9px;font-weight:900;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)}
+.t3p .amt{grid-area:a;justify-self:center;font-size:9.5px;font-weight:900;color:#8BEBB0;background:rgba(51,217,124,.16);border:1.5px solid rgba(51,217,124,.35);border-radius:999px;padding:0 5px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
-/* The cup rail, as a light card like everything else on the new home.
-   A later block in this sheet deliberately strips the rail down to
-   transparent with !important, so these have to out-specify it (#home) as
-   well as carry !important — otherwise they silently lose and the rail stays
-   dark grey text on a dark forest. */
-#home .weekly-progress-line{flex:0 0 auto!important;background:linear-gradient(180deg,#F3F0E2,#E2E7D8)!important;border:2.5px solid #000!important;border-radius:14px!important;
-  box-shadow:0 4px 0 #000!important;padding:6px 10px 8px!important;margin:0 12px 6px!important}
-#home .weekly-progress-line .wpl-marker b{background:var(--bolt)!important;color:#141414!important;border-color:#000!important}
-#home .weekly-progress-line .wpl-marker span{color:#2E6FC9!important;text-shadow:none!important}
-#home .weekly-progress-line .wpl-flag small{color:#3d3d3d!important}
-#home .weekly-progress-line .wpl-flag.done small{color:#1f7a45!important}
-#home .weekly-progress-line .wpl-next{color:#41567c!important}
-#home .weekly-progress-line .wpl-track::before{background:#C9CFBB!important;border-color:#000!important}
+
 
 /* Home does not scroll, so on a short phone something has to give. The order
    is deliberate: the trivia chips go first, then the "who is here" line, then
@@ -1894,7 +1876,8 @@ input,textarea,select,[contenteditable="true"],.pz-selectable,.pz-selectable *{
 #promoDuel .tk-promo,#promoLs .tk-promo{min-height:0;height:clamp(76px,14vh,128px)}
 #promoDuel .tk-promo-txt b,#promoLs .tk-promo-txt b{font-size:13px}
 #promoDuel .tk-promo-txt span,#promoLs .tk-promo-txt span{font-size:11px}
-@media(max-height:760px){#promoDuel .tk-promo,#promoLs .tk-promo{display:none}}
+@media(max-height:760px){#promoDuel .tk-promo,#promoLs .tk-promo{height:clamp(52px,9vh,88px)}
+  #promoDuel .tk-promo-txt span,#promoLs .tk-promo-txt span{display:none}}
 /* Moving banners fill their frame exactly like a still one. */
 .tk-promo-img video,.tk-promo-img img{width:100%;height:100%;object-fit:cover;display:block}
 
@@ -3695,16 +3678,19 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
 /* HOME header sits directly on the wallpaper: no panel background, pinned (no
    scroll), and every bare text gets a strong shadow so it stays readable. The
    chips/pills keep their own backgrounds. */
-/* The header used to be a dark translucent bar blurring the wallpaper behind
-   it, because its text was light and sat over a photo. The rebuilt header is a
-   light card with dark text, so all of that is not just unnecessary — the dark
-   chip behind the name and the black text-shadows made it unreadable. Rules
-   replaced rather than overridden: two rules fighting over the same header is
-   how the light background lost the first time. */
-#home .pz-header{position:sticky;top:0;z-index:8}
-#home .pz-header .pzh-nameline b,#home .pz-header .pzh-xptxt{text-shadow:none}
-#home .pz-header .pzh-lvl{text-shadow:0 1px 2px rgba(0,0,0,.55)}
-#home .pz-header .pzh-nameline{background:none;padding:0}
+/* The header is pinned and everything that scrolls BEHIND it is blurred out, so
+   page content never reads through it and the header itself stays crisp. */
+#home .pz-header{position:sticky;top:0;z-index:8;border-bottom:none!important;
+  background:linear-gradient(180deg,rgba(10,14,20,.82),rgba(10,14,20,.66) 72%,rgba(10,14,20,.42))!important;
+  -webkit-backdrop-filter:blur(16px) saturate(1.15)!important;backdrop-filter:blur(16px) saturate(1.15)!important;
+  box-shadow:0 10px 18px -12px rgba(0,0,0,.75)!important;
+  padding-bottom:8px;margin-bottom:-4px}
+#home .pz-header .pzh-nameline b,#home .pz-header .pzh-xptxt{text-shadow:0 1px 4px rgba(0,0,0,.95),0 0 3px rgba(0,0,0,.8)}
+#home .pz-header .pzh-lvl{text-shadow:0 1px 3px rgba(0,0,0,.9)}
+#home .pz-header .pzh-xpbar{box-shadow:0 1px 4px rgba(0,0,0,.6)}
+/* Bare-text belongings anywhere in the home header get a subtle dark chip so
+   they never disappear on a bright part of the photo. */
+#home .pz-header .pzh-nameline{background:rgba(6,10,14,.34);border-radius:10px;padding:2px 6px}
 /* The hero is only a layout wrapper on home now, so the mission card inside it
    blurs the wallpaper exactly like the plan-picker cards do. */
 #home .hero{background:none!important;border:none!important;box-shadow:none!important;padding:0!important;overflow:visible!important}
@@ -10655,16 +10641,42 @@ function pzBannerMount(slot,screenId){
   }
   const paint=()=>{
     host.innerHTML=pzPromoHTML(slot);
-    /* Home is a no-scroll screen. A banner is the one thing that can need
-       more room than the screen has, so the scroll is switched on only while
-       one is actually being shown — and switched back off when it is not. */
-    if((screenId||slot)==='home'){
-      const sc=document.getElementById('home');
-      if(sc) sc.classList.toggle('pz-hasbanner', host.innerHTML.trim().length>0);
-    }
+    if((screenId||slot)==='home') pzHomeBannerFit(host);
   };
   paint();
   if(!PZ_BANNERS) pzLoadBanners().then(paint);
+}
+/* HOME + BANNER.
+ *
+ * Home is a no-scroll screen: everything is sized to fit. A banner is the one
+ * thing that legitimately needs more room than the screen has, and the ask is
+ * that it behaves like a banner — visible when you arrive, scrolled away when
+ * you push the page up, back again when you pull down.
+ *
+ * For that it has to ADD height rather than squeeze the page. Left alone, the
+ * flexible middle of home would simply shrink by the banner's height and
+ * nothing would scroll at all. So the stage is pinned to the height it had
+ * WITHOUT the banner, and the banner's height becomes real scroll distance.
+ * The header is sticky, so it stays put while the banner slides under it.
+ */
+function pzHomeBannerFit(host){
+  const sc=document.getElementById('home'), stage=sc&&sc.querySelector('.hstage');
+  if(!sc||!stage) return;
+  const has=host.innerHTML.trim().length>0;
+  if(!has){
+    sc.classList.remove('pz-hasbanner');
+    stage.style.height='';
+    return;
+  }
+  /* The stage gets the height it would have had with NO banner: the screen
+     minus everything else on it. Measuring the stage directly does not work —
+     by the time the banner is in the DOM the stage has already been squeezed,
+     and freezing that just locks the squeeze in. */
+  let used=0;
+  for(const el of sc.children){ if(el!==host&&el!==stage) used+=el.getBoundingClientRect().height; }
+  const h=Math.max(140, Math.round(sc.clientHeight-used));
+  stage.style.height=h+'px';
+  sc.classList.add('pz-hasbanner');
 }
 /* Screens with no banner code of their own get theirs when they open. */
 const PZ_BANNER_SCREENS=['home','rankings','friends','wallet','missions','profile','support'];
@@ -12436,7 +12448,7 @@ function hmRender(){
     '<div class="mk-facts">'+m.facts.map(f=>'<span>'+f+'</span>').join('')+'</div>'+
     '<button class="mk-start'+(m.soon?' soon':'')+'" onclick="hmStart()">'+(m.soon?'بزودی 🚧':'شروع بازی')+'</button>';
   const d=document.getElementById('mdots');
-  if(d) d.innerHTML=HOME_MODES.map((x,i)=>'<i class="'+(i===hmIdx?'on':'')+'" onclick="hmSet('+i+')"></i>').join('');
+  if(d) d.innerHTML=HOME_MODES.map((x,i)=>'<i class="'+(i===hmIdx?'on':'')+'" onclick="hmSet('+i+','+(i>hmIdx?1:-1)+')"></i>').join('');
   const nx=document.getElementById('mnext');
   if(nx) nx.textContent='↔ بکش · بعدی: '+HOME_MODES[(hmIdx+1)%HOME_MODES.length].title+' ‹';
 }
@@ -12468,12 +12480,39 @@ function hmEntry(m){
   return '<div class="mk-entry">به‌زودی باز می‌شود</div>';
 }
 function hmStart(){ const m=HOME_MODES[hmIdx]; if(!m) return; if(m.soon){ toast('این حالت هنوز باز نشده 🚧'); return; } try{ m.go(); }catch(e){} }
-function hmSet(i){
-  const n=HOME_MODES.length;
-  hmIdx=((i%n)+n)%n;
-  hmRender();
+/* One card leaves, the next arrives from the opposite edge — the way a deck
+   behaves. Without this the card blinked from one mode to another and there
+   was nothing to say which direction you had just moved.
+   `dir` is +1 for "forward through the list". */
+function hmSet(i,dir){
+  const n=HOME_MODES.length, next=((i%n)+n)%n;
+  if(next===hmIdx&&dir){ hmSnapBack(); return; }
+  const el=document.getElementById('mcard');
+  if(!el||!dir){ hmIdx=next; hmRender(); return; }
+  const out=(dir>0?1:-1)*110, incoming=-out;
+  el.classList.remove('mc-snap');
+  el.style.transition='transform .15s ease-in,opacity .15s ease-in';
+  el.style.transform='translateX('+out+'%)';
+  el.style.opacity='0';
+  setTimeout(()=>{
+    hmIdx=next; hmRender();
+    el.style.transition='none';
+    el.style.transform='translateX('+incoming+'%)';
+    /* Two frames: one for the browser to take the jump without animating it,
+       one to start the slide in. A single frame sometimes animates the jump. */
+    requestAnimationFrame(()=>requestAnimationFrame(()=>{
+      el.style.transition='transform .24s cubic-bezier(.2,.9,.3,1),opacity .2s ease';
+      el.style.transform='translateX(0)';
+      el.style.opacity='1';
+    }));
+  },150);
 }
-function hmGo(d){ hmSet(hmIdx+d); }
+/* A drag that did not go far enough: put the card back where it was. */
+function hmSnapBack(){
+  const el=document.getElementById('mcard'); if(!el) return;
+  el.classList.add('mc-snap'); el.style.transform=''; el.style.opacity='';
+}
+function hmGo(d){ hmSet(hmIdx+d,d); }
 
 /* ---- the swipe ----
    Pointer events cover finger and mouse with one path. The card follows the
@@ -12499,12 +12538,15 @@ function hmSwipeInit(){
   const up=()=>{
     if(!drag) return; drag=false;
     const w=el.offsetWidth||300, fast=(Date.now()-t0)<300&&Math.abs(dx)>40;
-    el.classList.add('mc-snap'); el.style.transform=''; el.style.opacity='';
     if(Math.abs(dx)>w*0.25||fast){
       /* RTL: dragging toward the right hand side moves forward through the
-         list, which is what «به سمت راست بری بره به بازمانده» asks for. */
+         list, which is what «به سمت راست بری بره به بازمانده» asks for. The
+         card carries on out the way the finger was going, and the next one
+         comes in from the other edge. */
       hmGo(dx>0?1:-1);
       try{ sfx&&sfx('tap'); }catch(e){}
+    } else {
+      hmSnapBack();
     }
     dx=0;
   };
