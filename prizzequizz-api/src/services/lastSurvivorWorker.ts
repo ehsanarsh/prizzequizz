@@ -163,7 +163,16 @@ async function beginRound(room: RoomRow, roundNo: number, now: number): Promise<
   /* Keep WHAT this round asked. The room row is about to be overwritten by the
    * next round, and without this the match cannot be reviewed afterwards. */
   if (q) await recordRound(room.id, roundNo, q.id, q.correctIndex).catch(() => undefined);
-  publish(room.id, 'ls:ready', { round: roundNo, questionId: q?.id, difficulty: q?.difficulty, endsAt: room.phaseEndsAt, serverNow: now });
+  /* The TEXT and OPTIONS ride the push, never the correct index.
+   *
+   * They used to be reachable only through the snapshot, so every client had to
+   * fetch one the moment a round opened — all of them at once, on the same
+   * second. Whatever went wrong with any of those fetches (a slow phone, a
+   * dropped request, a rate-limited one) left that player looking at a card
+   * with no question in it while the clock ran, and the grader took their
+   * shield for it. Carrying the question on the broadcast that ANNOUNCES the
+   * round removes the extra round-trip from the path entirely. */
+  publish(room.id, 'ls:ready', { round: roundNo, questionId: q?.id, difficulty: q?.difficulty, text: q?.text, options: q?.options, endsAt: room.phaseEndsAt, serverNow: now });
   await broadcastState(room.id);
 }
 
@@ -175,7 +184,12 @@ async function openQuestion(room: RoomRow, now: number): Promise<void> {
   room.phaseEndsAt = now + Math.max(8, Number(room.config.timings.questionSeconds) || 8) * 1000;
   await saveRoom(room);
   // Send the question WITHOUT the correct index.
-  publish(room.id, 'ls:question', { round: room.round, questionId: room.questionId, endsAt: room.phaseEndsAt, serverNow: now });
+  let qq: { text?: string; options?: string[]; difficulty?: string } = {};
+  if (room.questionId) {
+    try { const q = await repositories.questions.findById(room.questionId); if (q) qq = { text: q.text, options: q.options, difficulty: q.difficulty }; }
+    catch { /* the snapshot still carries it */ }
+  }
+  publish(room.id, 'ls:question', { round: room.round, questionId: room.questionId, ...qq, endsAt: room.phaseEndsAt, serverNow: now });
   await broadcastState(room.id);
 }
 

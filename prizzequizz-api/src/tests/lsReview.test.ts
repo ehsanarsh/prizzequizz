@@ -134,12 +134,52 @@ async function run(): Promise<void> {
       assert.equal(r.code, 'MATCH_RUNNING');
     });
 
-    await check('the CURRENT round is withheld while the room is still running', async () => {
+    await check('a question still OPEN is withheld while the room is running', async () => {
+      /* The cheat-sheet rule. It is about the answer window, not about the
+         round number: an eliminated player watching the room must not be able
+         to read the answer to the question the survivors are looking at. */
       const room = (await getRoom(roomId))!;
+      room.phase = 'question'; room.round = room.round + 1;
+      await saveRoom(room);
       const r = await api(`/last-survivor/rooms/${roomId}/review`, tokens.get(loser));
-      for (const rd of r.body.rounds) {
-        assert.ok(rd.round < room.round, 'round ' + rd.round + ' is live (room is on ' + room.round + ')');
-      }
+      assert.ok(!r.body.rounds.some((rd: any) => rd.round >= room.round),
+        'the live round leaked: ' + JSON.stringify(r.body.rounds.map((x: any) => x.round)));
+      room.phase = 'elimination'; room.round = room.round - 1;
+      await saveRoom(room);
+    });
+
+    await check('but the round that KNOCKED YOU OUT is not', async () => {
+      /* This is what was reported. The filter hid the whole current round, and
+         for the player who had just been eliminated that round IS their last
+         question — so the review handed them the one before it and called it
+         their final answer. By then the round is graded and its correct answer
+         has already gone out to the whole room in the elimination broadcast,
+         so there is nothing left to protect. */
+      const me = (await getPlayer(roomId, loser))!;
+      const room = (await getRoom(roomId))!;
+      room.round = me.eliminatedRound!; room.phase = 'elimination';
+      await saveRoom(room);
+      const r = await api(`/last-survivor/rooms/${roomId}/review`, tokens.get(loser));
+      const last = r.body.rounds[r.body.rounds.length - 1];
+      assert.ok(last, 'the review is not empty');
+      assert.equal(last.round, me.eliminatedRound,
+        'the last round shown must be the one they went out on, not the one before: ' +
+        JSON.stringify(r.body.rounds.map((x: any) => x.round)));
+      assert.equal(last.yourIndex, 1, 'with the pick that ended it');
+      assert.equal(last.yourCorrect, false);
+    });
+
+    await check('a round still at the ready gate is withheld too', async () => {
+      /* «ready» is before the answer window, so the question is even more live
+         than during it. */
+      const room = (await getRoom(roomId))!;
+      const at = room.round;
+      room.phase = 'ready';
+      await saveRoom(room);
+      const r = await api(`/last-survivor/rooms/${roomId}/review`, tokens.get(loser));
+      assert.ok(!r.body.rounds.some((rd: any) => rd.round >= at), 'round ' + at + ' leaked from the ready gate');
+      room.phase = 'elimination';
+      await saveRoom(room);
     });
 
     await check('somebody who was never in the room gets nothing', async () => {

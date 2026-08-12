@@ -1,4 +1,5 @@
 import type { IncomingMessage } from 'node:http';
+import { clientIp } from '../http/clientIp.js';
 import { db } from '../repositories/memory.js';
 import { id } from '../utils/id.js';
 import { logger } from './logger.js';
@@ -15,7 +16,7 @@ export function recordSecurityEvent(input: {
     userId: input.userId,
     eventType: input.eventType,
     severity: input.severity ?? 'info',
-    ipAddress: input.req?.socket.remoteAddress,
+    ipAddress: input.req ? clientIp(input.req) : undefined,
     userAgent: input.req?.headers['user-agent'],
     metadata: input.metadata ?? {},
     createdAt: new Date().toISOString()

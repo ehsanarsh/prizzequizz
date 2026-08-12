@@ -16,6 +16,7 @@ import { id } from '../utils/id.js';
 import { consumeTicket, refundTicket } from './ticketService.js';
 import { postEntry } from './walletLedgerService.js';
 import { logger } from './logger.js';
+import { usedIn as lifelinesUsedIn } from './lifelineService.js';
 import { getConfig, isTopicPlayable, type LastSurvivorConfig } from './lastSurvivorConfig.js';
 import { ticketValue, ticketUnits, buildPool, computeStats, cashoutShareFor, finalSplit, type PrizePlayer, ticketShields} from './lastSurvivorPrize.js';
 
@@ -529,7 +530,12 @@ export async function snapshot(roomId: string, forUserId?: string): Promise<any>
       /* Shields left, and whether one just broke. Without the second flag a
        * saved player is indistinguishable from one who answered correctly. */
       shields: me.shields ?? 0,
-      shieldBroke
+      shieldBroke,
+      /* Which helps this player has already spent in THIS MATCH. One of each
+       * per match, so the row has to grey out for the rest of the game — the
+       * client used to re-enable them at every round and the refusal only
+       * arrived after the tap. */
+      lifelinesUsed: await lifelinesUsedIn(`ls:${roomId}`, me.userId).catch(() => [] as string[])
     };
     // Private reveal: ONLY a player whose CURRENT round ended badly — knocked
     // out, or saved by a shield — may see the correct answer, and only while

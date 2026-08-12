@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { clientIp } from '../http/clientIp.js';
 import type { IncomingMessage } from 'node:http';
 import { repositories } from '../repositories/index.js';
 import type { DeviceRecord, DeviceTrustStatus, RiskLevel, UserDeviceBinding, UserRiskProfile } from '../types/domain.js';
@@ -159,7 +160,9 @@ function readObservedDevice(req: IncomingMessage): { fingerprintHash: string; cl
     clientDeviceId,
     userAgent: req.headers['user-agent']?.toString(),
     platform: header('x-platform')?.slice(0, 120),
-    ipAddress: req.socket.remoteAddress
+    /* Behind nginx the socket address is always 127.0.0.1, which would record
+     * every player in the country as one machine on one address. */
+    ipAddress: clientIp(req)
   };
 }
 

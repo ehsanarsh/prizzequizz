@@ -284,9 +284,17 @@ export function registerLastSurvivorRoutes(router: Router, base: string): void {
    *
    * Two rules keep it from becoming a cheat sheet. Only a PLAYER of the room may
    * read it, and only once it can no longer help them: the room has finished, or
-   * they are out of it. And while a room is still running the CURRENT round is
-   * withheld — it is the one question whose answer would still be worth
-   * something to somebody. */
+   * they are out of it. While the room is still running, a round is withheld
+   * only until it has been GRADED — up to that moment its answer is worth
+   * something to the players still in it.
+   *
+   * It used to withhold the whole current round, which is the round the reader
+   * was knocked out in — so the last thing that happened to them, the question
+   * that ended their match, was the one question the review would not show.
+   * They were handed the round before it and told that was their last answer.
+   * By the time anyone can open this, that round is over: the grader has run
+   * and its correct answer has already gone out to the whole room in the
+   * elimination broadcast. */
   router.add('GET', `${base}/last-survivor/rooms/:id/review`, async (ctx) => {
     if (!ctx.userId) return error(ctx.res, 401, 'UNAUTHORIZED', 'ابتدا وارد شو.');
     const roomId = ctx.params.id!;
@@ -301,7 +309,11 @@ export function registerLastSurvivorRoutes(router: Router, base: string): void {
 
     const rounds = await listRounds(roomId);
     const mine = await listMyAnswers(roomId, ctx.userId);
-    const visible = over ? rounds : rounds.filter((r) => r.round < room.round);
+    /* Graded = the answer window for that round has closed. Everything before
+     * the current round, plus the current one once the room has moved past the
+     * ready gate and the question itself. */
+    const currentGraded = room.phase !== 'ready' && room.phase !== 'question';
+    const visible = over ? rounds : rounds.filter((r) => r.round < room.round || (r.round === room.round && currentGraded));
 
     const items = [];
     for (const r of visible) {
@@ -362,8 +374,14 @@ export function registerLastSurvivorRoutes(router: Router, base: string): void {
      * yes and worked out what the help delivers. */
     const key = ({ '5050': 'p5050', second: 'psecond', stats: 'pstats' } as Record<string, string>)[type] || type;
     try {
-      const res = await useLifeline(roomId, ctx.userId, type, async (round) => {
-        const spent = await spendLifeline(ctx.userId!, key, `ls:${roomId}:${round}`);
+      /* ONE OF EACH HELP PER MATCH.
+       *
+       * The scope used to carry the round number, so «once per scope» meant
+       * once per ROUND: a player with stock could fire 50:50 on every question
+       * of the match, which is not a help any more, it is the answer. The
+       * scope is the room — the same rule the duel plays by. */
+      const res = await useLifeline(roomId, ctx.userId, type, async () => {
+        const spent = await spendLifeline(ctx.userId!, key, `ls:${roomId}`);
         return { remaining: spent.remaining };
       });
       if (!res.ok) return error(ctx.res, 409, res.reason || 'LIFELINE_REJECTED', 'این کمک الان قابل استفاده نیست.');

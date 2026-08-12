@@ -6951,13 +6951,42 @@ function lsTick(){
   if(lsSnap){ lsLive(lsSnap); } // smooth local countdown + timer bar, no network
   if(lsTickN%5===0) lsWsJoin();                       // keep the WS topic subscription alive across reconnects (idempotent)
   const waiting=lsSnap&&lsSnap.room&&lsSnap.room.status==='waiting';
-  if(lsTickN%(waiting?2:4)===0) lsPollNow();          // fallback refresh (WS handles instant transitions)
+  if(lsTickN%(waiting?2:4)===0 || lsShouldChase()) lsPollNow();   // fallback refresh (WS handles instant transitions)
   if(waiting&&lsTab==='chat'&&lsTickN%2===0) lsLoadChat(); // keep chat fresh without switching tabs
 }
 async function lsPollNow(){
   if(!lsRoomId) return;
   const r=await pzApi('GET','/last-survivor/rooms/'+lsRoomId);
-  if(r&&r.data) lsRender(r.data);
+  if(r&&r.data){ lsRender(r.data); return; }
+  /* The request failed (offline, throttled, a hiccup). If a question is open
+     and this phone has not got it, waiting for the next 4-second tick is four
+     seconds of a timer the player cannot answer against — so try again at once,
+     once. */
+  if(lsShouldChase()) setTimeout(()=>{ if(lsQuestionMissing()) lsPollNow(); },600);
+}
+/* A question window is open and this client has nothing to show for it.
+   Capped per round: a room whose question bank came up empty has no question to
+   fetch at all, and chasing one every second for twelve rounds would be this
+   phone hammering the server over something no request can fix. */
+let lsChaseRound=0, lsChaseN=0;
+const LS_CHASE_MAX=8;
+/* Pure: is a question window open with nothing on the card? */
+function lsQuestionMissing(){
+  if(!lsSnap||!lsSnap.room) return false;
+  const ph=lsSnap.room.phase;
+  if(lsSnap.room.status!=='running'||(ph!=='question'&&ph!=='ready')) return false;
+  const q=lsSnap.question;
+  return !(q&&Array.isArray(q.options)&&q.options.length>0);
+}
+/* Spends one attempt from this round's budget. Kept apart from the predicate
+   so asking the question twice cannot burn two tries. */
+function lsShouldChase(){
+  if(!lsQuestionMissing()) return false;
+  const rd=Number(lsSnap.room.round||0);
+  if(rd!==lsChaseRound){ lsChaseRound=rd; lsChaseN=0; }
+  if(lsChaseN>=LS_CHASE_MAX) return false;
+  lsChaseN++;
+  return true;
 }
 function lsWsJoin(){
   try{
@@ -6979,6 +7008,43 @@ function lsOnWs(type,payload){
     lsRender(payload);
     return;
   }
+  /* THE ROUND ANNOUNCEMENT, WITH THE QUESTION IN IT.
+     The server now sends the text and options on ls:ready and ls:question, so
+     the question no longer depends on a snapshot fetch landing in time. That
+     fetch is the thing that used to go missing: every player in the room fired
+     one on the same second, and any that failed left its owner looking at an
+     empty card while the clock ran down. The push is applied straight away and
+     a snapshot is still requested afterwards to reconcile the personal block —
+     if it never arrives, the player can still read and answer the question. */
+  if(type==='ls:ready'||type==='ls:question'){
+    if(!payload||!lsSnap||!lsSnap.room) { lsPollNow(); return; }
+    const r=lsSnap.room, newRound=Number(payload.round||0);
+    if(!newRound) return;
+    if(newRound<r.round) return;                       // a late push from a round already gone
+    if(newRound>r.round&&lsSnap.me){
+      /* A new round: everything the old `me` says about "this round" is about
+         the PREVIOUS one. Carrying answeredThisRound over would show «پاسخ شما
+         ثبت شد» instead of the new question — the same blank-screen bug by
+         another road. */
+      lsSnap.me.answeredThisRound=false; lsSnap.me.decisionThisRound=null;
+      lsSnap.me.shieldBroke=false; delete lsSnap.me.reveal;
+    }
+    r.round=newRound;
+    r.phase=(type==='ls:ready')?'ready':'question';
+    r.status='running';
+    if(payload.endsAt) r.phaseEndsAt=payload.endsAt;
+    if(payload.serverNow) r.serverNow=payload.serverNow;
+    if(payload.questionId){
+      lsSnap.question=Object.assign({},lsSnap.question&&lsSnap.question.id===payload.questionId?lsSnap.question:{},
+        {id:payload.questionId,round:newRound});
+      if(payload.text) lsSnap.question.text=payload.text;
+      if(Array.isArray(payload.options)) lsSnap.question.options=payload.options;
+      if(payload.difficulty) lsSnap.question.difficulty=payload.difficulty;
+    }
+    lsRender(lsSnap);
+    lsPollNow();                                       // reconcile status/shields/pot
+    return;
+  }
   /* The room ended. `forfeited` is the pot that nobody won because the last
      players all answered wrongly — remembered here so the result screen can
      say what happened to the money instead of showing a blank podium. */
@@ -6994,14 +7060,62 @@ function lsTimer(snap){
   return lsFa(m)+':'+(ss<10?'۰':'')+lsFa(ss);
 }
 
+/* THE ORDER SNAPSHOTS ARRIVE IN IS NOT THE ORDER THEY WERE MADE IN.
+   A push moves the room to round 3; the reconciling fetch that was already in
+   flight answers with round 2 and, taken at face value, drags the screen back
+   to a round that is over — and if that older answer also happens to be missing
+   the question, the player is left with a blank card on a live timer. Both are
+   the reported bug, arriving by a different road. So a snapshot may move the
+   match forward, never backwards, and it may not blank out a question the
+   client already has for the round it is on. */
+const LS_PHASE_ORDER={waiting:0,ready:1,question:2,elimination:3,dashboard:4,cashout:5,finished:6};
+function lsStale(next){
+  const cur=lsSnap&&lsSnap.room; if(!cur||!next||!next.room) return false;
+  if(next.room.id!==cur.id) return false;
+  if(cur.status==='finished'&&next.room.status!=='finished') return true;
+  const a=Number(next.room.round||0), b=Number(cur.round||0);
+  if(a<b) return true;
+  if(a>b) return false;
+  return (LS_PHASE_ORDER[next.room.phase]??0) < (LS_PHASE_ORDER[cur.phase]??0);
+}
 function lsRender(snap){
+  if(lsStale(snap)) return;
+  /* Same round, and this one has no question while we already have it: keep it.
+     Losing it here is what leaves a player unable to answer. */
+  if(lsSnap&&lsSnap.question&&snap&&snap.room&&lsSnap.room&&snap.room.round===lsSnap.room.round
+     &&Array.isArray(lsSnap.question.options)&&lsSnap.question.options.length
+     &&!(snap.question&&Array.isArray(snap.question.options)&&snap.question.options.length)){
+    snap.question=lsSnap.question;
+  }
   lsSnap=snap; if(snap.me) lsMyId=snap.me.userId;
   /* Also carried on the snapshot, so the REST poll explains a no-winner ending
      even when the ls:ended push was missed. */
   if(snap.room&&Number(snap.room.forfeited||0)>0) lsForfeited=Number(snap.room.forfeited);
   const r=snap.room;
-  const key=r.status+'|'+r.phase+'|'+r.round;
-  if(key!==lsLastKey){ lsLastKey=key; lsBuild(snap); if(r.phase==='ready'){ lsPuUsed={}; lsSecondArmed=false; lsSecondSubmitted=false; } if(r.phase==='ready'||r.phase==='question'){ lsAnswered=(snap.me&&snap.me.answeredThisRound)||false; } if(r.phase==='elimination')lsDeadDismissed=false; try{if(r.phase==='elimination')sfx('found');}catch(e){} }
+  /* The question id is part of the key on purpose. A snapshot that reached the
+     phone without the question — a dropped or throttled request, a reconnect
+     mid-round — used to draw an empty card, and because status|phase|round had
+     not changed, NOTHING redrew it when the question finally arrived. The
+     player sat in front of «…» with no options while the timer ran and was
+     graded as having not answered. Keying on what is actually on the card means
+     the moment the question turns up, the card is rebuilt. */
+  const key=r.status+'|'+r.phase+'|'+r.round+'|'+((snap.question&&snap.question.options&&snap.question.options.length)?snap.question.id:'-');
+  /* Each help may be used ONCE PER MATCH. This used to empty lsPuUsed at every
+     ready gate, so all three buttons lit up again every round and the refusal
+     only arrived after the tap. The server is the authority — it sends back
+     which ones this player has already spent in this room — and the round reset
+     is limited to the one thing that really is per-round: the armed second
+     chance. */
+  if(snap.me&&Array.isArray(snap.me.lifelinesUsed)){
+    const back={p5050:'5050',psecond:'second',pstats:'stats'};
+    const next={}; snap.me.lifelinesUsed.forEach(k=>{ next[back[k]||k]=true; });
+    const changed=Object.keys(next).join(',')!==Object.keys(lsPuUsed).join(',');
+    lsPuUsed=next;
+    /* Repaint the row straight away. Waiting for the next full rebuild leaves a
+       spent help looking available, and the player finds out by tapping it. */
+    if(changed){ try{ lsBindPowerups(); }catch(e){} }
+  }
+  if(key!==lsLastKey){ lsLastKey=key; lsBuild(snap); if(r.phase==='ready'){ lsSecondArmed=false; lsSecondSubmitted=false; } if(r.phase==='ready'||r.phase==='question'){ lsAnswered=(snap.me&&snap.me.answeredThisRound)||false; } if(r.phase==='elimination')lsDeadDismissed=false; try{if(r.phase==='elimination')sfx('found');}catch(e){} }
   lsLive(snap);
   // A player who has cashed out is DONE — show the victory result right away
   // instead of making them watch the rest of the match.
@@ -7248,7 +7362,10 @@ function lsBindPowerups(){
   slot.innerHTML=defs.map(d=>{
     const used=!!lsPuUsed[d[0]], own=Math.max(0,Number(((pzLL&&pzLL.inv)||{})[d[3]]||0));
     const off=used||own<=0;
-    return '<div class="pu'+(off?' disabled used':'')+'" data-ls-pu="'+d[0]+'"><span class="pu-i">'+d[1]+'</span><span class="pu-l">'+d[2]+'</span><span class="pu-c">'+(used?'استفاده شد':'×'+lsFa(own))+'</span></div>';
+    /* Two different reasons a help is unavailable, and they must not share a
+       class: «استفاده شد» on something the player simply never bought reads as
+       the game having taken it. */
+    return '<div class="pu'+(off?' disabled':'')+(used?' used':'')+(!used&&own<=0?' empty':'')+'" data-ls-pu="'+d[0]+'"><span class="pu-i">'+d[1]+'</span><span class="pu-l">'+d[2]+'</span><span class="pu-c">'+(used?'استفاده شد':'×'+lsFa(own))+'</span></div>';
   }).join('');
   slot.querySelectorAll('[data-ls-pu]').forEach(el=>{
     el.onclick=function(ev){ ev.preventDefault(); ev.stopPropagation(); lsUsePower(el.getAttribute('data-ls-pu'),el); };
