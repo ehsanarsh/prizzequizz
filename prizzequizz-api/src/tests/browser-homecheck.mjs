@@ -78,6 +78,28 @@ async function swipe(dx, dy = 0, steps = 12) {
   await page.waitForTimeout(350);
 }
 
+console.log('the header:');
+{
+  const h = await page.evaluate(() => {
+    const hdr = document.querySelector('#home .pz-header');
+    return {
+      buttons: hdr ? hdr.querySelectorAll('button').length : -1,
+      hasCup: !!hdr?.querySelector('.weekly-progress-line'),
+      hasName: !!hdr?.querySelector('#hdrName'),
+      hasWallet: !!hdr?.querySelector('#hdrWallet'),
+      bg: hdr ? getComputedStyle(hdr).backgroundImage.replace(/\s+/g, '') : ''
+    };
+  });
+  /* The wheel, the bell and the daily gift moved to the rails. A control in
+     two places is a control whose badge is wrong in one of them. */
+  ok('the header carries no action buttons any more', h.buttons === 0, String(h.buttons));
+  ok('the cup rail is inside the header now', h.hasCup);
+  ok('and the name and belongings are still there', h.hasName && h.hasWallet);
+  ok('the header is a light card, not the old dark bar', /243,240,226/.test(h.bg), h.bg.slice(0, 50));
+  const rails = await page.evaluate(() => [...document.querySelectorAll('.hside .lbl')].map((e) => e.textContent));
+  for (const must of ['گردونه', 'اعلان‌ها', 'هدایا']) ok('«' + must + '» is on a rail', rails.includes(must), rails.join('،'));
+}
+
 console.log('touching the card:');
 {
   /* A plain tap once turned the card into a 44×44 button: the swipe code added
@@ -160,10 +182,41 @@ for (const [w, h] of [[390, 844], [360, 640], [412, 732]]) {
     for (let i = 1; i < order.length; i++) if (order[i].top < order[i - 1].bottom - 1) overlap = true;
     return { squashed, overlap, card: parts.card && Math.round(parts.card.h) };
   });
+  /* Home is one screen. A start button below the fold is a start button
+     nobody presses. */
+  const sc = await page.evaluate(() => { const e = document.getElementById('home'); return { sh: e.scrollHeight, ch: e.clientHeight, top: e.scrollTop }; });
+  ok('home does not scroll at ' + w + '×' + h, sc.sh <= sc.ch + 2, sc.sh + ' vs ' + sc.ch);
+  if (r.squashed.length) console.log('     ', JSON.stringify(await page.evaluate(() => {
+    const st = document.querySelector('.hstage'), c = document.querySelector('#mcard');
+    return { stage: Math.round(st.getBoundingClientRect().height) + '/' + st.scrollHeight,
+             kids: [...st.children].map((e) => e.className + ':' + Math.round(e.getBoundingClientRect().height) + '/' + e.scrollHeight),
+             card: Math.round(c.getBoundingClientRect().height) + '/' + c.scrollHeight,
+             cardKids: [...c.children].map((e) => (e.className || '?') + ':' + Math.round(e.getBoundingClientRect().height)) };
+  })));
   ok('nothing is squashed at ' + w + '×' + h, r.squashed.length === 0, r.squashed.join(',') || 'none');
   ok('and no two blocks overlap at ' + w + '×' + h, !r.overlap, 'card ' + r.card + 'px');
 }
 await page.setViewportSize({ width: 390, height: 844 });
+
+console.log('the banner is the one exception:');
+{
+  const r = await page.evaluate(async () => {
+    const home = document.getElementById('home');
+    const before = getComputedStyle(home).overflowY;
+    /* Put a banner in the way the banner system does. */
+    let host = home.querySelector('.tk-promo-host');
+    if (!host) { host = document.createElement('div'); host.className = 'tk-promo-host'; home.insertBefore(host, home.firstChild); }
+    host.innerHTML = '<div style="height:150px;background:#333">بنر</div>';
+    home.classList.add('pz-hasbanner');
+    await new Promise((r2) => setTimeout(r2, 200));
+    const withB = { overflow: getComputedStyle(home).overflowY, sh: home.scrollHeight, ch: home.clientHeight };
+    host.innerHTML = ''; home.classList.remove('pz-hasbanner');
+    await new Promise((r2) => setTimeout(r2, 200));
+    return { before, withB, after: getComputedStyle(home).overflowY };
+  });
+  ok('home does not scroll without a banner', r.before === 'hidden' && r.after === 'hidden', r.before + ' / ' + r.after);
+  ok('and it may scroll while one is shown', r.withB.overflow === 'auto', r.withB.overflow + ', ' + r.withB.sh + ' vs ' + r.withB.ch);
+}
 
 ok('no script errors on the new home', errs.length === 0, errs.slice(0, 2).join(' | '));
 await page.screenshot({ path: '/tmp/claude-0/-home-user-prizzequizz/8e7dbfdd-7716-52fe-a640-0feaacd6599f/scratchpad/home-real.png' });
