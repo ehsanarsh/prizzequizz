@@ -216,6 +216,70 @@ function run(): void {
     assert.ok(html.includes('/admin/withdraw-otp'), 'and is wired to its endpoint');
   });
 
+  /* ── merged tabs ──────────────────────────────────────────────────── */
+
+  check('the shop no longer carries a second banner editor', () => {
+    /* «بنرها» owns every banner on every screen, with video and GIF. Two
+       editors for one thing means one of them is always the stale one. */
+    for (const gone of ['PROMO_SLOTS', 'function promoCard(', 'function promoSave(', 'promoPickImage', "'/admin/ticket-promos'"]) {
+      assert.ok(!script.includes(gone), 'left behind: ' + gone);
+    }
+    assert.ok(!html.includes('تبلیغ صفحه‌های بلیط'), 'the shop still shows the old promo editor');
+    assert.ok(script.includes('async function renderShopAdmin('), 'and the shop screen itself is still there');
+  });
+
+  check('every screen the sidebar used to list is still reachable', () => {
+    /* Merging rows must not lose a section — that is the very report this
+       whole round started from. Each screen is either its own nav row or a
+       member of a group. */
+    const nav = (/const NAV=\[[\s\S]*?\n\];/.exec(script) || [])[0] || '';
+    const groups = (/const TAB_GROUPS=\{[\s\S]*?\n\};/.exec(script) || [])[0] || '';
+    assert.ok(nav && groups, 'NAV and TAB_GROUPS must both be present');
+    const reachable = new Set<string>();
+    for (const m of nav.matchAll(/\['([a-zA-Z_0-9]+)','[^']*','[^']*'\]/g)) reachable.add(m[1]!);
+    for (const m of groups.matchAll(/\['([a-zA-Z_0-9]+)','[^']*'\]/g)) reachable.add(m[1]!);
+    for (const key of ['dashboard', 'finance', 'accounting', 'expenses', 'users', 'matches', 'lastsurvivor', 'support',
+      'questions', 'qreports', 'aistudio', 'pipeline', 'categories', 'characters', 'charboxes', 'lifelines', 'rewards',
+      'recordmode', 'onboarding', 'wallet', 'withdrawals', 'payoutpartners', 'withdrawotp', 'smsgroups', 'rewardholds',
+      'tickets', 'shop', 'giftcodes', 'payments', 'cfg_xp', 'cfg_level', 'cfg_cup', 'cfg_gameplay', 'leagues', 'missions2',
+      'leaderboard', 'campaign', 'events', 'banners', 'notifications', 'sms', 'monitoring', 'anticheat', 'suspicious',
+      'reports', 'logs', 'reset', 'accounts', 'backup', 'general', 'rawcfg']) {
+      assert.ok(reachable.has(key), 'no longer reachable from the sidebar: ' + key);
+    }
+  });
+
+  check('no nav row is listed twice', () => {
+    const nav = (/const NAV=\[[\s\S]*?\n\];/.exec(script) || [])[0] || '';
+    const rows: Array<[string, string]> = [...nav.matchAll(/\['([a-zA-Z_0-9]+)','[^']*','([^']*)'\]/g)].map((m) => [m[1]!, m[2]!]);
+    const seen = new Map<string, number>(), labels = new Map<string, number>();
+    for (const [k, l] of rows) { seen.set(k, (seen.get(k) || 0) + 1); labels.set(l, (labels.get(l) || 0) + 1); }
+    const dupKeys = [...seen].filter(([, n]) => n > 1).map(([k]) => k);
+    const dupLabels = [...labels].filter(([, n]) => n > 1).map(([k]) => k);
+    assert.deepEqual(dupKeys, [], 'duplicate nav keys');
+    assert.deepEqual(dupLabels, [], 'duplicate nav labels');
+  });
+
+  check('a screen with a purpose-built renderer is not shadowed by a config page', () => {
+    /* render() consults CONFIG_PAGES BEFORE the renderer map, so a key in both
+       can never reach its screen. That is exactly how «بنرها» went blank, and
+       «ضدتقلب» was sitting in the same trap. */
+    const cfg = (/const CONFIG_PAGES=\{[^}]*\};/.exec(script) || [])[0] || '';
+    const fnMap = (/const fn=\{[\s\S]*?\}\[CUR\];/.exec(script) || [])[0] || '';
+    assert.ok(cfg && fnMap, 'both maps must be present');
+    const cfgKeys = [...cfg.matchAll(/([a-zA-Z_0-9]+):\[/g)].map((m) => m[1]!);
+    const shadowed = cfgKeys.filter((k) => new RegExp('[,{]' + k + ':render').test(fnMap));
+    assert.deepEqual(shadowed, [], 'these tabs can never reach their own screen');
+  });
+
+  check('access is still granted one screen at a time', () => {
+    /* A merged row must not become a single permission covering four screens —
+       that would hand an account whatever it was not granted. */
+    assert.match(script, /function permChecklist[\s\S]{0,400}navLeaves\(\)/,
+      'the access checklist must be built from the opened-out screen list');
+    assert.match(script, /function canTab[\s\S]{0,400}TAB_GROUPS\[k\]/,
+      'a merged row opens only when one of its own screens is permitted');
+  });
+
   console.log(`[adminPanelHtml] ${passed} passed, ${failed} failed`);
   if (failed) process.exit(1);
 }

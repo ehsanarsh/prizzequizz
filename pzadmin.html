@@ -122,7 +122,13 @@ async function api(method,path,body){
   return d&&d.data!==undefined?d.data:d;
 }
 let PERMS=['*'], IS_OWNER=true, ME_USER='';
-function canTab(k){ return PERMS.indexOf('*')>=0 || PERMS.indexOf(k)>=0; }
+function canTab(k){
+  if(PERMS.indexOf('*')>=0) return true;
+  /* A merged nav row opens when any one of its screens is permitted; the
+     screens themselves are still checked one by one. */
+  if(typeof TAB_GROUPS!=='undefined' && TAB_GROUPS[k]) return TAB_GROUPS[k].tabs.some(t=>PERMS.indexOf(t[0])>=0);
+  return PERMS.indexOf(k)>=0;
+}
 async function doLogin(){
   API=($('#inApi').value||'').trim().replace(/\/$/,'')||API;
   const key=($('#inKey')&&$('#inKey').value||'').trim();
@@ -156,30 +162,95 @@ function logout(){localStorage.removeItem('pz_admin_key');location.reload();}
 async function loadCfg(){ try{ CFG=await api('GET','/admin/config'); $('#cfgVer').textContent='config '+(CFG.version||''); }catch(e){ CFG={}; } }
 
 /* ---- nav: 25 sections grouped ---- */
+/* ---- Merged tabs ----
+   Fifty-one entries in the sidebar, and several of them were one job split
+   across four rows: a payout was «دریافت جایزه» + «جوایز در انتظار» +
+   «شرکای جایزه» + «کد تأیید», each a separate scroll away from the others.
+   A group is ONE nav entry whose screens sit behind a row of subtabs.
+
+   CUR still holds the individual screen's key, never the group's. That keeps
+   everything that already reads it working unchanged — the permission check,
+   CONFIG_PAGES, `if(CUR==='questions')`, `go('pipeline')` from another screen
+   — and it keeps the permission unit per-screen, so an account granted
+   'withdrawals' and nothing else still sees exactly that one subtab. */
+const TAB_GROUPS={
+  g_money:   {icon:'💰',label:'مالی و حسابداری',tabs:[['finance','داشبورد مالی'],['accounting','حسابداری و گزارش'],['expenses','هزینه‌های شرکت']]},
+  g_qhub:    {icon:'❓',label:'سوالات',tabs:[['questions','بانک سوال'],['qreports','گزارش سؤالات'],['aistudio','استودیوی AI'],['pipeline','خط‌لولهٔ کیفیت']]},
+  g_chars:   {icon:'🎭',label:'کاراکترها',tabs:[['characters','کاراکترها'],['charboxes','قرعه‌کشی کاراکتر']]},
+  g_payout:  {icon:'💸',label:'دریافت جایزه',tabs:[['withdrawals','درخواست‌ها'],['rewardholds','جوایز در انتظار'],['payoutpartners','شرکای جایزه'],['withdrawotp','کد تأیید']]},
+  g_balance: {icon:'⚖️',label:'بالانس بازی',tabs:[['cfg_xp','XP'],['cfg_level','Level'],['cfg_cup','Cup'],['cfg_gameplay','گیم‌پلی مودها']]},
+  g_sms:     {icon:'📱',label:'پنل پیامکی',tabs:[['sms','ارسال و تنظیمات'],['smsgroups','گروه‌های شماره']]},
+  g_security:{icon:'🛡️',label:'امنیت و ضدتقلب',tabs:[['anticheat','تنظیمات ضدتقلب'],['suspicious','کاربران مشکوک']]},
+  g_audit:   {icon:'📑',label:'گزارش و لاگ',tabs:[['reports','گزارش‌ها'],['logs','لاگ و Audit']]}
+};
+/* screen key → the group that carries it */
+const TAB_GROUP_OF={};
+Object.keys(TAB_GROUPS).forEach(g=>TAB_GROUPS[g].tabs.forEach(t=>{TAB_GROUP_OF[t[0]]=g;}));
+function groupMembers(g){ return (TAB_GROUPS[g]?TAB_GROUPS[g].tabs:[]).filter(t=>canTab(t[0])); }
+
 const NAV=[
-  ['اصلی',[['dashboard','📊','داشبورد'],['finance','💰','داشبورد مالی'],['accounting','🧾','حسابداری و گزارش'],['expenses','🧮','هزینه‌های شرکت'],['users','👤','کاربران'],['matches','🎮','مسابقات'],['lastsurvivor','🏆','آخرین بازمانده'],['support','🎧','پشتیبانی']]],
-  ['محتوا',[['questions','❓','سوالات'],['qreports','🚩','گزارش سؤالات'],['aistudio','🤖','استودیوی سوال (AI)'],['pipeline','🔬','خط‌لولهٔ کیفیت'],['categories','🏷️','موضوعات'],['characters','🎭','کاراکترها'],['charboxes','🎲','قرعه‌کشی کاراکتر'],['lifelines','🧩','کمک‌ها'],['rewards','🎡','گردونه و جایزه روزانه'],['recordmode','🏅','ثبت رکورد'],['onboarding','👋','خوش‌آمدگویی']]],
-  ['اقتصاد',[['wallet','🏆','صندوق جایزه'],['withdrawals','💸','دریافت جایزه'],['payoutpartners','🎁','شرکای جایزه'],['withdrawotp','🔐','کد تأیید جایزه'],['smsgroups','📇','گروه‌های پیامک'],['rewardholds','⏳','جوایز در انتظار'],['tickets','🎫','بلیط‌ها'],['shop','🛒','فروشگاه'],['giftcodes','🎁','کدهای هدیه'],['payments','🏦','درگاه پرداخت']]],
-  ['بالانس بازی (Data-Driven)',[['cfg_xp','✨','XP'],['cfg_level','🏅','Level'],['cfg_cup','🏆','Cup'],['cfg_gameplay','🕹️','گیم‌پلی مودها'],['leagues','🛡️','لیگ‌ها'],['missions2','🎯','مأموریت‌ها']]],
-  ['رشد و تعامل',[['leaderboard','📈','لیدربرد'],['banners2','🖼️','بنرها'],['campaign','🎁','کمپین کاربر جدید'],['events','📅','رویدادها'],['banners','🖼️','بنرها'],['notifications','🔔','اعلان‌ها'],['sms','📱','پنل پیامکی']]],
-  ['سیستم',[['monitoring','🖥️','مانیتورینگ سرور'],['anticheat','🛡️','ضدتقلب'],['suspicious','🚨','کاربران مشکوک'],['reports','📑','گزارش‌ها'],['logs','📝','لاگ و Audit'],['reset','♻️','ابزار ریست'],['accounts','🔐','حساب‌ها و دسترسی'],['backup','💾','پشتیبان‌گیری'],['general','⚙️','تنظیمات عمومی'],['rawcfg','🧩','ویرایش خام Config']]]
+  ['اصلی',[['dashboard','📊','داشبورد'],['g_money','💰','مالی و حسابداری'],['users','👤','کاربران'],['matches','🎮','مسابقات'],['lastsurvivor','🏆','آخرین بازمانده'],['support','🎧','پشتیبانی']]],
+  ['محتوا',[['g_qhub','❓','سوالات'],['categories','🏷️','موضوعات'],['g_chars','🎭','کاراکترها'],['lifelines','🧩','کمک‌ها'],['rewards','🎡','گردونه و جایزه روزانه'],['recordmode','🏅','ثبت رکورد'],['onboarding','👋','خوش‌آمدگویی']]],
+  ['اقتصاد',[['wallet','🏆','صندوق جایزه'],['g_payout','💸','دریافت جایزه'],['tickets','🎫','بلیط‌ها'],['shop','🛒','فروشگاه'],['giftcodes','🎁','کدهای هدیه'],['payments','🏦','درگاه پرداخت']]],
+  ['بالانس بازی (Data-Driven)',[['g_balance','⚖️','بالانس بازی'],['leagues','🛡️','لیگ‌ها'],['missions2','🎯','مأموریت‌ها']]],
+  ['رشد و تعامل',[['leaderboard','📈','لیدربرد'],['campaign','🎁','کمپین کاربر جدید'],['events','📅','رویدادها'],['banners','🖼️','بنرها'],['notifications','🔔','اعلان‌ها'],['g_sms','📱','پنل پیامکی']]],
+  ['سیستم',[['monitoring','🖥️','مانیتورینگ سرور'],['g_security','🛡️','امنیت و ضدتقلب'],['g_audit','📑','گزارش و لاگ'],['reset','♻️','ابزار ریست'],['accounts','🔐','حساب‌ها و دسترسی'],['backup','💾','پشتیبان‌گیری'],['general','⚙️','تنظیمات عمومی'],['rawcfg','🧩','ویرایش خام Config']]]
 ];
+/* NAV with every group opened out into its screens — for anything that has to
+   speak in screens rather than nav rows (the access checklist, tab labels). */
+function navLeaves(){
+  const out=[];
+  NAV.forEach(g=>g[1].forEach(p=>{
+    if(TAB_GROUPS[p[0]]) TAB_GROUPS[p[0]].tabs.forEach(t=>out.push([t[0],TAB_GROUPS[p[0]].icon,t[1],g[0]]));
+    else out.push([p[0],p[1],p[2],g[0]]);
+  }));
+  return out;
+}
 function buildNav(){
   $('#nav').innerHTML=NAV.map(g=>{
     // Only show tabs this account may access; 'accounts' is owner-only.
+    // A group shows when ANY of its screens is permitted.
     const items=g[1].filter(p=>(p[0]==='accounts'?IS_OWNER:canTab(p[0])));
     if(!items.length)return '';
     return '<div class="navgroup">'+g[0]+'</div>'+items.map(p=>'<button data-p="'+p[0]+'" onclick="go(\''+p[0]+'\')"><span class="ico">'+p[1]+'</span>'+p[2]+'</button>').join('');
   }).join('');
 }
 let CUR='dashboard';
-function go(p){CUR=p;document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('active',b.dataset.p===p));render();}
+function go(p){
+  /* Clicking a group opens its first screen the account may actually see. */
+  if(TAB_GROUPS[p]){ const m=groupMembers(p); if(!m.length)return; p=m[0][0]; }
+  CUR=p;
+  const active=TAB_GROUP_OF[p]||p;
+  document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('active',b.dataset.p===active));
+  render();
+}
+/* The subtab row, prepended to whatever the screen drew. Screens each assign
+   #main.innerHTML wholesale, so the bar goes in after they run — no screen
+   needed changing to join a group. */
+function groupBar(){
+  const g=TAB_GROUP_OF[CUR]; if(!g)return;
+  const m=groupMembers(g); if(m.length<2)return;
+  /* Its own class: several screens already have a .subtabs row of their own
+     (the withdrawal states, the shop categories), and anything looking for
+     the group bar must not find one of those instead. */
+  const bar='<div class="subtabs pz-groupbar" style="margin-bottom:12px">'+
+    m.map(t=>'<button class="'+(t[0]===CUR?'active':'')+'" onclick="go(\''+t[0]+'\')">'+esc(t[1])+'</button>').join('')+'</div>';
+  const main=$('#main'); if(main)main.insertAdjacentHTML('afterbegin',bar);
+}
 function loading(){$('#main').innerHTML='<div class="skel"></div><div class="skel"></div><div class="skel"></div>';}
 function head(t,s,r){return '<div class="head"><div><h2>'+t+'</h2>'+(s?'<div class="sub">'+s+'</div>':'')+'</div><div>'+(r||'')+'</div></div>';}
 function stat(k,cls,v){return '<div class="stat"><div class="k">'+k+'</div><div class="v '+(cls||'')+'">'+v+'</div></div>';}
 function tbl(cols,rows){if(!rows||!rows.length)return '<div class="empty">داده‌ای نیست</div>';return '<div class="tbl-wrap"><table><thead><tr>'+cols.map(c=>'<th>'+c+'</th>').join('')+'</tr></thead><tbody>'+rows.map(r=>'<tr>'+r.map(c=>'<td>'+c+'</td>').join('')+'</tr>').join('')+'</tbody></table></div>';}
 function modal(title,html){const bg=document.createElement('div');bg.className='modal-bg';bg.onclick=e=>{if(e.target===bg)bg.remove();};bg.innerHTML='<div class="modal"><div class="head"><h2 style="font-size:16px">'+title+'</h2><button class="btn sm" onclick="this.closest(\'.modal-bg\').remove()">✕</button></div>'+html+'</div>';document.body.appendChild(bg);return bg;}
-const CONFIG_PAGES={cfg_xp:['xp','تنظیمات XP'],cfg_level:['level','تنظیمات Level'],cfg_cup:['cup','تنظیمات Cup'],cfg_gameplay:['gameplay','گیم‌پلی هر مود'],leagues:['leagues','مدیریت لیگ‌ها'],events:['events','رویدادها'],banners:['banners','بنرها'],general:['general','تنظیمات عمومی'],anticheat:['antiCheat','ضدتقلب'],campaign:['campaign','کمپین کاربر جدید']};
+/* 'banners' was a raw-config page: render() checks CONFIG_PAGES BEFORE the
+   renderer map, so it swallowed the real banners screen and drew a config
+   editor for a key that carries nothing. That is why the tab "showed
+   nothing". The real screen is renderBanners.
+
+   'anticheat' was the same mistake: a purpose-built screen (settings + risky
+   users + recent signals) sat behind a raw-config editor for the antiCheat
+   key, so the built screen could never run. Only one of the two is kept. */
+const CONFIG_PAGES={cfg_xp:['xp','تنظیمات XP'],cfg_level:['level','تنظیمات Level'],cfg_cup:['cup','تنظیمات Cup'],cfg_gameplay:['gameplay','گیم‌پلی هر مود'],leagues:['leagues','مدیریت لیگ‌ها'],events:['events','رویدادها'],general:['general','تنظیمات عمومی'],campaign:['campaign','کمپین کاربر جدید']};
 
 async function render(){
   loading();
@@ -188,9 +259,15 @@ async function render(){
   else if(!canTab(CUR)){ $('#main').innerHTML=head('دسترسی محدود')+'<div class="card empty">به این بخش دسترسی نداری. از مدیر کل بخواه دسترسی این تب را فعال کند.</div>';return; }
   try{
     if(CUR==='accounts')return renderAccounts();
-    if(CONFIG_PAGES[CUR])return renderConfigSection(CONFIG_PAGES[CUR][0],CONFIG_PAGES[CUR][1]);
-    const fn={dashboard:renderDashboard,finance:renderFinance,accounting:renderAccounting,expenses:renderExpenses,backup:renderBackup,users:renderUsers,matches:renderMatches,support:renderSupport,questions:renderQuestions,qreports:renderQReports,aistudio:renderAiStudio,pipeline:renderPipeline,categories:renderCategories,wallet:renderWallet,withdrawals:renderWithdrawals,payoutpartners:renderPayoutPartners,withdrawotp:renderWithdrawOtp,smsgroups:renderSmsGroups,rewardholds:renderRewardHolds,tickets:renderTickets,giftcodes:renderGiftCodes,shop:renderShopAdmin,characters:renderCharacters,charboxes:renderCharBoxes,lifelines:renderLifelines,rewards:renderRewards,missions2:renderMissions2,recordmode:renderRecordMode,onboarding:renderOnboarding,lastsurvivor:renderLastSurvivor,sms:renderSms,payments:renderPayments,leaderboard:renderLeaderboard,banners2:renderBanners,notifications:renderNotifications,anticheat:renderAntiCheat,suspicious:renderSuspicious,reports:renderReports,logs:renderLogs,reset:renderReset,roles:renderRoles,rawcfg:renderRawCfg,monitoring:renderMonitoring}[CUR];
-    if(fn)return fn();
+    if(CONFIG_PAGES[CUR]){ await renderConfigSection(CONFIG_PAGES[CUR][0],CONFIG_PAGES[CUR][1]); return groupBar(); }
+    const fn={dashboard:renderDashboard,finance:renderFinance,accounting:renderAccounting,expenses:renderExpenses,backup:renderBackup,users:renderUsers,matches:renderMatches,support:renderSupport,questions:renderQuestions,qreports:renderQReports,aistudio:renderAiStudio,pipeline:renderPipeline,categories:renderCategories,wallet:renderWallet,withdrawals:renderWithdrawals,payoutpartners:renderPayoutPartners,withdrawotp:renderWithdrawOtp,smsgroups:renderSmsGroups,rewardholds:renderRewardHolds,tickets:renderTickets,giftcodes:renderGiftCodes,shop:renderShopAdmin,characters:renderCharacters,charboxes:renderCharBoxes,lifelines:renderLifelines,rewards:renderRewards,missions2:renderMissions2,recordmode:renderRecordMode,onboarding:renderOnboarding,lastsurvivor:renderLastSurvivor,sms:renderSms,payments:renderPayments,leaderboard:renderLeaderboard,banners:renderBanners,notifications:renderNotifications,anticheat:renderAntiCheat,suspicious:renderSuspicious,reports:renderReports,logs:renderLogs,reset:renderReset,roles:renderRoles,rawcfg:renderRawCfg,monitoring:renderMonitoring}[CUR];
+    if(fn){ await fn(); return groupBar(); }
+    /* No renderer for this tab. Six nav entries were in this state, and
+       clicking one silently left the PREVIOUS screen's content on display —
+       which is indistinguishable from a section having disappeared. Say so. */
+    $('#main').innerHTML=head('در دست ساخت')+
+      '<div class="card empty">این بخش هنوز ساخته نشده است.<br><span class="sub">اگر لازمش داری بگو تا اضافه شود.</span></div>';
+    return;
   }catch(e){$('#main').innerHTML=head('خطا')+'<div class="card empty">'+(e.message||'خطا')+'</div>';}
 }
 
@@ -223,7 +300,7 @@ async function renderDashboard(){
       stat('درآمدِ امروز','gold',money(d.todayRevenue))+
     '</div>'+
     '<div class="grid g4" style="margin-bottom:13px">'+
-      stat('برداشتِ در انتظار','bad',fa(d.pendingWithdrawals)+' ('+money(d.pendingWithdrawAmount)+')')+
+      stat('دریافت جایزهٔ در انتظار','bad',fa(d.pendingWithdrawals)+' ('+money(d.pendingWithdrawAmount)+')')+
       stat('تیکتِ پشتیبانیِ باز','pend',fa(d.openTickets))+
       stat('آپ‌تایم سرویس','',(d.system?d.system.uptimeH:0)+' ساعت')+
       stat('مسابقاتِ در جریان','info',fa(d.runningMatches))+
@@ -235,7 +312,7 @@ async function renderDashboard(){
       '<div class="card"><h3>🎮 مسابقات — ۳۰ روزِ اخیر</h3>'+miniBars(d.matchesSeries,'#7b8bff','مسابقه')+'</div>'+
     '</div>'+
     '<div class="card" style="margin-top:13px"><h3>🔴 فعالیتِ لحظه‌ای (Live Feed)</h3>'+
-      tbl(['زمان','رویداد'],(d.liveFeed||[]).map(f=>[fmtDate(f.at),'<span class="pill '+(f.kind==='signup'?'ok':f.kind==='withdraw'?'pend':'info')+'">'+({signup:'ثبت‌نام',match:'مسابقه',withdraw:'برداشت'}[f.kind]||f.kind)+'</span> '+esc(f.text)]))+
+      tbl(['زمان','رویداد'],(d.liveFeed||[]).map(f=>[fmtDate(f.at),'<span class="pill '+(f.kind==='signup'?'ok':f.kind==='withdraw'?'pend':'info')+'">'+({signup:'ثبت‌نام',match:'مسابقه',withdraw:'دریافت جایزه'}[f.kind]||f.kind)+'</span> '+esc(f.text)]))+
     '</div>'+
     '';
   /* Both panels fill themselves in so a slow query never blocks the dashboard. */
@@ -434,10 +511,10 @@ async function renderAccounting(){
     (r.shopSalesTracked?'':'<div class="note">فروش آیتم هنوز اندازه‌گیری نمی‌شود: فروشگاه فعلاً فقط کاتالوگ است و مسیر خرید آیتم ساخته نشده. جدول ثبت فروش آماده است و به‌محض ساخت خرید، این عدد پر می‌شود.</div>')+
     '<div class="grid g4" style="margin-bottom:13px">'+
       /* Two different things that used to share one label. «جوایز واریزشده» is
-         what landed in players' wallets — a debt, not a payment. «برداشت نقدی»
-         is the only figure that is money actually gone. */
-      stat('جوایز واریزشده به کیف پول','bad',money(r.payouts.total))+
-      stat('برداشت نقدیِ پرداخت‌شده','bad',money(r.payouts.cashedOut||0))+
+         what landed in players' vaults — a debt, not a payment. «جایزهٔ نقدیِ
+         پرداخت‌شده» is the only figure that is money actually gone. */
+      stat('جوایز واریزشده به صندوق جایزه','bad',money(r.payouts.total))+
+      stat('جایزهٔ نقدیِ پرداخت‌شده','bad',money(r.payouts.cashedOut||0))+
       stat('هزینه‌های شرکت','bad',money(r.expenses.total))+
       stat('سود ناخالص',r.grossProfit>=0?'ok':'bad',money(r.grossProfit))+
     '</div>'+
@@ -447,7 +524,7 @@ async function renderAccounting(){
       stat('واریز کاربران','',money(r.income.deposits||0))+
       stat('سود خالص',r.netProfit>=0?'ok':'bad',money(r.netProfit))+
     '</div>'+
-    '<div class="note"><b>این دو عدد یکی نیستند.</b> «جوایز واریزشده» یعنی چقدر به کیف پول بازیکن‌ها اضافه شده — این پول هنوز نزد توست و فقط <b>بدهی</b> است. «برداشت نقدیِ پرداخت‌شده» تنها عددی است که واقعاً از شرکت خارج شده. سود ناخالص بر اساس <b>تعهد</b> حساب می‌شود (جوایز واریزشده)، نه برداشت‌ها؛ اگر هر دو کم می‌شدند، یک برد دو بار شمرده می‌شد.</div>'+
+    '<div class="note"><b>این دو عدد یکی نیستند.</b> «جوایز واریزشده» یعنی چقدر به صندوق جایزه بازیکن‌ها اضافه شده — این پول هنوز نزد توست و فقط <b>بدهی</b> است. «جایزهٔ نقدیِ پرداخت‌شده» تنها عددی است که واقعاً از شرکت خارج شده. سود ناخالص بر اساس <b>تعهد</b> حساب می‌شود (جوایز واریزشده)، نه پرداخت‌ها؛ اگر هر دو کم می‌شدند، یک برد دو بار شمرده می‌شد.</div>'+
     '<div class="card" style="margin-bottom:13px"><b>روند مالی</b><div class="sub" style="margin-bottom:6px">'+esc(r.from)+' تا '+esc(r.to)+'</div>'+accChart(r.series)+'</div>'+
     '<div class="grid g2">'+
       '<div class="card"><b>کارمزد به تفکیک بازی</b><div class="tbl-wrap" style="margin-top:8px"><table><thead><tr><th>بازی</th><th>کارمزد</th><th>مسابقه</th></tr></thead><tbody>'+modeRows+'</tbody></table></div></div>'+
@@ -562,9 +639,9 @@ async function renderFinance(){
       stat('موجودی سیستم (خزانه)','gold',money(f.systemBalance))+
     '</div>'+
     '<div class="grid g4" style="margin-bottom:13px">'+
-      stat('برداشتِ در انتظار','gold',money(f.pendingWithdraw))+
-      stat('برداشتِ تأییدشده','info',money(f.approvedWithdraw))+
-      stat('برداشتِ ردشده/ناموفق','',money(f.rejectedWithdraw))+
+      stat('دریافت جایزهٔ در انتظار','gold',money(f.pendingWithdraw))+
+      stat('دریافت جایزهٔ تأییدشده','info',money(f.approvedWithdraw))+
+      stat('دریافت جایزهٔ ردشده/ناموفق','',money(f.rejectedWithdraw))+
       stat('سود خالص','gold',money(f.netProfit))+
     '</div>'+
     '<div class="grid g2">'+
@@ -586,7 +663,7 @@ async function renderFinance(){
       '<div class="mono" style="direction:rtl;font-size:12.5px;line-height:2.2;color:#cdd6ff">'+esc(f.formula||'')+'</div>'+
       '<div style="margin-top:12px;padding:12px;background:#0c0f16;border-radius:9px;border:1.5px solid var(--line)">'+
         '<div style="font-size:13px;line-height:2.1">سود خالص = <span style="color:var(--ok)">'+money(income)+'</span> − <span style="color:var(--bad)">'+money(payout)+'</span> = <b style="color:var(--gold);font-size:16px">'+money(f.netProfit)+'</b></div>'+
-        '<div style="font-size:13px;line-height:2.1;margin-top:6px">موجودی سیستم = واریزها('+money(f.totalDeposits)+') − برداشت('+money(f.totalWithdrawnPaid)+') − موجودی کاربران('+money(f.usersWalletBalance)+') = <b style="color:var(--gold);font-size:16px">'+money(f.systemBalance)+'</b></div>'+
+        '<div style="font-size:13px;line-height:2.1;margin-top:6px">موجودی سیستم = واریزها('+money(f.totalDeposits)+') − جایزهٔ پرداخت‌شده('+money(f.totalWithdrawnPaid)+') − موجودی کاربران('+money(f.usersWalletBalance)+') = <b style="color:var(--gold);font-size:16px">'+money(f.systemBalance)+'</b></div>'+
       '</div>'+
     '</div>';
 }
@@ -602,7 +679,7 @@ async function renderUsers(){
     '<div class="toolbar"><input id="uq" placeholder="جستجوی نام/یوزرنیم/شناسه/شماره..." value="'+esc(U_Q)+'" onkeydown="if(event.key===\'Enter\'){U_Q=this.value.trim();render();}"><button class="btn" onclick="U_Q=$(\'#uq\').value.trim();render()">جستجو</button></div>'+
     '<div id="ubulk"></div>'+
     '<div class="tbl-wrap"><table><thead><tr><th style="width:34px"><input type="checkbox" id="uselall" onclick="uSelAll(this.checked)"></th>'+
-      ['کاربر','لول/XP','کاپ','کیف پول','وضعیت','عملیات'].map(c=>'<th>'+c+'</th>').join('')+'</tr></thead><tbody>'+
+      ['کاربر','لول/XP','کاپ','صندوق جایزه','وضعیت','عملیات'].map(c=>'<th>'+c+'</th>').join('')+'</tr></thead><tbody>'+
       (list.length?list.map(u=>'<tr>'+
         '<td><input type="checkbox" class="usel" value="'+u.id+'" '+(_USEL.has(u.id)?'checked':'')+' onclick="uSelOne(\''+u.id+'\',this.checked)"></td>'+
         '<td>'+esc(u.username||'')+' <span class="mono" style="color:var(--muted)">'+String(u.id).slice(0,8)+'</span></td>'+
@@ -658,10 +735,10 @@ async function userDetail(uid){
   const kyc=wds.find(w=>w.nationalId||w.holderName||w.destination)||{};
   const kycRow=(k,v)=>'<div style="display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid var(--line)"><span style="color:var(--muted);font-size:12px">'+k+'</span><b class="mono" dir="ltr" style="font-size:12px;word-break:break-all">'+esc(v||'—')+'</b></div>';
   const wdList=wds.slice(0,8).map(w=>'<tr><td>'+fa(w.amount)+'</td><td class="mono" dir="ltr" style="font-size:11px">'+esc(wdFmtDest(w.destination))+'</td><td>'+esc(WD_STFA[w.status]||w.status)+'</td><td>'+fmtDate(w.createdAt)+'</td></tr>').join('');
-  const bankCard='<div class="card" style="margin-top:12px"><h3>اطلاعات بانکی و برداشت‌ها</h3>'+
+  const bankCard='<div class="card" style="margin-top:12px"><h3>اطلاعات بانکی و دریافت جایزه</h3>'+
     (kyc.nationalId||kyc.holderName||kyc.destination||kyc.phone?
       (kycRow('شماره موبایل',u.phone||kyc.phone)+kycRow('کد ملی',kyc.nationalId)+kycRow('نام صاحب کارت',kyc.holderName)+kycRow(String(kyc.destination||'').toUpperCase().startsWith('IR')?'شماره شبا':'شماره کارت',wdFmtDest(kyc.destination)))
-      :'<div class="note">این کاربر هنوز درخواست برداشتی ثبت نکرده است.</div>')+
+      :'<div class="note">این کاربر هنوز درخواست دریافت جایزه‌ای ثبت نکرده است.</div>')+
     (wdList?'<table style="margin-top:10px"><thead><tr><th>مبلغ</th><th>کارت/شبا</th><th>وضعیت</th><th>زمان</th></tr></thead><tbody>'+wdList+'</tbody></table>':'')+
     '</div>';
   const f=(id,label,val,type)=>'<div class="field"><label>'+label+'</label><input id="'+id+'" '+(type==='num'?'type="number"':'')+' value="'+esc(val==null?'':val)+'"></div>';
@@ -675,7 +752,7 @@ async function userDetail(uid){
       f('ud_cup','کاپ هفتگی',u.weeklyScore,'num')+f('ud_coins','سکه',bal.coins,'num')+
     '</div>'+
     '<button class="btn pri" style="margin:4px 0 14px" onclick="saveUser(\''+uid+'\')">💾 ذخیرهٔ فیلدها</button>'+
-    '<div class="card" style="margin-bottom:12px"><h3>کیف پول و بلیط</h3>'+
+    '<div class="card" style="margin-bottom:12px"><h3>صندوق جایزه و بلیط</h3>'+
       '<div class="grid g2"><div><b style="color:var(--ok);font-size:18px">'+fa(bal.wallet)+'</b> تومان</div>'+
       '<div style="display:flex;gap:6px"><input id="ud_adj" type="number" placeholder="± مبلغ اصلاح"><button class="btn info sm" onclick="adjUser(\''+uid+'\')">اصلاح</button></div></div>'+
       '<div style="margin-top:10px;display:flex;gap:6px;align-items:center;flex-wrap:wrap"><span style="font-size:12px;color:var(--muted)">بلیط:</span>'+
@@ -696,7 +773,7 @@ async function userDetail(uid){
 }
 function nv(id){const v=$('#'+id).value;return v===''?undefined:Number(v);}
 async function saveUser(uid){try{await api('PATCH','/admin/users/'+uid,{displayName:$('#ud_name').value,username:$('#ud_uname').value,xp:nv('ud_xp'),level:nv('ud_level'),weeklyScore:nv('ud_cup'),coins:nv('ud_coins')});toast('ذخیره شد','ok');document.querySelector('.modal-bg').remove();render();}catch(e){toast(e.message,'bad');}}
-async function adjUser(uid){const a=nv('ud_adj');if(a==null)return;const reason=prompt('علت اصلاح موجودی:')||'اصلاح ادمین';try{await api('POST','/admin/wallet/adjust',{userId:uid,amount:a,reason});toast('کیف پول اصلاح شد','ok');userDetailReopen(uid);}catch(e){toast(e.message,'bad');}}
+async function adjUser(uid){const a=nv('ud_adj');if(a==null)return;const reason=prompt('علت اصلاح موجودی:')||'اصلاح ادمین';try{await api('POST','/admin/wallet/adjust',{userId:uid,amount:a,reason});toast('صندوق جایزه اصلاح شد','ok');userDetailReopen(uid);}catch(e){toast(e.message,'bad');}}
 async function grantTicket(uid,mode){const tier=$('#ud_tier').value,count=Number($('#ud_tkn').value||0);try{await api('POST','/admin/users/'+uid+'/tickets',{tier,count,mode});toast('بلیط بروزرسانی شد','ok');userDetailReopen(uid);}catch(e){toast(e.message,'bad');}}
 async function msgUser(uid){const body=$('#ud_msg').value.trim();if(!body)return;try{await api('POST','/admin/users/'+uid+'/message',{title:'پیام پشتیبانی',body});toast('پیام ارسال شد','ok');}catch(e){toast(e.message,'bad');}}
 async function setStatus(uid,status){const reason=status!=='active'?(prompt('علت:')||''):'';try{await api('PATCH','/admin/users/'+uid+'/status',{status,reason});toast('وضعیت تغییر کرد','ok');userDetailReopen(uid);}catch(e){toast(e.message,'bad');}}
@@ -711,7 +788,7 @@ async function renderMatches(){
   if(M_TAB==='done'){
     const d=await api('GET','/admin/matches/history?limit=80').catch(()=>({rows:[]}));
     $('#main').innerHTML=head('مدیریت مسابقات','مسابقاتِ پایان‌یافته — از دیتابیس (منبع حقیقت)')+tabs+
-      '<div class="note">به‌محضِ پایان، مسابقه از فهرستِ «در حال اجرا» خارج و اینجا ثبت می‌شود؛ وضعیت همیشه برابرِ وضعیتِ واقعیِ دیتابیس است. جایزهٔ برنده هم‌زمان در کیف پول، تراکنش، لیدربرد و گزارشِ مالی ثبت شده است.</div>'+
+      '<div class="note">به‌محضِ پایان، مسابقه از فهرستِ «در حال اجرا» خارج و اینجا ثبت می‌شود؛ وضعیت همیشه برابرِ وضعیتِ واقعیِ دیتابیس است. جایزهٔ برنده هم‌زمان در صندوق جایزه، تراکنش، لیدربرد و گزارشِ مالی ثبت شده است.</div>'+
       tbl(['شناسه','مود','وضعیت','اقتصاد','برنده','نتیجه','زمان'],(d.rows||[]).map(m=>{
         const win=(m.players||[]).find(p=>p.userId===m.winnerUserId);
         return ['<span class="mono">'+String(m.id).slice(0,8)+'</span>',m.modeId||'—','<span class="pill ok">'+esc(m.phase||'finished')+'</span>',m.economyType||'free',
@@ -1134,9 +1211,9 @@ async function catSave(){
 let AC_Q='';
 async function renderWallet(){
   const d=await api('GET','/admin/wallet/accounts?q='+encodeURIComponent(AC_Q));
-  $('#main').innerHTML=head('مدیریت کیف پول','موجودی کاربران، دفترکل، اصلاح دستی')+
+  $('#main').innerHTML=head('مدیریت صندوق جایزه','موجودی کاربران، دفترکل، اصلاح دستی')+
     '<div class="toolbar"><input id="acq" placeholder="جستجو..." value="'+esc(AC_Q)+'" onkeydown="if(event.key===\'Enter\'){AC_Q=this.value.trim();render();}"><button class="btn" onclick="AC_Q=$(\'#acq\').value.trim();render()">جستجو</button> <button class="btn info" onclick="checkConsistency()">بررسی سازگاری دفترکل</button></div>'+
-    tbl(['کاربر','قابل‌برداشت','بلوکه','عملیات'],(d.rows||[]).map(u=>[
+    tbl(['کاربر','قابل‌دریافت','بلوکه','عملیات'],(d.rows||[]).map(u=>[
       esc(u.username||'')+' <span class="mono" style="color:var(--muted)">'+String(u.userId).slice(0,8)+'</span>',
       '<b style="color:var(--ok)">'+fa(u.account.available)+'</b>',fa(u.account.locked),
       '<button class="btn sm" onclick="viewLedger(\''+u.userId+'\')">دفترکل</button> <button class="btn sm info" onclick="userDetail(\''+u.userId+'\')">مدیریت</button>'
@@ -1152,7 +1229,7 @@ async function renderWithdrawals(){
   const d=await api('GET','/admin/wallet/withdrawals?status='+WD_ST+'&pageSize=100');
   _WD_ROWS={}; (d.rows||[]).forEach(w=>{_WD_ROWS[w.id]=w;});
   const st=WD_STFA;
-  $('#main').innerHTML=head('مدیریت برداشت‌ها','روی هر ردیف بزن تا جزئیات کامل (کاربر، کد ملی، موبایل، شبا) را ببینی')+
+  $('#main').innerHTML=head('مدیریت دریافت جایزه','روی هر ردیف بزن تا جزئیات کامل (کاربر، کد ملی، موبایل، شبا) را ببینی')+
     '<div class="subtabs">'+Object.keys(st).map(s=>'<button class="'+(WD_ST===s?'active':'')+'" onclick="WD_ST=\''+s+'\';render()">'+st[s]+'</button>').join('')+'</div>'+
     tbl(['کاربر','کد ملی','کارت/شبا مقصد','مبلغ','وضعیت','زمان','عملیات'],(d.rows||[]).map(w=>{
       let a='<button class="btn sm" onclick="wdDetail(\''+w.id+'\')">جزئیات</button>';
@@ -1174,7 +1251,7 @@ function wdDetail(id){
   let acts='';
   if(w.status==='pending')acts='<button class="btn ok" onclick="this.closest(\'.modal-bg\').remove();wdAct(\''+w.id+'\',\'approve\')">تأیید</button><button class="btn bad" onclick="this.closest(\'.modal-bg\').remove();wdReject(\''+w.id+'\')">رد</button>';
   else if(w.status==='approved')acts='<button class="btn info" onclick="this.closest(\'.modal-bg\').remove();wdPaid(\''+w.id+'\')">ثبت پرداخت</button><button class="btn bad" onclick="this.closest(\'.modal-bg\').remove();wdReject(\''+w.id+'\')">رد</button>';
-  modal('جزئیات درخواست برداشت',
+  modal('جزئیات درخواست دریافت جایزه',
     r('نام کاربر', esc(w.displayName||'—')+(w.username?' <span class="mono" style="color:var(--muted)">@'+esc(w.username)+'</span>':''))+
     r('شماره موبایل','<span class="mono">'+esc(w.phone||'—')+'</span>')+
     r('کد ملی','<span class="mono">'+esc(w.nationalId||'—')+'</span>')+
@@ -1182,7 +1259,7 @@ function wdDetail(id){
     r(String(w.destination||'').toUpperCase().startsWith('IR')?'شماره شبا':'شماره کارت مقصد','<span class="mono" dir="ltr">'+esc(wdFmtDest(w.destination))+'</span>')+
     r('مبلغ درخواستی','<span style="color:var(--gold)">'+fa(w.amount)+' تومان</span>')+
     r('کارمزد', fa(w.fee||0)+' تومان')+
-    r('موجودی فعلی کیف پول', w.walletBalance!=null?fa(w.walletBalance)+' تومان':'—')+
+    r('موجودی فعلی صندوق جایزه', w.walletBalance!=null?fa(w.walletBalance)+' تومان':'—')+
     r('وضعیت','<span class="pill '+(w.status==='paid'||w.status==='approved'?'ok':w.status==='rejected'||w.status==='failed'?'bad':'pend')+'">'+(WD_STFA[w.status]||w.status)+'</span>')+
     r('زمان ثبت', fmtDate(w.createdAt))+
     (w.reviewedAt?r('زمان بررسی',fmtDate(w.reviewedAt)):'')+
@@ -1209,7 +1286,7 @@ async function renderRewardHolds(){
   const money=v=>fa(v)+' ت';
   $('#main').innerHTML=head('جوایز در انتظار','جوایزی که برای بررسی امنیتی پارک شده‌اند — تأیید (واریز) یا رد',
     '<button class="btn sm" onclick="render()">↻ بروزرسانی</button>')+
-    '<div class="note">جوایزی که پیش از رفعِ باگ (یا هنگام روشن‌بودنِ بررسیِ امنیتی) پارک شده‌اند اینجا هستند. با «تأیید و واریز»، جایزه از طریقِ ledger به کیف پولِ کاربر واریز و در تراکنش/لیدربورد ثبت می‌شود. بردهای جدید (با تنظیمِ پیش‌فرض) دیگر پارک نمی‌شوند.</div>'+
+    '<div class="note">جوایزی که پیش از رفعِ باگ (یا هنگام روشن‌بودنِ بررسیِ امنیتی) پارک شده‌اند اینجا هستند. با «تأیید و واریز»، جایزه از طریقِ ledger به صندوق جایزهٔ کاربر واریز و در تراکنش/لیدربورد ثبت می‌شود. بردهای جدید (با تنظیمِ پیش‌فرض) دیگر پارک نمی‌شوند.</div>'+
     '<div class="grid g4" style="margin-bottom:13px">'+
       stat('در انتظار','gold',fa(diag.pending||0))+
       stat('مبلغ در انتظار','gold',money(diag.pendingAmount||0))+
@@ -1235,7 +1312,7 @@ async function releaseAllHolds(){
   const holds=await api('GET','/admin/rewards/holds?status=pending&limit=500').catch(()=>[]);
   const list=Array.isArray(holds)?holds:(holds.rows||[]);
   if(!list.length)return toast('موردی برای واریز نیست');
-  if(!confirm('همهٔ '+list.length+' جایزهٔ در انتظار تأیید و به کیف پولِ کاربران واریز شود؟'))return;
+  if(!confirm('همهٔ '+list.length+' جایزهٔ در انتظار تأیید و به صندوق جایزهٔ کاربران واریز شود؟'))return;
   let ok=0,bad=0;
   for(const h of list){try{await api('PATCH','/admin/rewards/holds/'+h.id+'/status',{status:'approved'});ok++;}catch(e){bad++;}}
   toast('واریز شد: '+fa(ok)+(bad?' · ناموفق: '+fa(bad):''),bad?'bad':'ok');render();
@@ -1246,7 +1323,7 @@ async function renderTickets(){
   const tp=(CFG.economy&&CFG.economy.wallet&&CFG.economy.wallet.ticketPrices)||{};
   const colors={green:'#2ecc71',blue:'#3aa0ff',red:'#ff5a48',bronze:'#cd7f32',silver:'#c8c8c8',gold:'#ffd21f'};
   $('#main').innerHTML=head('مدیریت بلیط‌ها','قیمت بلیط‌ها (data-driven) — اعطای بلیط از بخش کاربران')+
-    '<div class="note">بلیط داراییِ جدا از کیف پول است. قیمت‌ها زنده از config خوانده می‌شوند؛ تغییر اینجا بلافاصله در فروشگاهِ بازی اعمال می‌شود.</div>'+
+    '<div class="note">بلیط داراییِ جدا از صندوق جایزه است. قیمت‌ها زنده از config خوانده می‌شوند؛ تغییر اینجا بلافاصله در فروشگاهِ بازی اعمال می‌شود.</div>'+
     '<div class="card"><h3>قیمت بلیط‌ها (تومان)</h3>'+
     ['green','blue','red','bronze','silver','gold'].map(k=>'<div class="cfg-row"><label><span style="color:'+(colors[k]||'#fff')+'">●</span> '+k+'</label><input id="tp_'+k+'" type="number" value="'+(tp[k]!=null?tp[k]:0)+'"></div>').join('')+
     '<button class="btn pri" style="margin-top:10px" onclick="saveTicketPrices()">💾 ذخیره</button></div>';
@@ -1576,10 +1653,10 @@ async function renderLeaderboard(){
 
 /* ================= NOTIFICATIONS ================= */
 const NT_STFA={pending:'در انتظار',sending:'در حال ارسال',sent:'ارسال شد',canceled:'لغو شد',failed:'ناموفق'};
-function ntTypeOptions(sel){const t={system:'عمومی/مهم (همه دریافت می‌کنند)',promo:'تبلیغی (طبق تنظیمات کاربر)',match_update:'مسابقه',wallet_update:'کیف پول',leaderboard_update:'لیدربرد'};return Object.keys(t).map(k=>'<option value="'+k+'"'+(sel===k?' selected':'')+'>'+t[k]+'</option>').join('');}
+function ntTypeOptions(sel){const t={system:'عمومی/مهم (همه دریافت می‌کنند)',promo:'تبلیغی (طبق تنظیمات کاربر)',match_update:'مسابقه',wallet_update:'صندوق جایزه',leaderboard_update:'لیدربرد'};return Object.keys(t).map(k=>'<option value="'+k+'"'+(sel===k?' selected':'')+'>'+t[k]+'</option>').join('');}
 function ntLocalDefault(){const d=new Date(Date.now()+3600000);d.setSeconds(0,0);const p=n=>String(n).padStart(2,'0');return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+'T'+p(d.getHours())+':'+p(d.getMinutes());}
 let NT_TAB='compose';
-const NT_LINKS={'':'— بدون مقصد —','/home':'🏠 خانه','/shop':'🛒 فروشگاه','/wallet':'👛 کیف پول','/match':'⚔️ شروع مسابقه','/league':'🛡️ لیگ','/rewards':'🎡 جوایز و گردونه','/profile':'👤 پروفایل','/notifications':'🔔 صندوق پیام'};
+const NT_LINKS={'':'— بدون مقصد —','/home':'🏠 خانه','/shop':'🛒 فروشگاه','/wallet':'👛 صندوق جایزه','/match':'⚔️ شروع مسابقه','/league':'🛡️ لیگ','/rewards':'🎡 جوایز و گردونه','/profile':'👤 پروفایل','/notifications':'🔔 صندوق پیام'};
 async function renderNotifications(){
   const tab=(k,label)=>'<button class="btn sm '+(NT_TAB===k?'pri':'')+'" onclick="NT_TAB=\''+k+'\';render()">'+label+'</button>';
   const tabs=tab('dashboard','📊 داشبورد')+' '+tab('compose','✍️ ارسال پیام')+' '+tab('history','🗂️ کمپین‌ها و آنالیز')+' '+tab('scheduled','⏰ زمان‌بندی‌شده')+' '+tab('push','📲 وضعیت پوش')+' '+tab('policy','🎛️ چه چیزی فرستاده شود');
@@ -1886,73 +1963,12 @@ const SHOP_EFFECTS={'ticket-green':'🎫 بلیط سبز (مسابقه)','ticket
   'skin-gold':'اسکین طلایی','skin-neon':'اسکین نئون','skin-rainbow':'اسکین رنگین‌کمان',gift:'هدیه به دوست'};
 /* Which effects actually hand over a match ticket. */
 const SHOP_TICKET_EFFECTS=['ticket-green','ticket-blue','ticket-red','ticket-bronze','ticket-silver','ticket-gold'];
-/* ---- Banners on the three ticket screens ----
-   The duel entry, the Last Survivor entry and the shop's ticket tab each carry
-   one admin-owned banner: image + headline + a line of text. They render through
-   the same component in the game, so all three look identical. */
-const PROMO_SLOTS=[['duel','ورود به دوئل'],['lastSurvivor','ورود آخرین بازمانده'],['shop','فروشگاه بلیط']];
-let _PROMOS=null, _PROMO_MAX=400*1024;
-function promoCard(id,label,p){
-  p=p||{};
-  return '<div class="card" style="margin-bottom:12px">'+
-    '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px"><b>'+esc(label)+'</b>'+
-      '<label style="margin-inline-start:auto;display:flex;align-items:center;gap:6px;font-size:12px"><input type="checkbox" id="pm_en_'+id+'"'+(p.enabled!==false?' checked':'')+'> نمایش داده شود</label></div>'+
-    '<div class="grid g2">'+
-      '<div class="field"><label>عنوان</label><input id="pm_t_'+id+'" maxlength="80" value="'+esc(p.title||'')+'"></div>'+
-      '<div class="field"><label>رفتن به صفحه (اختیاری)</label><input id="pm_l_'+id+'" placeholder="مثلاً shop" value="'+esc(p.link||'')+'"></div>'+
-    '</div>'+
-    '<div class="field"><label>متن</label><input id="pm_x_'+id+'" maxlength="240" value="'+esc(p.text||'')+'"></div>'+
-    '<div class="field"><label>تصویر تبلیغ (اختیاری · حداکثر '+fa(Math.round(_PROMO_MAX/1024))+' کیلوبایت)</label>'+
-      '<div style="display:flex;align-items:center;gap:10px">'+
-        '<div id="pm_prev_'+id+'" style="width:72px;height:72px;border-radius:12px;border:1px solid var(--line);overflow:hidden;background:#0e1218;display:grid;place-items:center;font-size:11px;color:var(--sub)">'+
-          (p.image?'<img src="'+esc(p.image)+'" style="width:100%;height:100%;object-fit:cover">':'بدون تصویر')+'</div>'+
-        '<input type="file" accept="image/*" id="pm_f_'+id+'" onchange="promoPickImage(\''+id+'\',this)" style="flex:1">'+
-        '<button class="btn sm" onclick="promoClearImage(\''+id+'\')">حذف تصویر</button>'+
-      '</div><input type="hidden" id="pm_i_'+id+'" value="'+esc(p.image||'')+'"></div>'+
-  '</div>';
-}
-/* Shrink on the way in so a big upload can never blow the size cap. */
-function promoPickImage(id,input){
-  const f=input&&input.files&&input.files[0]; if(!f) return;
-  const img=new Image(); const url=URL.createObjectURL(f);
-  img.onload=()=>{
-    URL.revokeObjectURL(url);
-    const maxW=900, sc=Math.min(1,maxW/img.width);
-    const c=document.createElement('canvas'); c.width=Math.round(img.width*sc); c.height=Math.round(img.height*sc);
-    c.getContext('2d').drawImage(img,0,0,c.width,c.height);
-    let out='';
-    for(const q of [0.85,0.7,0.55,0.42]){
-      const d=c.toDataURL('image/webp',q);
-      out=(d.indexOf('data:image/webp')===0)?d:c.toDataURL('image/jpeg',q);
-      if(Math.floor((out.length-out.indexOf(',')-1)*3/4)<=_PROMO_MAX) break;
-    }
-    if(Math.floor((out.length-out.indexOf(',')-1)*3/4)>_PROMO_MAX){ toast('تصویر خیلی بزرگ است — عکس کوچک‌تری انتخاب کن'); return; }
-    document.getElementById('pm_i_'+id).value=out;
-    document.getElementById('pm_prev_'+id).innerHTML='<img src="'+out+'" style="width:100%;height:100%;object-fit:cover">';
-  };
-  img.onerror=()=>{ URL.revokeObjectURL(url); toast('این فایل تصویر نیست'); };
-  img.src=url;
-}
-function promoClearImage(id){
-  document.getElementById('pm_i_'+id).value='';
-  document.getElementById('pm_f_'+id).value='';
-  document.getElementById('pm_prev_'+id).textContent='بدون تصویر';
-}
-async function promoSave(){
-  const body={};
-  PROMO_SLOTS.forEach(function(sl){ const id=sl[0]; body[id]={
-    enabled:document.getElementById('pm_en_'+id).checked,
-    title:document.getElementById('pm_t_'+id).value,
-    text:document.getElementById('pm_x_'+id).value,
-    link:document.getElementById('pm_l_'+id).value.trim(),
-    image:document.getElementById('pm_i_'+id).value
-  };});
-  try{ const r=await api('PUT','/admin/ticket-promos',body); _PROMOS=r.promos; toast('تبلیغ‌های صفحهٔ بلیط ذخیره شد ✅'); }
-  catch(e){ toast(e&&e.message?e.message:'ذخیره نشد'); }
-}
+/* The three ticket-screen promos used to be edited here. They are banners, and
+   «بنرها» now owns every banner on every screen — with video and GIF, which
+   this never had. Two editors for one thing means one of them is always the
+   stale one, so this one is gone; the old promos were migrated into banners. */
 
 async function renderShopAdmin(){
-  try{ const pr=await api('GET','/admin/ticket-promos'); _PROMOS=pr.promos; if(pr.maxImageBytes) _PROMO_MAX=pr.maxImageBytes; }catch(e){ _PROMOS=_PROMOS||{}; }
   let rows=[];try{const r=await api('GET','/admin/shop/items');rows=r.rows||[];}catch(e){}
   window._SHOP_ROWS={};rows.forEach(it=>window._SHOP_ROWS[it.id]=it);
   const cats=[...new Set(rows.map(i=>i.category))];
@@ -1961,10 +1977,6 @@ async function renderShopAdmin(){
     cats.map(c=>{const n=rows.filter(i=>i.category===c).length;return '<button class="'+(SHOP_CAT===c?'active':'')+'" onclick="SHOP_CAT='+JSON.stringify(c).replace(/"/g,'&quot;')+';render()">'+esc(SHOP_CATS[c]||c)+' ('+fa(n)+')</button>';}).join('')+'</div>';
   const list=rows.filter(i=>!SHOP_CAT||i.category===SHOP_CAT).sort((a,b)=>a.category===b.category?a.sortOrder-b.sortOrder:(a.category<b.category?-1:1));
   $('#main').innerHTML=head('مدیریت فروشگاه','آیتم اضافه کن، قیمت و اثر بگذار، فعال/غیرفعال و مرتب کن — بلافاصله در بازی اعمال می‌شود','<button class="btn pri" onclick="shopEdit()">➕ افزودن آیتم</button>')+
-    '<div class="card" style="margin-bottom:14px"><b style="display:block;margin-bottom:4px">تبلیغ صفحه‌های بلیط</b>'+
-      '<div class="sub" style="margin-bottom:12px">هر سه صفحه‌ای که بلیط دارند یک بنر یکسان نشان می‌دهند؛ متن و تصویر هرکدام را جدا تنظیم کن.</div>'+
-      PROMO_SLOTS.map(function(sl){return promoCard(sl[0],sl[1],(_PROMOS||{})[sl[0]]);}).join('')+
-      '<button class="btn ok" onclick="promoSave()">ذخیره تبلیغ‌ها</button></div>'+
     /* A catalogue built before a category existed never receives it — the coin
        packs are the case that showed up: the shop's «سکه» tab was empty and
        nothing in the panel explained why. This adds only what is missing, and
@@ -2013,7 +2025,7 @@ function shopEdit(id){
     '<div class="grid g3">'+
       '<div class="field"><label>دسته</label><select id="sh_cat" onchange="if(this.value===\'__custom\'){this.style.display=\'none\';document.getElementById(\'sh_cat_custom\').style.display=\'block\'}">'+catOpts+'</select><input id="sh_cat_custom" placeholder="نام دستهٔ جدید" style="display:none;margin-top:6px"></div>'+
       '<div class="field"><label>قیمت</label><input id="sh_price" type="number" value="'+(it.price||0)+'"></div>'+
-      '<div class="field"><label>ارز</label><select id="sh_cur"><option value="coins"'+(it.currency!=='cash'?' selected':'')+'>سکه</option><option value="cash"'+(it.currency==='cash'?' selected':'')+'>تومان (کیف پول)</option></select></div>'+
+      '<div class="field"><label>ارز</label><select id="sh_cur"><option value="coins"'+(it.currency!=='cash'?' selected':'')+'>سکه</option><option value="cash"'+(it.currency==='cash'?' selected':'')+'>تومان (صندوق جایزه)</option></select></div>'+
     '</div>'+
     '<div class="grid g3">'+
       '<div class="field"><label>اثر خرید</label><select id="sh_eff">'+effOpts+'</select></div>'+
@@ -2767,7 +2779,7 @@ let LL_ROWS=[];
    real odds and the expected cost per spin are computed and shown alongside —
    an operator setting a jackpot should see what it costs before players do. */
 let RW_CFG=null;
-const RW_TYPES=[['coins','🪙 سکه'],['xp','⚡ XP'],['cash','💰 تومان (کیف پول)'],['ticket','🎫 بلیت'],['heart','❤️ قلب'],['lifeline','🧩 کمک'],['nothing','— پوچ']];
+const RW_TYPES=[['coins','🪙 سکه'],['xp','⚡ XP'],['cash','💰 تومان (صندوق جایزه)'],['ticket','🎫 بلیت'],['heart','❤️ قلب'],['lifeline','🧩 کمک'],['nothing','— پوچ']];
 function rwTypeSel(idp,i,v){
   return '<select id="'+idp+'_type_'+i+'" onchange="rwHint(\''+idp+'\','+i+')">'+
     RW_TYPES.map((t)=>'<option value="'+t[0]+'"'+(v===t[0]?' selected':'')+'>'+t[1]+'</option>').join('')+'</select>';
@@ -3346,8 +3358,8 @@ let PAY_SUB='gateways';
 const GW_TYPES={zibal:'زیبال',zarinpal:'زرین‌پال',nextpay:'نکست‌پی',idpay:'آیدی‌پی',bitpay:'بیت‌پی',sandbox:'تست (Sandbox)',custom:'سفارشی'};
 const PIST={created:'ایجاد شد',pending:'در انتظار',paid:'موفق',failed:'ناموفق',expired:'منقضی'};
 async function renderPayments(){
-  const subtabs='<div class="subtabs">'+[['gateways','🏦 درگاه‌ها'],['settings','⚙️ واریز/برداشت'],['reports','📊 گزارش درگاه‌ها'],['tx','📄 تراکنش‌ها']].map(s=>'<button class="'+(PAY_SUB===s[0]?'active':'')+'" onclick="PAY_SUB=\''+s[0]+'\';renderPayments()">'+s[1]+'</button>').join('')+'</div>';
-  $('#main').innerHTML=head('درگاه پرداخت چنددرگاهی','چند درگاه ثبت کن، اولویت بده و سوییچ خودکار داشته باش؛ تنظیمات واریز/برداشت و گزارش هر درگاه')+subtabs+'<div id="payBody"><div class="skel"></div></div>';
+  const subtabs='<div class="subtabs">'+[['gateways','🏦 درگاه‌ها'],['settings','⚙️ واریز/دریافت جایزه'],['reports','📊 گزارش درگاه‌ها'],['tx','📄 تراکنش‌ها']].map(s=>'<button class="'+(PAY_SUB===s[0]?'active':'')+'" onclick="PAY_SUB=\''+s[0]+'\';renderPayments()">'+s[1]+'</button>').join('')+'</div>';
+  $('#main').innerHTML=head('درگاه پرداخت چنددرگاهی','چند درگاه ثبت کن، اولویت بده و سوییچ خودکار داشته باش؛ تنظیمات واریز/دریافت جایزه و گزارش هر درگاه')+subtabs+'<div id="payBody"><div class="skel"></div></div>';
   const b=$('#payBody');
   try{
     if(PAY_SUB==='gateways')return payGateways(b);
@@ -3403,14 +3415,14 @@ async function paySettings(b){
     '<div class="field"><label>سقف روزانه (ت)</label>'+nn('ps_dCap',s.deposit.dailyCap)+'</div>'+
     '<div class="field"><label>تعداد تراکنش مجاز/روز</label>'+nn('ps_dTx',s.deposit.txPerDay)+'</div>'+
     '</div></div>'+
-    '<div class="card"><h3>🏧 برداشت</h3><div class="grid g4">'+
+    '<div class="card"><h3>🏧 دریافت جایزه</h3><div class="grid g4">'+
     '<div class="field"><label>وضعیت</label><select id="ps_wEn"><option value="1"'+(s.withdraw.enabled?' selected':'')+'>فعال</option><option value="0"'+(!s.withdraw.enabled?' selected':'')+'>غیرفعال</option></select></div>'+
     '<div class="field"><label>حداقل (ت)</label>'+nn('ps_wMin',s.withdraw.min)+'</div>'+
     '<div class="field"><label>حداکثر (ت)</label>'+nn('ps_wMax',s.withdraw.max)+'</div>'+
     '<div class="field"><label>سقف روزانه (ت)</label>'+nn('ps_wCap',s.withdraw.dailyCap)+'</div>'+
-    '<div class="field"><label>کارمزد برداشت (ت)</label>'+nn('ps_wFee',s.withdraw.fee)+'</div>'+
+    '<div class="field"><label>کارمزد دریافت جایزه (ت)</label>'+nn('ps_wFee',s.withdraw.fee)+'</div>'+
     '<div class="field"><label>پرداخت کارمزد توسط</label><select id="ps_wPayer"><option value="user"'+(s.withdraw.feePayer==='user'?' selected':'')+'>کاربر</option><option value="system"'+(s.withdraw.feePayer==='system'?' selected':'')+'>سیستم</option></select></div>'+
-    '<div class="field"><label>تأیید برداشت</label><select id="ps_wAuto"><option value="0"'+(!s.withdraw.autoApprove?' selected':'')+'>دستی (ادمین)</option><option value="1"'+(s.withdraw.autoApprove?' selected':'')+'>خودکار</option></select></div>'+
+    '<div class="field"><label>تأیید دریافت جایزه</label><select id="ps_wAuto"><option value="0"'+(!s.withdraw.autoApprove?' selected':'')+'>دستی (ادمین)</option><option value="1"'+(s.withdraw.autoApprove?' selected':'')+'>خودکار</option></select></div>'+
     '<div class="field"><label>ساعت مجاز از</label>'+nn('ps_wFrom',s.withdraw.hoursFrom)+'</div>'+
     '<div class="field"><label>تا</label>'+nn('ps_wTo',s.withdraw.hoursTo)+'</div>'+
     '</div></div>'+
@@ -3565,12 +3577,16 @@ function monShowKey(key,name){
 }
 
 /* ================= ADMIN ACCOUNTS + ACCESS ================= */
-function tabLabelMap(){const m={};NAV.forEach(g=>g[1].forEach(p=>{if(p[0]!=='accounts')m[p[0]]=p[1]+' '+p[2];}));return m;}
+/* Access is granted per screen, not per nav row — merging tabs must not
+   silently widen what a limited account can open. Both of these walk the
+   opened-out list so a group's four screens stay four separate permissions. */
+function tabLabelMap(){const m={};navLeaves().forEach(p=>{if(p[0]!=='accounts')m[p[0]]=p[1]+' '+p[2];});return m;}
 function permChecklist(selected){
   const sel=new Set(selected||[]); const all=sel.has('*');
   let html='<label style="display:flex;gap:8px;align-items:center;font-weight:900;margin-bottom:8px"><input type="checkbox" id="perm_all" '+(all?'checked':'')+' onchange="document.querySelectorAll(\'.permchk\').forEach(c=>{c.checked=this.checked;c.disabled=this.checked})"> دسترسی کامل (همهٔ تب‌ها)</label>';
+  const leaves=navLeaves().filter(p=>p[0]!=='accounts');
   html+=NAV.map(g=>{
-    const items=g[1].filter(p=>p[0]!=='accounts');
+    const items=leaves.filter(p=>p[3]===g[0]);
     if(!items.length)return '';
     return '<div style="margin:8px 0 3px;color:var(--muted);font-size:11px;font-weight:800">'+g[0]+'</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">'+
       items.map(p=>'<label style="display:flex;gap:6px;align-items:center;font-size:12.5px"><input type="checkbox" class="permchk" value="'+p[0]+'" '+(all||sel.has(p[0])?'checked':'')+' '+(all?'disabled':'')+'>'+p[1]+' '+esc(p[2])+'</label>').join('')+'</div>';
@@ -3655,7 +3671,7 @@ async function renderSuspicious(){
   window._SUSP=rows;
   $('#main').innerHTML=head('کاربران مشکوک','فهرست کاملِ هشدارها — شناسه، دلیل، امتیاز ریسک، زمان و جزئیات؛ با امکانِ رسیدگی',
     '<button class="btn sm" onclick="render()">↻ بروزرسانی</button>')+
-    '<div class="note">این فهرست از سیگنال‌های تقلبِ باز، سرعتِ غیرعادیِ تراکنش و برداشت‌های ناموفق ساخته می‌شود و بر اساسِ امتیازِ ریسک مرتب شده است. با «رسیدگی» هر هشدار را تأیید (تقلب) یا رد (بی‌خطر) کن؛ پس از رسیدگی، کاربر از فهرست خارج می‌شود.</div>'+
+    '<div class="note">این فهرست از سیگنال‌های تقلبِ باز، سرعتِ غیرعادیِ تراکنش و درخواست‌های ناموفقِ دریافت جایزه ساخته می‌شود و بر اساسِ امتیازِ ریسک مرتب شده است. با «رسیدگی» هر هشدار را تأیید (تقلب) یا رد (بی‌خطر) کن؛ پس از رسیدگی، کاربر از فهرست خارج می‌شود.</div>'+
     tbl(['کاربر','دلیل','امتیاز ریسک','آخرین رویداد','تعداد سیگنال','عملیات'],rows.map((u,i)=>[
       esc(u.username||'')+' <span class="mono" style="color:var(--muted)">'+String(u.userId).slice(0,8)+'</span>',
       (u.reasons||[]).map(r=>'<span class="pill '+(String(r).match(/BURST|CRITICAL|multi/i)?'bad':'pend')+'">'+esc(reasonFa(r))+'</span>').join(' '),
@@ -3664,13 +3680,13 @@ async function renderSuspicious(){
       '<button class="btn sm info" onclick="suspDetail('+i+')">جزئیات و رسیدگی</button>'
     ]));
 }
-function reasonFa(r){return ({high_velocity:'سرعتِ بالای تراکنش',failed_withdrawals:'برداشت‌های ناموفق',REPEATED_QUESTION_ANSWER:'پاسخِ تکراری',ANSWER_BURST:'پاسخِ رگباری',IMPOSSIBLE_ANSWER_TIME:'زمانِ غیرممکن',MULTI_ACCOUNT:'چندحسابی',DEVICE_SHARED_BY_MULTIPLE_USERS:'اشتراکِ دستگاه'}[r])||r;}
+function reasonFa(r){return ({high_velocity:'سرعتِ بالای تراکنش',failed_withdrawals:'دریافت جایزهٔ ناموفق',REPEATED_QUESTION_ANSWER:'پاسخِ تکراری',ANSWER_BURST:'پاسخِ رگباری',IMPOSSIBLE_ANSWER_TIME:'زمانِ غیرممکن',MULTI_ACCOUNT:'چندحسابی',DEVICE_SHARED_BY_MULTIPLE_USERS:'اشتراکِ دستگاه'}[r])||r;}
 function suspDetail(i){
   const u=(window._SUSP||[])[i]; if(!u)return;
   const sig=(u.signals||[]).map(s=>'<div class="card" style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><div><b>'+esc(reasonFa(s.type))+'</b> <span class="pill '+(s.severity==='critical'?'bad':'pend')+'">'+esc(s.severity||'')+'</span> <span class="pill '+(s.status==='open'?'pend':'ok')+'">'+esc(s.status||'')+'</span></div><div class="mono" style="color:var(--muted);font-size:10px">'+fmtDate(s.createdAt)+'</div></div>'+
     (s.metadata?'<div class="mono" style="direction:ltr;text-align:left;font-size:10px;color:var(--muted);margin-top:6px;white-space:pre-wrap;word-break:break-all">'+esc(JSON.stringify(s.metadata))+'</div>':'')+
     (s.status==='open'?'<div style="display:flex;gap:6px;margin-top:8px"><button class="btn sm bad" onclick="suspResolve(\''+s.id+'\',\'confirmed\','+i+')">✔ تأیید تقلب</button><button class="btn sm ok" onclick="suspResolve(\''+s.id+'\',\'dismissed\','+i+')">✖ بی‌خطر (رد)</button></div>':'<div style="margin-top:8px;color:var(--muted);font-size:11px">رسیدگی‌شده</div>')+
-    '</div>').join('')||'<div class="empty">این کاربر سیگنالِ تقلبِ ثبت‌شده‌ای ندارد؛ هشدار از سرعتِ تراکنش یا برداشتِ ناموفق است.</div>';
+    '</div>').join('')||'<div class="empty">این کاربر سیگنالِ تقلبِ ثبت‌شده‌ای ندارد؛ هشدار از سرعتِ تراکنش یا دریافت جایزهٔ ناموفق است.</div>';
   modal('رسیدگی به کاربر: '+esc(u.username||String(u.userId).slice(0,8)),
     '<div class="grid g2" style="margin-bottom:12px"><div class="stat"><div class="k">امتیاز ریسک</div><div class="v '+(u.riskScore>=70?'bad':'gold')+'">'+fa(u.riskScore||0)+'</div></div>'+
     '<div class="stat"><div class="k">شناسهٔ کاربر</div><div class="v" style="font-size:13px" dir="ltr">'+esc(u.userId)+'</div></div></div>'+
@@ -3682,7 +3698,7 @@ async function suspBan(uid){if(!confirm('این کاربر بن شود؟'))retur
 
 /* ================= RESET TOOLS (per-area, confirmation-gated) ================= */
 const RESET_AREAS=[
-  ['wallet','کیف پول','دفترکل + موجودی + برداشت‌ها را پاک می‌کند',1],
+  ['wallet','صندوق جایزه','دفترکل + موجودی + درخواست‌های دریافت جایزه را پاک می‌کند',1],
   ['tickets','بلیط‌ها','همهٔ بلیط‌های کاربران صفر می‌شود',0],
   ['xp','XP کاربران','XP همه صفر می‌شود',0],
   ['cup','کاپ هفتگی','امتیازِ کاپِ هفتگی صفر می‌شود',0],
@@ -3698,7 +3714,7 @@ const RESET_AREAS=[
 ];
 async function renderReset(){
   $('#main').innerHTML=head('ابزار ریست','ریستِ هر بخش به‌صورت جداگانه — عملیاتِ حساس نیازمندِ تأییدِ نهایی است')+
-    '<div class="note">⚠️ این عملیات‌ها <b>برگشت‌ناپذیر</b>اند و مستقیم روی دیتابیس اثر می‌گذارند. هر ریست در <b>Audit Log</b> ثبت می‌شود (چه کسی، چه بخشی، چند رکورد). مواردِ حساس (کیف پول، تراکنش، تاریخچه، ریستِ کامل) قبلِ اجرا نیازمندِ تایپِ کلمهٔ <span class="mono">RESET</span> هستند.</div>'+
+    '<div class="note">⚠️ این عملیات‌ها <b>برگشت‌ناپذیر</b>اند و مستقیم روی دیتابیس اثر می‌گذارند. هر ریست در <b>Audit Log</b> ثبت می‌شود (چه کسی، چه بخشی، چند رکورد). مواردِ حساس (صندوق جایزه، تراکنش، تاریخچه، ریستِ کامل) قبلِ اجرا نیازمندِ تایپِ کلمهٔ <span class="mono">RESET</span> هستند.</div>'+
     '<div class="grid g3">'+RESET_AREAS.map(a=>{
       const danger=a[3]; const bcls=danger>=2?'bad':danger>=1?'bad':'';
       const border=danger>=2?'border-color:var(--bad);box-shadow:0 0 0 1.5px var(--bad) inset':danger>=1?'border-color:#5a2020':'';
