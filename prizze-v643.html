@@ -55,6 +55,109 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
   display:flex;align-items:center;justify-content:center;min-height:100vh;padding:16px}
 @media(max-width:480px){body{padding:0}}
 
+
+/* ============================================================
+   HOME: the mode card, the two rails, and the week's top prizes.
+
+   Everything here is LIGHT on purpose. The forest backdrop is dark,
+   and the old home put dark cards on top of it, so the whole screen
+   was one shade and nothing stood out. Light cards on the forest,
+   with the brand yellow kept for anything that wants a tap.
+   ============================================================ */
+.hstage{display:grid;grid-template-columns:56px 1fr 56px;gap:4px;padding:2px 8px 0;align-items:start}
+.hrail{display:flex;flex-direction:column;gap:11px;padding-top:2px}
+.hside{display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.hside .art{width:50px;height:50px;border-radius:15px;display:grid;place-items:center;font-size:25px;position:relative;
+  background:linear-gradient(180deg,#FFFDF6,#E7E2D2);border:2.5px solid #000;box-shadow:0 4px 0 #000;overflow:visible}
+.hside .art img{width:100%;height:100%;object-fit:cover;border-radius:12px}
+.hside:active .art{transform:translateY(2px);box-shadow:0 2px 0 #000}
+.hside .lbl{font-size:8.5px;font-weight:900;text-align:center;line-height:1.2;color:#141414;
+  background:#F7F4EC;border:2px solid #000;border-radius:7px;padding:1px 4px;box-shadow:0 2px 0 #000;max-width:58px}
+.hside .tag{position:absolute;bottom:-6px;left:50%;transform:translateX(-50%);background:var(--bolt);color:#141414;
+  border:2px solid #000;border-radius:999px;font-size:8px;font-weight:900;padding:0 5px;white-space:nowrap;z-index:2}
+.hside .live{position:absolute;top:-3px;right:-3px;width:12px;height:12px;border-radius:50%;background:var(--ok);
+  border:2px solid #000;box-shadow:0 0 8px rgba(51,217,124,.9)}
+
+.hcenter{position:relative;display:flex;flex-direction:column;align-items:center;min-width:0}
+/* The swipe surface. touch-action tells the browser we handle the
+   horizontal drag, so it never steals it for a scroll mid-gesture. */
+.mcard{width:100%;background:linear-gradient(180deg,#FBF8F0,#E9EDF3);color:#12203a;border:2.5px solid #000;
+  border-radius:22px;box-shadow:0 6px 0 #000,0 18px 30px -12px rgba(0,0,0,.55);padding:10px 10px 12px;text-align:center;
+  position:relative;touch-action:pan-y;user-select:none;-webkit-user-select:none}
+.mcard.sw{transition:transform .22s cubic-bezier(.2,.9,.3,1),opacity .22s ease}
+.mk-art{width:100%;height:min(24vh,170px);border-radius:16px;overflow:hidden;border:2.5px solid #000;position:relative;
+  display:grid;place-items:center;background:radial-gradient(70% 70% at 50% 40%,#FFF1B8,#F6D25A)}
+.mk-art img{width:100%;height:100%;object-fit:cover}
+.mk-art .emj{font-size:64px;filter:drop-shadow(0 6px 0 rgba(0,0,0,.18))}
+.mk-badge{position:absolute;top:6px;right:6px;background:rgba(13,13,16,.85);color:#fff;border:2px solid #000;
+  border-radius:999px;font-size:9.5px;font-weight:900;padding:2px 8px;z-index:2}
+.mcard h2{font-size:18px;margin-top:6px;line-height:1.25}
+.mcard .msub{font-size:11px;color:#41567c;font-weight:800;margin-top:1px}
+.mk-rib{margin:9px auto 0;width:70%;background:linear-gradient(180deg,#FF6B5E,#E33F30);color:#fff;border:2.5px solid #000;
+  border-radius:9px;font-size:12px;font-weight:900;padding:3px 0;box-shadow:0 3px 0 #000}
+.mk-prizes{display:flex;gap:7px;justify-content:center;margin-top:7px}
+.mk-prz{flex:1;max-width:74px;border-radius:13px;background:linear-gradient(180deg,#5AA6F0,#2E6FC9);border:2.5px solid #000;
+  box-shadow:0 3px 0 #000;color:#fff;padding:6px 2px;display:flex;flex-direction:column;align-items:center;gap:1px}
+.mk-prz .e{font-size:19px;line-height:1}
+.mk-prz b{font-size:12px}
+.mk-entry{margin-top:10px;font-size:12px;font-weight:900;color:#1f7a45;display:flex;align-items:center;justify-content:center;gap:6px}
+.mk-entry .cost{color:#12203a;background:#FFE066;border:2.5px solid #000;border-radius:999px;padding:1px 9px;font-size:11.5px}
+.mk-facts{display:flex;gap:5px;justify-content:center;flex-wrap:wrap;margin-top:7px}
+.mk-facts span{background:#E4EAF6;border:2px solid #000;border-radius:999px;padding:2px 8px;font-size:10px;font-weight:900;color:#22335a}
+.mk-live{margin-top:8px;font-size:11px;font-weight:900;color:#1f7a45;display:flex;align-items:center;justify-content:center;gap:6px}
+.mk-live i{width:9px;height:9px;border-radius:50%;background:var(--ok);border:1.5px solid #000;display:inline-block}
+.mk-start{margin-top:9px;width:100%;padding:10px 0;border-radius:14px;border:2.5px solid #000;
+  background:linear-gradient(180deg,#4BE38B,#22A85C);color:#06301a;font-size:17px;font-weight:900;box-shadow:0 5px 0 #000}
+.mk-start:active{transform:translateY(3px);box-shadow:0 2px 0 #000}
+.mk-start.soon{background:linear-gradient(180deg,#d7d2c4,#a8a293);color:#2a2a2a}
+.mk-arrow{position:absolute;top:calc(min(24vh,170px)/2 + 10px);transform:translateY(-50%);z-index:6;width:38px;height:38px;
+  border-radius:50%;display:grid;place-items:center;background:linear-gradient(180deg,#FFD84D,#F0A400);
+  border:2.5px solid #000;box-shadow:0 3px 0 #000;font-size:20px;color:#12203a;font-weight:900;cursor:pointer}
+.mk-arrow.next{left:14px}
+.mk-arrow.prev{right:14px}
+.mk-arrow:active{transform:translateY(-50%) translateY(2px);box-shadow:0 1px 0 #000}
+.mdots{display:flex;gap:5px;justify-content:center;margin-top:7px}
+.mdots i{width:7px;height:7px;border-radius:50%;background:rgba(255,255,255,.4);border:1.5px solid #000;cursor:pointer}
+.mdots i.on{background:var(--bolt);width:18px;border-radius:999px}
+.mnext{margin-top:6px;font-size:10px;font-weight:900;color:#141414;background:#F7F4EC;border:2px solid #000;
+  border-radius:999px;padding:3px 10px;box-shadow:0 2px 0 #000;cursor:pointer}
+
+.top3{margin:6px 12px 4px;background:#F7F4EC;border:2.5px solid #000;border-radius:16px;box-shadow:0 4px 0 #000;
+  padding:8px 10px;color:#141414;cursor:pointer}
+.t3h{display:flex;justify-content:space-between;align-items:center;font-size:11.5px;font-weight:900;margin-bottom:7px}
+.t3h span{color:#8a6b00;font-size:10px}
+.t3row{display:flex;gap:6px}
+.t3empty{flex:1;text-align:center;font-size:10.5px;font-weight:800;color:#5a5a5a;padding:6px 0}
+.t3p{flex:1;min-width:0;background:#fff;border:2.5px solid #000;border-radius:12px;box-shadow:0 3px 0 #000;padding:5px 3px;
+  display:flex;flex-direction:column;align-items:center;gap:2px}
+.t3p.first{background:linear-gradient(180deg,#FFF6D8,#FFE9A8)}
+.t3p .medal{font-size:14px;line-height:1}
+.t3p .f{width:30px;height:30px;border-radius:50%;border:2px solid #000;overflow:hidden;display:grid;place-items:center;font-size:16px;
+  background:linear-gradient(180deg,#FFE7A8,#F0B33C)}
+.t3p .f img{width:100%;height:100%;object-fit:cover}
+.t3p .n{font-size:10px;font-weight:900;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.t3p .amt{font-size:10px;font-weight:900;color:#1f7a45;background:#E4F6EA;border:1.5px solid #000;border-radius:999px;padding:0 6px}
+
+/* The cup rail, as a light card like everything else on the new home.
+   A later block in this sheet deliberately strips the rail down to
+   transparent with !important, so these have to out-specify it (#home) as
+   well as carry !important — otherwise they silently lose and the rail stays
+   dark grey text on a dark forest. */
+#home .weekly-progress-line{background:#F7F4EC!important;border:2.5px solid #000!important;border-radius:14px!important;
+  box-shadow:0 4px 0 #000!important;padding:6px 10px 8px!important;margin:0 12px 6px!important}
+#home .weekly-progress-line .wpl-marker b{background:var(--bolt)!important;color:#141414!important;border-color:#000!important}
+#home .weekly-progress-line .wpl-marker span{color:#2E6FC9!important;text-shadow:none!important}
+#home .weekly-progress-line .wpl-flag small{color:#3d3d3d!important}
+#home .weekly-progress-line .wpl-flag.done small{color:#1f7a45!important}
+#home .weekly-progress-line .wpl-next{color:#41567c!important}
+#home .weekly-progress-line .wpl-track::before{background:#DCD7C6!important;border-color:#000!important}
+
+@media(max-height:760px){
+  .mk-art{height:22vh}
+  .mcard h2{font-size:17px}
+  .mk-start{padding:9px 0;font-size:15px}
+}
+
 /* ===== PHONE ===== */
 .phone{width:100%;max-width:400px;height:min(860px,100vh);border-radius:38px;overflow:hidden;position:relative;
   box-shadow:0 40px 90px -25px rgba(0,0,0,.95),0 0 0 1px rgba(255,255,255,.06);display:flex;flex-direction:column;background:var(--studio-2)}
@@ -1724,7 +1827,7 @@ input,textarea,select,[contenteditable="true"],.pz-selectable,.pz-selectable *{
 #promoDuel .tk-promo,#promoLs .tk-promo{min-height:0;height:clamp(76px,14vh,128px)}
 #promoDuel .tk-promo-txt b,#promoLs .tk-promo-txt b{font-size:13px}
 #promoDuel .tk-promo-txt span,#promoLs .tk-promo-txt span{font-size:11px}
-@media(max-height:700px){#promoDuel .tk-promo,#promoLs .tk-promo{display:none}}
+@media(max-height:760px){#promoDuel .tk-promo,#promoLs .tk-promo{display:none}}
 /* Moving banners fill their frame exactly like a still one. */
 .tk-promo-img video,.tk-promo-img img{width:100%;height:100%;object-fit:cover;display:block}
 
@@ -4609,61 +4712,31 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
         <!-- The «تا Silver …» line is gone: the flags on the rail already say
              where the next target is, and the token says how far along it is. -->
       </div>
-      <div class="pad" style="padding-top:6px">
-        <div class="hero">
-          <div class="hero-top">
-            <!-- avatar + name now live in the header; here we keep only league + rank -->
-            <div class="hero-meta" style="display:flex;gap:8px;flex-wrap:wrap;width:100%">
-              <span class="hero-tag lg" id="hdrLeague" onclick="openLeagues()">🥉 لیگ برنزی</span>
-              <span class="hero-tag rank" id="hdrRank" onclick="go('rankings')">رتبه هفته: —</span>
-            </div>
-            <span id="hdrStreak" style="display:none"></span>
-          </div>
-          <div class="hero-mission pz-glass" onclick="go('missions')">
-            <div class="mrow"><span>🎯 <b id="misTitle">مأموریت امروز</b></span><span id="misReward" class="mis-reward"></span></div>
-            <div class="hero-mbar"><i id="misBar"></i></div>
-            <div class="mrow" style="margin-top:5px;font-size:10px;color:var(--muted)"><span id="misTxt">در حال بارگذاری…</span><span>تا نیمه‌شب</span></div>
-          </div>
-          <!-- The daily reward now lives on the header button next to the
-               wheel, with the same badge treatment, instead of taking a full
-               card on home. -->
+      <!-- ============================================================
+           HOME, REBUILT.
+           Four game modes used to be four stacked cards you scrolled past;
+           everything else (missions, the wheel, gifts, invites) was either in
+           the header or another screen. Now the modes are ONE card you swipe
+           through, and the things you reach for sit in two rails either side
+           of it, so the whole home is one screenful and the thumb never has
+           to travel.
+           ============================================================ -->
+      <div class="hstage">
+        <div class="hrail" id="hrailR"></div>
+        <div class="hcenter">
+          <div class="mcard" id="mcard"><!-- filled by hmRender() --></div>
+          <div class="mdots" id="mdots"></div>
+          <div class="mnext" id="mnext" onclick="hmGo(1)"></div>
         </div>
+        <div class="hrail" id="hrailL"></div>
+      </div>
 
-        <button class="duel-hero" onclick="enterMode('survivor')" aria-label="شروع دوئل">
-          <span class="dh-glow"></span>
-          <span class="dh-stage"><img class="dh-art" src="mode-duel.png" alt="" data-fallback='<span class="dh-play"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></span>'></span>
-          <span class="dh-txt"><b>دوئل یک‌به‌یک</b><small>شروع مسابقه سریع</small></span>
-          <span class="dh-bolt">⚡</span>
-        </button>
-        <div class="section-title">حالت‌های دیگر</div>
-        <div class="mode-art ma-rm tilt-r" id="homeRecordCard" onclick="rmOpen()">
-          <div class="ma-stage"><span class="ma-fallback">🏅</span></div>
-          <div class="ma-txt"><b>ثبت رکورد</b><span>تا آخرین قلب جواب بده · جدول رکورد</span></div>
-          <span class="ma-go">‹</span>
-        </div>
-        <div class="mode-art ma-ls tilt-l" onclick="lsStart()">
-          <div class="ma-stage"><img class="ma-art" src="mode-ls.png" alt="" data-fallback='<span class="ma-fallback">⚔️</span>'></div>
-          <div class="ma-txt"><b>آخرین بازمانده</b><span>حذفی · بمون تا جایزه مال تو شه</span></div>
-          <span class="ma-go">‹</span>
-        </div>
-        <div class="mode-art ma-aon tilt-l soon-dim" onclick="enterMode('consensus')">
-          <div class="ma-stage pair">
-            <img class="ma-art" src="mode-aon.png" alt="" data-fallback='<span class="ma-fallback">🤝</span>'>
-            <img class="ma-art" src="mode-aon2.png" alt="" data-fallback=''>
-          </div>
-          <div class="ma-txt"><b>همه یا هیچ</b><span>تیمی بازی کن · سرنوشت با رأی جمع</span></div>
-          <span class="soon-tag">بزودی 🚧</span>
-        </div>
-        <div class="league-cta pz-glass soon-dim" onclick="openLeagues()">
-          <span class="lci">🏆</span>
-          <div class="lct"><b>لیگ‌های هفتگی</b><span>طلایی · نقره‌ای · برنزی — جوایز تا ۵۰ میلیون!</span></div>
-          <span class="soon-tag">بزودی 🚧</span>
-        </div>
-
-        <div class="mini-lb pz-glass" style="margin-top:8px">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><b style="font-size:13px">برترین‌های این هفته 🏆</b><span style="font-size:11px;color:var(--gold);font-weight:700" onclick="go('rankings')">رتبه‌بندی کلی ‹</span></div>
-          <div id="homeMiniLbRows"><div style="text-align:center;color:var(--muted);font-size:11.5px;font-weight:800;padding:10px">در حال بارگذاری…</div></div>
-        </div>
+      <!-- Biggest prize of the week — money, not points. It reads the
+           weekly-winnings board, which resets on the same Monday boundary as
+           the cup, so the two never disagree. -->
+      <div class="top3" onclick="go('rankings')">
+        <div class="t3h"><b>💰 بیشترین جایزهٔ این هفته</b><span>رتبه‌بندی کامل ‹</span></div>
+        <div class="t3row" id="top3Row"><div class="t3empty">در حال بارگذاری…</div></div>
       </div>
       <div class="grow"></div>
       <nav class="bottomnav" id="nav-home"></nav>
@@ -7355,6 +7428,9 @@ function go(id){
   if(id==='friends'&&typeof friendsLoad==='function'){try{friendsLoad();}catch(e){}}
   if(id==='shop'&&typeof pzLoadShop==='function'){try{pzLoadShop();}catch(e){}}
   if(id==='support'){ _supLoaded=false; _supOpenId=null; supportActiveTab='home'; try{renderSupport();}catch(e){} }
+  /* Home is rebuilt on every visit: the rails carry live counts (unread mail,
+     claimable missions) and a stale badge is worse than none. */
+  if(id==='home'){ try{ hmBoot(); }catch(e){} }
   try{history.pushState({id},'');}catch(e){}
 }
 function goBack(){
@@ -12198,6 +12274,180 @@ async function pzHydrateAll(){
   }catch(e){}
   pzHydrateBoards();
 }
+/* ============================================================
+   HOME: the mode carousel, the rails, the week's top prizes.
+
+   Four modes used to be four cards you scrolled past. They are one card now,
+   and the card is swiped. Two things this has to get right or it is worse
+   than what it replaced:
+
+     — a swipe must not fight the page. The card claims only the horizontal
+       axis (touch-action:pan-y), so a vertical flick still scrolls the home
+       screen and a horizontal one still changes mode. Getting this wrong
+       makes the page feel stuck.
+
+     — a swipe that goes nowhere must snap back, not leave the card halfway.
+       Anything under the threshold returns to centre.
+
+   Every number on the card comes from the same config the game already uses.
+   Nothing here invents a prize.
+   ============================================================ */
+const HOME_MODES=[
+  {key:'duel',   title:'دوئل یک‌به‌یک',  sub:'رو در رو با یک حریف',      badge:'۲ نفره',
+   art:'mode-duel.png', emj:'⚔️', tint:'radial-gradient(70% 70% at 50% 40%,#FFF1B8,#F6D25A)',
+   facts:['⏱ سریع','❓ ۵ سؤال','🏆 کاپ می‌گیری'], go:()=>enterMode('survivor')},
+  {key:'ls',     title:'آخرین بازمانده', sub:'حذفی · تا آخرین نفر بمان', badge:'گروهی',
+   art:'mode-ls.png',   emj:'🛡️', tint:'radial-gradient(70% 70% at 50% 40%,#DFF3D8,#7FC9A0)',
+   facts:['❌ خطا = حذف','💰 جایزهٔ نقدی','🎫 با بلیط'], go:()=>lsStart()},
+  {key:'aon',    title:'همه یا هیچ',     sub:'تیمی · سرنوشت با رأی جمع', badge:'تیمی',
+   art:'mode-aon.png',  emj:'🤝', tint:'radial-gradient(70% 70% at 50% 40%,#FFE3D6,#F5A98A)',
+   soon:true, facts:['🗳️ رأی جمعی','💬 چت‌روم'], go:()=>enterMode('consensus')},
+  {key:'league', title:'لیگ هفتگی',      sub:'طلایی · نقره‌ای · برنزی',  badge:'هفتگی',
+   art:'mode-league.png', emj:'🏆', tint:'radial-gradient(70% 70% at 50% 40%,#FFE9A8,#E8B14A)',
+   soon:true, facts:['📅 هر هفته','🥇 سه لیگ'], go:()=>openLeagues()}
+];
+let hmIdx=0;
+/* What the rails carry. Each one is a real screen that already exists — the
+   rail is a shortcut, never a new place for something to live. */
+function hmRailItems(){
+  return {
+    right:[
+      {ico:'🎡',lbl:'گردونه',go:()=>openSpin()},
+      {ico:'🎯',lbl:'مأموریت‌ها',go:()=>go('missions'),tag:()=>hmMissionTag()},
+      {ico:'🔔',lbl:'اعلان‌ها',go:()=>pzOpenInbox(),tag:()=>hmBellTag()}
+    ],
+    left:[
+      {ico:'🎁',lbl:'هدایا',go:()=>openDailyRewards()},
+      {ico:'👥',lbl:'آنلاین',go:()=>hmOnline(),live:true},
+      {ico:'🤝',lbl:'دعوت',go:()=>go('friends')},
+      {ico:'✏️',lbl:'کوییزساز',go:()=>hmQuizMaker()}
+    ]
+  };
+}
+function hmMissionTag(){ try{ const n=(typeof missionsClaimable==='function')?missionsClaimable():0; return n>0?fa(n):''; }catch(e){ return ''; } }
+function hmBellTag(){ const b=document.getElementById('pzBellBadge'); const n=b&&b.style.display!=='none'?b.textContent:''; return n&&n!=='۰'?n:''; }
+function hmRails(){
+  const R=hmRailItems();
+  const one=(it,i,side)=>{
+    const tag=it.tag?it.tag():'';
+    return '<div class="hside" onclick="hmRailTap(\''+side+'\','+i+')">'+
+      '<div class="art">'+it.ico+
+        (tag?'<span class="tag">'+tag+'</span>':'')+
+        (it.live?'<span class="live"></span>':'')+
+      '</div><div class="lbl">'+it.lbl+'</div></div>';
+  };
+  const r=document.getElementById('hrailR'), l=document.getElementById('hrailL');
+  if(r) r.innerHTML=R.right.map((it,i)=>one(it,i,'right')).join('');
+  if(l) l.innerHTML=R.left.map((it,i)=>one(it,i,'left')).join('');
+}
+function hmRailTap(side,i){ try{ hmRailItems()[side][i].go(); sfx&&sfx('tap'); }catch(e){} }
+
+function hmRender(){
+  const m=HOME_MODES[hmIdx]; if(!m) return;
+  const el=document.getElementById('mcard'); if(!el) return;
+  const pz=hmPrizes(m);
+  el.innerHTML=
+    '<div class="mk-art" style="background:'+m.tint+'">'+
+      '<span class="mk-badge">'+m.badge+'</span>'+
+      '<img src="'+m.art+'" alt="" onerror="this.replaceWith(Object.assign(document.createElement(\'span\'),{className:\'emj\',textContent:\''+m.emj+'\'}))">'+
+    '</div>'+
+    '<div class="mk-arrow next" onclick="event.stopPropagation();hmGo(1)">‹</div>'+
+    '<div class="mk-arrow prev" onclick="event.stopPropagation();hmGo(-1)">›</div>'+
+    '<h2>'+m.title+'</h2><div class="msub">'+m.sub+'</div>'+
+    '<div class="mk-rib">جوایز</div>'+
+    '<div class="mk-prizes">'+pz.map(p=>'<div class="mk-prz"><span class="e">'+p[0]+'</span><b>'+p[1]+'</b></div>').join('')+'</div>'+
+    (m.entryHtml||hmEntry(m))+
+    '<div class="mk-facts">'+m.facts.map(f=>'<span>'+f+'</span>').join('')+'</div>'+
+    '<button class="mk-start'+(m.soon?' soon':'')+'" onclick="hmStart()">'+(m.soon?'بزودی 🚧':'شروع بازی')+'</button>';
+  const d=document.getElementById('mdots');
+  if(d) d.innerHTML=HOME_MODES.map((x,i)=>'<i class="'+(i===hmIdx?'on':'')+'" onclick="hmSet('+i+')"></i>').join('');
+  const nx=document.getElementById('mnext');
+  if(nx) nx.textContent='↔ بکش · بعدی: '+HOME_MODES[(hmIdx+1)%HOME_MODES.length].title+' ‹';
+}
+/* Prizes and entry cost come from the live economy config the rest of the game
+   reads — never from numbers typed into this screen. When a mode has nothing
+   configured yet, its chips are left off rather than filled with a guess. */
+function hmPrizes(m){
+  const C=(typeof CFG!=='undefined'&&CFG)||{};
+  const out=[];
+  try{
+    if(m.key==='duel'){
+      const w=(C.modes&&C.modes.duel)||{};
+      out.push(['🏆',fa(w.winCup||20)]);
+      if(w.winCoins) out.push(['🪙',fa(w.winCoins)]);
+      if(w.winXp) out.push(['⚡',fa(w.winXp)]);
+    } else if(m.key==='ls'){
+      const w=(C.modes&&C.modes.lastSurvivor)||{};
+      out.push(['🏆',fa(w.winCup||80)]);
+      out.push(['💰',w.pot?fa(w.pot):'جایزهٔ نقدی']);
+      if(w.winXp) out.push(['⚡',fa(w.winXp)]);
+    }
+  }catch(e){}
+  if(!out.length) out.push(['🏆','—']);
+  return out.slice(0,3);
+}
+function hmEntry(m){
+  if(m.key==='duel') return '<div class="mk-entry">حریف‌یابی <span class="cost">رایگان</span></div>';
+  if(m.key==='ls')   return '<div class="mk-entry">ورود با <span class="cost">🎫 بلیط</span></div>';
+  return '<div class="mk-entry">به‌زودی باز می‌شود</div>';
+}
+function hmStart(){ const m=HOME_MODES[hmIdx]; if(!m) return; if(m.soon){ toast('این حالت هنوز باز نشده 🚧'); return; } try{ m.go(); }catch(e){} }
+function hmSet(i){
+  const n=HOME_MODES.length;
+  hmIdx=((i%n)+n)%n;
+  hmRender();
+}
+function hmGo(d){ hmSet(hmIdx+d); }
+
+/* ---- the swipe ----
+   Pointer events cover finger and mouse with one path. The card follows the
+   finger, and only a deliberate move (a quarter of the card, or a fast flick)
+   changes mode; anything less snaps back. */
+function hmSwipeInit(){
+  const el=document.getElementById('mcard'); if(!el||el._sw) return; el._sw=1;
+  let x0=0,y0=0,t0=0,dx=0,drag=false,axis='';
+  const down=(e)=>{ const p=e.touches?e.touches[0]:e; x0=p.clientX; y0=p.clientY; t0=Date.now(); dx=0; drag=true; axis=''; el.classList.remove('sw'); };
+  const move=(e)=>{
+    if(!drag) return;
+    const p=e.touches?e.touches[0]:e;
+    const mx=p.clientX-x0, my=p.clientY-y0;
+    /* Decide once which way this gesture is going, then stick to it — a card
+       that changes its mind mid-drag feels broken. */
+    if(!axis) axis=(Math.abs(mx)>Math.abs(my)+4)?'x':(Math.abs(my)>Math.abs(mx)+4?'y':'');
+    if(axis!=='x') return;
+    dx=mx;
+    el.style.transform='translateX('+dx+'px) rotate('+(dx/40)+'deg)';
+    el.style.opacity=String(Math.max(.55,1-Math.abs(dx)/420));
+    if(e.cancelable) e.preventDefault();
+  };
+  const up=()=>{
+    if(!drag) return; drag=false;
+    const w=el.offsetWidth||300, fast=(Date.now()-t0)<300&&Math.abs(dx)>40;
+    el.classList.add('sw'); el.style.transform=''; el.style.opacity='';
+    if(Math.abs(dx)>w*0.25||fast){
+      /* RTL: dragging toward the right hand side moves forward through the
+         list, which is what «به سمت راست بری بره به بازمانده» asks for. */
+      hmGo(dx>0?1:-1);
+      try{ sfx&&sfx('tap'); }catch(e){}
+    }
+    dx=0;
+  };
+  el.addEventListener('touchstart',down,{passive:true});
+  el.addEventListener('touchmove',move,{passive:false});
+  el.addEventListener('touchend',up);
+  el.addEventListener('touchcancel',up);
+  el.addEventListener('mousedown',(e)=>{ down(e); const mm=(ev)=>move(ev), mu=()=>{ up(); document.removeEventListener('mousemove',mm); document.removeEventListener('mouseup',mu); }; document.addEventListener('mousemove',mm); document.addEventListener('mouseup',mu); });
+}
+
+/* The online list is still to be built; it says so rather than doing nothing,
+   which from the outside is indistinguishable from a broken button.
+   «کوییزساز» opens the question screen that already exists — its submission is
+   still local, and making it reach the panel is the next piece of work. */
+function hmOnline(){ toast('فهرست بازیکنان آنلاین به‌زودی — در حال ساخت'); }
+function hmQuizMaker(){ go('qsubmit'); }
+
+function hmBoot(){ hmRails(); hmRender(); hmSwipeInit(); }
+
 /* Real rank (from the weekly board), real win/game counts (from stats), and the
    real home "top of the week" rows. */
 async function pzHydrateBoards(){
@@ -12210,18 +12460,23 @@ async function pzHydrateBoards(){
       if(rk) rk.textContent='رتبه هفته: '+(mine?fa(mine.rank):'—');
     }
   }catch(e){}
-  /* Home board is the WEEKLY ranking and nothing else — it reads the weekly
-     board (this week's 🏆 cup), which the server derives from users.weekly_score.
-     The rankings screen owns the all-time boards; the two never share a source. */
+  /* The home strip is the week's biggest PRIZES — money, not cup. It reads the
+     weekly-winnings board, which the server derives from the ledger and resets
+     on the same Monday boundary as the cup, so the two can never disagree. */
   try{
-    const r=await pzApi('GET','/leaderboards/weekly');
-    const rows=document.getElementById('homeMiniLbRows');
-    if(rows){
+    const r=await pzApi('GET','/leaderboards/weekly-winnings?limit=3');
+    const row=document.getElementById('top3Row');
+    if(row){
       const list=(r&&r.ok&&r.data&&Array.isArray(r.data.entries))?r.data.entries.slice(0,3):[];
-      if(!list.length){ rows.innerHTML='<div style="text-align:center;color:var(--muted);font-size:11.5px;font-weight:800;padding:10px">هنوز رتبه‌ای برای این هفته ثبت نشده — اولین نفر باش!</div>'; }
-      /* The avatar is a real photo URL for players who uploaded one, so it goes
-         through pzAvHTML — a raw value here printed the file path on screen. */
-      else rows.innerHTML=list.map((e,i)=>'<div class="lb-row" style="cursor:pointer" onclick="showOpponentProfileByData(\''+jsStr(e.userId||'')+'\',\''+jsStr(e.username||'بازیکن')+'\',\''+jsStr(e.avatar||'')+'\',\'رتبه‌بندی هفتگی\')"><span class="rk"'+(i===1?' style="background:#c8c8c8"':i===2?' style="background:#cd7f32"':'')+'>'+fa(i+1)+'</span><span style="flex:1;display:flex;align-items:center;gap:7px;min-width:0"><span class="lb-av">'+pzFaceHTML(e)+'</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+frEsc(e.username||'بازیکن')+(e.highlighted?' (تو)':'')+'</span></span><span style="color:var(--bolt);font-weight:900;flex-shrink:0">'+fa(Number(e.score)||0)+' 🏆</span></div>').join('');
+      if(!list.length){ row.innerHTML='<div class="t3empty">این هفته هنوز جایزه‌ای برده نشده — اولین نفر باش!</div>'; }
+      else{
+        const medal=['🥇','🥈','🥉'];
+        row.innerHTML=list.map((e,i)=>'<div class="t3p'+(i===0?' first':'')+'">'+
+          '<span class="medal">'+medal[i]+'</span>'+
+          '<span class="f">'+pzFaceHTML(e)+'</span>'+
+          '<span class="n">'+frEsc(e.username||'بازیکن')+(e.highlighted?' (تو)':'')+'</span>'+
+          '<span class="amt">'+fa(Number(e.score)||0)+'</span></div>').join('');
+      }
     }
   }catch(e){}
 }
