@@ -14,6 +14,7 @@ import { GiftError, redeemGiftCode } from '../../services/giftCodeService.js';
 import { recordAdmin } from '../../services/adminAuditService.js';
 import { id } from '../../utils/id.js';
 import { parseOrder, quote, payFromVault, isGatewayPayable, asOrderError } from '../../services/purchaseOrderService.js';
+import { payoutOptions, issuedCodeFor, getPartner } from '../../services/payoutPartnerService.js';
 import { bodyObject, optionalString, requiredNumber, requiredString } from '../../utils/validation.js';
 
 /* Request metadata for audit + ledger rows (never trusted for money math). */
@@ -143,6 +144,24 @@ export function registerWalletRoutes(router: Router, base: string): void {
     }
   });
 
+  /* ---------- Getting a prize out: the doors that are actually open ----------
+   * Only partners with stock appear. Offering one with an empty shelf would be
+   * promising something that cannot be handed over. */
+  router.add('GET', `${base}/wallet/payout-options`, async (ctx) => {
+    const uid = requireUser(ctx); if (!uid) return;
+    json(ctx.res, 200, { bank: true, partners: await payoutOptions() });
+  });
+
+  /* The code itself, once the payout has actually been made. A reserved code
+   * is never revealed — it is not the player's until the operator pays out. */
+  router.add('GET', `${base}/wallet/withdrawals/:id/code`, async (ctx) => {
+    const uid = requireUser(ctx); if (!uid) return;
+    const c = await issuedCodeFor(ctx.params.id!, uid);
+    if (!c) return error(ctx.res, 404, 'CODE_NOT_READY', 'کد هنوز صادر نشده است.');
+    const p = await getPartner(c.partnerId);
+    json(ctx.res, 200, { code: c.code, amount: c.amount, partner: p?.name ?? '', instructions: p?.instructions ?? '', issuedAt: c.issuedAt });
+  });
+
   // ---------- Withdrawals ----------
   router.add('POST', `${base}/wallet/withdrawals`, async (ctx) => {
     const uid = requireUser(ctx); if (!uid) return;
@@ -151,9 +170,17 @@ export function registerWalletRoutes(router: Router, base: string): void {
     const meta = reqMeta(ctx);
     const amount = Math.round(requiredNumber(body, 'amount'));
     try {
-      const req = await requestWithdraw({ userId: uid, amount, destination: requiredString(body, 'destination'), nationalId: optionalString(body, 'nationalId'), holderName: optionalString(body, 'holderName'), otp: optionalString(body, 'otp'), idempotencyKey: optionalString(body, 'idempotencyKey'), ...meta });
-      await auditLog({ userId: uid, action: 'withdraw_requested', api: 'POST /wallet/withdrawals', ...meta, request: { amount }, response: { requestId: req.id } });
-      await notifications.create({ userId: uid, type: 'wallet_update', title: 'درخواست برداشت ثبت شد', body: `${amount.toLocaleString('fa-IR')} تومان بلوکه شد و در صف بررسی است.`, data: { requestId: req.id, url: '/wallet' }, push: true });
+      /* A partner payout has no bank destination to give, so `destination` is
+       * only required for the bank door. */
+      const payoutMethod = String(body.payoutMethod ?? 'bank') === 'partner' ? 'partner' as const : 'bank' as const;
+      const req = await requestWithdraw({
+        userId: uid, amount, payoutMethod, partnerId: optionalString(body, 'partnerId'),
+        destination: payoutMethod === 'bank' ? requiredString(body, 'destination') : optionalString(body, 'destination'),
+        nationalId: optionalString(body, 'nationalId'), holderName: optionalString(body, 'holderName'),
+        otp: optionalString(body, 'otp'), idempotencyKey: optionalString(body, 'idempotencyKey'), ...meta
+      });
+      await auditLog({ userId: uid, action: 'withdraw_requested', api: 'POST /wallet/withdrawals', ...meta, request: { amount, payoutMethod }, response: { requestId: req.id } });
+      await notifications.create({ userId: uid, type: 'wallet_update', title: 'درخواست دریافت جایزه ثبت شد', body: payoutMethod === 'partner' ? `${amount.toLocaleString('fa-IR')} تومان به‌صورت کد ${req.partnerName ?? ''} در صف بررسی است.` : `${amount.toLocaleString('fa-IR')} تومان بلوکه شد و در صف بررسی است.`, data: { requestId: req.id, url: '/wallet' }, push: true });
       json(ctx.res, 201, req);
     } catch (e) {
       await auditLog({ userId: uid, action: 'withdraw_request_failed', api: 'POST /wallet/withdrawals', ...meta, request: { amount }, error: e instanceof Error ? e.message : 'unknown' });

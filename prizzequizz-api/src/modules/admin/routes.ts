@@ -13,6 +13,7 @@ import { activeMatchState } from '../../services/matchStateStore.js';
 import { createGiftCode, listGiftCodes, redeemGiftCode } from '../../services/giftCodeService.js';
 import { aiGenerate, approve as approvePipeline, createDraft, getMeta as getPipelineMeta, listPipeline, reject as rejectPipeline, runPipeline } from '../../services/questionPipelineService.js';
 import { listAdminAudit, recordAdmin } from '../../services/adminAuditService.js';
+import { listPartners, savePartner, removePartner, addCodes, listCodes, stock as payoutStock, PayoutError } from '../../services/payoutPartnerService.js';
 import { listReports, reportCounts, setReportStatus } from '../../services/questionReportService.js';
 import { RESET_AREAS, type ResetArea, dashboardMetrics, financeSummary, finishedMatches, resetArea, runningMatches, suspiciousUsers } from '../../services/adminOpsService.js';
 import { getAccount } from '../../services/walletLedgerService.js';
@@ -47,7 +48,91 @@ import {
   listDefs as listMissions, saveDef as saveMission
 } from '../../services/missionService.js';
 
+/* An unissued code is a secret worth money: shown as ABCD••••WXYZ so an
+ * operator can tell rows apart without the panel becoming a place to harvest
+ * unused credit. */
+function maskCode(code: string): string {
+  const c = String(code ?? '');
+  if (c.length <= 8) return c.slice(0, 2) + '••••';
+  return c.slice(0, 4) + '••••' + c.slice(-4);
+}
+
 export function registerAdminRoutes(router: Router, base: string): void {
+  /* ===== Non-cash prize payouts: partners and their code stock =====
+   * A prize can leave as a bank transfer or as credit with a partner. Until a
+   * partner offers an API, the codes are a shelf the operator stocks here.
+   * Every figure below is counted from real rows — a partner with an empty
+   * shelf is never offered to a player. */
+  router.add('GET', `${base}/admin/payout-partners`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    const partners = await listPartners({ includeDisabled: true });
+    const withStock = [];
+    for (const p of partners) {
+      const st = await payoutStock(p.id);
+      withStock.push({
+        ...p,
+        stock: p.denominations.map((amt: number) => ({ amount: amt, available: st[amt] ?? 0 })),
+        totalAvailable: Object.values(st).reduce((n: number, c: number) => n + c, 0)
+      });
+    }
+    json(ctx.res, 200, withStock);
+  });
+
+  router.add('POST', `${base}/admin/payout-partners`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    const b = (ctx.body ?? {}) as any;
+    try {
+      const p = await savePartner({ id: b.id, name: String(b.name ?? ''), logo: b.logo, enabled: b.enabled, denominations: b.denominations, instructions: b.instructions });
+      await recordAdmin({ action: 'payout_partner_saved', meta: { partnerId: p.id, name: p.name } });
+      json(ctx.res, 200, p);
+    } catch (e) {
+      if (e instanceof PayoutError) return error(ctx.res, 400, e.code, e.message);
+      throw e;
+    }
+  });
+
+  router.add('DELETE', `${base}/admin/payout-partners/:id`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    const gone = await removePartner(ctx.params.id!);
+    await recordAdmin({ action: 'payout_partner_removed', meta: { partnerId: ctx.params.id } });
+    json(ctx.res, 200, { removed: gone });
+  });
+
+  /* Loading stock. Codes arrive as a pasted list — one per line, or comma
+   * separated — and re-uploading the same list adds nothing, so an operator
+   * who pastes twice does not double the shelf. */
+  router.add('POST', `${base}/admin/payout-partners/:id/codes`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    const b = (ctx.body ?? {}) as any;
+    const raw = String(b.codes ?? '');
+    const codes = Array.isArray(b.codes) ? b.codes.map(String) : raw.split(/[\r\n,;\t]+/);
+    try {
+      const r = await addCodes(ctx.params.id!, Number(b.amount), codes);
+      await recordAdmin({ action: 'payout_codes_added', meta: { partnerId: ctx.params.id, amount: Number(b.amount), added: r.added, skipped: r.skipped } });
+      json(ctx.res, 200, r);
+    } catch (e) {
+      if (e instanceof PayoutError) return error(ctx.res, 400, e.code, e.message);
+      throw e;
+    }
+  });
+
+  /* The shelf itself. Codes are secrets, so an available one is never printed
+   * in full here — only what was already given to a player can be, because the
+   * player already has it and support needs to be able to see it. */
+  router.add('GET', `${base}/admin/payout-codes`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    const rows = await listCodes({
+      partnerId: ctx.query.get('partnerId') || undefined,
+      status: (ctx.query.get('status') as any) || undefined,
+      limit: Number(ctx.query.get('limit') ?? 200)
+    });
+    json(ctx.res, 200, rows.map((c) => ({
+      ...c,
+      code: c.status === 'issued' ? c.code : maskCode(c.code)
+    })));
+  });
+
+
   // ===== Admin auth + accounts (per-tab access control) =====
   // Login with username+password → returns a session token (used as x-admin-key).
   router.add('POST', `${base}/admin/auth/login`, async (ctx) => {

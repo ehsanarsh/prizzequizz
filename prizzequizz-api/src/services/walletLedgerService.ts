@@ -15,6 +15,7 @@
  *    real money movements so existing stats/winnings boards keep working.
  */
 import { getPgPool } from '../database/postgres.js';
+import { getPartner, reserveCode, issueForWithdraw, releaseForWithdraw } from './payoutPartnerService.js';
 import { repositories } from '../repositories/index.js';
 import { id } from '../utils/id.js';
 import { logger } from './logger.js';
@@ -488,9 +489,13 @@ async function lastEntryAt(userId: string): Promise<string | null> {
 // Withdrawals — pending → approved → paid, or rejected/failed (funds locked
 // while in flight, released on reject/fail, settled on paid).
 // ---------------------------------------------------------------------------
+/** How the player wants the prize out: to a bank account, or as partner credit. */
+export type PayoutMethod = 'bank' | 'partner';
+
 export interface WithdrawRequest {
   id: string; userId: string; amount: number; fee: number; destination: string;
   status: 'pending' | 'approved' | 'rejected' | 'paid' | 'failed';
+  payoutMethod: PayoutMethod; partnerId?: string; partnerName?: string;
   nationalId?: string; holderName?: string;
   rejectReason?: string; reviewedBy?: string; reviewedAt?: string;
   paidBy?: string; paidAt?: string; paymentReference?: string; createdAt: string;
@@ -502,17 +507,31 @@ export interface WithdrawRequest {
 // localized change. A withdrawal is NEVER recorded without the correct code.
 export function withdrawOtpCode(): string { return String(process.env.WITHDRAW_OTP_CODE || '1234'); }
 
-export async function requestWithdraw(input: { userId: string; amount: number; destination: string; nationalId?: string; holderName?: string; otp?: string; ip?: string; device?: string; platform?: string; idempotencyKey?: string }): Promise<WithdrawRequest> {
+export async function requestWithdraw(input: { userId: string; amount: number; destination?: string; nationalId?: string; holderName?: string; otp?: string; ip?: string; device?: string; platform?: string; idempotencyKey?: string; payoutMethod?: PayoutMethod; partnerId?: string }): Promise<WithdrawRequest> {
   // Mobile-code gate FIRST: no valid code ⇒ nothing is locked or recorded.
   if (String(input.otp ?? '').trim() !== withdrawOtpCode()) throw new WalletError('WITHDRAW_OTP_INVALID', 'کد تأیید پیامک‌شده نادرست است.');
   const amount = Math.round(Number(input.amount));
   if (!Number.isFinite(amount) || amount <= 0) throw new WalletError('AMOUNT_INVALID', 'مبلغ نامعتبر است.');
   if (amount < WALLET_LIMITS.minWithdraw) throw new WalletError('WITHDRAW_BELOW_MIN', `حداقل برداشت ${WALLET_LIMITS.minWithdraw.toLocaleString('fa-IR')} تومان است.`);
   if (amount > WALLET_LIMITS.maxWithdraw) throw new WalletError('WITHDRAW_ABOVE_MAX', `حداکثر برداشت ${WALLET_LIMITS.maxWithdraw.toLocaleString('fa-IR')} تومان است.`);
-  const dest = String(input.destination ?? '').trim();
+  /* TWO DOORS OUT. A bank payout needs a card or SHEBA; a partner payout needs
+   * a partner that actually has a code of this amount on the shelf. Asking a
+   * player for their bank details in order to hand them a discount code would
+   * be collecting information for no reason. */
+  const payoutMethod: PayoutMethod = input.payoutMethod === 'partner' ? 'partner' : 'bank';
+  let dest = String(input.destination ?? '').trim();
+  let partner: { id: string; name: string } | null = null;
   const nationalId = String(input.nationalId ?? '').replace(/[^\d]/g, '').slice(0, 20) || undefined;
   const holderName = String(input.holderName ?? '').trim().slice(0, 120) || undefined;
-  if (!/^(IR[0-9]{24}|[0-9]{16}|[0-9]{24})$/.test(dest.replace(/[\s-]/g, ''))) throw new WalletError('DESTINATION_INVALID', 'شماره شبا (IR + ۲۴ رقم) یا کارت ۱۶ رقمی معتبر وارد کن.');
+  if (payoutMethod === 'bank') {
+    if (!/^(IR[0-9]{24}|[0-9]{16}|[0-9]{24})$/.test(dest.replace(/[\s-]/g, ''))) throw new WalletError('DESTINATION_INVALID', 'شماره شبا (IR + ۲۴ رقم) یا کارت ۱۶ رقمی معتبر وارد کن.');
+  } else {
+    const p = await getPartner(String(input.partnerId ?? ''));
+    if (!p) throw new WalletError('PARTNER_NOT_FOUND', 'شریک انتخاب‌شده پیدا نشد.');
+    if (!p.enabled) throw new WalletError('PARTNER_DISABLED', 'این شریک فعلاً فعال نیست.');
+    partner = { id: p.id, name: p.name };
+    dest = 'partner:' + p.id;
+  }
   const user = await repositories.users.findById(input.userId);
   if (!user) throw new WalletError('USER_NOT_FOUND', 'کاربر یافت نشد.');
   if ((user.status ?? 'active') !== 'active') throw new WalletError('ACCOUNT_NOT_ACTIVE', 'حساب کاربری فعال نیست؛ برداشت ممکن نیست.');
@@ -526,14 +545,48 @@ export async function requestWithdraw(input: { userId: string; amount: number; d
     const existing = await findWithdrawByLedgerRef(posted.entry.refId!);
     if (existing) return existing;
   }
-  const row: WithdrawRequest = { id: reqId, userId: input.userId, amount, fee: WALLET_LIMITS.withdrawFee, destination: dest, status: 'pending', nationalId, holderName, createdAt: new Date().toISOString() };
+  /* Reserve the code AFTER the money is locked and BEFORE the player is told
+   * yes. Reserving first would strand a code whenever the lock failed; telling
+   * them yes first would let two players be promised the same last code. If
+   * the shelf is empty the lock is released again — a request that cannot be
+   * paid must not sit on the player's balance. */
+  if (payoutMethod === 'partner') {
+    try {
+      await reserveCode({ partnerId: partner!.id, amount, userId: input.userId, withdrawId: reqId });
+    } catch (e) {
+      await postEntry({ userId: input.userId, entryType: 'withdraw_release', kind: 'release', amount, idempotencyKey: `wd_release:${reqId}`, refType: 'withdraw', refId: reqId, description: 'کد موجود نبود' }).catch(() => undefined);
+      throw new WalletError((e as any)?.code || 'OUT_OF_STOCK', (e as Error)?.message || 'کد این مبلغ موجود نیست.');
+    }
+  }
+  const row: WithdrawRequest = { id: reqId, userId: input.userId, amount, fee: WALLET_LIMITS.withdrawFee, destination: dest, status: 'pending', payoutMethod, partnerId: partner?.id, partnerName: partner?.name, nationalId, holderName, createdAt: new Date().toISOString() };
   const pool = pgAvailable();
   if (pool) {
-    await pool.query(`INSERT INTO withdraw_requests(id,user_id,amount,fee,destination,status,national_id,holder_name,idempotency_key) VALUES ($1,$2,$3,$4,$5,'pending',$6,$7,$8)`, [reqId, input.userId, amount, WALLET_LIMITS.withdrawFee, dest, nationalId ?? null, holderName ?? null, idem]);
+    const hasCols = await ensureWithdrawPayoutColumns(pool);
+    if (hasCols) {
+      await pool.query(`INSERT INTO withdraw_requests(id,user_id,amount,fee,destination,status,national_id,holder_name,idempotency_key,payout_method,partner_id) VALUES ($1,$2,$3,$4,$5,'pending',$6,$7,$8,$9,$10)`, [reqId, input.userId, amount, WALLET_LIMITS.withdrawFee, dest, nationalId ?? null, holderName ?? null, idem, payoutMethod, partner?.id ?? null]);
+    } else {
+      await pool.query(`INSERT INTO withdraw_requests(id,user_id,amount,fee,destination,status,national_id,holder_name,idempotency_key) VALUES ($1,$2,$3,$4,$5,'pending',$6,$7,$8)`, [reqId, input.userId, amount, WALLET_LIMITS.withdrawFee, dest, nationalId ?? null, holderName ?? null, idem]);
+    }
   } else {
     memWithdraws.push({ ...row, idempotencyKey: idem });
   }
   return row;
+}
+
+/* Adds the two payout columns to a table that predates them. Never throws:
+ * a withdrawal is money, and it must not fail because a schema statement did.
+ * If the columns cannot be added, partner payouts simply record as bank rows
+ * with a `partner:` destination, which still names the partner. */
+let _wdColsReady: Promise<boolean> | null = null;
+async function ensureWithdrawPayoutColumns(pool: ReturnType<typeof getPgPool>): Promise<boolean> {
+  if (!_wdColsReady) {
+    _wdColsReady = pool.query(`ALTER TABLE withdraw_requests
+        ADD COLUMN IF NOT EXISTS payout_method TEXT NOT NULL DEFAULT 'bank',
+        ADD COLUMN IF NOT EXISTS partner_id TEXT`)
+      .then(() => true)
+      .catch((e) => { _wdColsReady = null; logger.warn('withdraw_payout_columns_missing', { message: e instanceof Error ? e.message : 'unknown' }); return false; });
+  }
+  return _wdColsReady;
 }
 
 async function withdrawnToday(userId: string): Promise<number> {
@@ -583,6 +636,9 @@ export async function transitionWithdraw(reqId: string, action: 'approve' | 'rej
   const now = new Date().toISOString();
   if (action === 'reject' || action === 'failed') {
     await postEntry({ userId: w.userId, entryType: 'withdraw_release', kind: 'release', amount: w.amount, idempotencyKey: `wd_release:${reqId}`, refType: 'withdraw', refId: reqId, description: action === 'reject' ? `برداشت رد شد: ${operator.reason ?? ''}` : `پرداخت ناموفق: ${operator.reason ?? ''}`, operatorId: operator.id });
+    /* The code goes back on the shelf. A rejected request that kept its code
+     * would quietly burn stock nobody can account for. */
+    if (w.payoutMethod === 'partner') await releaseForWithdraw(reqId).catch(() => undefined);
   }
   if (action === 'paid') {
     await postEntry({ userId: w.userId, entryType: 'withdraw_paid', kind: 'settle', amount: w.amount, idempotencyKey: `wd_paid:${reqId}`, refType: 'withdraw', refId: reqId, description: `برداشت پرداخت شد (${operator.paymentReference ?? ''})`, operatorId: operator.id });
@@ -594,6 +650,11 @@ export async function transitionWithdraw(reqId: string, action: 'approve' | 'rej
       const m = await import('./missionService.js');
       await m.recordMoney(w.userId, 'withdrawal', w.amount);
     } catch { /* missions must never block a payout */ }
+    /* The payout has happened, so the reserved code becomes the player's. */
+    if (w.payoutMethod === 'partner') {
+      const issued = await issueForWithdraw(reqId).catch(() => null);
+      if (!issued) logger.error('payout_code_not_issued', { withdrawId: reqId, userId: w.userId });
+    }
   }
   const status = action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : action === 'paid' ? 'paid' : 'failed';
   const pool = pgAvailable();
@@ -611,6 +672,9 @@ export async function transitionWithdraw(reqId: string, action: 'approve' | 'rej
 function withdrawFromRow(r: any): WithdrawRequest {
   return {
     id: r.id, userId: r.user_id, amount: Number(r.amount), fee: Number(r.fee), destination: r.destination,
+    /* A row written before the column existed is a bank payout, which is what
+     * every withdrawal was until partners arrived. */
+    payoutMethod: (r.payout_method === 'partner' ? 'partner' : 'bank'), partnerId: r.partner_id ?? undefined,
     nationalId: r.national_id ?? undefined, holderName: r.holder_name ?? undefined,
     status: r.status, rejectReason: r.reject_reason ?? undefined, reviewedBy: r.reviewed_by ?? undefined,
     reviewedAt: r.reviewed_at?.toISOString?.() ?? r.reviewed_at ?? undefined,
