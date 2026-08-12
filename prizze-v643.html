@@ -1715,6 +1715,19 @@ input,textarea,select,[contenteditable="true"],.pz-selectable,.pz-selectable *{
 
 
 
+/* A BANNER MUST NOT PUSH THE TICKETS OFF THE SCREEN.
+   min-height:172px is fine on the shop, where scrolling is expected. On the
+   two ENTRY screens it was adding 172px above a grid of ticket buttons and a
+   confirm button, so putting a picture there made the page scroll and the
+   thing the player came to tap went below the fold. Here the banner takes what
+   is spare and no more. */
+#promoDuel .tk-promo,#promoLs .tk-promo{min-height:0;height:clamp(76px,14vh,128px)}
+#promoDuel .tk-promo-txt b,#promoLs .tk-promo-txt b{font-size:13px}
+#promoDuel .tk-promo-txt span,#promoLs .tk-promo-txt span{font-size:11px}
+@media(max-height:700px){#promoDuel .tk-promo,#promoLs .tk-promo{display:none}}
+/* Moving banners fill their frame exactly like a still one. */
+.tk-promo-img video,.tk-promo-img img{width:100%;height:100%;object-fit:cover;display:block}
+
 /* The payout method picker: two doors, one chosen before anything is asked. */
 .wd-methods{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
 .wd-method{border:2px solid #000;border-radius:14px;background:var(--ink-2);color:var(--muted);font-family:inherit;font-size:12.5px;font-weight:900;padding:12px 6px;box-shadow:var(--hard-sm);cursor:pointer}
@@ -7310,6 +7323,9 @@ function lsEndHtml(snap){ lsFinish(snap); return '<div class="ls-end"><div class
 function showScreen(id){
   const el=document.getElementById(id);
   if(!el || !el.classList.contains('screen')) return false;
+  /* A screen gains its banner as it opens, so adding one in the panel needs no
+     change to this file. Wrapped because a banner must never stop a screen. */
+  try{ if(typeof PZ_BANNER_SCREENS!=='undefined'&&PZ_BANNER_SCREENS.indexOf(id)>=0) pzBannerMount(id,id); }catch(e){}
 
   // Drop focus first: a focused control inside a screen we're about to mark
   // aria-hidden triggers a browser accessibility warning ("aria-hidden on an
@@ -10418,6 +10434,16 @@ function pzPrizeFor(key){ return (PZ_PRIZES&&PZ_PRIZES[key])?PZ_PRIZES[key].priz
    their own slot, edited from the admin panel (image + headline + one line).
    All three render through this one component, so they look identical. */
 let PZ_PROMOS=null, _pzPromoReq=null;
+let PZ_BANNERS=null,_pzBannerReq=null;
+async function pzLoadBanners(force){
+  if(PZ_BANNERS&&!force) return PZ_BANNERS;
+  if(_pzBannerReq) return _pzBannerReq;
+  _pzBannerReq=(async()=>{
+    try{ const r=await pzApi('GET','/banners'); if(r&&r.ok&&r.data) PZ_BANNERS=r.data; }catch(e){}
+    _pzBannerReq=null; return PZ_BANNERS;
+  })();
+  return _pzBannerReq;
+}
 async function pzLoadPromos(force){
   if(PZ_PROMOS&&!force) return PZ_PROMOS;
   if(_pzPromoReq) return _pzPromoReq;
@@ -10427,23 +10453,69 @@ async function pzLoadPromos(force){
   })();
   return _pzPromoReq;
 }
-function pzPromoHTML(slot){
-  const p=PZ_PROMOS&&PZ_PROMOS[slot];
-  if(!p||!p.enabled||(!p.title&&!p.text&&!p.image)) return '';
-  const tap=p.link?(' onclick="go(\''+jsStr(p.link)+'\')" style="cursor:pointer"'):'';
-  /* With artwork the text sits over the picture; without it the same block
-     becomes a text-only panel, so the space is never left blank. */
-  return '<div class="tk-promo'+(p.image?' has-img':'')+'" data-promo="'+slot+'"'+tap+'>'+
-    (p.image?'<div class="tk-promo-img"><img src="'+frEsc(p.image)+'" alt="" onerror="this.parentNode.parentNode.classList.remove(\'has-img\');this.parentNode.remove()"></div>':'')+
-    '<div class="tk-promo-txt">'+(p.title?'<b>'+frEsc(p.title)+'</b>':'')+(p.text?'<span>'+frEsc(p.text)+'</span>':'')+'</div>'+
+/* ONE BANNER, WHATEVER IT IS MADE OF.
+   The server says which kind it is — a .mp4 is a video whether or not anybody
+   ticked a box — so this never has to guess from the URL. A GIF goes in an
+   <img>, because a <video> cannot play one. */
+function pzBannerMediaHTML(b){
+  const src=b.media||b.image||'';
+  if(!src) return '';
+  const kind=b.kind||'image';
+  if(kind==='video'){
+    /* Muted is not a preference: a phone will not start a video with sound by
+       itself, so an unmuted autoplay is simply a video that never plays.
+       playsinline stops iOS taking it fullscreen. If it cannot play at all the
+       whole layer removes itself and the banner becomes a text panel. */
+    return '<div class="tk-promo-img"><video src="'+frEsc(src)+'"'+(b.poster?' poster="'+frEsc(b.poster)+'"':'')+
+      ' muted playsinline preload="metadata"'+(b.autoplay!==false?' autoplay':'')+(b.loop!==false?' loop':'')+
+      ' onerror="this.parentNode.parentNode.classList.remove(\'has-img\');this.parentNode.remove()"></video></div>';
+  }
+  return '<div class="tk-promo-img"><img src="'+frEsc(src)+'" alt="" onerror="this.parentNode.parentNode.classList.remove(\'has-img\');this.parentNode.remove()"></div>';
+}
+function pzBannerHTML(b){
+  if(!b) return '';
+  const media=b.media||b.image||'';
+  if(!b.title&&!b.text&&!media) return '';
+  const tap=b.link?(' onclick="go(\''+jsStr(b.link)+'\')" style="cursor:pointer"'):'';
+  return '<div class="tk-promo'+(media?' has-img':'')+'" data-promo="'+frEsc(b.slot||'')+'"'+tap+'>'+
+    pzBannerMediaHTML(b)+
+    '<div class="tk-promo-txt">'+(b.title?'<b>'+frEsc(b.title)+'</b>':'')+(b.text?'<span>'+frEsc(b.text)+'</span>':'')+'</div>'+
   '</div>';
+}
+function pzPromoHTML(slot){
+  /* New banners first; the old three-slot promos are the fallback so a server
+     that has not been updated still shows what it always did. */
+  const list=(PZ_BANNERS&&PZ_BANNERS[slot])||null;
+  if(list&&list.length) return list.map(pzBannerHTML).join('');
+  const p=PZ_PROMOS&&PZ_PROMOS[slot];
+  if(!p||!p.enabled) return '';
+  return pzBannerHTML({slot,title:p.title,text:p.text,media:p.image,link:p.link,kind:'image'});
 }
 /** Paint a slot into its own host element, above (and separate from) the tickets. */
 function pzPromoRender(slot,hostId){
   const paint=()=>{ const host=document.getElementById(hostId); if(host) host.innerHTML=pzPromoHTML(slot); };
   paint();
+  if(!PZ_BANNERS) pzLoadBanners().then(paint);
   if(!PZ_PROMOS) pzLoadPromos().then(paint);
 }
+/* Every screen can carry one now. The host is created on demand at the top of
+   the screen, so a screen gains a banner without its markup being edited. */
+function pzBannerMount(slot,screenId){
+  const sec=document.getElementById(screenId||slot); if(!sec) return;
+  let host=sec.querySelector('.tk-promo-host[data-slot="'+slot+'"]');
+  if(!host){
+    host=document.createElement('div');
+    host.className='tk-promo-host'; host.dataset.slot=slot;
+    const after=sec.querySelector('.topbar');
+    if(after&&after.nextSibling) sec.insertBefore(host,after.nextSibling);
+    else sec.insertBefore(host,sec.firstChild);
+  }
+  const paint=()=>{ host.innerHTML=pzPromoHTML(slot); };
+  paint();
+  if(!PZ_BANNERS) pzLoadBanners().then(paint);
+}
+/* Screens with no banner code of their own get theirs when they open. */
+const PZ_BANNER_SCREENS=['home','rankings','friends','wallet','missions','profile','support'];
 
 /* Ticket-tier selector on the paid-duel entry screen. */
 function renderTicketSelect(){

@@ -161,7 +161,7 @@ const NAV=[
   ['محتوا',[['questions','❓','سوالات'],['qreports','🚩','گزارش سؤالات'],['aistudio','🤖','استودیوی سوال (AI)'],['pipeline','🔬','خط‌لولهٔ کیفیت'],['categories','🏷️','موضوعات'],['characters','🎭','کاراکترها'],['charboxes','🎲','قرعه‌کشی کاراکتر'],['lifelines','🧩','کمک‌ها'],['rewards','🎡','گردونه و جایزه روزانه'],['recordmode','🏅','ثبت رکورد'],['onboarding','👋','خوش‌آمدگویی']]],
   ['اقتصاد',[['wallet','🏆','صندوق جایزه'],['withdrawals','💸','دریافت جایزه'],['payoutpartners','🎁','شرکای جایزه'],['rewardholds','⏳','جوایز در انتظار'],['tickets','🎫','بلیط‌ها'],['shop','🛒','فروشگاه'],['giftcodes','🎁','کدهای هدیه'],['payments','🏦','درگاه پرداخت']]],
   ['بالانس بازی (Data-Driven)',[['cfg_xp','✨','XP'],['cfg_level','🏅','Level'],['cfg_cup','🏆','Cup'],['cfg_gameplay','🕹️','گیم‌پلی مودها'],['leagues','🛡️','لیگ‌ها'],['missions2','🎯','مأموریت‌ها']]],
-  ['رشد و تعامل',[['leaderboard','📈','لیدربرد'],['campaign','🎁','کمپین کاربر جدید'],['events','📅','رویدادها'],['banners','🖼️','بنرها'],['notifications','🔔','اعلان‌ها'],['sms','📱','پنل پیامکی']]],
+  ['رشد و تعامل',[['leaderboard','📈','لیدربرد'],['banners2','🖼️','بنرها'],['campaign','🎁','کمپین کاربر جدید'],['events','📅','رویدادها'],['banners','🖼️','بنرها'],['notifications','🔔','اعلان‌ها'],['sms','📱','پنل پیامکی']]],
   ['سیستم',[['monitoring','🖥️','مانیتورینگ سرور'],['anticheat','🛡️','ضدتقلب'],['suspicious','🚨','کاربران مشکوک'],['reports','📑','گزارش‌ها'],['logs','📝','لاگ و Audit'],['reset','♻️','ابزار ریست'],['accounts','🔐','حساب‌ها و دسترسی'],['backup','💾','پشتیبان‌گیری'],['general','⚙️','تنظیمات عمومی'],['rawcfg','🧩','ویرایش خام Config']]]
 ];
 function buildNav(){
@@ -189,7 +189,7 @@ async function render(){
   try{
     if(CUR==='accounts')return renderAccounts();
     if(CONFIG_PAGES[CUR])return renderConfigSection(CONFIG_PAGES[CUR][0],CONFIG_PAGES[CUR][1]);
-    const fn={dashboard:renderDashboard,finance:renderFinance,accounting:renderAccounting,expenses:renderExpenses,backup:renderBackup,users:renderUsers,matches:renderMatches,support:renderSupport,questions:renderQuestions,qreports:renderQReports,aistudio:renderAiStudio,pipeline:renderPipeline,categories:renderCategories,wallet:renderWallet,withdrawals:renderWithdrawals,payoutpartners:renderPayoutPartners,rewardholds:renderRewardHolds,tickets:renderTickets,giftcodes:renderGiftCodes,shop:renderShopAdmin,characters:renderCharacters,charboxes:renderCharBoxes,lifelines:renderLifelines,rewards:renderRewards,missions2:renderMissions2,recordmode:renderRecordMode,onboarding:renderOnboarding,lastsurvivor:renderLastSurvivor,sms:renderSms,payments:renderPayments,leaderboard:renderLeaderboard,notifications:renderNotifications,anticheat:renderAntiCheat,suspicious:renderSuspicious,reports:renderReports,logs:renderLogs,reset:renderReset,roles:renderRoles,rawcfg:renderRawCfg,monitoring:renderMonitoring}[CUR];
+    const fn={dashboard:renderDashboard,finance:renderFinance,accounting:renderAccounting,expenses:renderExpenses,backup:renderBackup,users:renderUsers,matches:renderMatches,support:renderSupport,questions:renderQuestions,qreports:renderQReports,aistudio:renderAiStudio,pipeline:renderPipeline,categories:renderCategories,wallet:renderWallet,withdrawals:renderWithdrawals,payoutpartners:renderPayoutPartners,rewardholds:renderRewardHolds,tickets:renderTickets,giftcodes:renderGiftCodes,shop:renderShopAdmin,characters:renderCharacters,charboxes:renderCharBoxes,lifelines:renderLifelines,rewards:renderRewards,missions2:renderMissions2,recordmode:renderRecordMode,onboarding:renderOnboarding,lastsurvivor:renderLastSurvivor,sms:renderSms,payments:renderPayments,leaderboard:renderLeaderboard,banners2:renderBanners,notifications:renderNotifications,anticheat:renderAntiCheat,suspicious:renderSuspicious,reports:renderReports,logs:renderLogs,reset:renderReset,roles:renderRoles,rawcfg:renderRawCfg,monitoring:renderMonitoring}[CUR];
     if(fn)return fn();
   }catch(e){$('#main').innerHTML=head('خطا')+'<div class="card empty">'+(e.message||'خطا')+'</div>';}
 }
@@ -1263,6 +1263,85 @@ async function saveTicketPrices(){
    their codes are pasted in. Every number below is counted from real rows — a
    partner with an empty shelf is never offered to a player, so an operator who
    forgets to restock sees it here rather than a player hitting a dead end. */
+/* BANNERS, ON ANY SCREEN.
+   The three old promo slots were hard-coded to the ticket screens; this is the
+   list that replaced them. A banner names its screen, and its media can be a
+   picture, a GIF or a video — the server decides which from the file itself,
+   so there is no kind to choose here and no way to choose it wrongly. */
+async function renderBanners(){
+  let d={banners:[],slots:[],labels:{}};
+  try{ d=await api('GET','/admin/banners'); }
+  catch(e){ $('#main').innerHTML=head('بنرها')+'<div class="card empty">'+(e.message||'خطا')+'</div>'; return; }
+  window._BN=d;
+  const opts=(sel)=>(d.slots||[]).map(sl=>'<option value="'+sl+'"'+(sel===sl?' selected':'')+'>'+esc((d.labels||{})[sl]||sl)+'</option>').join('');
+  const kindTag=(b)=>{ const k=b.kind||''; return k==='video'?'<span class="pill">🎬 ویدیو</span>':k==='gif'?'<span class="pill">🎞️ GIF</span>':(b.media?'<span class="pill">🖼️ تصویر</span>':'<span class="pill">متن</span>'); };
+  const card=(b)=>'<div class="card">'+
+    '<div style="display:flex;align-items:center;gap:10px">'+
+      '<b>'+esc((d.labels||{})[b.slot]||b.slot)+'</b>'+kindTag(b)+
+      (b.enabled?'':'<span class="pill bad">خاموش</span>')+
+      '<span style="flex:1"></span>'+
+      '<button class="btn sm" onclick="bnToggle(\''+b.id+'\')">'+(b.enabled?'خاموش کن':'روشن کن')+'</button>'+
+      '<button class="btn sm danger" onclick="bnDel(\''+b.id+'\')">حذف</button>'+
+    '</div>'+
+    '<div style="display:grid;gap:6px;margin-top:8px">'+
+      '<select class="in" id="bnSlot_'+b.id+'">'+opts(b.slot)+'</select>'+
+      '<input class="in" id="bnTitle_'+b.id+'" placeholder="عنوان" value="'+esc(b.title||'')+'">'+
+      '<input class="in" id="bnText_'+b.id+'" placeholder="متن" value="'+esc(b.text||'')+'">'+
+      '<input class="in" id="bnMedia_'+b.id+'" placeholder="آدرس تصویر/GIF/ویدیو یا data:" value="'+esc(b.media||'')+'" dir="ltr">'+
+      '<input class="in" id="bnLink_'+b.id+'" placeholder="با لمس به کدام صفحه برود (اختیاری)" value="'+esc(b.link||'')+'">'+
+      '<input class="in" id="bnOrder_'+b.id+'" placeholder="ترتیب" value="'+(b.order||0)+'" style="max-width:110px">'+
+      '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'+
+        '<input type="file" accept="image/*,video/mp4,video/webm" onchange="bnUpload(\''+b.id+'\',this)">'+
+        '<button class="btn sm" onclick="bnSave(\''+b.id+'\')">ذخیره</button>'+
+      '</div>'+
+    '</div></div>';
+  $('#main').innerHTML=head('بنرها (هر صفحه)')+
+    '<div class="card"><b>بنر روی هر صفحه‌ای</b><div class="sub" style="margin-top:6px;line-height:1.9">هر بنر صفحه‌اش را خودش تعیین می‌کند. فایل می‌تواند عکس، GIF یا ویدیوی MP4/WebM باشد؛ نوعش از روی خود فایل تشخیص داده می‌شود.<br>ویدیو روی گوشی <b>بی‌صدا</b> پخش می‌شود — این انتخاب ما نیست، مرورگر موبایل ویدیوی صدادار را خودش شروع نمی‌کند.<br>در دو صفحهٔ ورود (دوئل و آخرین بازمانده) ارتفاع بنر محدود است تا دکمهٔ انتخاب بلیط پایین نیفتد.</div></div>'+
+    '<div class="card"><b>بنر جدید</b><div style="display:grid;gap:6px;margin-top:8px">'+
+      '<select class="in" id="bnNewSlot">'+opts('home')+'</select>'+
+      '<input class="in" id="bnNewTitle" placeholder="عنوان">'+
+      '<input class="in" id="bnNewText" placeholder="متن">'+
+      '<input class="in" id="bnNewMedia" placeholder="آدرس تصویر/GIF/ویدیو" dir="ltr">'+
+      '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><input type="file" accept="image/*,video/mp4,video/webm" onchange="bnUpload(\'new\',this)"><button class="btn" onclick="bnNew()">افزودن</button></div>'+
+    '</div></div>'+
+    ((d.banners||[]).length?(d.banners||[]).map(card).join(''):'<div class="card empty">هنوز بنری ساخته نشده.</div>');
+}
+/* A video is sent as-is: re-encoding it here is not something a browser can do
+   well, and catShrink only understands pictures. */
+async function bnUpload(which,input){
+  const f=input.files&&input.files[0]; if(!f) return;
+  const target=which==='new'?$('#bnNewMedia'):$('#bnMedia_'+which);
+  try{
+    const uri=f.type.startsWith('video/')? await bnFileToDataUri(f) : await catShrink(f);
+    target.value=uri;
+    toast('فایل آماده شد — حالا ذخیره کن');
+  }catch(e){ toast(e.message||'خطا در خواندن فایل'); }
+}
+function bnFileToDataUri(f){
+  return new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=()=>rej(new Error('فایل خوانده نشد')); r.readAsDataURL(f); });
+}
+async function bnSave(id){
+  const g=(k)=>($('#bn'+k+'_'+id)||{}).value||'';
+  try{
+    await api('POST','/admin/banners',{id,slot:g('Slot'),title:g('Title'),text:g('Text'),media:g('Media'),link:g('Link'),order:parseInt(g('Order'))||0});
+    toast('ذخیره شد'); render();
+  }catch(e){ toast(e.message||'خطا'); }
+}
+async function bnNew(){
+  try{
+    await api('POST','/admin/banners',{slot:$('#bnNewSlot').value,title:($('#bnNewTitle').value||''),text:($('#bnNewText').value||''),media:($('#bnNewMedia').value||'')});
+    toast('بنر اضافه شد'); render();
+  }catch(e){ toast(e.message||'خطا'); }
+}
+async function bnToggle(id){
+  const b=((window._BN&&window._BN.banners)||[]).find(x=>x.id===id); if(!b) return;
+  try{ await api('POST','/admin/banners',{id,slot:b.slot,enabled:!b.enabled}); render(); }catch(e){ toast(e.message||'خطا'); }
+}
+async function bnDel(id){
+  if(!confirm('حذف بنر؟')) return;
+  try{ await api('DELETE','/admin/banners/'+id); toast('حذف شد'); render(); }catch(e){ toast(e.message||'خطا'); }
+}
+
 async function renderPayoutPartners(){
   let rows=[];
   try{ rows=await api('GET','/admin/payout-partners'); }

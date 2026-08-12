@@ -188,7 +188,7 @@ export const ADMIN_TABS = [
   'questions', 'qreports', 'aistudio', 'pipeline', 'categories', 'shop', 'characters', 'charboxes', 'lifelines', 'onboarding', 'lastsurvivor', 'sms', 'payments',
   'wallet', 'withdrawals', 'payoutpartners', 'rewardholds', 'tickets', 'giftcodes',
   'cfg_xp', 'cfg_level', 'cfg_cup', 'cfg_gameplay', 'leagues', 'missions', 'rewards',
-  'leaderboard', 'campaign', 'events', 'banners', 'notifications',
+  'leaderboard', 'campaign', 'events', 'banners', 'banners2', 'notifications',
   'anticheat', 'suspicious', 'reports', 'logs', 'reset', 'roles', 'accounts', 'general', 'rawcfg', 'monitoring'
 ] as const;
 

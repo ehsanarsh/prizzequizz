@@ -4,6 +4,7 @@ import { listItems, rewardsOf, rewardLabel } from '../../services/shopService.js
 import { ShopError, purchase } from '../../services/shopPurchaseService.js';
 import { ticketPrizeTable } from '../../services/prizeService.js';
 import { getPromos, updatePromos, PromoError, PROMO_IMAGE_MAX_BYTES } from '../../services/ticketPromoService.js';
+import { activeBanners, listBanners, saveBanner, removeBanner, BannerError, BANNER_SLOTS, BANNER_SLOT_LABELS } from '../../services/bannerService.js';
 import { requireAdmin } from '../../services/adminGuard.js';
 import { error } from '../../http/response.js';
 
@@ -18,6 +19,25 @@ export function registerShopRoutes(router: Router, base: string): void {
   });
 
   /* The admin-owned banner shown on each of the three ticket screens. */
+  /* Banners: any screen, image / GIF / video. The old three-slot promo
+   * endpoints below are kept so a client that has not updated still works. */
+  router.add('GET', `${base}/banners`, async (ctx) => {
+    json(ctx.res, 200, await activeBanners());
+  });
+  router.add('GET', `${base}/admin/banners`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    json(ctx.res, 200, { banners: await listBanners(), slots: BANNER_SLOTS, labels: BANNER_SLOT_LABELS });
+  });
+  router.add('POST', `${base}/admin/banners`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    try { json(ctx.res, 200, await saveBanner((ctx.body ?? {}) as any)); }
+    catch (e) { if (e instanceof BannerError) return error(ctx.res, 400, e.code, e.message); throw e; }
+  });
+  router.add('DELETE', `${base}/admin/banners/:id`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    json(ctx.res, 200, { removed: await removeBanner(ctx.params.id!) });
+  });
+
   router.add('GET', `${base}/economy/ticket-promos`, async (ctx) => {
     json(ctx.res, 200, await getPromos());
   });
