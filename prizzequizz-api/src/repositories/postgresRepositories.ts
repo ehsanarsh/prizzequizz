@@ -25,6 +25,32 @@ function matchFromRow(r: any, players: any[] = []): Match {
   return { id: r.id, modeId: r.mode_id, economyType: r.economy_type, phase: r.status, round: r.current_round, winnerUserId: r.winner_user_id ?? undefined, configVersion: r.config_version, players: players.map((p) => ({ userId: p.user_id, username: p.username ?? 'Player', avatar: p.avatar ?? '👤', score: p.score, correctAnswers: p.correct_answers, wrongAnswers: p.wrong_answers, eliminated: p.eliminated })), createdAt: r.created_at?.toISOString?.() ?? r.created_at, updatedAt: r.updated_at?.toISOString?.() ?? r.updated_at };
 }
 
+
+/* COLUMNS ADDED AFTER THE FIRST DEPLOY.
+ *
+ * Migrations are applied by `npm run migrate`, which reads .sql files from the
+ * working directory — and the deployed bundle is compiled JavaScript with no
+ * database/migrations folder in it. So a release that starts writing a NEW
+ * column will fail EVERY user save on a server whose migration was not run by
+ * hand: XP awards, coin spends, profile edits, all of it.
+ *
+ * The column adds itself, the same way every new table in this codebase does.
+ * If it cannot (no rights), saves fall back to the statement without it rather
+ * than failing — a missing gender is a blank field; a failing save is the game.
+ */
+let _genderColumn: 'unknown' | 'yes' | 'no' = 'unknown';
+async function ensureGenderColumn(): Promise<boolean> {
+  if (_genderColumn !== 'unknown') return _genderColumn === 'yes';
+  try {
+    await pool().query('ALTER TABLE users ADD COLUMN IF NOT EXISTS gender VARCHAR(12)');
+    _genderColumn = 'yes';
+  } catch (e) {
+    _genderColumn = 'no';
+    logger.warn('users_gender_column_unavailable', { message: e instanceof Error ? e.message : 'unknown' });
+  }
+  return _genderColumn === 'yes';
+}
+
 export const postgresRepositories: RepositoryBundle = {
   beta: {
     async saveInvite(i: BetaInvite): Promise<void> { await pool().query(`insert into beta_invites(code,max_uses,used_count,status,note,created_by,created_at,expires_at) values($1,$2,$3,$4,$5,$6,$7,$8) on conflict(code) do update set max_uses=$2, used_count=$3, status=$4, note=$5, expires_at=$8`, [i.code.toUpperCase(),i.maxUses,i.usedCount,i.status,i.note??null,i.createdBy === 'system' ? null : i.createdBy,i.createdAt,i.expiresAt??null]); },
@@ -63,10 +89,18 @@ export const postgresRepositories: RepositoryBundle = {
     async findByPhone(phone: string): Promise<User | null> { const { rows } = await pool().query('select * from users where phone=$1', [phone]); return rows[0] ? userFromRow(rows[0]) : null; },
     async list(limit = 1000): Promise<User[]> { const { rows } = await pool().query('select * from users order by updated_at desc limit $1', [limit]); return rows.map(userFromRow); },
     async save(user: User): Promise<void> {
-      await pool().query(`insert into users(id,phone,username,display_name,plan,coins,hearts,wallet_balance,xp,level,weekly_score,role,status,ban_reason,banned_at,gender,updated_at)
-        values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,now())
-        on conflict(id) do update set phone=$2, username=$3, display_name=$4, plan=$5, coins=$6, hearts=$7, wallet_balance=$8, xp=$9, level=$10, weekly_score=$11, role=$12, status=$13, ban_reason=$14, banned_at=$15, gender=$16, updated_at=now()`,
-        [user.id,user.phone,user.username,user.displayName,user.plan,user.coins,user.hearts,user.wallet,user.xp,user.level,user.weeklyScore,user.role ?? 'user',user.status ?? 'active',user.banReason ?? null,user.bannedAt ?? null,user.gender ?? null]);
+      const values = [user.id,user.phone,user.username,user.displayName,user.plan,user.coins,user.hearts,user.wallet,user.xp,user.level,user.weeklyScore,user.role ?? 'user',user.status ?? 'active',user.banReason ?? null,user.bannedAt ?? null];
+      if (await ensureGenderColumn()) {
+        await pool().query(`insert into users(id,phone,username,display_name,plan,coins,hearts,wallet_balance,xp,level,weekly_score,role,status,ban_reason,banned_at,gender,updated_at)
+          values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,now())
+          on conflict(id) do update set phone=$2, username=$3, display_name=$4, plan=$5, coins=$6, hearts=$7, wallet_balance=$8, xp=$9, level=$10, weekly_score=$11, role=$12, status=$13, ban_reason=$14, banned_at=$15, gender=$16, updated_at=now()`,
+          [...values, user.gender ?? null]);
+        return;
+      }
+      await pool().query(`insert into users(id,phone,username,display_name,plan,coins,hearts,wallet_balance,xp,level,weekly_score,role,status,ban_reason,banned_at,updated_at)
+        values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,now())
+        on conflict(id) do update set phone=$2, username=$3, display_name=$4, plan=$5, coins=$6, hearts=$7, wallet_balance=$8, xp=$9, level=$10, weekly_score=$11, role=$12, status=$13, ban_reason=$14, banned_at=$15, updated_at=now()`,
+        values);
     },
     async updateLifelines(userId: string, lifelines: Record<string, number>): Promise<void> {
       await pool().query('update users set lifelines=$1, updated_at=now() where id=$2', [JSON.stringify(lifelines), userId]);
