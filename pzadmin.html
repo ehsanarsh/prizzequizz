@@ -105,7 +105,12 @@ textarea.json{min-height:300px;font-family:ui-monospace,monospace;font-size:12px
   <aside>
     <div class="brand">⚡ Prizze Admin<small id="cfgVer"></small></div>
     <nav class="nav" id="nav"></nav>
+    <div id="pzbStatus"></div>
     <button class="btn" style="width:100%;margin-top:14px;color:var(--bad)" onclick="logout()">خروج</button>
+    <!-- Which panel file is actually loaded. "The panel did not update" has
+         been the report several times, and a cached HTML looks identical to a
+         broken feature; this is how to tell them apart in one glance. -->
+    <div id="pzBuild" style="text-align:center;font-size:9.5px;color:var(--muted);margin-top:8px;letter-spacing:.3px"></div>
   </aside>
   <main id="main"></main>
 </section>
@@ -225,7 +230,7 @@ function navLeaves(){
    screen is what clears it. The server decides which is which. */
 let PZB={screens:{},total:0};      // what the server says is waiting
 const PZB_SINCE={};                // screen → when THIS admin last looked (for row tags)
-let PZB_TIMER=null;
+let PZB_TIMER=null, PZB_ERR='';    // why the counts are missing, if they are
 
 function badgeFor(key){
   /* A merged row carries the sum of the screens behind it — otherwise a
@@ -239,11 +244,28 @@ function badgeHTML(key){
   const n=badgeFor(key);
   return n>0?'<span class="pzb">'+fa(n>99?'99+':n)+'</span>':'';
 }
+/* Which build this file is. Shown in the sidebar because "the panel did not
+   update" has been the report more than once, and a cached HTML file looks
+   exactly like a feature that does not work. */
+const PANEL_BUILD='2026-08-12 · badges';
 async function badgeLoad(){
   try{
     const d=await api('GET','/admin/badges');
-    if(d&&d.screens){ PZB=d; buildNav(); paintGroupBar(); }
-  }catch(e){ /* a badge is decoration — never let it break the panel */ }
+    if(d&&d.screens){ PZB=d; PZB_ERR=''; buildNav(); paintGroupBar(); }
+  }catch(e){
+    /* A badge is decoration and must never break the panel — but failing in
+       COMPLETE silence is why "the badges do not work" was impossible to tell
+       apart from "the backend is still the old one". So it says which. */
+    PZB_ERR=(e&&e.message)?e.message:'در دسترس نیست';
+  }
+  badgeStatus();
+}
+function badgeStatus(){
+  const el=$('#pzbStatus'); if(!el)return;
+  el.innerHTML=PZB_ERR
+    ? '<div class="note" style="margin:10px 0 0;font-size:10.5px;line-height:1.7">⚠️ شمارندهٔ «جدید» کار نمی‌کند<br><span class="mono" style="color:var(--muted)">'+esc(PZB_ERR)+'</span><br><span style="color:var(--muted)">اگر خطای 404 است یعنی بک‌اندِ سرور هنوز نسخهٔ قدیمی است؛ باید <span class="mono">restart api</span> شود.</span></div>'
+    : '';
+  const b=$('#pzBuild'); if(b)b.textContent='پنل: '+PANEL_BUILD;
 }
 /* Tell the server this admin has now looked, and keep the PREVIOUS mark: rows
    newer than it are what they have not seen, and get a «جدید» tag. */
@@ -1504,6 +1526,13 @@ async function bnDel(id){
    is the whole interaction, so the input keeps focus and never loses what was
    typed — a form that clears itself between numbers is a form nobody can use
    for a hundred of them. */
+/* What share of a list became players. An empty group divides by zero, so it
+   answers 0 — fa() would print NaN as ۰ anyway, but the number itself goes to
+   whatever uses it next. */
+function sgPct(g){
+  const n=Number(g&&g.count)||0, r=Number(g&&g.registered)||0;
+  return n?Math.round((r/n)*100):0;
+}
 async function renderSmsGroups(){
   let groups=[];
   try{ groups=await api('GET','/admin/sms/groups'); }
@@ -1522,10 +1551,13 @@ async function renderSmsGroups(){
       '<button class="btn" onclick="sgNew()">ساختن گروه</button>'+
     '</div></div>'+
     '<div class="card"><b>گروه‌ها</b><div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">'+
-      (groups.length?groups.map(x=>'<button class="btn sm'+(x.id===sel?'':' ghost')+'" onclick="sgPick(\''+x.id+'\')">'+esc(x.name)+' ('+fa(x.count)+')</button>').join(''):'<span class="sub">هنوز گروهی نساخته‌ای.</span>')+
+      (groups.length?groups.map(x=>'<button class="btn sm'+(x.id===sel?'':' ghost')+'" onclick="sgPick(\''+x.id+'\')">'+esc(x.name)+' ('+fa(x.count)+') <span style="opacity:.75">· '+fa(sgPct(x))+'٪ ثبت‌نام</span></button>').join(''):'<span class="sub">هنوز گروهی نساخته‌ای.</span>')+
     '</div></div>'+
     (!g?'':
-      '<div class="card"><div style="display:flex;align-items:center;gap:8px"><b>'+esc(g.name)+'</b><span class="pill">'+fa(g.count)+' شماره</span>'+
+      '<div class="card"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b>'+esc(g.name)+'</b><span class="pill">'+fa(g.count)+' شماره</span>'+
+        /* The reason a list of leads is worth keeping: how much of it turned
+           into players. */
+        '<span class="pill '+(sgPct(g)>0?'ok':'')+'">'+fa(g.registered||0)+' ثبت‌نام‌کرده · '+fa(sgPct(g))+'٪</span>'+
         '<span style="flex:1"></span><button class="btn sm" onclick="sgRename(\''+g.id+'\')">تغییر نام</button><button class="btn sm danger" onclick="sgDel(\''+g.id+'\')">حذف گروه</button></div>'+
         '<div class="sub" style="margin:8px 0">شماره را بنویس و <b>Enter</b> بزن. شماره بعدی را بنویس و باز Enter. تکراری‌ها خودشان حذف می‌شوند و ۰۹۱۲…، +۹۸۹۱۲… و ارقام فارسی همه یک شماره حساب می‌شوند.</div>'+
         '<div style="display:flex;gap:6px;flex-wrap:wrap">'+
@@ -1536,7 +1568,11 @@ async function renderSmsGroups(){
         '<div style="margin-top:10px"><textarea class="in" id="sgBulk" placeholder="یا یک‌جا بچسبان — هر خط یک شماره" style="width:100%;height:70px"></textarea>'+
         '<button class="btn sm" onclick="sgBulkAdd()">افزودن گروهی</button></div>'+
         '<div style="margin-top:10px;max-height:230px;overflow:auto">'+
-          (nums.length?nums.map(n=>'<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-top:1px solid var(--line)"><span class="mono" dir="ltr">'+esc(n.phone)+'</span><span style="flex:1"></span><button class="btn sm danger" onclick="sgRm(\''+g.id+'\',\''+n.phone+'\')">حذف</button></div>').join(''):'<span class="sub">هنوز شماره‌ای در این گروه نیست.</span>')+
+          (nums.length?nums.map(n=>'<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-top:1px solid var(--line)"><span class="mono" dir="ltr">'+esc(n.phone)+'</span>'+
+            (n.registered
+              ? '<span class="pill ok">ثبت‌نام کرده'+(n.username?' · '+esc(n.username):'')+'</span>'+(n.registeredAt?'<span class="sub">'+fmtDate(n.registeredAt)+'</span>':'')
+              : '<span class="pill">هنوز ثبت‌نام نکرده</span>')+
+            '<span style="flex:1"></span><button class="btn sm danger" onclick="sgRm(\''+g.id+'\',\''+n.phone+'\')">حذف</button></div>').join(''):'<span class="sub">هنوز شماره‌ای در این گروه نیست.</span>')+
         '</div>'+
       '</div>'+
       '<div class="card"><b>ارسال به این گروه</b>'+

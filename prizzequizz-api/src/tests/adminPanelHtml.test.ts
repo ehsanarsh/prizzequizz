@@ -286,6 +286,18 @@ function run(): void {
     assert.match(script, /if\(TAB_GROUPS\[key\]\)\s*return groupMembers\(key\)\.reduce/, 'a group row must sum its screens');
   });
 
+  check('a missing badges endpoint is reported, not swallowed', () => {
+    /* The panel was updated and the API was not; /admin/badges 404'd, the
+       failure was caught in complete silence, and "the badges do not work"
+       was indistinguishable from "the backend is still the old one". */
+    const i = script.indexOf('async function badgeLoad(');
+    assert.ok(i > 0, 'badgeLoad exists');
+    const body = script.slice(i, i + 800);
+    assert.match(body, /catch\s*\([\s\S]{0,500}PZB_ERR\s*=/, 'the failure must be recorded, not dropped');
+    assert.ok(script.includes('function badgeStatus('), 'and shown somewhere');
+    assert.ok(script.includes('const PANEL_BUILD='), 'the sidebar states which panel file is loaded');
+  });
+
   check('the screen is marked seen BEFORE it draws', () => {
     /* Marking afterwards moves the mark past the very rows that were about to
        be tagged, and «جدید» would never appear on anything. */

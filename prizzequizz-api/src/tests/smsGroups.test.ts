@@ -18,6 +18,7 @@ import {
   GroupError, _resetGroups
 } from '../services/smsGroupService.js';
 import { updateSmsConfig, addBlacklist, removeBlacklist, listLog } from '../services/smsService.js';
+import { repositories } from '../repositories/index.js';
 
 let passed = 0, failed = 0;
 async function check(name: string, fn: () => Promise<void>): Promise<void> {
@@ -174,6 +175,47 @@ async function run(): Promise<void> {
     await assert.rejects(() => sendToGroup({ groupId: g.id, text: 'سلام' }), (e: unknown) => e instanceof GroupError && e.code === 'GROUP_EMPTY');
     await addNumber(g.id, '09121112233');
     await assert.rejects(() => sendToGroup({ groupId: g.id, text: '   ' }), (e: unknown) => e instanceof GroupError && e.code === 'TEXT_REQUIRED');
+  });
+
+  /* ── did the list turn into players? ─────────────────────────────── */
+
+  await check('a number that has since registered is shown as registered', async () => {
+    /* The whole reason to keep a list of leads. The join is on the canonical
+       phone, so it works for somebody who signed up long before the list was
+       imported — nothing has to be recorded at signup time. */
+    _resetGroups();
+    const g = await createGroup('لیست');
+    await repositories.users.save({
+      id: 'u-lead-1', phone: '09121112233', username: 'lead1', displayName: 'سرنخ', plan: 'free',
+      level: 1, xp: 0, weeklyScore: 0, wallet: 0, coins: 0, hearts: 5, tickets: { bronze: 0, silver: 0, gold: 0 }
+    } as any);
+    await addNumbers(g.id, '09121112233 09351112233');
+    const rows = await listNumbers(g.id);
+    const joined = rows.find((r) => r.phone === '09121112233')!;
+    const notYet = rows.find((r) => r.phone === '09351112233')!;
+    assert.equal(joined.registered, true, 'the one who signed up must show as registered');
+    assert.equal(joined.username, 'lead1', 'and who they became');
+    assert.equal(notYet.registered, false, 'the one who has not is left alone');
+    assert.equal(notYet.username, undefined);
+  });
+
+  await check('the group says how many of it registered', async () => {
+    _resetGroups();
+    const g = await createGroup('لیست');
+    await addNumbers(g.id, '09121112233 09351112233 09901112233');
+    const row = (await listGroups()).find((x) => x.id === g.id)!;
+    assert.equal(row.count, 3);
+    assert.equal(row.registered, 1, 'one of the three is a player');
+  });
+
+  await check('a spelling of the number does not hide the registration', async () => {
+    /* Added as +98…, registered as 09… — the same person. Without one
+       canonical form this reports "nobody from this list ever signed up". */
+    _resetGroups();
+    const g = await createGroup('لیست');
+    await addNumber(g.id, '+989121112233');
+    const rows = await listNumbers(g.id);
+    assert.equal(rows[0]!.registered, true, 'still matched');
   });
 
   await check('every message lands in the panel’s log', async () => {

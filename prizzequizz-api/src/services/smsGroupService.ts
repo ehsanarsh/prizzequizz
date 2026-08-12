@@ -24,13 +24,36 @@ import { getPgPool } from '../database/postgres.js';
 import { id } from '../utils/id.js';
 import { logger } from './logger.js';
 import { sendSms, listBlacklist } from './smsService.js';
+import { repositories } from '../repositories/index.js';
 
 export interface SmsGroup {
   id: string;
   name: string;
   note?: string;
   count: number;
+  /** How many of them have since signed up. The point of keeping a lead list. */
+  registered: number;
   createdAt: string;
+}
+
+/* A number in a group, and whether it turned into a player.
+ *
+ * The join is free: a phone is stored in ONE canonical form here
+ * (09xxxxxxxxx) and registration stores exactly the same form, so a number
+ * that signed up matches its user row directly. Nothing has to be recorded at
+ * signup time — a list imported today can be checked against players who
+ * registered last year. */
+export interface GroupNumber {
+  phone: string;
+  label?: string;
+  createdAt: string;
+  /** Has this number become a player? This is the fact being asked for. */
+  registered: boolean;
+  /** When, when the store keeps that (Postgres does; the memory driver's User
+   *  carries no signup date, and a missing date must not read as "never
+   *  registered"). */
+  registeredAt: string | null;
+  username?: string;
 }
 
 export class GroupError extends Error {
@@ -85,14 +108,23 @@ export async function listGroups(): Promise<SmsGroup[]> {
   if (pool) {
     await ensureSchema(pool);
     const { rows } = await pool.query(
-      `SELECT g.id, g.name, g.note, g.created_at, count(n.phone)::int AS c
-       FROM sms_groups g LEFT JOIN sms_group_numbers n ON n.group_id = g.id
+      `SELECT g.id, g.name, g.note, g.created_at,
+              count(n.phone)::int AS c,
+              count(u.id)::int   AS reg
+       FROM sms_groups g
+       LEFT JOIN sms_group_numbers n ON n.group_id = g.id
+       LEFT JOIN users u ON u.phone = n.phone
        GROUP BY g.id ORDER BY g.created_at DESC`);
-    return rows.map((r: any) => ({ id: r.id, name: r.name, note: r.note ?? undefined, count: Number(r.c) || 0, createdAt: r.created_at?.toISOString?.() ?? String(r.created_at) }));
+    return rows.map((r: any) => ({ id: r.id, name: r.name, note: r.note ?? undefined, count: Number(r.c) || 0, registered: Number(r.reg) || 0, createdAt: r.created_at?.toISOString?.() ?? String(r.created_at) }));
   }
-  return memGroups
-    .map((g) => ({ ...g, count: memNumbers.filter((n) => n.groupId === g.id).length }))
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const out: SmsGroup[] = [];
+  for (const g of memGroups) {
+    const nums = memNumbers.filter((n) => n.groupId === g.id);
+    let registered = 0;
+    for (const n of nums) if (await repositories.users.findByPhone(n.phone).catch(() => null)) registered++;
+    out.push({ ...g, count: nums.length, registered });
+  }
+  return out.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
 export async function createGroup(name: string, note?: string): Promise<SmsGroup> {
@@ -106,7 +138,7 @@ export async function createGroup(name: string, note?: string): Promise<SmsGroup
   } else {
     memGroups.push(row);
   }
-  return { ...row, count: 0 };
+  return { ...row, count: 0, registered: 0 };
 }
 
 export async function renameGroup(groupId: string, name: string, note?: string): Promise<boolean> {
@@ -195,14 +227,32 @@ export async function removeNumber(groupId: string, raw: string): Promise<boolea
   return true;
 }
 
-export async function listNumbers(groupId: string, limit = 500): Promise<Array<{ phone: string; label?: string; createdAt: string }>> {
+export async function listNumbers(groupId: string, limit = 500): Promise<GroupNumber[]> {
   const pool = pg();
+  const iso = (v: any): string | null => (v == null ? null : (v.toISOString?.() ?? String(v)));
   if (pool) {
     await ensureSchema(pool);
-    const { rows } = await pool.query('SELECT phone,label,created_at FROM sms_group_numbers WHERE group_id=$1 ORDER BY created_at DESC LIMIT $2', [groupId, Math.min(5000, limit)]);
-    return rows.map((r: any) => ({ phone: r.phone, label: r.label ?? undefined, createdAt: r.created_at?.toISOString?.() ?? String(r.created_at) }));
+    const { rows } = await pool.query(
+      `SELECT n.phone, n.label, n.created_at, u.created_at AS reg_at, u.username
+       FROM sms_group_numbers n
+       LEFT JOIN users u ON u.phone = n.phone
+       WHERE n.group_id=$1 ORDER BY n.created_at DESC LIMIT $2`,
+      [groupId, Math.min(5000, limit)]);
+    return rows.map((r: any) => ({
+      phone: r.phone, label: r.label ?? undefined,
+      createdAt: iso(r.created_at) ?? '',
+      registered: r.username != null || r.reg_at != null,
+      registeredAt: iso(r.reg_at),
+      username: r.username ?? undefined
+    }));
   }
-  return memNumbers.filter((n) => n.groupId === groupId).slice(-limit).reverse();
+  const nums = memNumbers.filter((n) => n.groupId === groupId).slice(-limit).reverse();
+  const out: GroupNumber[] = [];
+  for (const n of nums) {
+    const u = await repositories.users.findByPhone(n.phone).catch(() => null);
+    out.push({ ...n, registered: !!u, registeredAt: (u as any)?.createdAt ?? null, username: u?.username });
+  }
+  return out;
 }
 
 /* ---------------------------------------------------------------------------
