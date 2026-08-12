@@ -124,6 +124,51 @@ console.log('touching the card:');
   ok('and the card is a card, not a 44px button', after.w > 150 && after.h > 200, after.w + '×' + after.h);
 }
 
+console.log('the deck reads as a deck:');
+{
+  /* The complaint: nothing said there was another card. A slice of BOTH
+     neighbours has to be on screen, or the swipe is a secret. */
+  const r = await page.evaluate(() => {
+    const vw = document.querySelector('.phone').getBoundingClientRect();
+    const seen = (sel) => {
+      const e = document.querySelector(sel); if (!e) return 0;
+      const b = e.getBoundingClientRect();
+      return Math.round(Math.max(0, Math.min(b.right, vw.right) - Math.max(b.left, vw.left)));
+    };
+    const cur = document.querySelector('#mcard').getBoundingClientRect();
+    return { prev: seen('.mcard.prev'), next: seen('.mcard.next'), cur: Math.round(cur.width),
+             names: [...document.querySelectorAll('.mcard.side h2')].map((e) => e.textContent) };
+  });
+  ok('a slice of the previous card is visible', r.prev > 8, r.prev + 'px');
+  ok('a slice of the next card is visible', r.next > 8, r.next + 'px');
+  ok('and the one you are on is much bigger than either', r.cur > r.prev * 3 && r.cur > r.next * 3, 'cur ' + r.cur + ' vs ' + r.prev + '/' + r.next);
+  ok('the slices are the modes either side, not copies', r.names.length === 2 && r.names[0] !== r.names[1], r.names.join(' / '));
+
+  const arrows = await page.evaluate(() => [...document.querySelectorAll('.mk-arrow')].map((e) => {
+    const b = e.getBoundingClientRect(), c = document.querySelector('#mcard').getBoundingClientRect();
+    return { onEdge: Math.abs(b.left - c.left) < 40 || Math.abs(b.right - c.right) < 40, midHeight: Math.abs((b.top + b.bottom) / 2 - (c.top + c.bottom) / 2) < 60 };
+  }));
+  ok('both arrows sit on the card edges at its middle', arrows.length === 2 && arrows.every((a) => a.onEdge && a.midHeight), JSON.stringify(arrows));
+}
+
+console.log('the mode pictures:');
+{
+  /* They were cropped to a band across the middle by object-fit:cover, so none
+     of the four could be made out. The artwork itself is not in this repo —
+     it is uploaded — so the rule is what gets checked, plus the fallback a
+     player sees when a mode has no picture yet. */
+  const r = await page.evaluate(() => {
+    const rules = [...document.styleSheets].flatMap((sh) => { try { return [...sh.cssRules]; } catch (e) { return []; } });
+    const art = rules.filter((x) => x.selectorText && /\.mk-art img/.test(x.selectorText)).map((x) => x.style.objectFit).filter(Boolean);
+    const el = document.querySelector('#mcard .mk-art');
+    const emj = el && el.querySelector('.emj');
+    return { fit: art[art.length - 1], fallback: !!emj, emjSize: emj ? parseFloat(getComputedStyle(emj).fontSize) : 0,
+             usesLoader: !!document.querySelector('.mk-art img[data-pzsrc]') || !!emj };
+  });
+  ok('the picture is shown whole, not cropped', r.fit === 'contain', JSON.stringify(r));
+  ok('a mode with no artwork yet still shows something big', !r.fallback || r.emjSize >= 40, 'fallback ' + r.fallback + ', ' + r.emjSize + 'px');
+}
+
 console.log('the swipe:');
 {
   await swipe(160);
@@ -145,7 +190,7 @@ console.log('the rest:');
   await page.evaluate(() => { try { (0, eval)('hmSet')(0); } catch (e) {} });
   await page.waitForTimeout(200);
   const arrow = await page.evaluate(async () => {
-    document.querySelector('#mcard .mk-arrow.next').click();
+    document.querySelector('.mk-arrow.next').click();
     await new Promise((r) => setTimeout(r, 250));
     return document.querySelector('#mcard h2').textContent;
   });

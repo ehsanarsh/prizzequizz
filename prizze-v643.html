@@ -66,7 +66,16 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
    only change is that the cup rail now lives INSIDE it, on the same card,
    with its own light-on-dark styling untouched.
    ============================================================ */
-#home .pz-header{flex:0 0 auto}
+#home .pz-header{flex:0 0 auto;gap:5px;padding-top:6px;padding-bottom:4px}
+/* Shorter header, so the deck in the middle gets the room. Nothing is dropped
+   — the rows are just tighter. */
+#home .pzh-av{width:38px;height:38px;border-radius:12px}
+#home .pzh-av .mascot{width:32px!important;height:32px!important}
+#home .pzh-nameline b{font-size:12.5px}
+#home .pzh-xpbar{height:15px;margin-top:3px}
+#home .pzh-xptxt{font-size:10px}
+#home .pzh-pill{padding:3px 8px;font-size:11.5px}
+
 #home .pzh-wallets{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
 #home .pzh-wallets::-webkit-scrollbar{height:0}
 /* Flush inside the header — the rail is part of that card, not a card on a
@@ -91,27 +100,38 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
    was one shade and nothing stood out. Light cards on the forest,
    with the brand yellow kept for anything that wants a tap.
    ============================================================ */
-.hstage{display:grid;grid-template-columns:56px 1fr 56px;gap:4px;padding:2px 8px 0;align-items:stretch;flex:1 1 auto;min-height:0}
-.hrail{display:flex;flex-direction:column;gap:clamp(4px,1.3vh,11px);padding-top:2px;min-height:0}
-.hside{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;cursor:pointer;
-  -webkit-tap-highlight-color:transparent;flex:1 1 0;min-height:0}
-.hside .art{flex:0 1 auto;aspect-ratio:1;width:auto;height:100%;max-height:50px;max-width:50px;min-height:26px;
-  border-radius:15px;display:grid;place-items:center;font-size:clamp(15px,3.1vh,25px);position:relative;
-  background:linear-gradient(180deg,rgba(46,54,42,.62),rgba(22,28,21,.70));border:2.5px solid #000;box-shadow:0 4px 0 #000;
-  backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);overflow:visible}
+.hstage{display:grid;grid-template-columns:52px 1fr 52px;gap:2px;padding:2px 4px 0;align-items:stretch;flex:1 1 auto;min-height:0;
+  /* The neighbouring cards stick out past the middle column and tuck behind
+     the rails, which is what makes the deck read as a deck. */
+  overflow:visible}
+.hrail{display:flex;flex-direction:column;justify-content:flex-start;gap:clamp(3px,0.9vh,8px);padding-top:2px;
+  min-height:0;position:relative;z-index:5}
+.hside{display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:2px;cursor:pointer;
+  -webkit-tap-highlight-color:transparent;flex:0 1 auto;min-height:0}
+.hside .art{flex:0 0 auto;aspect-ratio:1;width:clamp(30px,6.2vh,52px);height:clamp(30px,6.2vh,52px);
+  border-radius:16px;display:grid;place-items:center;font-size:clamp(20px,4.1vh,34px);position:relative;
+  /* Barely-there frame: the icon is the thing, not the box around it. */
+  background:rgba(14,18,13,.42);border:2px solid rgba(255,255,255,.16);
+  backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px);overflow:visible;
+  text-shadow:0 2px 4px rgba(0,0,0,.6)}
 .hside .art img{width:100%;height:100%;object-fit:cover;border-radius:12px}
 .hside:active .art{transform:translateY(2px);box-shadow:0 2px 0 #000}
-.hside .lbl{font-size:clamp(7px,1.15vh,8.5px);font-weight:900;text-align:center;line-height:1.2;color:#1A241C;
+.hside .lbl{font-size:clamp(7.5px,1.25vh,9.5px);font-weight:900;text-align:center;line-height:1.2;color:#1A241C;
   background:#EDEADC;border:2px solid #000;border-radius:7px;padding:1px 4px;box-shadow:0 2px 0 #000;max-width:58px}
 .hside .tag{position:absolute;bottom:-6px;left:50%;transform:translateX(-50%);background:var(--bolt);color:#141414;
   border:2px solid #000;border-radius:999px;font-size:8px;font-weight:900;padding:0 5px;white-space:nowrap;z-index:2}
 .hside .live{position:absolute;top:-3px;right:-3px;width:12px;height:12px;border-radius:50%;background:var(--ok);
   border:2px solid #000;box-shadow:0 0 8px rgba(51,217,124,.9)}
 
-.hcenter{position:relative;display:flex;flex-direction:column;align-items:center;min-width:0;min-height:0}
+.hcenter{position:relative;display:flex;flex-direction:column;align-items:center;min-width:0;min-height:0;overflow:visible}
+/* A real track: three cards side by side, the middle one centred and the other
+   two hanging off both edges so a slice of each shows. Absolute positioning was
+   tried first and could not hold a height — this lays out on its own. */
+.mtrack{flex:1 1 auto;width:100%;min-height:0;display:flex;justify-content:center;align-items:stretch;
+  gap:6px;overflow:visible;will-change:transform}
 /* The swipe surface. touch-action tells the browser we handle the
    horizontal drag, so it never steals it for a scroll mid-gesture. */
-.mcard{width:100%;flex:1 1 auto;min-height:0;display:flex;flex-direction:column;
+.mcard{flex:0 0 78%;min-width:0;display:flex;flex-direction:column;
   background:linear-gradient(180deg,rgba(38,44,36,.62),rgba(20,25,19,.68));color:var(--text);
   border:2.5px solid #000;border-radius:22px;box-shadow:0 6px 0 #000,0 18px 30px -12px rgba(0,0,0,.55);
   backdrop-filter:blur(7px) saturate(1.1);-webkit-backdrop-filter:blur(7px) saturate(1.1);
@@ -120,10 +140,31 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
    putting it on the card turned the whole card into one on the first touch.
    In a single-file app a two-letter class name is a collision waiting to
    happen; anything added at runtime here is namespaced. */
-.mcard.mc-snap{transition:transform .22s cubic-bezier(.2,.9,.3,1),opacity .22s ease}
+/* The card you are on, and the two slivers. The neighbours are pushed out to
+   the sides and scaled back, so a piece of each is always visible past the
+   middle column: the deck says "there is more this way" without a caption. */
+.mcard.cur{z-index:4}
+/* The slivers: dimmed and set back, and they carry only the picture and the
+   name — enough to say which game is next, not enough to compete. */
+.mcard.side{z-index:1;opacity:.62;cursor:pointer;transform:scale(.9);transform-origin:50% 50%;padding-bottom:8px}
+.mcard.side{justify-content:center}
+.mcard.side .mk-art{flex:0 1 auto}
+.mcard.side h2{font-size:12px;margin-top:4px;opacity:.9}
+.mtrack.mc-snap{transition:transform .22s cubic-bezier(.2,.9,.3,1)}
+
+/* The arrows straddle the edge between the card and the sliver they lead to,
+   at the card's middle — the one place where "this way" is unambiguous. */
+.mk-arrow{position:absolute;top:50%;transform:translateY(-50%);z-index:6;width:34px;height:52px;
+  border-radius:16px;display:grid;place-items:center;background:linear-gradient(180deg,#FFD84D,#F0A400);
+  border:2.5px solid #000;box-shadow:0 4px 0 #000;font-size:22px;color:#12203a;font-weight:900;cursor:pointer;padding:0}
+.mk-arrow.next{left:-2px}
+.mk-arrow.prev{right:-2px}
+.mk-arrow:active{transform:translateY(-50%) translateY(3px);box-shadow:0 1px 0 #000}
 .mk-art{width:100%;height:min(24vh,170px);border-radius:16px;overflow:hidden;border:2.5px solid #000;position:relative;
   display:grid;place-items:center;background:radial-gradient(70% 70% at 50% 40%,#FFF1B8,#F6D25A)}
-.mk-art img{width:100%;height:100%;object-fit:cover}
+/* contain, not cover: cover cropped every mode picture down to a
+   band across the middle, which is why none of them could be made out. */
+.mk-art img{width:100%;height:100%;object-fit:contain;padding:4px}
 .mk-art .emj{font-size:64px;filter:drop-shadow(0 6px 0 rgba(0,0,0,.18))}
 .mk-badge{position:absolute;top:6px;right:6px;background:rgba(13,13,16,.85);color:#fff;border:2px solid #000;
   border-radius:999px;font-size:9.5px;font-weight:900;padding:2px 8px;z-index:2}
@@ -146,12 +187,7 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
   background:linear-gradient(180deg,#4BE38B,#22A85C);color:#06301a;font-size:17px;font-weight:900;box-shadow:0 5px 0 #000}
 .mk-start:active{transform:translateY(3px);box-shadow:0 2px 0 #000}
 .mk-start.soon{background:linear-gradient(180deg,#d7d2c4,#a8a293);color:#2a2a2a}
-.mk-arrow{position:absolute;top:22%;transform:translateY(-50%);z-index:6;width:38px;height:38px;
-  border-radius:50%;display:grid;place-items:center;background:linear-gradient(180deg,#FFD84D,#F0A400);
-  border:2.5px solid #000;box-shadow:0 3px 0 #000;font-size:20px;color:#12203a;font-weight:900;cursor:pointer}
-.mk-arrow.next{left:14px}
-.mk-arrow.prev{right:14px}
-.mk-arrow:active{transform:translateY(-50%) translateY(2px);box-shadow:0 1px 0 #000}
+
 .mdots{display:flex;gap:5px;justify-content:center;margin-top:7px}
 .mdots i{width:7px;height:7px;border-radius:50%;background:rgba(255,255,255,.4);border:1.5px solid #000;cursor:pointer}
 .mdots i.on{background:var(--bolt);width:18px;border-radius:999px}
@@ -4777,7 +4813,10 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
       <div class="hstage">
         <div class="hrail" id="hrailR"></div>
         <div class="hcenter">
-          <div class="mcard" id="mcard"><!-- filled by hmRender() --></div>
+          <!-- Three cards, not one: the one you are on plus a sliver of the
+               ones either side, so it is obvious the deck goes left and right
+               without having to discover it. -->
+          <div class="mtrack" id="mtrack"><!-- filled by hmRender() --></div>
           <div class="mdots" id="mdots"></div>
           <div class="mnext" id="mnext" onclick="hmGo(1)"></div>
         </div>
@@ -12393,16 +12432,16 @@ async function pzHydrateAll(){
    ============================================================ */
 const HOME_MODES=[
   {key:'duel',   title:'دوئل یک‌به‌یک',  sub:'رو در رو با یک حریف',      badge:'۲ نفره',
-   art:'mode-duel.png', emj:'⚔️', tint:'radial-gradient(70% 70% at 50% 40%,#FFF1B8,#F6D25A)',
+   art:'mode-duel', emj:'⚔️', tint:'radial-gradient(70% 70% at 50% 40%,#FFF1B8,#F6D25A)',
    facts:['⏱ سریع','❓ ۵ سؤال','🏆 کاپ می‌گیری'], go:()=>enterMode('survivor')},
   {key:'ls',     title:'آخرین بازمانده', sub:'حذفی · تا آخرین نفر بمان', badge:'گروهی',
-   art:'mode-ls.png',   emj:'🛡️', tint:'radial-gradient(70% 70% at 50% 40%,#DFF3D8,#7FC9A0)',
+   art:'mode-ls',   emj:'🛡️', tint:'radial-gradient(70% 70% at 50% 40%,#DFF3D8,#7FC9A0)',
    facts:['❌ خطا = حذف','💰 جایزهٔ نقدی','🎫 با بلیط'], go:()=>lsStart()},
   {key:'aon',    title:'همه یا هیچ',     sub:'تیمی · سرنوشت با رأی جمع', badge:'تیمی',
-   art:'mode-aon.png',  emj:'🤝', tint:'radial-gradient(70% 70% at 50% 40%,#FFE3D6,#F5A98A)',
+   art:'mode-aon',  emj:'🤝', tint:'radial-gradient(70% 70% at 50% 40%,#FFE3D6,#F5A98A)',
    soon:true, facts:['🗳️ رأی جمعی','💬 چت‌روم'], go:()=>enterMode('consensus')},
   {key:'league', title:'لیگ هفتگی',      sub:'طلایی · نقره‌ای · برنزی',  badge:'هفتگی',
-   art:'mode-league.png', emj:'🏆', tint:'radial-gradient(70% 70% at 50% 40%,#FFE9A8,#E8B14A)',
+   art:'mode-league', emj:'🏆', tint:'radial-gradient(70% 70% at 50% 40%,#FFE9A8,#E8B14A)',
    soon:true, facts:['📅 هر هفته','🥇 سه لیگ'], go:()=>openLeagues()}
 ];
 let hmIdx=0;
@@ -12441,27 +12480,54 @@ function hmRails(){
 }
 function hmRailTap(side,i){ try{ hmRailItems()[side][i].go(); sfx&&sfx('tap'); }catch(e){} }
 
+/* One card's worth of markup. The same builder makes the card you are on and
+   the slivers either side, so a neighbour can never drift out of step with
+   what it will look like once you get there. */
+function hmCardHTML(m,side){
+  const pz=hmPrizes(m);
+  return '<div class="mk-art" style="background:'+m.tint+'">'+
+      '<span class="mk-badge">'+m.badge+'</span>'+
+      '<img data-pzsrc="'+m.art+'" data-emj="'+m.emj+'" alt="">'+
+    '</div>'+
+    '<h2>'+m.title+'</h2>'+
+    (side?'':'<div class="msub">'+m.sub+'</div>'+
+      '<div class="mk-rib">جوایز</div>'+
+      '<div class="mk-prizes">'+pz.map(p=>'<div class="mk-prz"><span class="e">'+p[0]+'</span><b>'+p[1]+'</b></div>').join('')+'</div>'+
+      (m.entryHtml||hmEntry(m))+
+      '<div class="mk-facts">'+m.facts.map(f=>'<span>'+f+'</span>').join('')+'</div>'+
+      '<button class="mk-start'+(m.soon?' soon':'')+'" onclick="hmStart()">'+(m.soon?'بزودی 🚧':'شروع بازی')+'</button>');
+}
 function hmRender(){
   const m=HOME_MODES[hmIdx]; if(!m) return;
-  const el=document.getElementById('mcard'); if(!el) return;
-  const pz=hmPrizes(m);
-  el.innerHTML=
-    '<div class="mk-art" style="background:'+m.tint+'">'+
-      '<span class="mk-badge">'+m.badge+'</span>'+
-      '<img src="'+m.art+'" alt="" onerror="this.replaceWith(Object.assign(document.createElement(\'span\'),{className:\'emj\',textContent:\''+m.emj+'\'}))">'+
-    '</div>'+
-    '<div class="mk-arrow next" onclick="event.stopPropagation();hmGo(1)">‹</div>'+
-    '<div class="mk-arrow prev" onclick="event.stopPropagation();hmGo(-1)">›</div>'+
-    '<h2>'+m.title+'</h2><div class="msub">'+m.sub+'</div>'+
-    '<div class="mk-rib">جوایز</div>'+
-    '<div class="mk-prizes">'+pz.map(p=>'<div class="mk-prz"><span class="e">'+p[0]+'</span><b>'+p[1]+'</b></div>').join('')+'</div>'+
-    (m.entryHtml||hmEntry(m))+
-    '<div class="mk-facts">'+m.facts.map(f=>'<span>'+f+'</span>').join('')+'</div>'+
-    '<button class="mk-start'+(m.soon?' soon':'')+'" onclick="hmStart()">'+(m.soon?'بزودی 🚧':'شروع بازی')+'</button>';
+  const t=document.getElementById('mtrack'); if(!t) return;
+  const n=HOME_MODES.length, prev=(hmIdx-1+n)%n, next=(hmIdx+1)%n;
+  t.innerHTML=
+    '<div class="mcard side prev" onclick="hmGo(-1)">'+hmCardHTML(HOME_MODES[prev],true)+'</div>'+
+    '<div class="mcard cur" id="mcard">'+hmCardHTML(m,false)+'</div>'+
+    '<div class="mcard side next" onclick="hmGo(1)">'+hmCardHTML(HOME_MODES[next],true)+'</div>'+
+    /* The arrows sit on the outer edges at the card's middle, half over the
+       sliver they lead to — so which way they go is not a guess. */
+    '<button class="mk-arrow next" onclick="event.stopPropagation();hmGo(1)" aria-label="بعدی">‹</button>'+
+    '<button class="mk-arrow prev" onclick="event.stopPropagation();hmGo(-1)" aria-label="قبلی">›</button>';
   const d=document.getElementById('mdots');
   if(d) d.innerHTML=HOME_MODES.map((x,i)=>'<i class="'+(i===hmIdx?'on':'')+'" onclick="hmSet('+i+','+(i>hmIdx?1:-1)+')"></i>').join('');
   const nx=document.getElementById('mnext');
-  if(nx) nx.textContent='↔ بکش · بعدی: '+HOME_MODES[(hmIdx+1)%HOME_MODES.length].title+' ‹';
+  if(nx) nx.textContent='↔ بکش · بعدی: '+HOME_MODES[next].title+' ‹';
+  /* Artwork goes through the game's own loader: .webp first, then .png, then
+     .jpg, so a picture uploaded from the panel in any of those is picked up
+     without this file knowing which. Only when none of the three exist does
+     the mode fall back to its glyph. */
+  try{
+    t.querySelectorAll('img[data-pzsrc]').forEach(el=>{
+      pzTryArt(el, el.getAttribute('data-pzsrc'), ok=>{
+        if(ok) return;
+        const sp=document.createElement('span'); sp.className='emj';
+        sp.textContent=el.getAttribute('data-emj')||'🎮';
+        el.replaceWith(sp);
+      });
+    });
+  }catch(e){}
+  hmSwipeInit();
 }
 /* Prizes and entry cost come from the live economy config the rest of the game
    reads — never from numbers typed into this screen. When a mode has nothing
@@ -12498,30 +12564,28 @@ function hmStart(){ const m=HOME_MODES[hmIdx]; if(!m) return; if(m.soon){ toast(
 function hmSet(i,dir){
   const n=HOME_MODES.length, next=((i%n)+n)%n;
   if(next===hmIdx&&dir){ hmSnapBack(); return; }
-  const el=document.getElementById('mcard');
+  const el=document.getElementById('mtrack');
   if(!el||!dir){ hmIdx=next; hmRender(); return; }
-  const out=(dir>0?1:-1)*110, incoming=-out;
+  const out=(dir>0?1:-1)*100;
   el.classList.remove('mc-snap');
-  el.style.transition='transform .15s ease-in,opacity .15s ease-in';
+  el.style.transition='transform .16s ease-in';
   el.style.transform='translateX('+out+'%)';
-  el.style.opacity='0';
   setTimeout(()=>{
     hmIdx=next; hmRender();
     el.style.transition='none';
-    el.style.transform='translateX('+incoming+'%)';
+    el.style.transform='translateX('+(-out)+'%)';
     /* Two frames: one for the browser to take the jump without animating it,
        one to start the slide in. A single frame sometimes animates the jump. */
     requestAnimationFrame(()=>requestAnimationFrame(()=>{
-      el.style.transition='transform .24s cubic-bezier(.2,.9,.3,1),opacity .2s ease';
+      el.style.transition='transform .26s cubic-bezier(.2,.9,.3,1)';
       el.style.transform='translateX(0)';
-      el.style.opacity='1';
     }));
-  },150);
+  },160);
 }
-/* A drag that did not go far enough: put the card back where it was. */
+/* A drag that did not go far enough: put the deck back where it was. */
 function hmSnapBack(){
-  const el=document.getElementById('mcard'); if(!el) return;
-  el.classList.add('mc-snap'); el.style.transform=''; el.style.opacity='';
+  const el=document.getElementById('mtrack'); if(!el) return;
+  el.classList.add('mc-snap'); el.style.transform='';
 }
 function hmGo(d){ hmSet(hmIdx+d,d); }
 
@@ -12530,30 +12594,29 @@ function hmGo(d){ hmSet(hmIdx+d,d); }
    finger, and only a deliberate move (a quarter of the card, or a fast flick)
    changes mode; anything less snaps back. */
 function hmSwipeInit(){
-  const el=document.getElementById('mcard'); if(!el||el._sw) return; el._sw=1;
+  const el=document.getElementById('mtrack'); if(!el||el._sw) return; el._sw=1;
   let x0=0,y0=0,t0=0,dx=0,drag=false,axis='';
   const down=(e)=>{ const p=e.touches?e.touches[0]:e; x0=p.clientX; y0=p.clientY; t0=Date.now(); dx=0; drag=true; axis=''; el.classList.remove('mc-snap'); };
   const move=(e)=>{
     if(!drag) return;
     const p=e.touches?e.touches[0]:e;
     const mx=p.clientX-x0, my=p.clientY-y0;
-    /* Decide once which way this gesture is going, then stick to it — a card
+    /* Decide once which way this gesture is going, then stick to it — a deck
        that changes its mind mid-drag feels broken. */
     if(!axis) axis=(Math.abs(mx)>Math.abs(my)+4)?'x':(Math.abs(my)>Math.abs(mx)+4?'y':'');
     if(axis!=='x') return;
     dx=mx;
-    el.style.transform='translateX('+dx+'px) rotate('+(dx/40)+'deg)';
-    el.style.opacity=String(Math.max(.55,1-Math.abs(dx)/420));
+    /* The whole deck follows the finger, so the sliver either side comes with
+       it — that is what makes the next card feel like it is really there. */
+    el.style.transform='translateX('+dx+'px)';
     if(e.cancelable) e.preventDefault();
   };
   const up=()=>{
     if(!drag) return; drag=false;
     const w=el.offsetWidth||300, fast=(Date.now()-t0)<300&&Math.abs(dx)>40;
-    if(Math.abs(dx)>w*0.25||fast){
+    if(Math.abs(dx)>w*0.22||fast){
       /* RTL: dragging toward the right hand side moves forward through the
-         list, which is what «به سمت راست بری بره به بازمانده» asks for. The
-         card carries on out the way the finger was going, and the next one
-         comes in from the other edge. */
+         deck, which is what «به سمت راست بری بره به بازمانده» asks for. */
       hmGo(dx>0?1:-1);
       try{ sfx&&sfx('tap'); }catch(e){}
     } else {
