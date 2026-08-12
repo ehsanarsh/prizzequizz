@@ -53,6 +53,10 @@ async function balancesOf(userId: string): Promise<{ wallet: number; coins: numb
 
 export async function purchase(input: {
   userId: string; itemId: string; idempotencyKey: string; qty?: number;
+  /* The money has already been taken somewhere else — a gateway payment for
+   * THIS order. Grant the goods and charge nothing; the صندوق must not move,
+   * because the player did not pay from it. */
+  paidExternally?: boolean;
 }): Promise<PurchaseResult> {
   const { userId, itemId } = input;
   const key = String(input.idempotencyKey || '').trim();
@@ -74,7 +78,7 @@ export async function purchase(input: {
   /* Pay first. If the charge fails there is nothing to unwind; if the grant
    * fails afterwards it is a support case with a ledger entry to point at,
    * which is far better than a granted item nobody was charged for. */
-  if (price > 0) {
+  if (price > 0 && !input.paidExternally) {
     if (item.currency === 'cash') {
       const acct = await getAccount(userId).catch(() => ({ available: Number(user.wallet) || 0 } as any));
       if (Number(acct.available) < price) throw new ShopError('INSUFFICIENT_FUNDS', 'موجودی کیف پولت کافی نیست.');

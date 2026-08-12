@@ -182,7 +182,9 @@ async function run() {
 
   // ---- buying, like a ticket ----
   const fund = async (userId: string, amount: number) =>
-    postEntry({ userId, entryType: 'deposit', kind: 'credit', amount, idempotencyKey: 'fund:' + userId + ':' + amount });
+    /* Funded by WINNING, because that is now the only way money enters the
+       صندوق جایزه — a deposit is refused at the ledger. */
+    postEntry({ userId, entryType: 'match_reward', kind: 'credit', amount, idempotencyKey: 'fund:' + userId + ':' + amount });
 
   await check('buying charges the wallet and raises the count', async () => {
     const u = await makeUser();

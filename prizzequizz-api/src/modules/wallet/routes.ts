@@ -13,6 +13,7 @@ import { TicketError, consumeTicket, purchaseTicket, refundTicket } from '../../
 import { GiftError, redeemGiftCode } from '../../services/giftCodeService.js';
 import { recordAdmin } from '../../services/adminAuditService.js';
 import { id } from '../../utils/id.js';
+import { parseOrder, quote, payFromVault, isGatewayPayable, asOrderError } from '../../services/purchaseOrderService.js';
 import { bodyObject, optionalString, requiredNumber, requiredString } from '../../utils/validation.js';
 
 /* Request metadata for audit + ledger rows (never trusted for money math). */
@@ -53,7 +54,7 @@ export function registerWalletRoutes(router: Router, base: string): void {
   // ---------- Dashboard (balances + totals; backward-compatible fields kept) ----------
   router.add('GET', `${base}/wallet`, async (ctx) => {
     const uid = requireUser(ctx); if (!uid) return;
-    const [dash, user, recent] = await Promise.all([getDashboard(uid), repositories.users.findById(uid), listEntries(uid, { page: 1, pageSize: 10 })]);
+    const [dash, user, recent] = await Promise.all([getDashboard(uid), repositories.users.findById(uid), listEntries(uid, { page: 1, pageSize: 10, playerVisibleOnly: true })]);
     json(ctx.res, 200, {
       ...dash,
       wallet: (dash as any).available, // legacy field name
@@ -67,7 +68,11 @@ export function registerWalletRoutes(router: Router, base: string): void {
     const uid = requireUser(ctx); if (!uid) return;
     if (!userRateLimit(ctx, uid, 'read', 120, 60_000)) return;
     const q = ctx.query;
+    /* The player's own statement, so the house lines never appear in it — the
+     * fee above all. A player is shown the prize they actually receive, not an
+     * itemised account of what the game kept. */
     const out = await listEntries(uid, {
+      playerVisibleOnly: true,
       type: q.get('type') || undefined, q: q.get('q') || undefined,
       from: q.get('from') || undefined, to: q.get('to') || undefined,
       sort: q.get('sort') === 'asc' ? 'asc' : 'desc',
@@ -76,20 +81,64 @@ export function registerWalletRoutes(router: Router, base: string): void {
     json(ctx.res, 200, out);
   });
 
-  // ---------- Deposit: server-validated payment intent; NO direct crediting ----------
+  /* ---------- Top-up: GONE ----------
+   * The صندوق جایزه fills with prizes and nothing else. This endpoint stays
+   * only to answer honestly: an old client still calling it must be told the
+   * feature was removed rather than get a payment link that credits a balance
+   * the game no longer has. */
   router.add('POST', `${base}/wallet/deposits`, async (ctx) => {
     const uid = requireUser(ctx); if (!uid) return;
-    if (!userRateLimit(ctx, uid, 'deposit', 20, 3_600_000)) return;
+    error(ctx.res, 410, 'DEPOSIT_REMOVED', 'شارژ حذف شده است. صندوق جایزه فقط با جایزه‌های بردت پر می‌شود.');
+  });
+
+  /* ---------- Buying something: price it, then pay for it ----------
+   * The player picks the funding in a sheet before anything is charged, so
+   * both endpoints take the SAME order and only the method differs. The price
+   * is always read from the catalogue here — never taken from the client. */
+  router.add('POST', `${base}/orders/quote`, async (ctx) => {
+    const uid = requireUser(ctx); if (!uid) return;
+    const order = parseOrder(bodyObject(ctx.body).order ?? ctx.body);
+    if (!order) return error(ctx.res, 400, 'ORDER_INVALID', 'سفارش نامعتبر است.');
+    try {
+      const q = await quote(order);
+      const acct = await getAccount(uid).catch(() => ({ available: 0 } as any));
+      const vault = Number(acct.available) || 0;
+      json(ctx.res, 200, {
+        order: q.order, amount: q.amount, currency: q.currency, label: q.label,
+        vaultBalance: vault,
+        /* What the sheet should offer. A coin-priced item has neither. */
+        canPayFromVault: q.currency === 'coins' ? true : vault >= q.amount,
+        canPayByGateway: isGatewayPayable(q)
+      });
+    } catch (e) {
+      const oe = asOrderError(e);
+      if (oe) return error(ctx.res, 400, oe.code, oe.message);
+      throw e;
+    }
+  });
+
+  router.add('POST', `${base}/orders/pay`, async (ctx) => {
+    const uid = requireUser(ctx); if (!uid) return;
+    if (!userRateLimit(ctx, uid, 'order', 60, 3_600_000)) return;
     const body = bodyObject(ctx.body);
-    const amount = Math.round(requiredNumber(body, 'amount'));
+    const order = parseOrder(body.order);
+    if (!order) return error(ctx.res, 400, 'ORDER_INVALID', 'سفارش نامعتبر است.');
+    const method = String(body.method ?? 'vault') === 'gateway' ? 'gateway' : 'vault';
+    const idem = `order:${uid}:${optionalString(body, 'idempotencyKey') ?? id()}`;
     const meta = reqMeta(ctx);
     try {
-      if (amount < WALLET_LIMITS.minDeposit || amount > WALLET_LIMITS.maxDeposit) throw new WalletError('DEPOSIT_AMOUNT_INVALID', `مبلغ شارژ باید بین ${WALLET_LIMITS.minDeposit.toLocaleString('fa-IR')} و ${WALLET_LIMITS.maxDeposit.toLocaleString('fa-IR')} تومان باشد.`);
-      const intent = await createPaymentIntent({ userId: uid, amount, idempotencyKey: optionalString(body, 'idempotencyKey') });
-      await auditLog({ userId: uid, action: 'deposit_intent_created', api: 'POST /wallet/deposits', ...meta, request: { amount }, response: { intentId: intent.id } });
-      json(ctx.res, 201, { intentId: intent.id, amount: intent.amount, status: intent.status, paymentUrl: intent.paymentUrl });
+      if (method === 'gateway') {
+        const intent = await createPaymentIntent({ userId: uid, order, callbackUrl: optionalString(body, 'callbackUrl'), idempotencyKey: optionalString(body, 'idempotencyKey') });
+        await auditLog({ userId: uid, action: 'order_gateway_started', api: 'POST /orders/pay', ...meta, request: { order }, response: { intentId: intent.id, amount: intent.amount } });
+        return json(ctx.res, 201, { method, intentId: intent.id, amount: intent.amount, status: intent.status, paymentUrl: intent.paymentUrl });
+      }
+      const r = await payFromVault(uid, order, idem);
+      await auditLog({ userId: uid, action: 'order_paid_from_vault', api: 'POST /orders/pay', ...meta, request: { order }, response: { amount: r.quote.amount, duplicate: r.duplicate } });
+      json(ctx.res, 200, { method, amount: r.quote.amount, label: r.quote.label, granted: r.granted, duplicate: r.duplicate, balance: r.balance });
     } catch (e) {
-      await auditLog({ userId: uid, action: 'deposit_intent_failed', api: 'POST /wallet/deposits', ...meta, request: { amount }, error: e instanceof Error ? e.message : 'unknown' });
+      await auditLog({ userId: uid, action: 'order_failed', api: 'POST /orders/pay', ...meta, request: { order, method }, error: e instanceof Error ? e.message : 'unknown' });
+      const oe = asOrderError(e);
+      if (oe) return error(ctx.res, 400, oe.code, oe.message);
       walletError(ctx, e);
     }
   });

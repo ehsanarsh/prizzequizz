@@ -64,7 +64,7 @@ async function main(): Promise<void> {
 
   // ---------- 4) Withdraw lifecycle ----------
   const u2 = await makeUser('2');
-  await postEntry({ userId: u2, entryType: 'deposit', kind: 'credit', amount: 1_000_000, idempotencyKey: 't2:seed' });
+  await postEntry({ userId: u2, entryType: 'match_reward', kind: 'credit', amount: 1_000_000, idempotencyKey: 't2:seed' });
   // no / wrong mobile code rejected — nothing is locked or recorded
   await assert.rejects(() => requestWithdraw({ userId: u2, amount: 300_000, destination: 'IR012345678901234567890123' }),
     (e: unknown) => e instanceof WalletError && e.code === 'WITHDRAW_OTP_INVALID');
@@ -102,23 +102,23 @@ async function main(): Promise<void> {
     (e: unknown) => e instanceof WalletError && e.code === 'WITHDRAW_BAD_STATE');
   console.log('✔ withdraw lifecycle (lock/reject-release/approve/paid + no double pay)');
 
-  // ---------- 5) Deposit settle: signature-gated, double-payment safe ----------
+  // ---------- 5) Top-ups are gone: a payment must be FOR something ----------
+  /* This used to prove a deposit settled exactly once. There are no deposits
+     any more: a bare payment intent is refused, and a payment that carries an
+     order delivers the order instead of crediting the صندوق. The detailed
+     behaviour lives in prizeVault.test.ts; what is checked here is that the
+     door this file used to walk through is shut. */
   const u3 = await makeUser('3');
-  const intent = await createPaymentIntent({ userId: u3, amount: 50_000 });
-  // forged signature rejected
-  await assert.rejects(() => settlePaymentIntent(intent.id, 'deadbeef'.repeat(8), 'paid'),
-    (e: unknown) => e instanceof WalletError && e.code === 'PAYMENT_SIGNATURE_INVALID');
-  assert.equal((await getAccount(u3)).available, 0, 'forged callback credits nothing');
-  // valid signature settles exactly once
-  const sig = paymentSignature(intent.id, intent.amount, 'paid');
-  await settlePaymentIntent(intent.id, sig, 'paid');
-  await settlePaymentIntent(intent.id, sig, 'paid'); // replayed callback
-  assert.equal((await getAccount(u3)).available, 50_000, 'replayed callback does not double credit');
-  console.log('✔ deposit: signature required + double payment blocked');
+  await assert.rejects(() => createPaymentIntent({ userId: u3, amount: 50_000 } as any),
+    (e: unknown) => e instanceof WalletError && e.code === 'DEPOSIT_REMOVED');
+  assert.equal((await getAccount(u3)).available, 0, 'no balance appeared');
+  await assert.rejects(() => postEntry({ userId: u3, entryType: 'deposit', kind: 'credit', amount: 50_000, idempotencyKey: 't3:dep' }),
+    (e: unknown) => e instanceof WalletError && e.code === 'DEPOSIT_REMOVED');
+  console.log('\u2714 top-ups removed: no intent without an order, no deposit in the ledger');
 
   // ---------- 6) Concurrency: parallel spends can never overspend ----------
   const u4 = await makeUser('4');
-  await postEntry({ userId: u4, entryType: 'deposit', kind: 'credit', amount: 1000, idempotencyKey: 't4:seed' });
+  await postEntry({ userId: u4, entryType: 'match_reward', kind: 'credit', amount: 1000, idempotencyKey: 't4:seed' });
   const attempts = await Promise.allSettled(
     Array.from({ length: 30 }, (_, i) => postEntry({ userId: u4, entryType: 'match_stake', kind: 'debit', amount: 100, idempotencyKey: `t4:spend:${i}` })));
   const okCount = attempts.filter((r) => r.status === 'fulfilled').length;
@@ -134,7 +134,10 @@ async function main(): Promise<void> {
 
   // ---------- 8) Dashboard totals ----------
   const dash = await getDashboard(u2) as any;
-  assert.equal(dash.totalDeposits, 1_000_000);
+  /* The seed is a prize now, so it lands in totalPrizes; totalDeposits is a
+     legacy figure that must read zero on an account created after the change. */
+  assert.equal(dash.totalPrizes, 1_000_000);
+  assert.equal(dash.totalDeposits, 0);
   assert.equal(dash.totalWithdrawn, 400_000);
   assert.ok(dash.lastTransactionAt, 'last transaction date present');
   assert.equal(dash.accountStatus, 'active');
@@ -168,7 +171,7 @@ async function main(): Promise<void> {
   (gc2 as any).economy = { ...(gc2 as any).economy, wallet: { ...(gc2 as any).economy?.wallet, ticketPrices: { green: 12500, blue: 25000, red: 50000 } } };
   const { purchaseTicket, consumeTicket, refundTicket, getTickets, TicketError } = await import('../services/ticketService.js');
   const u7 = await makeUser('7');
-  await postEntry({ userId: u7, entryType: 'deposit', kind: 'credit', amount: 100_000, idempotencyKey: 't7:seed' });
+  await postEntry({ userId: u7, entryType: 'match_reward', kind: 'credit', amount: 100_000, idempotencyKey: 't7:seed' });
   // buy blue (25,000) → wallet debited, ticket granted
   const buy = await purchaseTicket({ userId: u7, tier: 'blue', idempotencyKey: 't7:buyblue' });
   assert.equal(buy.balance, 75_000, 'ticket purchase debits wallet');
@@ -195,7 +198,7 @@ async function main(): Promise<void> {
   assert.equal((await getTickets(u7)).blue, 1, 'refund restores the ticket');
   // concurrency: buy 3, fire 10 parallel consumes → exactly 3 succeed
   const u8 = await makeUser('8');
-  await postEntry({ userId: u8, entryType: 'deposit', kind: 'credit', amount: 1_000_000, idempotencyKey: 't8:seed' });
+  await postEntry({ userId: u8, entryType: 'match_reward', kind: 'credit', amount: 1_000_000, idempotencyKey: 't8:seed' });
   for (let i = 0; i < 3; i++) await purchaseTicket({ userId: u8, tier: 'green', idempotencyKey: `t8:g${i}` });
   const consumes = await Promise.allSettled(Array.from({ length: 10 }, () => consumeTicket(u8, 'green')));
   assert.equal(consumes.filter((r) => r.status === 'fulfilled').length, 3, 'exactly 3 of 10 parallel consumes succeed');

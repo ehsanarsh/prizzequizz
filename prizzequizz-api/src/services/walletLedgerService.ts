@@ -184,7 +184,20 @@ function legacyRow(e: { entryType: LedgerEntryType; kind: LedgerKind }): { type:
 // ---------------------------------------------------------------------------
 // Core posting — the ONLY way money moves.
 // ---------------------------------------------------------------------------
+/* THE ONE-WAY DOOR.
+ *
+ * The صندوق جایزه is not a wallet: money enters it by being WON and leaves it
+ * by being spent or withdrawn. There is no topping up, so a `deposit` entry is
+ * no longer a thing that can exist. Refusing it here — at the only place money
+ * moves — is what makes that true, rather than merely hiding the button.
+ *
+ * This matters beyond tidiness: if a player could put money in and take it out
+ * again, the game would be moving other people's money for them, which is a
+ * different and heavily regulated business. */
 export async function postEntry(input: PostInput): Promise<PostResult> {
+  if (input.entryType === 'deposit') {
+    throw new WalletError('DEPOSIT_REMOVED', 'شارژ صندوق جایزه ممکن نیست؛ فقط جایزه وارد آن می‌شود.');
+  }
   const amount = Math.round(Number(input.amount));
   if (!Number.isFinite(amount) || amount <= 0) throw new WalletError('AMOUNT_INVALID', 'Amount must be a positive integer.');
   if (!input.idempotencyKey || input.idempotencyKey.length > 200) throw new WalletError('IDEMPOTENCY_KEY_INVALID', 'Idempotency key missing or too long.');
@@ -365,7 +378,26 @@ export async function getAccount(userId: string): Promise<WalletAccount> {
   return { userId, available: Number(r.available), locked: Number(r.locked), pendingSettlement: Number(r.pending_settlement), version: Number(r.version), updatedAt: r.updated_at?.toISOString?.() ?? String(r.updated_at) };
 }
 
-export interface LedgerFilter { type?: string; q?: string; from?: string; to?: string; page?: number; pageSize?: number; sort?: 'asc' | 'desc' }
+export interface LedgerFilter { type?: string; q?: string; from?: string; to?: string; page?: number; pageSize?: number; sort?: 'asc' | 'desc'; playerVisibleOnly?: boolean }
+
+/* WHAT A PLAYER SEES IN THEIR STATEMENT.
+ *
+ * Prizes in, prize withdrawals out, and purchases they paid for out of the
+ * صندوق — which are there because otherwise the balance drops with nothing to
+ * explain it. Everything else is house bookkeeping and is not the player's
+ * business: fees above all. The player is shown the prize they actually get;
+ * what the house kept on the way is not itemised for them.
+ *
+ * `withdraw_lock` is included because money that has left the available
+ * balance and is waiting on a payout has to appear somewhere, or the player
+ * simply loses sight of it. */
+export const PLAYER_VISIBLE_ENTRY_TYPES: LedgerEntryType[] = [
+  'match_reward', 'league_reward', 'referral_reward', 'bonus', 'refund', 'stake_refund',
+  'ticket_purchase', 'shop_purchase', 'lifeline_purchase',
+  'withdraw_lock', 'withdraw_release', 'withdraw_paid', 'adjustment'
+];
+const PLAYER_HIDDEN = new Set<LedgerEntryType>(['fee', 'penalty', 'deposit', 'match_stake', 'transfer_in', 'transfer_out']);
+export function isPlayerVisible(entryType: LedgerEntryType): boolean { return !PLAYER_HIDDEN.has(entryType); }
 
 export async function listEntries(userId: string, f: LedgerFilter = {}): Promise<{ rows: LedgerEntry[]; total: number; page: number; pageSize: number }> {
   const page = Math.max(1, Number(f.page) || 1);
@@ -373,6 +405,7 @@ export async function listEntries(userId: string, f: LedgerFilter = {}): Promise
   const pool = pgAvailable();
   if (!pool) {
     let rows = memLedger.filter((e) => e.userId === userId);
+    if (f.playerVisibleOnly) rows = rows.filter((e) => isPlayerVisible(e.entryType));
     if (f.type) rows = rows.filter((e) => e.entryType === f.type);
     if (f.q) { const q = f.q.toLowerCase(); rows = rows.filter((e) => (e.description ?? '').toLowerCase().includes(q) || (e.refId ?? '').toLowerCase().includes(q) || e.id.includes(q)); }
     if (f.from) rows = rows.filter((e) => e.createdAt >= f.from!);
@@ -382,6 +415,7 @@ export async function listEntries(userId: string, f: LedgerFilter = {}): Promise
   }
   await ensureSchema(pool);
   const conds: string[] = ['user_id=$1']; const args: unknown[] = [userId];
+  if (f.playerVisibleOnly) { args.push(Array.from(PLAYER_HIDDEN)); conds.push(`NOT (entry_type = ANY($${args.length}::text[]))`); }
   if (f.type) { args.push(f.type); conds.push(`entry_type=$${args.length}`); }
   if (f.q) { args.push(`%${f.q}%`); conds.push(`(description ILIKE $${args.length} OR ref_id ILIKE $${args.length} OR id::text ILIKE $${args.length})`); }
   if (f.from) { args.push(f.from); conds.push(`created_at >= $${args.length}`); }
@@ -398,7 +432,9 @@ export async function getDashboard(userId: string): Promise<Record<string, unkno
   const user = await repositories.users.findById(userId);
   const agg = await aggregateByType(userId);
   const rewards = (agg['match_reward']?.credit ?? 0) + (agg['league_reward']?.credit ?? 0) + (agg['referral_reward']?.credit ?? 0);
-  const deposits = agg['deposit']?.credit ?? 0;
+  /* Kept only to add up history that predates the change. Nothing writes a
+   * deposit any more, so on a fresh account this is always zero. */
+  const legacyDeposits = agg['deposit']?.credit ?? 0;
   const bonuses = agg['bonus']?.credit ?? 0;
   const refunds = (agg['refund']?.credit ?? 0) + (agg['stake_refund']?.credit ?? 0);
   const withdrawn = agg['withdraw_paid']?.settle ?? 0;
@@ -407,9 +443,13 @@ export async function getDashboard(userId: string): Promise<Record<string, unkno
     available: account.available,
     locked: account.locked,
     pendingSettlement: account.pendingSettlement,
-    totalIncome: deposits + rewards + bonuses + refunds + (agg['transfer_in']?.credit ?? 0) + (agg['adjustment']?.credit ?? 0),
+    totalIncome: legacyDeposits + rewards + bonuses + refunds + (agg['transfer_in']?.credit ?? 0) + (agg['adjustment']?.credit ?? 0),
     totalWithdrawn: withdrawn,
-    totalDeposits: deposits,
+    /* The صندوق جایزه has no deposits. `totalPrizes` is the figure that means
+     * something now; `totalDeposits` stays, zero on every new account, so an
+     * older admin screen reading it does not break while it is being updated. */
+    totalPrizes: rewards + bonuses,
+    totalDeposits: legacyDeposits,
     totalRewards: rewards,
     totalTicketSpend: ticketSpend,
     totalBonuses: bonuses,

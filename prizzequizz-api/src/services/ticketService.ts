@@ -30,7 +30,7 @@ function memLock<T>(userId: string, fn: () => Promise<T>): Promise<T> {
   return next;
 }
 
-function isValidTier(tier: string): boolean { return Object.prototype.hasOwnProperty.call(getTicketPrices(), tier); }
+export function isValidTier(tier: string): boolean { return Object.prototype.hasOwnProperty.call(getTicketPrices(), tier); }
 
 export async function getTickets(userId: string): Promise<Record<string, number>> {
   const u = await repositories.users.findById(userId);
@@ -130,7 +130,7 @@ export async function refundTicket(userId: string, tier: string): Promise<Record
   return tickets ?? await getTickets(userId);
 }
 
-function ticketName(tier: string): string {
+export function ticketName(tier: string): string {
   const m: Record<string, string> = { green: 'بلیط سبز', blue: 'بلیط آبی', red: 'بلیط قرمز', bronze: 'بلیت برنزی', silver: 'بلیت نقره‌ای', gold: 'بلیت طلایی' };
   return m[tier] ?? `بلیط ${tier}`;
 }

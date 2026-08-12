@@ -20,6 +20,7 @@ import { notifications } from './notificationService.js';
 import { WALLET_LIMITS, WalletError, postEntry } from './walletLedgerService.js';
 import { recordMoney } from './missionService.js';
 import { getPaymentSettings, pickActiveGateway } from './paymentGatewayService.js';
+import { fulfil, isGatewayPayable, parseOrder, quote, type PurchaseOrder } from './purchaseOrderService.js';
 
 export interface PaymentDiagnostics {
   provider: PaymentProvider;
@@ -49,13 +50,23 @@ function signatureValid(intent: PaymentIntent, sig: string, status: 'paid' | 'fa
   } catch { return false; }
 }
 
-export async function createPaymentIntent(input: { userId: string; amount: number; callbackUrl?: string; idempotencyKey?: string }): Promise<PaymentIntent> {
-  const amount = Math.round(Number(input.amount));
-  if (!Number.isFinite(amount) || amount < WALLET_LIMITS.minDeposit || amount > WALLET_LIMITS.maxDeposit) throw new WalletError('PAYMENT_AMOUNT_INVALID', 'مبلغ پرداخت نامعتبر است.');
-  // Admin deposit policy (from the multi-gateway panel) — takes precedence.
+/* THERE IS NO TOPPING UP ANY MORE.
+ *
+ * A payment must be FOR something. `order` says what, its price is taken from
+ * the catalogue server-side — never from the client — and settlement delivers
+ * that thing instead of crediting a balance. An intent with no order is a bare
+ * wallet top-up, which the game no longer has, so it is refused rather than
+ * quietly credited.
+ *
+ * The old deposit limits still guard the amount, because they are also a sane
+ * bound on what a single purchase may cost. */
+export async function createPaymentIntent(input: { userId: string; amount?: number; callbackUrl?: string; idempotencyKey?: string; order?: PurchaseOrder }): Promise<PaymentIntent> {
+  if (!input.order) throw new WalletError('DEPOSIT_REMOVED', 'شارژ کیف پول حذف شده است؛ پرداخت باید برای یک خرید مشخص باشد.');
+  const q = await quote(input.order);
+  if (!isGatewayPayable(q)) throw new WalletError('ORDER_NOT_PAYABLE', 'این مورد از درگاه قابل پرداخت نیست.');
+  const amount = q.amount;
+  if (!Number.isFinite(amount) || amount < 1 || amount > WALLET_LIMITS.maxDeposit) throw new WalletError('PAYMENT_AMOUNT_INVALID', 'مبلغ پرداخت نامعتبر است.');
   const settings = await getPaymentSettings();
-  if (!settings.deposit.enabled) throw new WalletError('DEPOSIT_DISABLED', 'واریز موقتاً غیرفعال است.');
-  if (amount < settings.deposit.min || amount > settings.deposit.max) throw new WalletError('PAYMENT_AMOUNT_INVALID', `مبلغ باید بین ${settings.deposit.min.toLocaleString('fa-IR')} و ${settings.deposit.max.toLocaleString('fa-IR')} تومان باشد.`);
   // Pick the highest-priority enabled gateway (auto-switch handled at retry).
   const gateway = await pickActiveGateway();
   const key = input.idempotencyKey ? `payment:${input.userId}:${input.idempotencyKey}` : `payment:${input.userId}:${amount}:${Date.now()}:${id().slice(0, 8)}`;
@@ -64,7 +75,8 @@ export async function createPaymentIntent(input: { userId: string; amount: numbe
   const intentId = id();
   const transactionId = id();
   const now = new Date().toISOString();
-  await repositories.transactions.save({ id: transactionId, userId: input.userId, type: 'topup', currency: 'cash', amount, direction: 'in', status: 'pending', reference: intentId, createdAt: now });
+  /* 'purchase', not 'topup': nothing is being added to a balance. */
+  await repositories.transactions.save({ id: transactionId, userId: input.userId, type: 'purchase' as any, currency: 'cash', amount, direction: 'out', status: 'pending', reference: intentId, createdAt: now });
   const sig = paymentSignature(intentId, amount, 'paid');
   const intent: PaymentIntent = {
     id: intentId,
@@ -80,7 +92,10 @@ export async function createPaymentIntent(input: { userId: string; amount: numbe
     callbackUrl: input.callbackUrl,
     providerReference: `sandbox_${intentId}`,
     idempotencyKey: key,
-    metadata: { sandbox: gateway ? gateway.sandbox : provider() === 'sandbox', gatewayId: gateway?.id, gatewayName: gateway?.name, gatewayType: gateway?.type },
+    /* The order travels WITH the intent, because the callback that settles it
+     * may arrive minutes later on a different process with no memory of the
+     * request that started it. */
+    metadata: { sandbox: gateway ? gateway.sandbox : provider() === 'sandbox', gatewayId: gateway?.id, gatewayName: gateway?.name, gatewayType: gateway?.type, order: input.order, orderLabel: q.label },
     createdAt: now,
     updatedAt: now
   };
@@ -112,18 +127,27 @@ export async function settlePaymentIntent(intentId: string, sig: string, status:
   const claimed = await claimIntent(intentId);
   if (!claimed) return repositories.payments.findById(intentId); // another caller settled it
 
-  // Ledger credit — idempotent on the intent id (second layer of protection).
-  await postEntry({
-    userId: intent.userId, entryType: 'deposit', kind: 'credit', amount: intent.amount,
-    idempotencyKey: `deposit:${intent.id}`, refType: 'payment', refId: intent.id,
-    description: 'شارژ کیف پول از درگاه پرداخت', metadata: { provider: intent.provider, providerReference: intent.providerReference }
-  });
+  /* DELIVER THE ORDER. The money paid at the gateway belongs to the house, not
+   * to the player's صندوق — crediting it there and debiting it again would let
+   * a purchase be laundered into a withdrawable prize, which is exactly what
+   * removing top-ups is meant to prevent. So nothing is posted to the ledger:
+   * the goods are simply handed over. */
+  const order = parseOrder((intent.metadata as any)?.order);
+  if (order) {
+    try {
+      await fulfil(intent.userId, order, `intent:${intent.id}`);
+    } catch (e) {
+      /* Paid but undelivered is the one outcome that must never be silent. */
+      logger.error('payment_fulfilment_failed', { intentId: intent.id, userId: intent.userId, message: e instanceof Error ? e.message : 'unknown' });
+      await notifications.create({ userId: intent.userId, type: 'wallet_update', title: 'پرداخت انجام شد، تحویل ناموفق', body: 'پرداختت موفق بود ولی تحویل انجام نشد. پشتیبانی پیگیری می‌کند.', data: { paymentIntentId: intent.id, url: '/support' }, push: true }).catch(() => undefined);
+    }
+  } else {
+    logger.error('payment_settled_without_order', { intentId: intent.id, userId: intent.userId });
+  }
   await repositories.transactions.updateStatus(intent.transactionId, 'paid', intent.id);
-  /* Only a settled intent counts as a top-up — a created or failed one is not
-   * money that arrived. claimIntent above guarantees this runs once. */
-  await recordMoney(intent.userId, 'deposit', intent.amount);
   const paid = await repositories.payments.updateStatus(intent.id, 'paid', { paidAt: new Date().toISOString(), metadata: { ...intent.metadata, verifiedAt: new Date().toISOString() } });
-  await notifications.create({ userId: intent.userId, type: 'wallet_update', title: 'پرداخت موفق بود', body: `${intent.amount.toLocaleString('fa-IR')} تومان به کیف پول اضافه شد.`, data: { paymentIntentId: intent.id, amount: intent.amount, url: '/wallet' }, push: true });
+  const what = (intent.metadata as any)?.orderLabel || 'خریدت';
+  await notifications.create({ userId: intent.userId, type: 'wallet_update', title: 'پرداخت موفق بود', body: `${what} فعال شد.`, data: { paymentIntentId: intent.id, amount: intent.amount, url: '/shop' }, push: true });
   return paid;
 }
 

@@ -27,7 +27,8 @@ async function makeUser(opts: { wallet?: number; coins?: number; hearts?: number
     tickets: { bronze: 0, silver: 0, gold: 0 }
   } as any);
   if (opts.wallet) {
-    await postEntry({ userId, entryType: 'deposit', kind: 'credit', amount: opts.wallet,
+    /* A prize, not a top-up: topping up no longer exists. */
+    await postEntry({ userId, entryType: 'match_reward', kind: 'credit', amount: opts.wallet,
       idempotencyKey: 'seed:' + userId, description: 'شارژ تست' }).catch(() => undefined);
   }
   return userId;
