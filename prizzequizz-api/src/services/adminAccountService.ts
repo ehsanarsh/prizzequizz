@@ -186,7 +186,7 @@ export async function deleteAccount(accountId: string): Promise<boolean> {
 export const ADMIN_TABS = [
   'dashboard', 'finance', 'accounting', 'expenses', 'backup', 'security', 'users', 'matches', 'support',
   'questions', 'qreports', 'aistudio', 'pipeline', 'categories', 'shop', 'characters', 'charboxes', 'lifelines', 'onboarding', 'lastsurvivor', 'sms', 'payments',
-  'wallet', 'withdrawals', 'rewardholds', 'tickets', 'giftcodes',
+  'wallet', 'withdrawals', 'payoutpartners', 'rewardholds', 'tickets', 'giftcodes',
   'cfg_xp', 'cfg_level', 'cfg_cup', 'cfg_gameplay', 'leagues', 'missions', 'rewards',
   'leaderboard', 'campaign', 'events', 'banners', 'notifications',
   'anticheat', 'suspicious', 'reports', 'logs', 'reset', 'roles', 'accounts', 'general', 'rawcfg', 'monitoring'

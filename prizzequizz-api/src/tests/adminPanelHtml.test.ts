@@ -167,6 +167,29 @@ function run(): void {
     assert.match(script.slice(i, i + 400), /image\/svg\+xml/, 'catShrink must recognise SVG and leave it alone');
   });
 
+  /* ── the صندوق جایزه reached the panel too ───────────────────────── */
+
+  check('the panel has a partners screen, wired to its endpoints', () => {
+    assert.match(html, /payoutpartners/, 'the tab exists');
+    assert.match(html, /renderPayoutPartners/, 'and it renders');
+    for (const ep of ['/admin/payout-partners', "/admin/payout-partners/'+pid+'/codes"]) {
+      assert.ok(html.includes(ep), 'calls ' + ep);
+    }
+  });
+
+  check('the panel no longer calls the wallet a wallet', () => {
+    /* The nav is the part a person reads first. */
+    assert.ok(html.includes("['wallet','🏆','صندوق جایزه']"), 'nav says صندوق جایزه');
+    assert.ok(!html.includes("['wallet','👛','کیف پول']"), 'and not کیف پول');
+  });
+
+  check('no figure in the panel is labelled as a top-up any more', () => {
+    /* Deposits are structurally zero now, so a tile named «شارژ» would be a
+       tile that always reads nothing. */
+    assert.ok(!html.includes('کل واریزها (شارژ)'), 'the deposits tile is renamed');
+    assert.ok(!/tbl\(\['دوره','شارژ'/.test(html), 'and so is the report column');
+  });
+
   console.log(`[adminPanelHtml] ${passed} passed, ${failed} failed`);
   if (failed) process.exit(1);
 }

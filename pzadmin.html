@@ -159,7 +159,7 @@ async function loadCfg(){ try{ CFG=await api('GET','/admin/config'); $('#cfgVer'
 const NAV=[
   ['اصلی',[['dashboard','📊','داشبورد'],['finance','💰','داشبورد مالی'],['accounting','🧾','حسابداری و گزارش'],['expenses','🧮','هزینه‌های شرکت'],['users','👤','کاربران'],['matches','🎮','مسابقات'],['lastsurvivor','🏆','آخرین بازمانده'],['support','🎧','پشتیبانی']]],
   ['محتوا',[['questions','❓','سوالات'],['qreports','🚩','گزارش سؤالات'],['aistudio','🤖','استودیوی سوال (AI)'],['pipeline','🔬','خط‌لولهٔ کیفیت'],['categories','🏷️','موضوعات'],['characters','🎭','کاراکترها'],['charboxes','🎲','قرعه‌کشی کاراکتر'],['lifelines','🧩','کمک‌ها'],['rewards','🎡','گردونه و جایزه روزانه'],['recordmode','🏅','ثبت رکورد'],['onboarding','👋','خوش‌آمدگویی']]],
-  ['اقتصاد',[['wallet','👛','کیف پول'],['withdrawals','💸','برداشت‌ها'],['rewardholds','⏳','جوایز در انتظار'],['tickets','🎫','بلیط‌ها'],['shop','🛒','فروشگاه'],['giftcodes','🎁','کدهای هدیه'],['payments','🏦','درگاه پرداخت']]],
+  ['اقتصاد',[['wallet','🏆','صندوق جایزه'],['withdrawals','💸','دریافت جایزه'],['payoutpartners','🎁','شرکای جایزه'],['rewardholds','⏳','جوایز در انتظار'],['tickets','🎫','بلیط‌ها'],['shop','🛒','فروشگاه'],['giftcodes','🎁','کدهای هدیه'],['payments','🏦','درگاه پرداخت']]],
   ['بالانس بازی (Data-Driven)',[['cfg_xp','✨','XP'],['cfg_level','🏅','Level'],['cfg_cup','🏆','Cup'],['cfg_gameplay','🕹️','گیم‌پلی مودها'],['leagues','🛡️','لیگ‌ها'],['missions2','🎯','مأموریت‌ها']]],
   ['رشد و تعامل',[['leaderboard','📈','لیدربرد'],['campaign','🎁','کمپین کاربر جدید'],['events','📅','رویدادها'],['banners','🖼️','بنرها'],['notifications','🔔','اعلان‌ها'],['sms','📱','پنل پیامکی']]],
   ['سیستم',[['monitoring','🖥️','مانیتورینگ سرور'],['anticheat','🛡️','ضدتقلب'],['suspicious','🚨','کاربران مشکوک'],['reports','📑','گزارش‌ها'],['logs','📝','لاگ و Audit'],['reset','♻️','ابزار ریست'],['accounts','🔐','حساب‌ها و دسترسی'],['backup','💾','پشتیبان‌گیری'],['general','⚙️','تنظیمات عمومی'],['rawcfg','🧩','ویرایش خام Config']]]
@@ -189,7 +189,7 @@ async function render(){
   try{
     if(CUR==='accounts')return renderAccounts();
     if(CONFIG_PAGES[CUR])return renderConfigSection(CONFIG_PAGES[CUR][0],CONFIG_PAGES[CUR][1]);
-    const fn={dashboard:renderDashboard,finance:renderFinance,accounting:renderAccounting,expenses:renderExpenses,backup:renderBackup,users:renderUsers,matches:renderMatches,support:renderSupport,questions:renderQuestions,qreports:renderQReports,aistudio:renderAiStudio,pipeline:renderPipeline,categories:renderCategories,wallet:renderWallet,withdrawals:renderWithdrawals,rewardholds:renderRewardHolds,tickets:renderTickets,giftcodes:renderGiftCodes,shop:renderShopAdmin,characters:renderCharacters,charboxes:renderCharBoxes,lifelines:renderLifelines,rewards:renderRewards,missions2:renderMissions2,recordmode:renderRecordMode,onboarding:renderOnboarding,lastsurvivor:renderLastSurvivor,sms:renderSms,payments:renderPayments,leaderboard:renderLeaderboard,notifications:renderNotifications,anticheat:renderAntiCheat,suspicious:renderSuspicious,reports:renderReports,logs:renderLogs,reset:renderReset,roles:renderRoles,rawcfg:renderRawCfg,monitoring:renderMonitoring}[CUR];
+    const fn={dashboard:renderDashboard,finance:renderFinance,accounting:renderAccounting,expenses:renderExpenses,backup:renderBackup,users:renderUsers,matches:renderMatches,support:renderSupport,questions:renderQuestions,qreports:renderQReports,aistudio:renderAiStudio,pipeline:renderPipeline,categories:renderCategories,wallet:renderWallet,withdrawals:renderWithdrawals,payoutpartners:renderPayoutPartners,rewardholds:renderRewardHolds,tickets:renderTickets,giftcodes:renderGiftCodes,shop:renderShopAdmin,characters:renderCharacters,charboxes:renderCharBoxes,lifelines:renderLifelines,rewards:renderRewards,missions2:renderMissions2,recordmode:renderRecordMode,onboarding:renderOnboarding,lastsurvivor:renderLastSurvivor,sms:renderSms,payments:renderPayments,leaderboard:renderLeaderboard,notifications:renderNotifications,anticheat:renderAntiCheat,suspicious:renderSuspicious,reports:renderReports,logs:renderLogs,reset:renderReset,roles:renderRoles,rawcfg:renderRawCfg,monitoring:renderMonitoring}[CUR];
     if(fn)return fn();
   }catch(e){$('#main').innerHTML=head('خطا')+'<div class="card empty">'+(e.message||'خطا')+'</div>';}
 }
@@ -553,9 +553,12 @@ async function renderFinance(){
     '<button class="btn sm" onclick="render()">↻ بروزرسانی</button>')+
     (f.note?'<div class="note">⚠️ '+esc(f.note)+'</div>':'')+
     '<div class="grid g4" style="margin-bottom:13px">'+
-      stat('کل واریزها (شارژ)','ok',money(f.totalDeposits))+
-      stat('کل برداشتِ پرداخت‌شده','bad',money(f.totalWithdrawnPaid))+
-      stat('موجودی کلِ کاربران','info',money(f.usersWalletBalance))+
+      /* Top-ups no longer exist. The figure that means something is money
+         paid at the gateway FOR a purchase; deposits read zero on every
+         account created after the change, so the old tile said nothing. */
+      stat('کل پرداخت درگاه','ok',money(f.gatewayPaid!=null?f.gatewayPaid:f.totalDeposits))+
+      stat('کل جایزهٔ پرداخت‌شده','bad',money(f.totalWithdrawnPaid))+
+      stat('کل صندوق‌های جایزه','info',money(f.usersWalletBalance))+
       stat('موجودی سیستم (خزانه)','gold',money(f.systemBalance))+
     '</div>'+
     '<div class="grid g4" style="margin-bottom:13px">'+
@@ -1254,6 +1257,76 @@ async function saveTicketPrices(){
 }
 
 /* ================= GIFT CODES ================= */
+/* NON-CASH PRIZE PAYOUTS.
+   A prize can leave as a bank transfer or as credit with a partner company.
+   There is no partner API, so this is the shelf: partners are defined here and
+   their codes are pasted in. Every number below is counted from real rows — a
+   partner with an empty shelf is never offered to a player, so an operator who
+   forgets to restock sees it here rather than a player hitting a dead end. */
+async function renderPayoutPartners(){
+  let rows=[];
+  try{ rows=await api('GET','/admin/payout-partners'); }
+  catch(e){ $('#main').innerHTML=head('شرکای جایزه')+'<div class="card empty">'+(e.message||'خطا')+'</div>'; return; }
+  window._PP=rows;
+  const card=(p)=>{
+    const stock=(p.stock||[]).map(x=>'<span class="pill'+(x.available>0?'':' bad')+'">'+fa(x.amount)+': '+fa(x.available)+' کد</span>').join(' ');
+    const empty=(p.totalAvailable||0)===0;
+    return '<div class="card">'+
+      '<div style="display:flex;align-items:center;gap:10px">'+
+        (p.logo?'<img src="'+esc(p.logo)+'" style="width:40px;height:40px;border-radius:10px;object-fit:cover">':'<span style="font-size:26px">🎁</span>')+
+        '<div style="flex:1"><b>'+esc(p.name)+'</b>'+(p.enabled?'':' <span class="pill bad">غیرفعال</span>')+
+          (empty?' <span class="pill bad">موجودی تمام شده — به بازیکن نشان داده نمی‌شود</span>':'')+
+          '<div class="sub">'+(p.instructions?esc(p.instructions):'بدون توضیح')+'</div></div>'+
+        '<button class="btn sm" onclick="ppEdit(\''+p.id+'\')">ویرایش</button>'+
+        '<button class="btn sm danger" onclick="ppDel(\''+p.id+'\')">حذف</button>'+
+      '</div>'+
+      '<div style="margin-top:8px">'+(stock||'<span class="sub">هنوز مبلغی تعریف نشده</span>')+'</div>'+
+      '<div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">'+
+        '<input class="in" id="ppAmt_'+p.id+'" placeholder="مبلغ کد (تومان)" style="max-width:170px">'+
+        '<textarea class="in" id="ppCodes_'+p.id+'" placeholder="کدها — هر خط یک کد" style="flex:1;min-width:220px;height:64px"></textarea>'+
+        '<button class="btn sm" onclick="ppAdd(\''+p.id+'\')">افزودن کدها</button>'+
+      '</div></div>';
+  };
+  $('#main').innerHTML=head('شرکای جایزه (دریافت غیرنقدی)')+
+    '<div class="card"><b>جایزه به‌جای پول نقد</b><div class="sub" style="margin-top:6px;line-height:1.9">بازیکن می‌تواند جایزه‌اش را به‌صورت کد اعتبار یکی از این شرکت‌ها بگیرد. کدها را همین‌جا وارد کن؛ بازی یکی‌یکی تحویل می‌دهد و مصرف‌شده علامت می‌زند.<br>کد فقط وقتی به بازیکن نشان داده می‌شود که پرداختش را <b>تأیید کرده باشی</b>؛ تا آن لحظه فقط رزرو است و اگر درخواست را رد کنی به قفسه برمی‌گردد.</div></div>'+
+    '<div class="card"><b>شریک جدید</b>'+
+      '<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">'+
+        '<input class="in" id="ppName" placeholder="نام (مثلاً اسنپ)" style="max-width:200px">'+
+        '<input class="in" id="ppLogo" placeholder="آدرس لوگو (اختیاری)" style="max-width:240px">'+
+        '<input class="in" id="ppNote" placeholder="راهنمای استفاده برای بازیکن" style="flex:1;min-width:200px">'+
+        '<button class="btn" onclick="ppNew()">افزودن</button>'+
+      '</div></div>'+
+    (rows.length?rows.map(card).join(''):'<div class="card empty">هنوز شریکی تعریف نشده.</div>');
+}
+async function ppNew(){
+  const name=($('#ppName').value||'').trim();
+  if(!name) return toast('نام شریک را وارد کن');
+  try{ await api('POST','/admin/payout-partners',{name,logo:($('#ppLogo').value||'').trim(),instructions:($('#ppNote').value||'').trim()}); toast('شریک اضافه شد'); render(); }
+  catch(e){ toast(e.message||'خطا'); }
+}
+function ppEdit(pid){
+  const p=(window._PP||[]).find(x=>x.id===pid); if(!p) return;
+  const name=prompt('نام شریک:',p.name); if(name===null) return;
+  const note=prompt('راهنمای استفاده:',p.instructions||''); if(note===null) return;
+  const en=confirm('فعال باشد؟ (لغو = غیرفعال)');
+  api('POST','/admin/payout-partners',{id:pid,name,instructions:note,enabled:en}).then(()=>{toast('ذخیره شد');render();}).catch(e=>toast(e.message||'خطا'));
+}
+function ppDel(pid){
+  if(!confirm('حذف شریک؟ کدهای استفاده‌نشده پاک می‌شوند؛ کدهایی که به بازیکن داده شده باقی می‌مانند.')) return;
+  api('DELETE','/admin/payout-partners/'+pid).then(()=>{toast('حذف شد');render();}).catch(e=>toast(e.message||'خطا'));
+}
+async function ppAdd(pid){
+  const amt=parseInt(($('#ppAmt_'+pid).value||'').replace(/[^\d]/g,''))||0;
+  const codes=($('#ppCodes_'+pid).value||'').trim();
+  if(!amt) return toast('مبلغ کد را وارد کن');
+  if(!codes) return toast('حداقل یک کد وارد کن');
+  try{
+    const r=await api('POST','/admin/payout-partners/'+pid+'/codes',{amount:amt,codes});
+    toast(fa(r.added)+' کد اضافه شد'+(r.skipped?' · '+fa(r.skipped)+' تکراری بود':''));
+    render();
+  }catch(e){ toast(e.message||'خطا'); }
+}
+
 async function renderGiftCodes(){
   const d=await api('GET','/admin/gift-codes').catch(()=>({rows:[]}));
   $('#main').innerHTML=head('کدهای هدیه','ایجاد کد با جایزهٔ نقدی/سکه/بلیط/XP/کاپ','<button class="btn pri" onclick="gcAdd()">ایجاد کد</button>')+
@@ -3439,7 +3512,7 @@ let REP_G='daily';
 async function renderReports(){
   const [rep,top,failed]=await Promise.all([api('GET','/admin/wallet/reports?granularity='+REP_G),api('GET','/admin/wallet/reports/top-users?limit=15').catch(()=>[]),api('GET','/admin/wallet/reports/failed').catch(()=>({failedTransactions:[]}))]);
   $('#main').innerHTML=head('گزارش‌ها','درآمد، کاربران پرگردش، ناموفق','<button class="btn sm '+(REP_G==='daily'?'pri':'')+'" onclick="REP_G=\'daily\';render()">روزانه</button> <button class="btn sm '+(REP_G==='monthly'?'pri':'')+'" onclick="REP_G=\'monthly\';render()">ماهانه</button>')+
-    '<div class="card" style="margin-bottom:13px"><h3>مالی</h3>'+tbl(['دوره','شارژ','جوایز','ورودی','برداشت','سود'],(rep.rows||[]).map(r=>[r.period,fa(r.deposits),fa(r.rewards),fa(r.stakes),fa(r.withdrawals),'<b style="color:var(--gold)">'+fa(r.systemProfit)+'</b>']))+'</div>'+
+    '<div class="card" style="margin-bottom:13px"><h3>مالی</h3>'+tbl(['دوره','پرداخت درگاه','جوایز','ورودی','دریافت جایزه','سود'],(rep.rows||[]).map(r=>[r.period,fa(r.deposits),fa(r.rewards),fa(r.stakes),fa(r.withdrawals),'<b style="color:var(--gold)">'+fa(r.systemProfit)+'</b>']))+'</div>'+
     '<div class="grid g2"><div class="card"><h3>کاربران پرگردش</h3>'+tbl(['کاربر','گردش'],(top||[]).map(u=>[esc(u.username||String(u.userId).slice(0,8)),fa(u.volume)]))+'</div>'+
       '<div class="card"><h3>تراکنش‌های ناموفق</h3>'+tbl(['نوع','مبلغ','زمان'],((failed.failedTransactions)||[]).slice(0,15).map(t=>[esc(t.type),fa(t.amount),fmtDate(t.createdAt)]))+'</div></div>';
 }
