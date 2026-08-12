@@ -36,6 +36,7 @@ export const SMS_DEFAULT_TEMPLATES: SmsTemplate[] = [
   { key: 'login_code', title: 'کد ورود', text: 'پرایز کوییز\nکد ورود شما: {code}' },
   { key: 'password_change', title: 'تغییر رمز', text: 'پرایز کوییز\nرمز حساب شما تغییر کرد. اگر شما نبودید با پشتیبانی تماس بگیرید.' },
   { key: 'deposit_ok', title: 'واریز موفق', text: '{name} عزیز، مبلغ {amount} تومان به کیف پول شما واریز شد. موجودی: {wallet}' },
+  { key: 'withdraw_code', title: 'کد تأیید دریافت جایزه', text: 'پرایز کوییز\nکد تأیید دریافت جایزه: {code}\nتا {expiry} دقیقه معتبر است.' },
   { key: 'withdraw_ok', title: 'برداشت موفق', text: '{name} عزیز، برداشت {amount} تومان شما پرداخت شد. تاریخ: {date}' },
   { key: 'withdraw_rejected', title: 'برداشت رد شد', text: '{name} عزیز، درخواست برداشت {amount} تومان شما رد شد. مبلغ به کیف پول بازگشت.' },
   { key: 'match_win', title: 'برد در مسابقه', text: 'تبریک {name}! تو {amount} تومان جایزه بردی 🏆' },

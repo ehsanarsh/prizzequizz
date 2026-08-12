@@ -19,6 +19,7 @@ import {
 import { postEntry, requestWithdraw, transitionWithdraw, getAccount, WalletError } from '../services/walletLedgerService.js';
 import { repositories } from '../repositories/index.js';
 import { id } from '../utils/id.js';
+import { sendWithdrawOtp, _resetOtp } from '../services/withdrawOtpService.js';
 
 let passed = 0, failed = 0;
 async function check(name: string, fn: () => Promise<void>): Promise<void> {
@@ -38,7 +39,12 @@ async function player(prize = 0): Promise<string> {
   return uid;
 }
 
-const OTP = process.env.WITHDRAW_OTP_CODE || '1234';
+/* The payout code is a real per-user code now, so a test has to ask for one
+ * exactly as the game does. With SMS off it comes back in the response. */
+async function otpFor(uid: string): Promise<string> {
+  const r = await sendWithdrawOtp(uid, '09120000000');
+  return r.testCode!;
+}
 const AMT = 200_000;
 
 async function partnerWith(codes: string[], amount = AMT): Promise<string> {
@@ -48,7 +54,7 @@ async function partnerWith(codes: string[], amount = AMT): Promise<string> {
 }
 
 async function run(): Promise<void> {
-  _resetPayouts();
+  _resetPayouts(); _resetOtp();
 
   /* ── the shelf ────────────────────────────────────────────────────── */
 
@@ -152,7 +158,7 @@ async function run(): Promise<void> {
     _resetPayouts();
     const pid = await partnerWith(['H-1']);
     const uid = await player(AMT * 2);
-    const wd = await requestWithdraw({ userId: uid, amount: AMT, payoutMethod: 'partner', partnerId: pid, otp: OTP });
+    const wd = await requestWithdraw({ userId: uid, amount: AMT, payoutMethod: 'partner', partnerId: pid, otp: await otpFor(uid) });
     assert.equal(wd.payoutMethod, 'partner');
     assert.equal(wd.partnerId, pid);
     assert.equal((await getAccount(uid)).locked, AMT, 'the prize is held while it is in flight');
@@ -169,7 +175,7 @@ async function run(): Promise<void> {
     _resetPayouts();
     const pid = await partnerWith(['I-1']);
     const uid = await player(AMT * 2);
-    const wd = await requestWithdraw({ userId: uid, amount: AMT, payoutMethod: 'partner', partnerId: pid, otp: OTP });
+    const wd = await requestWithdraw({ userId: uid, amount: AMT, payoutMethod: 'partner', partnerId: pid, otp: await otpFor(uid) });
     assert.equal((await stock(pid))[AMT] ?? 0, 0, 'held while the request is open');
     await transitionWithdraw(wd.id, 'reject', { id: 'op', reason: 'تست' });
     assert.equal((await getAccount(uid)).available, AMT * 2, 'the prize came back');
@@ -183,7 +189,7 @@ async function run(): Promise<void> {
     const pid = await partnerWith([]);
     const uid = await player(AMT * 2);
     await assert.rejects(
-      () => requestWithdraw({ userId: uid, amount: AMT, payoutMethod: 'partner', partnerId: pid, otp: OTP }),
+      async () => requestWithdraw({ userId: uid, amount: AMT, payoutMethod: 'partner', partnerId: pid, otp: await otpFor(uid) }),
       (e: unknown) => e instanceof WalletError
     );
     const acct = await getAccount(uid);
@@ -195,14 +201,14 @@ async function run(): Promise<void> {
     _resetPayouts();
     const pid = await partnerWith(['J-1']);
     const uid = await player(AMT * 2);
-    const wd = await requestWithdraw({ userId: uid, amount: AMT, payoutMethod: 'partner', partnerId: pid, otp: OTP });
+    const wd = await requestWithdraw({ userId: uid, amount: AMT, payoutMethod: 'partner', partnerId: pid, otp: await otpFor(uid) });
     assert.ok(wd.id, 'accepted with no card, no SHEBA, no national id');
   });
 
   await check('the bank door still works exactly as before', async () => {
     _resetPayouts();
     const uid = await player(AMT * 2);
-    const wd = await requestWithdraw({ userId: uid, amount: AMT, destination: 'IR' + '1'.repeat(24), otp: OTP });
+    const wd = await requestWithdraw({ userId: uid, amount: AMT, destination: 'IR' + '1'.repeat(24), otp: await otpFor(uid) });
     assert.equal(wd.payoutMethod, 'bank');
     await transitionWithdraw(wd.id, 'approve', { id: 'op' });
     await transitionWithdraw(wd.id, 'paid', { id: 'op', paymentReference: 'REF-1' });
@@ -211,8 +217,9 @@ async function run(): Promise<void> {
 
   await check('a bank withdrawal still refuses a nonsense destination', async () => {
     const uid = await player(AMT * 2);
+    const code = await otpFor(uid);
     await assert.rejects(
-      () => requestWithdraw({ userId: uid, amount: AMT, destination: 'nope', otp: OTP }),
+      () => requestWithdraw({ userId: uid, amount: AMT, destination: 'nope', otp: code }),
       (e: unknown) => e instanceof WalletError && e.code === 'DESTINATION_INVALID'
     );
   });
@@ -221,6 +228,7 @@ async function run(): Promise<void> {
     _resetPayouts();
     const pid = await partnerWith(['K-1']);
     const uid = await player(AMT * 2);
+    await otpFor(uid);   // a code was requested; the WRONG one is typed
     await assert.rejects(() => requestWithdraw({ userId: uid, amount: AMT, payoutMethod: 'partner', partnerId: pid, otp: '0000' }));
     assert.equal((await stock(pid))[AMT], 1, 'no code was taken off the shelf');
     assert.equal((await getAccount(uid)).locked, 0, 'and nothing was held');

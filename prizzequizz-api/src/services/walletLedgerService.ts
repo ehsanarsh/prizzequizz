@@ -16,6 +16,7 @@
  */
 import { getPgPool } from '../database/postgres.js';
 import { getPartner, reserveCode, issueForWithdraw, releaseForWithdraw } from './payoutPartnerService.js';
+import { verifyWithdrawOtp } from './withdrawOtpService.js';
 import { repositories } from '../repositories/index.js';
 import { id } from '../utils/id.js';
 import { logger } from './logger.js';
@@ -508,8 +509,15 @@ export interface WithdrawRequest {
 export function withdrawOtpCode(): string { return String(process.env.WITHDRAW_OTP_CODE || '1234'); }
 
 export async function requestWithdraw(input: { userId: string; amount: number; destination?: string; nationalId?: string; holderName?: string; otp?: string; ip?: string; device?: string; platform?: string; idempotencyKey?: string; payoutMethod?: PayoutMethod; partnerId?: string }): Promise<WithdrawRequest> {
-  // Mobile-code gate FIRST: no valid code ⇒ nothing is locked or recorded.
-  if (String(input.otp ?? '').trim() !== withdrawOtpCode()) throw new WalletError('WITHDRAW_OTP_INVALID', 'کد تأیید پیامک‌شده نادرست است.');
+  /* Mobile-code gate FIRST: no valid code ⇒ nothing is locked or recorded.
+   * This used to compare against a constant — the same four digits for every
+   * player, never sent anywhere. It is now a real per-user code with an expiry,
+   * and the operator can switch the requirement off in the panel. */
+  try {
+    await verifyWithdrawOtp(input.userId, String(input.otp ?? ''));
+  } catch (e) {
+    throw new WalletError((e as any)?.code || 'WITHDRAW_OTP_INVALID', (e as Error)?.message || 'کد تأیید نادرست است.');
+  }
   const amount = Math.round(Number(input.amount));
   if (!Number.isFinite(amount) || amount <= 0) throw new WalletError('AMOUNT_INVALID', 'مبلغ نامعتبر است.');
   if (amount < WALLET_LIMITS.minWithdraw) throw new WalletError('WITHDRAW_BELOW_MIN', `حداقل برداشت ${WALLET_LIMITS.minWithdraw.toLocaleString('fa-IR')} تومان است.`);

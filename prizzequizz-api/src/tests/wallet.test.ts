@@ -14,6 +14,9 @@ const {
   postEntry, getAccount, getDashboard, listEntries, requestWithdraw, transitionWithdraw,
   verifyConsistency, WalletError, findEntryByIdempotencyKey
 } = await import('../services/walletLedgerService.js');
+/* Dynamic like the rest of this file: the env above has to be set before any
+   of these modules read it. */
+const { sendWithdrawOtp, _resetOtp } = await import('../services/withdrawOtpService.js');
 const { createPaymentIntent, settlePaymentIntent, paymentSignature } = await import('../services/paymentService.js');
 
 async function makeUser(idSuffix: string): Promise<string> {
@@ -65,19 +68,28 @@ async function main(): Promise<void> {
   // ---------- 4) Withdraw lifecycle ----------
   const u2 = await makeUser('2');
   await postEntry({ userId: u2, entryType: 'match_reward', kind: 'credit', amount: 1_000_000, idempotencyKey: 't2:seed' });
-  // no / wrong mobile code rejected — nothing is locked or recorded
+  /* No code at all is now a DIFFERENT answer from a wrong one — the old
+     constant could not tell them apart because there was nothing to request. */
+  _resetOtp();
   await assert.rejects(() => requestWithdraw({ userId: u2, amount: 300_000, destination: 'IR012345678901234567890123' }),
-    (e: unknown) => e instanceof WalletError && e.code === 'WITHDRAW_OTP_INVALID');
+    (e: unknown) => e instanceof WalletError && e.code === 'OTP_NOT_REQUESTED');
+  /* The payout code is a real per-user code now — a test must ask for one just
+     as the game does, and the old universal '1234' opens nothing. */
+  /* _resetOtp first: asking for a second code within the resend window is
+     itself refused, and this helper is called many times in a row. */
+  const otp2 = async () => { _resetOtp(); return (await sendWithdrawOtp(u2, '09120000000')).testCode!; };
+  _resetOtp();
+  await sendWithdrawOtp(u2, '09120000000');
   await assert.rejects(() => requestWithdraw({ userId: u2, amount: 300_000, destination: 'IR012345678901234567890123', otp: '0000' }),
     (e: unknown) => e instanceof WalletError && e.code === 'WITHDRAW_OTP_INVALID');
   // below-min rejected
-  await assert.rejects(() => requestWithdraw({ userId: u2, amount: 1000, destination: 'IR012345678901234567890123', otp: '1234' }),
+  await assert.rejects(async () => requestWithdraw({ userId: u2, amount: 1000, destination: 'IR012345678901234567890123', otp: await otp2() }),
     (e: unknown) => e instanceof WalletError && e.code === 'WITHDRAW_BELOW_MIN');
   // bad destination rejected
-  await assert.rejects(() => requestWithdraw({ userId: u2, amount: 300_000, destination: 'nonsense', otp: '1234' }),
+  await assert.rejects(async () => requestWithdraw({ userId: u2, amount: 300_000, destination: 'nonsense', otp: await otp2() }),
     (e: unknown) => e instanceof WalletError && e.code === 'DESTINATION_INVALID');
   // request (with valid code) → funds locked; KYC fields captured
-  const wd = await requestWithdraw({ userId: u2, amount: 300_000, destination: 'IR012345678901234567890123', otp: '1234', nationalId: '0012345678', holderName: 'کاربر تست' });
+  const wd = await requestWithdraw({ userId: u2, amount: 300_000, destination: 'IR012345678901234567890123', otp: await otp2(), nationalId: '0012345678', holderName: 'کاربر تست' });
   assert.equal(wd.nationalId, '0012345678', 'national id stored on request');
   assert.equal(wd.holderName, 'کاربر تست', 'holder name stored on request');
   let a2 = await getAccount(u2);
@@ -89,7 +101,7 @@ async function main(): Promise<void> {
   a2 = await getAccount(u2);
   assert.deepEqual([a2.available, a2.locked], [1_000_000, 0], 'reject releases funds');
   // request again → approve → paid (settle) with operator + reference
-  const wd2 = await requestWithdraw({ userId: u2, amount: 400_000, destination: 'IR012345678901234567890123', otp: '1234' });
+  const wd2 = await requestWithdraw({ userId: u2, amount: 400_000, destination: 'IR012345678901234567890123', otp: await otp2() });
   await transitionWithdraw(wd2.id, 'approve', { id: u1 });
   const paid = await transitionWithdraw(wd2.id, 'paid', { id: u1, paymentReference: 'BANK-REF-1234' });
   assert.equal(paid.status, 'paid');

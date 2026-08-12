@@ -15,6 +15,7 @@ import { recordAdmin } from '../../services/adminAuditService.js';
 import { id } from '../../utils/id.js';
 import { parseOrder, quote, payFromVault, isGatewayPayable, asOrderError } from '../../services/purchaseOrderService.js';
 import { payoutOptions, issuedCodeFor, getPartner } from '../../services/payoutPartnerService.js';
+import { sendWithdrawOtp, OtpError, otpRequired } from '../../services/withdrawOtpService.js';
 import { bodyObject, optionalString, requiredNumber, requiredString } from '../../utils/validation.js';
 
 /* Request metadata for audit + ledger rows (never trusted for money math). */
@@ -149,7 +150,9 @@ export function registerWalletRoutes(router: Router, base: string): void {
    * promising something that cannot be handed over. */
   router.add('GET', `${base}/wallet/payout-options`, async (ctx) => {
     const uid = requireUser(ctx); if (!uid) return;
-    json(ctx.res, 200, { bank: true, partners: await payoutOptions() });
+    /* otpRequired lets the client skip the code sheet entirely when the
+     * operator has switched it off, instead of showing a step that does nothing. */
+    json(ctx.res, 200, { bank: true, partners: await payoutOptions(), otpRequired: await otpRequired() });
   });
 
   /* The code itself, once the payout has actually been made. A reserved code
@@ -197,10 +200,17 @@ export function registerWalletRoutes(router: Router, base: string): void {
     if (!userRateLimit(ctx, uid, 'withdraw_otp', 6, 3_600_000)) return;
     const user = await repositories.users.findById(uid).catch(() => null);
     const phone = user?.phone ? String(user.phone) : '';
-    const code = withdrawOtpCode();
-    await notifications.create({ userId: uid, type: 'wallet_update', title: 'کد تأیید برداشت', body: `کد تأیید برداشت شما: ${code}`, data: { url: '/wallet' }, push: true }).catch(() => undefined);
-    const masked = phone ? phone.replace(/^(\d{4})\d+(\d{2})$/, '$1****$2') : '';
-    json(ctx.res, 200, { sent: true, phone: masked });
+    try {
+      const r = await sendWithdrawOtp(uid, phone);
+      /* Also to the in-app bell, so a player whose SMS is slow still has it. */
+      if (r.mode === 'sms') {
+        await notifications.create({ userId: uid, type: 'wallet_update', title: 'کد تأیید دریافت جایزه', body: 'کد تأیید برایت پیامک شد.', data: { url: '/wallet' }, push: true }).catch(() => undefined);
+      }
+      json(ctx.res, 200, { sent: true, phone: r.phoneMasked, mode: r.mode, expiresInSeconds: r.expiresInSeconds, testCode: r.testCode });
+    } catch (e) {
+      if (e instanceof OtpError) return error(ctx.res, 429, e.code, e.message);
+      throw e;
+    }
   });
 
   router.add('GET', `${base}/wallet/withdrawals`, async (ctx) => {

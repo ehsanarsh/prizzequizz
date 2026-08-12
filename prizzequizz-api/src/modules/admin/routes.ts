@@ -14,6 +14,8 @@ import { createGiftCode, listGiftCodes, redeemGiftCode } from '../../services/gi
 import { aiGenerate, approve as approvePipeline, createDraft, getMeta as getPipelineMeta, listPipeline, reject as rejectPipeline, runPipeline } from '../../services/questionPipelineService.js';
 import { listAdminAudit, recordAdmin } from '../../services/adminAuditService.js';
 import { listPartners, savePartner, removePartner, addCodes, listCodes, stock as payoutStock, PayoutError } from '../../services/payoutPartnerService.js';
+import { getOtpSettings, setOtpSettings } from '../../services/withdrawOtpService.js';
+import { getSmsConfig, smsIsLive } from '../../services/smsService.js';
 import { listReports, reportCounts, setReportStatus } from '../../services/questionReportService.js';
 import { RESET_AREAS, type ResetArea, dashboardMetrics, financeSummary, finishedMatches, resetArea, runningMatches, suspiciousUsers } from '../../services/adminOpsService.js';
 import { getAccount } from '../../services/walletLedgerService.js';
@@ -58,6 +60,31 @@ function maskCode(code: string): string {
 }
 
 export function registerAdminRoutes(router: Router, base: string): void {
+  /* ===== The code that guards a payout =====
+   * It was the constant "1234", identical for every player and never sent.
+   * The operator can now switch the requirement off, change its length and
+   * timings, and see at a glance whether SMS is really live — because when it
+   * is not, the test code works and that must never be a surprise. */
+  router.add('GET', `${base}/admin/withdraw-otp`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    const cfg = await getSmsConfig();
+    const live = smsIsLive(cfg);
+    json(ctx.res, 200, {
+      settings: await getOtpSettings(),
+      smsLive: live,
+      /* In test mode this is the code that will work, so the panel can say so
+       * rather than leaving the operator to discover it. */
+      testCode: live ? null : (cfg.otp?.testCode || '1234')
+    });
+  });
+  router.add('PUT', `${base}/admin/withdraw-otp`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    const b = (ctx.body ?? {}) as any;
+    const next = await setOtpSettings(b);
+    await recordAdmin({ action: 'withdraw_otp_settings', meta: next as any });
+    json(ctx.res, 200, next);
+  });
+
   /* ===== Non-cash prize payouts: partners and their code stock =====
    * A prize can leave as a bank transfer or as credit with a partner. Until a
    * partner offers an API, the codes are a shelf the operator stocks here.

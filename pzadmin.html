@@ -159,7 +159,7 @@ async function loadCfg(){ try{ CFG=await api('GET','/admin/config'); $('#cfgVer'
 const NAV=[
   ['اصلی',[['dashboard','📊','داشبورد'],['finance','💰','داشبورد مالی'],['accounting','🧾','حسابداری و گزارش'],['expenses','🧮','هزینه‌های شرکت'],['users','👤','کاربران'],['matches','🎮','مسابقات'],['lastsurvivor','🏆','آخرین بازمانده'],['support','🎧','پشتیبانی']]],
   ['محتوا',[['questions','❓','سوالات'],['qreports','🚩','گزارش سؤالات'],['aistudio','🤖','استودیوی سوال (AI)'],['pipeline','🔬','خط‌لولهٔ کیفیت'],['categories','🏷️','موضوعات'],['characters','🎭','کاراکترها'],['charboxes','🎲','قرعه‌کشی کاراکتر'],['lifelines','🧩','کمک‌ها'],['rewards','🎡','گردونه و جایزه روزانه'],['recordmode','🏅','ثبت رکورد'],['onboarding','👋','خوش‌آمدگویی']]],
-  ['اقتصاد',[['wallet','🏆','صندوق جایزه'],['withdrawals','💸','دریافت جایزه'],['payoutpartners','🎁','شرکای جایزه'],['rewardholds','⏳','جوایز در انتظار'],['tickets','🎫','بلیط‌ها'],['shop','🛒','فروشگاه'],['giftcodes','🎁','کدهای هدیه'],['payments','🏦','درگاه پرداخت']]],
+  ['اقتصاد',[['wallet','🏆','صندوق جایزه'],['withdrawals','💸','دریافت جایزه'],['payoutpartners','🎁','شرکای جایزه'],['withdrawotp','🔐','کد تأیید جایزه'],['rewardholds','⏳','جوایز در انتظار'],['tickets','🎫','بلیط‌ها'],['shop','🛒','فروشگاه'],['giftcodes','🎁','کدهای هدیه'],['payments','🏦','درگاه پرداخت']]],
   ['بالانس بازی (Data-Driven)',[['cfg_xp','✨','XP'],['cfg_level','🏅','Level'],['cfg_cup','🏆','Cup'],['cfg_gameplay','🕹️','گیم‌پلی مودها'],['leagues','🛡️','لیگ‌ها'],['missions2','🎯','مأموریت‌ها']]],
   ['رشد و تعامل',[['leaderboard','📈','لیدربرد'],['banners2','🖼️','بنرها'],['campaign','🎁','کمپین کاربر جدید'],['events','📅','رویدادها'],['banners','🖼️','بنرها'],['notifications','🔔','اعلان‌ها'],['sms','📱','پنل پیامکی']]],
   ['سیستم',[['monitoring','🖥️','مانیتورینگ سرور'],['anticheat','🛡️','ضدتقلب'],['suspicious','🚨','کاربران مشکوک'],['reports','📑','گزارش‌ها'],['logs','📝','لاگ و Audit'],['reset','♻️','ابزار ریست'],['accounts','🔐','حساب‌ها و دسترسی'],['backup','💾','پشتیبان‌گیری'],['general','⚙️','تنظیمات عمومی'],['rawcfg','🧩','ویرایش خام Config']]]
@@ -189,7 +189,7 @@ async function render(){
   try{
     if(CUR==='accounts')return renderAccounts();
     if(CONFIG_PAGES[CUR])return renderConfigSection(CONFIG_PAGES[CUR][0],CONFIG_PAGES[CUR][1]);
-    const fn={dashboard:renderDashboard,finance:renderFinance,accounting:renderAccounting,expenses:renderExpenses,backup:renderBackup,users:renderUsers,matches:renderMatches,support:renderSupport,questions:renderQuestions,qreports:renderQReports,aistudio:renderAiStudio,pipeline:renderPipeline,categories:renderCategories,wallet:renderWallet,withdrawals:renderWithdrawals,payoutpartners:renderPayoutPartners,rewardholds:renderRewardHolds,tickets:renderTickets,giftcodes:renderGiftCodes,shop:renderShopAdmin,characters:renderCharacters,charboxes:renderCharBoxes,lifelines:renderLifelines,rewards:renderRewards,missions2:renderMissions2,recordmode:renderRecordMode,onboarding:renderOnboarding,lastsurvivor:renderLastSurvivor,sms:renderSms,payments:renderPayments,leaderboard:renderLeaderboard,banners2:renderBanners,notifications:renderNotifications,anticheat:renderAntiCheat,suspicious:renderSuspicious,reports:renderReports,logs:renderLogs,reset:renderReset,roles:renderRoles,rawcfg:renderRawCfg,monitoring:renderMonitoring}[CUR];
+    const fn={dashboard:renderDashboard,finance:renderFinance,accounting:renderAccounting,expenses:renderExpenses,backup:renderBackup,users:renderUsers,matches:renderMatches,support:renderSupport,questions:renderQuestions,qreports:renderQReports,aistudio:renderAiStudio,pipeline:renderPipeline,categories:renderCategories,wallet:renderWallet,withdrawals:renderWithdrawals,payoutpartners:renderPayoutPartners,withdrawotp:renderWithdrawOtp,rewardholds:renderRewardHolds,tickets:renderTickets,giftcodes:renderGiftCodes,shop:renderShopAdmin,characters:renderCharacters,charboxes:renderCharBoxes,lifelines:renderLifelines,rewards:renderRewards,missions2:renderMissions2,recordmode:renderRecordMode,onboarding:renderOnboarding,lastsurvivor:renderLastSurvivor,sms:renderSms,payments:renderPayments,leaderboard:renderLeaderboard,banners2:renderBanners,notifications:renderNotifications,anticheat:renderAntiCheat,suspicious:renderSuspicious,reports:renderReports,logs:renderLogs,reset:renderReset,roles:renderRoles,rawcfg:renderRawCfg,monitoring:renderMonitoring}[CUR];
     if(fn)return fn();
   }catch(e){$('#main').innerHTML=head('خطا')+'<div class="card empty">'+(e.message||'خطا')+'</div>';}
 }
@@ -1340,6 +1340,47 @@ async function bnToggle(id){
 async function bnDel(id){
   if(!confirm('حذف بنر؟')) return;
   try{ await api('DELETE','/admin/banners/'+id); toast('حذف شد'); render(); }catch(e){ toast(e.message||'خطا'); }
+}
+
+/* THE CODE THAT GUARDS A PAYOUT.
+   It used to be the literal "1234" for every player and was never sent
+   anywhere. This is where the operator turns it on or off and sees, plainly,
+   whether SMS is really live — because when it is not, the test code works,
+   and that must never be a surprise. */
+async function renderWithdrawOtp(){
+  let d;
+  try{ d=await api('GET','/admin/withdraw-otp'); }
+  catch(e){ $('#main').innerHTML=head('کد تأیید دریافت جایزه')+'<div class="card empty">'+(e.message||'خطا')+'</div>'; return; }
+  const s=d.settings||{};
+  $('#main').innerHTML=head('کد تأیید دریافت جایزه')+
+    (d.smsLive
+      ? '<div class="card"><b style="color:var(--ok)">پیامک فعال است</b><div class="sub" style="margin-top:6px">کد به‌صورت تصادفی ساخته و به شمارهٔ کاربر پیامک می‌شود.</div></div>'
+      : '<div class="card"><b style="color:var(--warn,#e0a200)">پیامک در حالت آزمایشی است</b><div class="sub" style="margin-top:6px;line-height:1.9">کد واقعی فرستاده نمی‌شود و کد <b dir="ltr">'+esc(d.testCode||'')+'</b> کار می‌کند. برای فعال‌کردن ارسال واقعی، به تب «پیامک» برو و سرویس‌دهنده را از حالت sandbox خارج کن.</div></div>')+
+    '<div class="card"><b>تنظیمات</b><div style="display:grid;gap:8px;margin-top:10px">'+
+      '<label style="display:flex;align-items:center;gap:10px"><input type="checkbox" id="otpReq" '+(s.required!==false?'checked':'')+'> <span>درخواست کد تأیید برای دریافت جایزه <b>الزامی</b> باشد</span></label>'+
+      '<div class="sub" style="margin-bottom:4px">اگر خاموش کنی، کاربر بدون کد می‌تواند درخواست دریافت جایزه بدهد.</div>'+
+      '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
+        '<label>تعداد رقم <input class="in" id="otpDigits" value="'+(s.digits||5)+'" style="max-width:90px"></label>'+
+        '<label>اعتبار (ثانیه) <input class="in" id="otpTtl" value="'+(s.ttlSeconds||180)+'" style="max-width:110px"></label>'+
+        '<label>فاصلهٔ ارسال مجدد (ثانیه) <input class="in" id="otpResend" value="'+(s.resendSeconds||60)+'" style="max-width:110px"></label>'+
+        '<label>حداکثر در ساعت <input class="in" id="otpMax" value="'+(s.maxPerHour||5)+'" style="max-width:100px"></label>'+
+        '<label>حداکثر تلاش نادرست <input class="in" id="otpAtt" value="'+(s.maxAttempts||5)+'" style="max-width:110px"></label>'+
+      '</div>'+
+      '<button class="btn" onclick="otpSave()">ذخیره</button>'+
+    '</div></div>';
+}
+async function otpSave(){
+  try{
+    await api('PUT','/admin/withdraw-otp',{
+      required:$('#otpReq').checked,
+      digits:parseInt($('#otpDigits').value)||5,
+      ttlSeconds:parseInt($('#otpTtl').value)||180,
+      resendSeconds:parseInt($('#otpResend').value)||60,
+      maxPerHour:parseInt($('#otpMax').value)||5,
+      maxAttempts:parseInt($('#otpAtt').value)||5
+    });
+    toast('ذخیره شد'); render();
+  }catch(e){ toast(e.message||'خطا'); }
 }
 
 async function renderPayoutPartners(){

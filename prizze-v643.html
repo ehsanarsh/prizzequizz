@@ -15441,6 +15441,16 @@ function pzRenderWdCards(){
     '</button>';}).join('');
 }
 function pzPickWdCard(id){ _wdCardId=id; const c=BANK_CARDS.find(x=>x.id===id); if(c&&c.holder){const n=document.getElementById('wdName'); if(n&&!n.value.trim())n.value=c.holder;} pzRenderWdCards(); }
+/* WHAT THE CODE SHEET SAYS.
+   In test mode the server discloses the code, because nothing was really sent
+   and a tester staring at an empty inbox is not a useful state. In live mode
+   it never does — it only says where the message went. */
+function pzOtpHint(d,phone){
+  if(d&&d.testCode) return 'حالت آزمایشی: پیامکی ارسال نشد. کد ' + d.testCode + ' را وارد کن.';
+  return phone ? ('کد تأیید به شمارهٔ '+phone+' پیامک شد. برای ثبت درخواست، کد را وارد کن.')
+               : 'کد تأیید برایت ارسال شد.';
+}
+
 /* ---- Which door: cash to a bank account, or a partner gift code ---- */
 let _wdMethod='bank', _wdPartner=null, _wdPartnerAmt=0, _wdOptions=null;
 function pzWdMethod(m){
@@ -15494,12 +15504,14 @@ submitKyc=async function(){
     const pn=((_wdOptions||[]).find(x=>x.id===_wdPartner)||{}).name||'';
     _pzWd={amount,payoutMethod:'partner',partnerId:_wdPartner,idempotencyKey:'wd_'+Date.now()};
     const s2=await pzApi('POST','/wallet/withdrawals/send-otp',{});
+    /* Rate limits and provider failures are real answers now, not silence. */
+    if(s2&&!s2.ok){ toast((s2.error&&s2.error.message)||'ارسال کد ناموفق بود'); return; }
     const ph2=(s2&&s2.ok&&s2.data&&s2.data.phone)?s2.data.phone:'';
     closeKyc();
     const am2=document.getElementById('wotpAmount'), de2=document.getElementById('wotpDest'), h2=document.getElementById('wotpHint'), c2=document.getElementById('wotpCode'), e2=document.getElementById('wotpErr');
     if(am2)am2.textContent=fa(amount)+' تومان';
     if(de2)de2.textContent='کد هدیهٔ '+pn;
-    if(h2)h2.textContent=ph2?('کد تأیید به شمارهٔ '+ph2+' ارسال شد.'):'کد تأیید برایت ارسال شد.';
+    if(h2)h2.textContent=pzOtpHint(s2&&s2.data,ph2);
     if(e2)e2.textContent=''; if(c2)c2.value='';
     document.getElementById('wotpBg').classList.add('show');
     document.getElementById('wotpSheet').classList.add('show');
@@ -15520,12 +15532,13 @@ submitKyc=async function(){
   _pzWd={amount,destination:cardDigits,cardNumber:cardDigits,cardBank:card.bank||'',iban:card.iban||'',nationalId:nid,holderName:name,idempotencyKey:'wd_'+Date.now()};
   const s=await pzApi('POST','/wallet/withdrawals/send-otp',{});
   if(btn){btn.disabled=false;btn.textContent=_t;}
+  if(s&&!s.ok){ toast((s.error&&s.error.message)||'ارسال کد ناموفق بود'); return; }
   const ph=(s&&s.ok&&s.data&&s.data.phone)?s.data.phone:'';
   closeKyc();
   const am=document.getElementById('wotpAmount'), de=document.getElementById('wotpDest'), hint=document.getElementById('wotpHint'), code=document.getElementById('wotpCode'), err=document.getElementById('wotpErr');
   if(am)am.textContent=fa(amount)+' تومان';
   if(de)de.textContent='به کارت '+(card.mask||pzMaskCard(cardDigits));
-  if(hint)hint.textContent=ph?('کد تأیید به شمارهٔ '+ph+' ارسال شد. برای ثبت درخواست، کد را وارد کن.'):'کد تأیید به موبایل ثبت‌شده‌ات ارسال شد. برای ثبت درخواست، کد را وارد کن.';
+  if(hint)hint.textContent=pzOtpHint(s&&s.data,ph);
   if(err)err.textContent='';
   if(code)code.value='';
   document.getElementById('wotpBg').classList.add('show');
