@@ -169,6 +169,39 @@ console.log('the mode pictures:');
   ok('a mode with no artwork yet still shows something big', !r.fallback || r.emjSize >= 40, 'fallback ' + r.fallback + ', ' + r.emjSize + 'px');
 }
 
+console.log('the arrows hold still while the deck moves:');
+{
+  /* They used to be rendered inside the deck, so a drag carried them along
+     with the cards. Measured mid-gesture: the deck must have moved and the
+     arrows must not. */
+  const r = await page.evaluate(async () => {
+    const track = document.getElementById('mtrack');
+    const at = () => ({ deck: Math.round(track.getBoundingClientRect().left),
+                        prev: Math.round(document.querySelector('.mk-arrow.prev').getBoundingClientRect().left),
+                        next: Math.round(document.querySelector('.mk-arrow.next').getBoundingClientRect().left) });
+    const before = at();
+    /* Hold the drag open: press and move, and measure before letting go. */
+    const b = track.getBoundingClientRect();
+    const pt = { x: b.left + b.width / 2, y: b.top + 40 };
+    const fire = (type, x) => track.dispatchEvent(new TouchEvent(type, { bubbles: true, cancelable: true,
+      touches: type === 'touchend' ? [] : [new Touch({ identifier: 1, target: track, clientX: x, clientY: pt.y })] }));
+    fire('touchstart', pt.x);
+    fire('touchmove', pt.x + 60);
+    await new Promise((r2) => setTimeout(r2, 60));
+    const during = at();
+    fire('touchend', pt.x + 60);
+    await new Promise((r2) => setTimeout(r2, 500));
+    /* That drag was past the threshold, so it moved the deck on. Put it back,
+       or every check after this one starts from the wrong card. */
+    (0, eval)('hmSet')(0);
+    await new Promise((r2) => setTimeout(r2, 200));
+    return { before, during, after: at() };
+  });
+  ok('the deck follows the finger', Math.abs(r.during.deck - r.before.deck) > 20, r.before.deck + ' → ' + r.during.deck);
+  ok('and the arrows stay exactly where they are', r.during.prev === r.before.prev && r.during.next === r.before.next,
+     JSON.stringify({ prev: [r.before.prev, r.during.prev], next: [r.before.next, r.during.next] }));
+}
+
 console.log('the swipe:');
 {
   await swipe(160);
@@ -191,7 +224,7 @@ console.log('the rest:');
   await page.waitForTimeout(200);
   const arrow = await page.evaluate(async () => {
     document.querySelector('.mk-arrow.next').click();
-    await new Promise((r) => setTimeout(r, 250));
+    await new Promise((r) => setTimeout(r, 700));
     return document.querySelector('#mcard h2').textContent;
   });
   ok('the arrow works too', /بازمانده/.test(arrow), arrow);

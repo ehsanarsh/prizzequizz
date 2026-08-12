@@ -87,6 +87,7 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
    the banner, and it gets the room the card gives up. A home that scrolls is
    a home where the start button can be below the fold. */
 #home{overflow:hidden!important}
+#home>.grow{flex:0 0 0;height:0}
 #home.pz-hasbanner{overflow-y:auto!important}
 #home.pz-hasbanner .hstage{flex:0 0 auto}
 #home .tk-promo-host{flex:0 0 auto;margin:0 12px}
@@ -131,7 +132,7 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
   gap:6px;overflow:visible;will-change:transform}
 /* The swipe surface. touch-action tells the browser we handle the
    horizontal drag, so it never steals it for a scroll mid-gesture. */
-.mcard{flex:0 0 78%;min-width:0;display:flex;flex-direction:column;margin-top:clamp(18px,3.4vh,30px);
+.mcard{position:relative;flex:0 0 78%;min-width:0;display:flex;flex-direction:column;margin-top:clamp(26px,5vh,44px);
   background:linear-gradient(180deg,rgba(38,44,36,.62),rgba(20,25,19,.68));color:var(--text);
   border:2.5px solid #000;border-radius:22px;box-shadow:0 6px 0 #000,0 18px 30px -12px rgba(0,0,0,.55);
   backdrop-filter:blur(7px) saturate(1.1);-webkit-backdrop-filter:blur(7px) saturate(1.1);
@@ -154,19 +155,19 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
 
 /* The arrows straddle the edge between the card and the sliver they lead to,
    at the card's middle — the one place where "this way" is unambiguous. */
-.mk-arrow{position:absolute;top:50%;transform:translateY(-50%);z-index:6;width:34px;height:52px;
+.mk-arrow{position:absolute;top:calc(50% - 8px);transform:translateY(-50%);z-index:6;width:34px;height:52px;
   border-radius:16px;display:grid;place-items:center;background:linear-gradient(180deg,#FFD84D,#F0A400);
   border:2.5px solid #000;box-shadow:0 4px 0 #000;font-size:22px;color:#12203a;font-weight:900;cursor:pointer;padding:0}
-.mk-arrow.next{left:-2px}
-.mk-arrow.prev{right:-2px}
+.mk-arrow.next{right:-2px}
+.mk-arrow.prev{left:-2px}
 .mk-arrow:active{transform:translateY(-50%) translateY(3px);box-shadow:0 1px 0 #000}
 /* THE ARCH.
    The picture does not sit in a rectangle inside the card — it sits in a domed
    frame that rises above the card's top edge, the way the trophy does on the
    reference art. The dome is the card's crown, so the artwork is the first
    thing the eye lands on instead of a box in a stack of boxes. */
-.mk-art{width:84%;flex:0 1 auto;margin:calc(-1 * clamp(18px,3.4vh,30px)) auto 0;
-  height:clamp(88px,20vh,190px);min-height:88px;
+.mk-art{width:88%;flex:1 1 auto;margin:calc(-1 * clamp(18px,3.4vh,30px)) auto 0;
+  min-height:110px;
   border-radius:50% 50% 18px 18px / 62% 62% 18px 18px;
   overflow:hidden;border:2.5px solid #000;position:relative;z-index:2;
   box-shadow:0 5px 0 #000,0 12px 22px -10px rgba(0,0,0,.6);
@@ -177,8 +178,16 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
   border:2px solid rgba(255,255,255,.45);pointer-events:none}
 /* contain, not cover: cover cropped every mode picture down to a
    band across the middle, which is why none of them could be made out. */
-.mk-art img{width:100%;height:100%;object-fit:contain;padding:10px 8px 6px}
-.mk-art .emj{font-size:clamp(38px,9vh,72px);filter:drop-shadow(0 6px 0 rgba(0,0,0,.18))}
+/* Big inside the frame: the picture IS the card now that the text is
+   gone, so it only keeps enough margin to clear the ring. */
+.mk-art img{width:100%;height:100%;object-fit:contain;padding:8px 6px 4px}
+.mk-art .emj{font-size:clamp(52px,13vh,104px);filter:drop-shadow(0 6px 0 rgba(0,0,0,.18))}
+/* The cup rides on the crown of the arch, half of it outside the frame. */
+.mk-cup{position:absolute;left:50%;top:0;transform:translate(-50%,-52%);z-index:6;
+  width:clamp(40px,8.4vh,68px);height:clamp(40px,8.4vh,68px);display:grid;place-items:center;pointer-events:none}
+.mk-cup img{width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 4px 0 rgba(0,0,0,.35))}
+.mk-cup .emj{font-size:clamp(34px,7.4vh,60px);line-height:1;filter:drop-shadow(0 4px 0 rgba(0,0,0,.35))}
+.mcard.side .mk-cup{transform:translate(-50%,-52%) scale(.8);opacity:.9}
 .mk-badge{position:absolute;bottom:6px;right:6px;background:rgba(13,13,16,.85);color:#fff;border:2px solid #000;
   border-radius:999px;font-size:9.5px;font-weight:900;padding:2px 8px;z-index:2}
 .mcard h2{font-size:18px;margin-top:6px;line-height:1.25}
@@ -4830,8 +4839,12 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
                ones either side, so it is obvious the deck goes left and right
                without having to discover it. -->
           <div class="mtrack" id="mtrack"><!-- filled by hmRender() --></div>
+          <!-- Outside the deck on purpose: inside it, they were dragged along
+               with the cards instead of staying put. They point the way you
+               push, which is the same direction as the drag. -->
+          <button class="mk-arrow prev" onclick="hmGo(-1)" aria-label="قبلی">‹</button>
+          <button class="mk-arrow next" onclick="hmGo(1)" aria-label="بعدی">›</button>
           <div class="mdots" id="mdots"></div>
-          <div class="mnext" id="mnext" onclick="hmGo(1)"></div>
         </div>
         <div class="hrail" id="hrailL"></div>
       </div>
@@ -10728,7 +10741,12 @@ function pzHomeBannerFit(host){
   sc.classList.remove('pz-hasbanner');
   void sc.offsetHeight;
   let used=0;
-  for(const el of sc.children){ if(el!==host&&el!==stage) used+=el.getBoundingClientRect().height; }
+  /* `.grow` is a spacer, not content: counting it makes the stage smaller than
+     it should be, and the banner then cannot be scrolled fully out of sight. */
+  for(const el of sc.children){
+    if(el===host||el===stage||el.classList.contains('grow')) continue;
+    used+=el.getBoundingClientRect().height;
+  }
   const h=Math.max(140, Math.round(sc.clientHeight-used));
   stage.style.height=h+'px';
   sc.classList.add('pz-hasbanner');
@@ -12497,18 +12515,17 @@ function hmRailTap(side,i){ try{ hmRailItems()[side][i].go(); sfx&&sfx('tap'); }
    the slivers either side, so a neighbour can never drift out of step with
    what it will look like once you get there. */
 function hmCardHTML(m,side){
-  const pz=hmPrizes(m);
-  return '<div class="mk-art" style="background:'+m.tint+'">'+
+  /* The card says four things and nothing else: which game, what it looks
+     like, the cup riding on top of the frame, and how to start. Everything
+     that used to be printed here — the prize ribbon, the cup count, the entry
+     line, the trivia chips — was noise around a picture and a button. */
+  return '<div class="mk-cup"><img data-pzsrc="cup-crown" data-emj="🏆" alt=""></div>'+
+    '<div class="mk-art" style="background:'+m.tint+'">'+
       '<span class="mk-badge">'+m.badge+'</span>'+
       '<img data-pzsrc="'+m.art+'" data-emj="'+m.emj+'" alt="">'+
     '</div>'+
     '<h2>'+m.title+'</h2>'+
-    (side?'':'<div class="msub">'+m.sub+'</div>'+
-      '<div class="mk-rib">جوایز</div>'+
-      '<div class="mk-prizes">'+pz.map(p=>'<div class="mk-prz"><span class="e">'+p[0]+'</span><b>'+p[1]+'</b></div>').join('')+'</div>'+
-      (m.entryHtml||hmEntry(m))+
-      '<div class="mk-facts">'+m.facts.map(f=>'<span>'+f+'</span>').join('')+'</div>'+
-      '<button class="mk-start'+(m.soon?' soon':'')+'" onclick="hmStart()">'+(m.soon?'بزودی 🚧':'شروع بازی')+'</button>');
+    (side?'':'<button class="mk-start'+(m.soon?' soon':'')+'" onclick="hmStart()">'+(m.soon?'بزودی 🚧':'شروع بازی')+'</button>');
 }
 function hmRender(){
   const m=HOME_MODES[hmIdx]; if(!m) return;
@@ -12517,15 +12534,9 @@ function hmRender(){
   t.innerHTML=
     '<div class="mcard side prev" onclick="hmGo(-1)">'+hmCardHTML(HOME_MODES[prev],true)+'</div>'+
     '<div class="mcard cur" id="mcard">'+hmCardHTML(m,false)+'</div>'+
-    '<div class="mcard side next" onclick="hmGo(1)">'+hmCardHTML(HOME_MODES[next],true)+'</div>'+
-    /* The arrows sit on the outer edges at the card's middle, half over the
-       sliver they lead to — so which way they go is not a guess. */
-    '<button class="mk-arrow next" onclick="event.stopPropagation();hmGo(1)" aria-label="بعدی">‹</button>'+
-    '<button class="mk-arrow prev" onclick="event.stopPropagation();hmGo(-1)" aria-label="قبلی">›</button>';
+    '<div class="mcard side next" onclick="hmGo(1)">'+hmCardHTML(HOME_MODES[next],true)+'</div>';;
   const d=document.getElementById('mdots');
   if(d) d.innerHTML=HOME_MODES.map((x,i)=>'<i class="'+(i===hmIdx?'on':'')+'" onclick="hmSet('+i+','+(i>hmIdx?1:-1)+')"></i>').join('');
-  const nx=document.getElementById('mnext');
-  if(nx) nx.textContent='↔ بکش · بعدی: '+HOME_MODES[next].title+' ‹';
   /* Artwork goes through the game's own loader: .webp first, then .png, then
      .jpg, so a picture uploaded from the panel in any of those is picked up
      without this file knowing which. Only when none of the three exist does
@@ -12579,21 +12590,30 @@ function hmSet(i,dir){
   if(next===hmIdx&&dir){ hmSnapBack(); return; }
   const el=document.getElementById('mtrack');
   if(!el||!dir){ hmIdx=next; hmRender(); return; }
-  const out=(dir>0?1:-1)*100;
+  if(el._busy) return; el._busy=1;
+  /* Move by exactly ONE card, so when the deck stops, the neighbour is sitting
+     precisely where the current card was. Then swap the contents with the
+     transition off and put the deck back to zero — nothing moves on screen, so
+     there is no flicker. Re-rendering DURING the animation is what made the
+     card flutter before it settled. */
+  const card=el.querySelector('.mcard');
+  const step=(card?card.getBoundingClientRect().width:200)+6;
   el.classList.remove('mc-snap');
-  el.style.transition='transform .16s ease-in';
-  el.style.transform='translateX('+out+'%)';
-  setTimeout(()=>{
-    hmIdx=next; hmRender();
+  el.style.transition='transform .26s cubic-bezier(.2,.9,.3,1)';
+  el.style.transform='translateX('+(dir>0?step:-step)+'px)';
+  const land=()=>{
+    el.removeEventListener('transitionend',land);
+    clearTimeout(el._t);
+    hmIdx=next;
     el.style.transition='none';
-    el.style.transform='translateX('+(-out)+'%)';
-    /* Two frames: one for the browser to take the jump without animating it,
-       one to start the slide in. A single frame sometimes animates the jump. */
-    requestAnimationFrame(()=>requestAnimationFrame(()=>{
-      el.style.transition='transform .26s cubic-bezier(.2,.9,.3,1)';
-      el.style.transform='translateX(0)';
-    }));
-  },160);
+    hmRender();
+    el.style.transform='translateX(0)';
+    void el.offsetHeight;                    /* commit both before painting */
+    el._busy=0;
+  };
+  el.addEventListener('transitionend',land);
+  /* transitionend does not fire if the tab is hidden or the move is a no-op. */
+  el._t=setTimeout(land,320);
 }
 /* A drag that did not go far enough: put the deck back where it was. */
 function hmSnapBack(){
