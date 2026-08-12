@@ -131,7 +131,7 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
   gap:6px;overflow:visible;will-change:transform}
 /* The swipe surface. touch-action tells the browser we handle the
    horizontal drag, so it never steals it for a scroll mid-gesture. */
-.mcard{flex:0 0 78%;min-width:0;display:flex;flex-direction:column;
+.mcard{flex:0 0 78%;min-width:0;display:flex;flex-direction:column;margin-top:clamp(18px,3.4vh,30px);
   background:linear-gradient(180deg,rgba(38,44,36,.62),rgba(20,25,19,.68));color:var(--text);
   border:2.5px solid #000;border-radius:22px;box-shadow:0 6px 0 #000,0 18px 30px -12px rgba(0,0,0,.55);
   backdrop-filter:blur(7px) saturate(1.1);-webkit-backdrop-filter:blur(7px) saturate(1.1);
@@ -160,13 +160,26 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
 .mk-arrow.next{left:-2px}
 .mk-arrow.prev{right:-2px}
 .mk-arrow:active{transform:translateY(-50%) translateY(3px);box-shadow:0 1px 0 #000}
-.mk-art{width:100%;height:min(24vh,170px);border-radius:16px;overflow:hidden;border:2.5px solid #000;position:relative;
+/* THE ARCH.
+   The picture does not sit in a rectangle inside the card — it sits in a domed
+   frame that rises above the card's top edge, the way the trophy does on the
+   reference art. The dome is the card's crown, so the artwork is the first
+   thing the eye lands on instead of a box in a stack of boxes. */
+.mk-art{width:84%;flex:0 1 auto;margin:calc(-1 * clamp(18px,3.4vh,30px)) auto 0;
+  height:clamp(88px,20vh,190px);min-height:88px;
+  border-radius:50% 50% 18px 18px / 62% 62% 18px 18px;
+  overflow:hidden;border:2.5px solid #000;position:relative;z-index:2;
+  box-shadow:0 5px 0 #000,0 12px 22px -10px rgba(0,0,0,.6);
   display:grid;place-items:center;background:radial-gradient(70% 70% at 50% 40%,#FFF1B8,#F6D25A)}
+/* A thin ring just inside the dome, so the arch reads as a frame rather than
+   as a picture that happens to be round at the top. */
+.mk-art::after{content:"";position:absolute;inset:4px;border-radius:inherit;
+  border:2px solid rgba(255,255,255,.45);pointer-events:none}
 /* contain, not cover: cover cropped every mode picture down to a
    band across the middle, which is why none of them could be made out. */
-.mk-art img{width:100%;height:100%;object-fit:contain;padding:4px}
-.mk-art .emj{font-size:64px;filter:drop-shadow(0 6px 0 rgba(0,0,0,.18))}
-.mk-badge{position:absolute;top:6px;right:6px;background:rgba(13,13,16,.85);color:#fff;border:2px solid #000;
+.mk-art img{width:100%;height:100%;object-fit:contain;padding:10px 8px 6px}
+.mk-art .emj{font-size:clamp(38px,9vh,72px);filter:drop-shadow(0 6px 0 rgba(0,0,0,.18))}
+.mk-badge{position:absolute;bottom:6px;right:6px;background:rgba(13,13,16,.85);color:#fff;border:2px solid #000;
   border-radius:999px;font-size:9.5px;font-weight:900;padding:2px 8px;z-index:2}
 .mcard h2{font-size:18px;margin-top:6px;line-height:1.25}
 .mcard .msub{font-size:11px;color:var(--muted);font-weight:800;margin-top:1px}
@@ -218,19 +231,19 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
    is deliberate: the trivia chips go first, then the "who is here" line, then
    the ribbon — the picture, the name, the prizes and the start button are the
    reason the screen exists and are the last to shrink. */
-@media(max-height:780px){
+@media(max-height:800px){
   .mcard{padding:8px 8px 10px}
   .mk-start{font-size:15px}
   .mk-facts{display:none}
 }
-@media(max-height:700px){
+@media(max-height:740px){
   .mk-live{display:none}
   .mk-art{min-height:64px}
   .mcard .msub{font-size:10px}
   .top3{padding:6px 10px}
   .t3p .f{width:26px;height:26px;font-size:14px}
 }
-@media(max-height:640px){
+@media(max-height:660px){
   /* Last things to go on the smallest phones. What survives: the picture, the
      name, the prizes, the cost and the button. */
   .mk-rib{display:none}
