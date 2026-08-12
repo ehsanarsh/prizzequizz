@@ -78,6 +78,21 @@ async function swipe(dx, dy = 0, steps = 12) {
   await page.waitForTimeout(350);
 }
 
+console.log('touching the card:');
+{
+  /* A plain tap once turned the card into a 44×44 button: the swipe code added
+     a class named «sw», and this file already had a .sw that IS a 44×44
+     button. Everything after the first touch was scrambled. Geometry before
+     and after a touch must be identical. */
+  const before = await page.evaluate(() => { const r = document.getElementById('mcard').getBoundingClientRect(); return { w: Math.round(r.width), h: Math.round(r.height) }; });
+  const pt = await page.evaluate(() => { const r = document.getElementById('mcard').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + 40 }; });
+  await page.touchscreen.tap(pt.x, pt.y);
+  await page.waitForTimeout(350);
+  const after = await page.evaluate(() => { const r = document.getElementById('mcard').getBoundingClientRect(); return { w: Math.round(r.width), h: Math.round(r.height) }; });
+  ok('a tap does not change the card', before.w === after.w && before.h === after.h, before.w + '×' + before.h + ' → ' + after.w + '×' + after.h);
+  ok('and the card is a card, not a 44px button', after.w > 150 && after.h > 200, after.w + '×' + after.h);
+}
+
 console.log('the swipe:');
 {
   await swipe(160);
@@ -115,12 +130,40 @@ console.log('the rest:');
     const el = document.querySelector('#home .weekly-progress-line');
     if (!el) return null;
     const cs = getComputedStyle(el);
-    return { bg: cs.backgroundColor, flag: getComputedStyle(el.querySelector('.wpl-flag small')).color, marker: !!el.querySelector('.wpl-marker') };
+    return { bg: cs.backgroundImage.replace(/\s+/g, ''), flag: getComputedStyle(el.querySelector('.wpl-flag small')).color, marker: !!el.querySelector('.wpl-marker') };
   });
   ok('the cup rail is still there', !!cup && cup.marker, JSON.stringify(cup));
-  ok('and it is a light card, readable on the forest', cup && cup.bg === 'rgb(247, 244, 236)', cup && cup.bg);
+  ok('and it is a light card, readable on the forest', !!cup && /243,240,226|226,231,216/.test(cup.bg), cup && cup.bg.slice(0, 60));
   ok('its league labels are dark enough to read on it', cup && cup.flag === 'rgb(61, 61, 61)', cup && cup.flag);
 }
+
+/* ---- the squash ----
+   .screen is a scrolling flex column, and flex items shrink by default. Once
+   the real content made the page taller than the phone, every block was
+   compressed below its own content height and their insides overlapped — the
+   report was "at first it draws, then everything goes into everything".
+   Nothing here may shrink; the screen scrolls instead. Measured on a SHORT
+   phone, because that is where it bites. */
+console.log('nothing may be squashed:');
+for (const [w, h] of [[390, 844], [360, 640], [412, 732]]) {
+  await page.setViewportSize({ width: w, height: h });
+  await page.evaluate(() => { try { (0, eval)("go('home')"); } catch (e) {} });
+  await page.waitForTimeout(500);
+  const r = await page.evaluate(() => {
+    const box = (sel) => { const e = document.querySelector(sel); if (!e) return null; const b = e.getBoundingClientRect(); return { top: b.top, bottom: b.bottom, h: b.height, sh: e.scrollHeight }; };
+    const parts = { cup: box('#home .weekly-progress-line'), stage: box('.hstage'), card: box('#mcard'), top3: box('.top3') };
+    /* A block shorter than what it contains is a squashed block. */
+    const squashed = Object.keys(parts).filter((k) => parts[k] && parts[k].sh - parts[k].h > 2);
+    /* And two blocks must never sit on top of one another. */
+    const order = [parts.cup, parts.stage, parts.top3].filter(Boolean);
+    let overlap = false;
+    for (let i = 1; i < order.length; i++) if (order[i].top < order[i - 1].bottom - 1) overlap = true;
+    return { squashed, overlap, card: parts.card && Math.round(parts.card.h) };
+  });
+  ok('nothing is squashed at ' + w + '×' + h, r.squashed.length === 0, r.squashed.join(',') || 'none');
+  ok('and no two blocks overlap at ' + w + '×' + h, !r.overlap, 'card ' + r.card + 'px');
+}
+await page.setViewportSize({ width: 390, height: 844 });
 
 ok('no script errors on the new home', errs.length === 0, errs.slice(0, 2).join(' | '));
 await page.screenshot({ path: '/tmp/claude-0/-home-user-prizzequizz/8e7dbfdd-7716-52fe-a640-0feaacd6599f/scratchpad/home-real.png' });

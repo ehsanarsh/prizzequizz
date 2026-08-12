@@ -64,15 +64,15 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
    was one shade and nothing stood out. Light cards on the forest,
    with the brand yellow kept for anything that wants a tap.
    ============================================================ */
-.hstage{display:grid;grid-template-columns:56px 1fr 56px;gap:4px;padding:2px 8px 0;align-items:start}
+.hstage{display:grid;grid-template-columns:56px 1fr 56px;gap:4px;padding:2px 8px 0;align-items:start;flex:0 0 auto}
 .hrail{display:flex;flex-direction:column;gap:11px;padding-top:2px}
 .hside{display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;-webkit-tap-highlight-color:transparent}
 .hside .art{width:50px;height:50px;border-radius:15px;display:grid;place-items:center;font-size:25px;position:relative;
   background:linear-gradient(180deg,#FFFDF6,#E7E2D2);border:2.5px solid #000;box-shadow:0 4px 0 #000;overflow:visible}
 .hside .art img{width:100%;height:100%;object-fit:cover;border-radius:12px}
 .hside:active .art{transform:translateY(2px);box-shadow:0 2px 0 #000}
-.hside .lbl{font-size:8.5px;font-weight:900;text-align:center;line-height:1.2;color:#141414;
-  background:#F7F4EC;border:2px solid #000;border-radius:7px;padding:1px 4px;box-shadow:0 2px 0 #000;max-width:58px}
+.hside .lbl{font-size:8.5px;font-weight:900;text-align:center;line-height:1.2;color:#1A241C;
+  background:#EDEADC;border:2px solid #000;border-radius:7px;padding:1px 4px;box-shadow:0 2px 0 #000;max-width:58px}
 .hside .tag{position:absolute;bottom:-6px;left:50%;transform:translateX(-50%);background:var(--bolt);color:#141414;
   border:2px solid #000;border-radius:999px;font-size:8px;font-weight:900;padding:0 5px;white-space:nowrap;z-index:2}
 .hside .live{position:absolute;top:-3px;right:-3px;width:12px;height:12px;border-radius:50%;background:var(--ok);
@@ -81,10 +81,14 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
 .hcenter{position:relative;display:flex;flex-direction:column;align-items:center;min-width:0}
 /* The swipe surface. touch-action tells the browser we handle the
    horizontal drag, so it never steals it for a scroll mid-gesture. */
-.mcard{width:100%;background:linear-gradient(180deg,#FBF8F0,#E9EDF3);color:#12203a;border:2.5px solid #000;
+.mcard{width:100%;flex:0 0 auto;background:linear-gradient(180deg,#F3F0E2,#DCE2D2);color:#1A241C;border:2.5px solid #000;
   border-radius:22px;box-shadow:0 6px 0 #000,0 18px 30px -12px rgba(0,0,0,.55);padding:10px 10px 12px;text-align:center;
   position:relative;touch-action:pan-y;user-select:none;-webkit-user-select:none}
-.mcard.sw{transition:transform .22s cubic-bezier(.2,.9,.3,1),opacity .22s ease}
+/* NOT «sw» — this file already has a .sw class that is a 44×44 button, and
+   putting it on the card turned the whole card into one on the first touch.
+   In a single-file app a two-letter class name is a collision waiting to
+   happen; anything added at runtime here is namespaced. */
+.mcard.mc-snap{transition:transform .22s cubic-bezier(.2,.9,.3,1),opacity .22s ease}
 .mk-art{width:100%;height:min(24vh,170px);border-radius:16px;overflow:hidden;border:2.5px solid #000;position:relative;
   display:grid;place-items:center;background:radial-gradient(70% 70% at 50% 40%,#FFF1B8,#F6D25A)}
 .mk-art img{width:100%;height:100%;object-fit:cover}
@@ -92,19 +96,19 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
 .mk-badge{position:absolute;top:6px;right:6px;background:rgba(13,13,16,.85);color:#fff;border:2px solid #000;
   border-radius:999px;font-size:9.5px;font-weight:900;padding:2px 8px;z-index:2}
 .mcard h2{font-size:18px;margin-top:6px;line-height:1.25}
-.mcard .msub{font-size:11px;color:#41567c;font-weight:800;margin-top:1px}
-.mk-rib{margin:9px auto 0;width:70%;background:linear-gradient(180deg,#FF6B5E,#E33F30);color:#fff;border:2.5px solid #000;
+.mcard .msub{font-size:11px;color:#4A5A46;font-weight:800;margin-top:1px}
+.mk-rib{margin:9px auto 0;width:70%;background:linear-gradient(180deg,#FFDE5A,#EFAF12);color:#2A2000;border:2.5px solid #000;
   border-radius:9px;font-size:12px;font-weight:900;padding:3px 0;box-shadow:0 3px 0 #000}
 .mk-prizes{display:flex;gap:7px;justify-content:center;margin-top:7px}
-.mk-prz{flex:1;max-width:74px;border-radius:13px;background:linear-gradient(180deg,#5AA6F0,#2E6FC9);border:2.5px solid #000;
-  box-shadow:0 3px 0 #000;color:#fff;padding:6px 2px;display:flex;flex-direction:column;align-items:center;gap:1px}
+.mk-prz{flex:1;max-width:74px;border-radius:13px;background:linear-gradient(180deg,#55684A,#33402B);border:2.5px solid #000;
+  box-shadow:0 3px 0 #000;color:#F3F0E2;padding:6px 2px;display:flex;flex-direction:column;align-items:center;gap:1px}
 .mk-prz .e{font-size:19px;line-height:1}
-.mk-prz b{font-size:12px}
-.mk-entry{margin-top:10px;font-size:12px;font-weight:900;color:#1f7a45;display:flex;align-items:center;justify-content:center;gap:6px}
-.mk-entry .cost{color:#12203a;background:#FFE066;border:2.5px solid #000;border-radius:999px;padding:1px 9px;font-size:11.5px}
+.mk-prz b{font-size:12px;color:var(--bolt)}
+.mk-entry{margin-top:10px;font-size:12px;font-weight:900;color:#2A6B3C;display:flex;align-items:center;justify-content:center;gap:6px}
+.mk-entry .cost{color:#2A2000;background:#FFE066;border:2.5px solid #000;border-radius:999px;padding:1px 9px;font-size:11.5px}
 .mk-facts{display:flex;gap:5px;justify-content:center;flex-wrap:wrap;margin-top:7px}
-.mk-facts span{background:#E4EAF6;border:2px solid #000;border-radius:999px;padding:2px 8px;font-size:10px;font-weight:900;color:#22335a}
-.mk-live{margin-top:8px;font-size:11px;font-weight:900;color:#1f7a45;display:flex;align-items:center;justify-content:center;gap:6px}
+.mk-facts span{background:#E3E8D6;border:2px solid #000;border-radius:999px;padding:2px 8px;font-size:10px;font-weight:900;color:#2C3A28}
+.mk-live{margin-top:8px;font-size:11px;font-weight:900;color:#2A6B3C;display:flex;align-items:center;justify-content:center;gap:6px}
 .mk-live i{width:9px;height:9px;border-radius:50%;background:var(--ok);border:1.5px solid #000;display:inline-block}
 .mk-start{margin-top:9px;width:100%;padding:10px 0;border-radius:14px;border:2.5px solid #000;
   background:linear-gradient(180deg,#4BE38B,#22A85C);color:#06301a;font-size:17px;font-weight:900;box-shadow:0 5px 0 #000}
@@ -119,16 +123,16 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
 .mdots{display:flex;gap:5px;justify-content:center;margin-top:7px}
 .mdots i{width:7px;height:7px;border-radius:50%;background:rgba(255,255,255,.4);border:1.5px solid #000;cursor:pointer}
 .mdots i.on{background:var(--bolt);width:18px;border-radius:999px}
-.mnext{margin-top:6px;font-size:10px;font-weight:900;color:#141414;background:#F7F4EC;border:2px solid #000;
+.mnext{margin-top:6px;font-size:10px;font-weight:900;color:#1A241C;background:#EDEADC;border:2px solid #000;
   border-radius:999px;padding:3px 10px;box-shadow:0 2px 0 #000;cursor:pointer}
 
-.top3{margin:6px 12px 4px;background:#F7F4EC;border:2.5px solid #000;border-radius:16px;box-shadow:0 4px 0 #000;
+.top3{flex:0 0 auto;margin:6px 12px 4px;background:linear-gradient(180deg,#F3F0E2,#E2E7D8);border:2.5px solid #000;border-radius:16px;box-shadow:0 4px 0 #000;
   padding:8px 10px;color:#141414;cursor:pointer}
 .t3h{display:flex;justify-content:space-between;align-items:center;font-size:11.5px;font-weight:900;margin-bottom:7px}
 .t3h span{color:#8a6b00;font-size:10px}
 .t3row{display:flex;gap:6px}
 .t3empty{flex:1;text-align:center;font-size:10.5px;font-weight:800;color:#5a5a5a;padding:6px 0}
-.t3p{flex:1;min-width:0;background:#fff;border:2.5px solid #000;border-radius:12px;box-shadow:0 3px 0 #000;padding:5px 3px;
+.t3p{flex:1;min-width:0;background:#FAF8EE;border:2.5px solid #000;border-radius:12px;box-shadow:0 3px 0 #000;padding:5px 3px;
   display:flex;flex-direction:column;align-items:center;gap:2px}
 .t3p.first{background:linear-gradient(180deg,#FFF6D8,#FFE9A8)}
 .t3p .medal{font-size:14px;line-height:1}
@@ -136,21 +140,21 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
   background:linear-gradient(180deg,#FFE7A8,#F0B33C)}
 .t3p .f img{width:100%;height:100%;object-fit:cover}
 .t3p .n{font-size:10px;font-weight:900;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.t3p .amt{font-size:10px;font-weight:900;color:#1f7a45;background:#E4F6EA;border:1.5px solid #000;border-radius:999px;padding:0 6px}
+.t3p .amt{font-size:10px;font-weight:900;color:#2A6B3C;background:#DFF0DC;border:1.5px solid #000;border-radius:999px;padding:0 6px}
 
 /* The cup rail, as a light card like everything else on the new home.
    A later block in this sheet deliberately strips the rail down to
    transparent with !important, so these have to out-specify it (#home) as
    well as carry !important — otherwise they silently lose and the rail stays
    dark grey text on a dark forest. */
-#home .weekly-progress-line{background:#F7F4EC!important;border:2.5px solid #000!important;border-radius:14px!important;
+#home .weekly-progress-line{flex:0 0 auto!important;background:linear-gradient(180deg,#F3F0E2,#E2E7D8)!important;border:2.5px solid #000!important;border-radius:14px!important;
   box-shadow:0 4px 0 #000!important;padding:6px 10px 8px!important;margin:0 12px 6px!important}
 #home .weekly-progress-line .wpl-marker b{background:var(--bolt)!important;color:#141414!important;border-color:#000!important}
 #home .weekly-progress-line .wpl-marker span{color:#2E6FC9!important;text-shadow:none!important}
 #home .weekly-progress-line .wpl-flag small{color:#3d3d3d!important}
 #home .weekly-progress-line .wpl-flag.done small{color:#1f7a45!important}
 #home .weekly-progress-line .wpl-next{color:#41567c!important}
-#home .weekly-progress-line .wpl-track::before{background:#DCD7C6!important;border-color:#000!important}
+#home .weekly-progress-line .wpl-track::before{background:#C9CFBB!important;border-color:#000!important}
 
 @media(max-height:760px){
   .mk-art{height:22vh}
@@ -12406,7 +12410,7 @@ function hmGo(d){ hmSet(hmIdx+d); }
 function hmSwipeInit(){
   const el=document.getElementById('mcard'); if(!el||el._sw) return; el._sw=1;
   let x0=0,y0=0,t0=0,dx=0,drag=false,axis='';
-  const down=(e)=>{ const p=e.touches?e.touches[0]:e; x0=p.clientX; y0=p.clientY; t0=Date.now(); dx=0; drag=true; axis=''; el.classList.remove('sw'); };
+  const down=(e)=>{ const p=e.touches?e.touches[0]:e; x0=p.clientX; y0=p.clientY; t0=Date.now(); dx=0; drag=true; axis=''; el.classList.remove('mc-snap'); };
   const move=(e)=>{
     if(!drag) return;
     const p=e.touches?e.touches[0]:e;
@@ -12423,7 +12427,7 @@ function hmSwipeInit(){
   const up=()=>{
     if(!drag) return; drag=false;
     const w=el.offsetWidth||300, fast=(Date.now()-t0)<300&&Math.abs(dx)>40;
-    el.classList.add('sw'); el.style.transform=''; el.style.opacity='';
+    el.classList.add('mc-snap'); el.style.transform=''; el.style.opacity='';
     if(Math.abs(dx)>w*0.25||fast){
       /* RTL: dragging toward the right hand side moves forward through the
          list, which is what «به سمت راست بری بره به بازمانده» asks for. */
