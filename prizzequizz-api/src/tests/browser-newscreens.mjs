@@ -324,6 +324,24 @@ async function setPlan(plan) {
 }
 const deck = () => page.evaluate(() => (0, eval)('hmModes()').map((m) => m.key));
 
+/* What the eye actually gets off the mode carousel: the frame colour of the
+   card you are on, the shadow behind it, and the halo pseudo-element. Read as
+   computed values so a class name alone can never make these pass. */
+const rgb = (s) => (s.match(/\d+/g) || []).slice(0, 3).map(Number);
+const cardSkin = () =>
+  page.evaluate(() => {
+    const el = document.querySelector('#mtrack .mcard.cur');
+    if (!el) return null;
+    const cs = getComputedStyle(el);
+    return {
+      border: cs.borderTopColor,
+      shadow: cs.boxShadow,
+      halo: getComputedStyle(el, '::after').boxShadow,
+      plain: getComputedStyle(document.querySelector('.card')).borderTopColor,
+    };
+  });
+let freeSkin = null;
+
 console.log('the friendly plan:');
 {
   await setPlan('free');
@@ -344,6 +362,11 @@ console.log('the friendly plan:');
   ok('and the theme is the blue one', !!blue);
   const bolt = await page.evaluate(() => getComputedStyle(document.querySelector('.phone')).getPropertyValue('--bolt').trim());
   ok('the accent colour really changed, not just a class', /73D9FF/i.test(bolt), bolt);
+
+  freeSkin = await cardSkin();
+  const [r, g, b] = rgb(freeSkin.border);
+  ok('the friendly deck keeps its blue frame', b > r && b > g, freeSkin.border);
+  ok('and no gold halo is bolted onto it', !/255,\s*210/.test(freeSkin.halo || 'none'), String(freeSkin.halo).slice(0, 60));
 }
 
 console.log('«افراد آنلاین» in the friendly plan:');
@@ -367,6 +390,15 @@ console.log('back in the main plan:');
   ok('all four modes are back', d.length >= 4 && d.includes('ls') && d.includes('league'), JSON.stringify(d));
   const chip = await page.evaluate(() => getComputedStyle(document.getElementById('hdrPlan')).display);
   ok('and the free-plan chip is gone', chip === 'none', chip);
+
+  const skin = await cardSkin();
+  const [r, g, b] = rgb(skin.border);
+  ok('the prize deck is framed in yellow', r > 200 && g > 150 && b < 100, skin.border);
+  ok('which is not the frame the friendly deck wears', skin.border !== freeSkin.border, skin.border + ' vs ' + freeSkin.border);
+  ok('the drop shadow is gold too, not the flat black one', /255,\s*210/.test(skin.shadow), skin.shadow.slice(0, 90));
+  ok('and the card you are on carries a halo', /255,\s*210/.test(skin.halo || ''), String(skin.halo).slice(0, 70));
+  const [pr, pg, pb] = rgb(skin.plain);
+  ok('while an ordinary card is left alone, so the deck stands apart', !(pr > 200 && pg > 150 && pb < 100), skin.plain);
 
   seen.length = 0;
   await page.evaluate(() => (0, eval)('hmOnline()'));

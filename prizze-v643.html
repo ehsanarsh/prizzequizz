@@ -153,6 +153,31 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
 .mcard.side h2{font-size:12px;margin-top:4px;opacity:.9}
 .mtrack.mc-snap{transition:transform .22s cubic-bezier(.2,.9,.3,1)}
 
+/* THE MAIN-COMPETITION DECK IS GOLD.
+   دوئل / آخرین بازمانده / لیگ هفتگی / همه یا هیچ are the prize games, and they
+   were wearing the same flat black frame as every other card in the app, so the
+   one row that carries real money read like a list item. The friendly deck
+   already announces itself in blue; the prize deck gets the gold that matches
+   its own accent — a yellow frame, a gold drop shadow instead of the black one,
+   and a halo on the card you are actually on.
+   Scoped with :not(.theme-free) so the friendly override further down the sheet
+   stays the single place blue is defined — the two plans never fight over the
+   same declaration. */
+.phone:not(.theme-free) .mcard{
+  border-color:#FFD21F;
+  box-shadow:0 6px 0 #8A5C00,0 18px 30px -12px rgba(0,0,0,.55),
+             0 0 0 3px rgba(255,210,31,.18),0 0 26px rgba(255,210,31,.28)}
+/* The halo lives on a pseudo-element and animates opacity, not box-shadow:
+   animating a shadow repaints the card every frame and the carousel is already
+   carrying a backdrop-filter. It sits outside the card's own box and takes no
+   pointer events, so nothing about the swipe changes. */
+.phone:not(.theme-free) .mcard.cur::after{
+  content:'';position:absolute;inset:-5px;border-radius:26px;pointer-events:none;z-index:0;
+  box-shadow:0 0 20px 5px rgba(255,210,31,.42);
+  animation:mcHalo 2.6s ease-in-out infinite}
+@keyframes mcHalo{0%,100%{opacity:.4}50%{opacity:1}}
+@media (prefers-reduced-motion:reduce){.phone:not(.theme-free) .mcard.cur::after{animation:none;opacity:.7}}
+
 /* The arrows straddle the edge between the card and the sliver they lead to,
    at the card's middle — the one place where "this way" is unambiguous. */
 .mk-arrow{position:absolute;top:calc(50% - 8px);transform:translateY(-50%);z-index:6;width:34px;height:52px;
