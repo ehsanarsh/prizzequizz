@@ -113,18 +113,10 @@ for (const [w, h] of [[360, 640], [390, 844], [320, 568]]) {
   /* The old screen clipped: content past the bottom simply did not exist. */
   ok('the screen scrolls rather than clipping', /auto|scroll/.test(geom.overflowY), geom.overflowY);
   ok('every button is present', geom.btnCount >= 3, String(geom.btnCount));
-  if (geom.needsScroll) {
-    const reach = await page.evaluate(() => {
-      const sec = document.getElementById('result');
-      sec.scrollTop = sec.scrollHeight;
-      const btns = [...sec.querySelectorAll('.res-actions button')].filter((x) => x.offsetParent);
-      const last = btns[btns.length - 1].getBoundingClientRect();
-      return { bottom: Math.round(last.bottom), secBottom: Math.round(sec.getBoundingClientRect().bottom) };
-    });
-    ok('and the last button can be scrolled into view', reach.bottom <= reach.secBottom + 2, JSON.stringify(reach));
-  } else {
-    ok('everything fits without scrolling at all', geom.lastBtnBottom <= geom.secBottom + 2, JSON.stringify(geom));
-  }
+  /* It must FIT. overflow-y:auto stays as the guarantee that content can never
+     be silently CLIPPED, but needing to scroll is itself the failure here. */
+  ok('the whole screen fits — no scrolling needed', !geom.needsScroll, JSON.stringify(geom));
+  ok('and the last button is on screen', geom.lastBtnBottom <= geom.secBottom + 2, JSON.stringify(geom));
 
   const content = await page.evaluate(() => {
     const sec = document.getElementById('result');
@@ -138,15 +130,21 @@ for (const [w, h] of [[360, 640], [390, 844], [320, 568]]) {
       statsInOneCard: (function(){ const g=sec.querySelector('.res-stats'); if(!g) return false;
         const r=g.getBoundingClientRect(); const kids=[...g.querySelectorAll('.stat')];
         return kids.length===3 && kids.every(k=>{const kr=k.getBoundingClientRect(); return kr.top>=r.top-1 && kr.bottom<=r.bottom+1;}); })(),
+      titleCls: (document.getElementById('resultTitle')||{}).className || '',
+      subShown: !!(document.getElementById('resultSub')||{}).offsetParent,
       actionsAtBottom: (function(){ const a=sec.querySelector('.res-actions'), m=sec.querySelector('.res-mid');
         if(!a||!m) return false; return a.getBoundingClientRect().top >= m.getBoundingClientRect().bottom - 1; })(),
       scoreCount: (sec.innerText.match(/۵\s*-\s*۳|۳\s*-\s*۵/g) || []).length
     };
   });
   ok('two faces flank the score', content.faces === 2, String(content.faces));
-  ok('the opponent is on one side and you on the other', /حریف/.test(content.board) && /تو/.test(content.board), content.board.replace(/\n/g, ' '));
-  ok('the character has room again', content.charShown, String(content.charShown));
-  ok('but not more than a fifth of the screen', content.charFrac < 0.22, content.charFrac.toFixed(2));
+  /* The «حریف»/«تو» captions are gone — the two faces and the two names are
+     what separate the sides now. */
+  ok('both players are named, one per side', /زهرا/.test(content.board) && /ehsan|احسان/.test(content.board), content.board.replace(/\n/g, ' '));
+  ok('the character has real room', content.charShown && content.charFrac > 0.10, content.charFrac.toFixed(2));
+  ok('without taking over the screen', content.charFrac < 0.26, content.charFrac.toFixed(2));
+  ok('the headline is coloured by the outcome', /win|lose/.test(content.titleCls), content.titleCls);
+  ok('and the line under it is gone', !content.subShown, String(content.subShown));
   ok('there is no second XP figure among the stats', !content.statLabels.some((s) => /XP|امتیاز/.test(s)), JSON.stringify(content.statLabels));
   ok('the score is printed once, not twice', content.scoreCount <= 1, String(content.scoreCount));
   ok('the three figures share ONE card, on one line', content.statsInOneCard, String(content.statCards));
@@ -181,7 +179,42 @@ for (const [w, h] of [[360, 640], [390, 844], [320, 568]]) {
 /* ── the rematch button ──────────────────────────────────────────────── */
 {
   const { ctx, page, errs } = await makePage(390, 844);
-  console.log('the rematch button:');
+  /* ── the fake rematch ────────────────────────────────────────────────── */
+{
+  const { ctx, page, errs } = await makePage(390, 844);
+  console.log('the rematch button with no real match behind it:');
+  /* Underneath sits a leftover simulation: it rolls a dice for the opponent's
+     answer, DOUBLES the stake, charges it, and starts a local game off the
+     whole topic list. In the prize plan that is a match nobody was invited to
+     and money taken for it. */
+  await showDuelResult(page, true);
+  await page.evaluate(() => {
+    (0, eval)("_pzRematchMid=null; _pzRematchBusy=false; userPlan='premium';");
+    window.__paid = 0; window.__intro = 0;
+    (0, eval)('pay = function(n){ window.__paid += n; return true; }');
+    (0, eval)('duelIntro = function(){ window.__intro++; }');
+    (0, eval)("duelStakeVal=12500;");
+    (0, eval)('pzSyncRematchAvailability()');
+  });
+  let st = await page.evaluate(() => { const b = document.getElementById('rematchBtn'); return { text: b.textContent.trim(), disabled: b.disabled }; });
+  ok('the button says the offer is not available', /در دسترس نیست/.test(st.text), st.text);
+  ok('and is disabled', st.disabled === true, String(st.disabled));
+
+  await page.evaluate(() => { const b = document.getElementById('rematchBtn'); b.disabled = false; b.click(); });
+  await page.waitForTimeout(2200);
+  const after = await page.evaluate(() => ({
+    paid: window.__paid, intro: window.__intro, stake: (0, eval)('duelStakeVal'),
+    text: document.getElementById('rematchBtn').textContent.trim()
+  }));
+  ok('tapping it takes no money', after.paid === 0, String(after.paid));
+  ok('does not double the stake', after.stake === 12500, String(after.stake));
+  ok('and starts no game', after.intro === 0, String(after.intro));
+  ok('it just says the offer is gone', /در دسترس نیست/.test(after.text), after.text);
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
+console.log('the rematch button:');
   await showDuelResult(page, true);
   await page.evaluate(() => { (0, eval)("_pzRematchMid='m1'; _pzRematchBusy=false;"); (0, eval)("_pzRematchBtnState('idle')"); });
 

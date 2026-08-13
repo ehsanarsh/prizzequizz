@@ -580,27 +580,32 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
    result screen has to hold a scoreboard, a prize, stats and four buttons —
    that cannot be promised to fit, so it is allowed to scroll instead. */
 .res{overflow-y:auto;-webkit-overflow-scrolling:touch;display:flex;flex-direction:column;justify-content:flex-start;
-  padding:14px 20px calc(16px + env(safe-area-inset-bottom,0px));gap:10px}
+  padding:10px 16px calc(12px + env(safe-area-inset-bottom,0px));gap:6px}
 .res-hero{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;width:100%}
 /* The character, sized to what is left after the scoreboard and the strip —
    never the fixed 172px block that used to push the buttons off the screen. */
-.res-char{display:flex;align-items:flex-end;justify-content:center;height:clamp(70px,13vh,116px);margin-bottom:2px}
-.res-char .mascot{width:clamp(60px,12vh,100px);height:clamp(60px,12vh,100px);border-radius:50%;overflow:hidden}
-.res-char img{width:auto;height:100%;max-width:min(40vw,150px);object-fit:contain;
+/* The character gets the room the trimmed cards gave back. */
+.res-char{display:flex;align-items:flex-end;justify-content:center;height:clamp(84px,17vh,150px);margin-bottom:0}
+.res-char .mascot{width:clamp(74px,15vh,128px);height:clamp(74px,15vh,128px);border-radius:50%;overflow:hidden}
+.res-char img{width:auto;height:100%;max-width:min(48vw,180px);object-fit:contain;
   filter:drop-shadow(0 10px 18px rgba(0,0,0,.45));animation:pzPop .5s cubic-bezier(.2,1.4,.4,1)}
-.res-title{font-size:clamp(19px,4.6vw,26px);font-weight:900;line-height:1.25;text-align:center}
-.res-sub{color:var(--muted);margin-top:3px;font-size:clamp(11.5px,3vw,14px);line-height:1.5;text-align:center}
-.res-mid{flex:0 0 auto;width:100%;display:flex;flex-direction:column;align-items:center;gap:10px}
+/* One line, loud, and coloured by the outcome — set by endGame(). */
+.res-title{font-size:clamp(21px,5.4vw,30px);font-weight:900;line-height:1.2;text-align:center;letter-spacing:.3px;
+  text-shadow:0 2px 0 rgba(0,0,0,.45)}
+.res-title.win{color:var(--ok)}
+.res-title.lose{color:var(--red)}
+.res-sub{display:none}
+.res-mid{flex:0 0 auto;width:100%;display:flex;flex-direction:column;align-items:center;gap:6px}
 
 /* THE SCOREBOARD: a face on each side of the score. */
-.res-board{width:100%;display:flex;align-items:center;justify-content:center;gap:clamp(6px,2.5vw,14px);
-  background:var(--ink-2);border:var(--stroke);border-radius:20px;padding:12px 10px;box-shadow:var(--hard-sm)}
-.rb-side{flex:1 1 0;min-width:0;display:flex;flex-direction:column;align-items:center;gap:6px}
-.rb-face{width:clamp(52px,16vw,72px);height:clamp(52px,16vw,72px);border-radius:20px;border:2.5px solid #000;
-  overflow:hidden;background:var(--ink-3);box-shadow:0 4px 0 #000;display:grid;place-items:center;font-size:30px;cursor:pointer}
+.res-board{width:100%;display:flex;align-items:center;justify-content:center;gap:clamp(4px,2vw,12px);
+  background:var(--ink-2);border:var(--stroke);border-radius:18px;padding:8px 8px 7px;box-shadow:var(--hard-sm)}
+.rb-side{flex:1 1 0;min-width:0;display:flex;flex-direction:column;align-items:center;gap:3px}
+.rb-face{width:clamp(58px,18vw,84px);height:clamp(58px,18vw,84px);border-radius:20px;border:2.5px solid #000;
+  overflow:hidden;background:var(--ink-3);box-shadow:0 4px 0 #000;display:grid;place-items:center;font-size:32px;cursor:pointer}
 .rb-face .pz-avc,.rb-face img{width:100%;height:100%}
-.rb-name{font-size:12px;font-weight:900;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:center}
-.rb-role{font-size:10px;font-weight:800;color:var(--muted)}
+.rb-name{font-size:11.5px;font-weight:900;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:center;line-height:1.35}
+.rb-role{display:none}   /* «حریف»/«تو» — the sides are obvious from the faces */
 .rb-score{flex:0 0 auto;display:flex;align-items:center;gap:clamp(4px,2vw,10px);direction:ltr}
 .rb-n{font-size:clamp(30px,10vw,44px);font-weight:900;line-height:1}
 .rb-dash{font-size:clamp(18px,5vw,26px);font-weight:900;opacity:.35}
@@ -612,11 +617,11 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
 .res-sc-nm{font-size:11px;font-weight:900;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .res-sc-n{font-size:clamp(30px,11vw,46px);font-weight:900;line-height:1;text-shadow:0 0 22px rgba(0,0,0,.35);direction:ltr}
 .res-sc-dash{font-size:clamp(20px,6vw,30px);font-weight:900;opacity:.35}
-.res-amt{font-size:clamp(24px,7vw,38px);font-weight:900;color:var(--green);line-height:1.1;margin:2px 0}
+.res-amt{font-size:clamp(21px,6vw,32px);font-weight:900;color:var(--green);line-height:1.1;margin:0}
 .res-amt small{font-size:.42em;color:var(--muted);font-weight:800}
 /* ONE card, three figures, dividers between them. */
 .res-stats{width:100%;display:flex;align-items:center;justify-content:space-around;gap:4px;
-  background:var(--ink-2);border:var(--stroke);border-radius:16px;padding:9px 6px;box-shadow:var(--hard-sm)}
+  background:var(--ink-2);border:var(--stroke);border-radius:14px;padding:6px 6px;box-shadow:var(--hard-sm)}
 .res-stats .stat{flex:1 1 0;min-width:0;background:none;border:0;box-shadow:none;padding:0;text-align:center}
 .res-stats .rs-sep{flex:0 0 auto;width:2px;align-self:stretch;background:rgba(255,255,255,.10);border-radius:2px}
 /* The actions sit at the BOTTOM of the screen, pushed there by the gap above
@@ -629,10 +634,11 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
 .res-row2 .btn{flex:1 1 0;min-width:0}
 /* The result screen's own button metrics — the global .btn is sized for a page
    you can scroll. */
-.res .btn{padding:11px 12px;font-size:13.5px;border-radius:14px}
-.res .stat{padding:7px 4px}
-.res .stat b{font-size:clamp(15px,4.4vw,21px)}
-.res .stat span{font-size:10.5px}
+.res .btn{padding:10px 12px;font-size:13px;border-radius:14px}
+.res .stat{padding:2px 4px}
+.res .stat b{font-size:clamp(14px,4vw,19px)}
+.res .stat span{font-size:10px}
+.res-actions{gap:7px}
 @media (max-height:720px){
   .res{gap:3px;padding:10px 16px calc(10px + env(safe-area-inset-bottom,0px))}
   .res-mid{gap:3px}
@@ -5274,7 +5280,11 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
           <img id="resultChar" alt="" style="display:none">
         </div>
         <h1 class="res-title" id="resultTitle">برنده شدی!</h1>
-        <p class="res-sub" id="resultSub">تو آخرین بازمانده بودی</p>
+        <!-- The explanatory line under the title is gone: the scoreboard right
+             below already says what happened, and it was a third block of text
+             competing with the two that matter. Kept in the DOM (hidden) because
+             several modes still write their own wording into it. -->
+        <p class="res-sub" id="resultSub" style="display:none"></p>
       </div>
       <div class="res-mid">
         <!-- Faces + score, built by renderResultBoard(). -->
@@ -5446,10 +5456,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
     <section class="screen pad" id="settings">
       <div class="topbar" style="padding:0 0 14px;background:none"><button class="iconbtn" onclick="menuBack('home')">→</button><h1>تنظیمات ⚙️</h1></div>
       <div class="settings-hero"><div class="gear">⚙️</div><div><b>مرکز کنترل پرایز کوییز</b><p>همه چیز قابل تنظیمه؛ صدا، اعلان، امنیت، ظاهر و تجربه بازی.</p>
-        <!-- Which build this phone is actually running. Without it, "it works on
-             my laptop but not my phone" cannot be told apart from "the phone is
-             on last week's file", and both were guessed at for a whole evening. -->
-        <p style="opacity:.62;font-size:11px;margin-top:4px" dir="ltr">build <b id="setBuild">?</b></p></div></div>
+</div></div>
       <div class="set-group-title">تجربه بازی</div>
       <div class="row" onclick="openSettingDetail('notifications')"><div class="r-ico">🔔</div><div class="r-txt"><b>اعلان‌ها</b><span id="setSumNotifications">مدیریت پیام‌ها و یادآوری‌ها</span></div><span class="r-arrow">‹</span></div>
       <div class="row" onclick="openSettingDetail('audio')"><div class="r-ico">🔊</div><div class="r-txt"><b>صدا و لرزش</b><span id="setSumAudio">افکت‌های صوتی بازی</span></div><span class="r-arrow">‹</span></div>
@@ -9185,10 +9192,25 @@ function renderResultBoard(won){
       '<div class="rb-role">تو</div></div>';
 }
 
+/* The rematch offer only exists when a REAL match is behind it. Without this
+   the button sat there enabled in the prize plan with nothing to send. */
+function pzSyncRematchAvailability(){
+  const btn=document.getElementById('rematchBtn'); if(!btn) return;
+  const real=!!_pzRematchMid;
+  if(real){ return; }                      /* its own state machine owns it */
+  if(typeof userPlan!=='undefined'&&userPlan==='premium'){
+    btn.disabled=true; btn.textContent='بازی مجدد با این حریف در دسترس نیست';
+  }
+}
+
 function endGame(won,amount,isWithdraw,customSub){
   clearInterval(timer);clearInterval(dTimer);
   if(won){ try{ pzVictoryAnim(); }catch(e){} }   /* full-screen VICTORY (winner only) */
   try{ renderResultBoard(won); }catch(e){}
+  /* The headline carries the outcome on its own now that the line under it is
+     gone: green for a win, red for a loss, and heavier than anything else. */
+  try{ const _t=document.getElementById('resultTitle');
+       if(_t){ _t.classList.toggle('win',!!won); _t.classList.toggle('lose',!won); } }catch(e){}
   /* The win/lose character, at a size the rest of the screen can afford. Falls
      back to the SVG mascot, and to a plain emoji when neither file is on the
      server — an emoji always renders, so the slot is never blank. */
@@ -9220,6 +9242,7 @@ function endGame(won,amount,isWithdraw,customSub){
   }else if(isDuel&&!won){lastPracticeCoinsEarned=0;lastPracticeCoinBefore=practiceCoins;lastPracticeCoinAfter=practiceCoins;}
   const da=document.getElementById('duelActions');
   da.style.display=isDuel?'flex':'none';
+  try{ if(isDuel) setTimeout(pzSyncRematchAvailability,150); }catch(e){}
   try{ const _rvb=document.getElementById('reviewBtn'); if(_rvb) _rvb.style.display=(isDuel&&PZ_LAST_MATCH)?'block':'none'; }catch(e){}
   renderDuelResultPanel(won);
   /* Show the server-computed XP + 🏆cup for this match under the result. */
@@ -9578,9 +9601,6 @@ function closeStatSheet(){const s=document.getElementById('statSheet');if(s)s.cl
 
 /* ============ SETTINGS CENTER ============ */
 const SETTINGS_KEY='pq_app_settings_v2';
-/* Bumped by hand on every client release. It is printed in تنظیمات so the build
-   a device is running can be read off the screen instead of inferred. */
-const PZ_BUILD='2026-08-13.4';
 const DEFAULT_SETTINGS={
   notifications:true,notifMatch:true,notifLeague:true,notifRewards:true,notifFriends:true,quietHours:'off',
   sound:true,vibration:true,volume:'normal',countdownSound:true,
@@ -9595,7 +9615,6 @@ function loadSettings(){
 }
 function saveSettings(){try{localStorage.setItem(SETTINGS_KEY,JSON.stringify(window.appSettings));}catch(e){}applySettings();renderSettingsSummary();}
 function applySettings(){
-  try{ const bv=document.getElementById('setBuild'); if(bv) bv.textContent=PZ_BUILD; }catch(e){}
   const ph=document.querySelector('.phone');if(ph){ph.classList.toggle('compact-ui',!!appSettings.compactUI);ph.classList.toggle('high-contrast',!!appSettings.highContrast);ph.classList.toggle('no-motion',!!appSettings.reducedMotion);}
   /* «چت سریع» now hides the named button under your face; the floating circle
      it used to hide no longer exists, so the setting had nothing to act on. */
@@ -16736,7 +16755,22 @@ function _pzRematchBtnState(state,text){
 }
 const _origRematch=rematch;
 rematch=function(){
-  if(!_pzRematchMid) return _origRematch.apply(this,arguments);   /* non-real → keep original */
+  if(!_pzRematchMid){
+    /* NO REAL MATCH TO ASK ABOUT.
+       The function underneath is a simulation left over from the offline demo:
+       it rolls a dice for the opponent's answer, DOUBLES the stake, charges it
+       with pay(), and starts a local game off the whole topic list. Falling
+       through to it in the prize plan is what produced «بازی مجدد با همین حریف
+       با ورودی دوبرابر» — a game that began with no request ever sent to the
+       opponent, and real money taken for it.
+       In the prize plan there is nothing to simulate: say the offer is not
+       available and take nothing. */
+    if(typeof userPlan!=='undefined'&&userPlan==='premium'){
+      _pzRematchBtnState('gone','بازی مجدد با این حریف در دسترس نیست');
+      return;
+    }
+    return _origRematch.apply(this,arguments);   /* offline practice only */
+  }
   if(_pzRematchBusy) return;                                      /* one tap, one request */
   _pzRematchBusy=true;
   clearInterval(_pzRematchWatch);
