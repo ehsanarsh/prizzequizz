@@ -15235,12 +15235,16 @@ startMatchmaking = async function(){
   if(r&&!r.ok&&r.error&&(r.error.code==='NO_TICKET'||r.error.code==='TICKET_TIER_INVALID')){ clearInterval(mmTimer);clearInterval(mmPingT); toast('بلیط لازم را نداری؛ از فروشگاه تهیه کن',3500); try{pzSyncWallet();}catch(e){} go('home'); return; }
   if(!r.ok){clearInterval(mmTimer);clearInterval(mmPingT);_pzRefundEntry();toast((r&&r.error&&r.error.message)||'خطای سرور در شروع جستجو',3500);go('home');return;}
   
+  /* The queue ticket id is what a later void is addressed to, so it is recorded
+     BEFORE the immediate-match branch — that branch used to return without ever
+     setting it, leaving an instantly-paired player with no way to be refunded. */
+  _mmt=r.data.id;
+
   /* Immediately matched? */
   if(r.data.status==='matched'&&r.data.matchId){
     _pzMatchFound(r.data.matchId); return;
   }
-  
-  _mmt=r.data.id;
+
   clearInterval(_mmi);
   let secs=0;
   _mmi=setInterval(async()=>{
@@ -15657,7 +15661,9 @@ async function _pzMatchFound(mid){
   /* Guard: process each match ONCE. Re-entry (double poll / reconnect) would
      rebuild pzRt and churn the WebSocket ("closed before established"). */
   if(pzRt&&pzRt.active&&pzRt.matchId===mid) return;
-  _pzEntryRefunded=true;   /* opponent found → entry fee is consumed, no refund */
+  /* NOT consumed yet. Finding an opponent is not playing one: the entry is only
+     spent when /start succeeds, which is now the last step rather than the
+     first. */
   _mid=mid;
   document.getElementById('mmStatus').textContent='✅ حریف پیدا شد!';
   const _radar=document.getElementById('radar');
@@ -15676,10 +15682,19 @@ async function _pzMatchFound(mid){
   pzConnStart();
   pzWsConnect();
 
-  /* Start match */
-  let r=await pzApi('POST','/matches/'+mid+'/start',{});
-  if(!r.ok) r=await pzApi('GET','/matches/'+mid);
-  if(!r.ok){toast('خطا در ورود');go('home');return;}
+  /* READ the match, do not START it yet.
+     POST /matches/:id/start is what really spends the entry ticket on the
+     server — after it, nothing can give the ticket back. Calling it here, the
+     moment a match id arrived, meant the ghost-opponent guard further down had
+     already paid for the match it was about to abandon: the player was thrown
+     home, told «ورودی برگشت داده شد», and the ticket was gone anyway. The GET
+     has no side effects, so the snapshot (names, avatars, questions) is
+     available while the entry is still refundable. */
+  let r=await pzApi('GET','/matches/'+mid);
+  if(!r.ok){
+    await _pzVoidEntry('match_unreadable');
+    toast('خطا در ورود به مسابقه',3000); go('home'); return;
+  }
 
   /* Set opponent from the REAL backend player package (fixes wrong/fake names) */
   const _myid=(typeof pzWsMyId!=='undefined'&&pzWsMyId)||_usr?.id;
@@ -15722,13 +15737,47 @@ async function _pzMatchFound(mid){
   if(!present){
     pzRt.active=false; pzRt.finished=true; pzHeartbeat(false); try{ pzConnStop(); }catch(_){}
     try{ if(pzRt.ws){ pzRt.ws.onclose=null; pzRt.ws.close(); } }catch(_){}
-    _pzEntryRefunded=false; _pzRefundEntry();
-    toast('حریف به بازی متصل نشد — ورودی برگشت داده شد',3200);
+    /* The match was never started, so the server can still void it and hand
+       BOTH players their ticket back. Only say «برگشت داده شد» when it did. */
+    const back=await _pzVoidEntry('opponent_never_joined');
+    toast(back?'حریف به بازی متصل نشد — بلیط برگشت داده شد':'حریف به بازی متصل نشد',3200);
     setTimeout(()=>go('home'),700);
     return;
   }
+
+  /* NOW the entry is really spent — both players are in the room and the match
+     is about to be played. */
   if(_mmStat) _mmStat.textContent='✅ حریف آماده است!';
+  const st=await pzApi('POST','/matches/'+mid+'/start',{});
+  if(!pzRt.active||pzRt.matchId!==mid) return;
+  if(!st.ok){
+    pzRt.active=false; pzRt.finished=true; pzHeartbeat(false); try{ pzConnStop(); }catch(_){}
+    try{ if(pzRt.ws){ pzRt.ws.onclose=null; pzRt.ws.close(); } }catch(_){}
+    const back=await _pzVoidEntry('start_failed');
+    toast(back?'مسابقه شروع نشد — بلیط برگشت داده شد':'مسابقه شروع نشد',3200);
+    setTimeout(()=>go('home'),700);
+    return;
+  }
+  _pzEntryRefunded=true;              /* played for → nothing to give back */
+  try{ pzSyncWallet(); }catch(e){}
   setTimeout(()=>duelIntro(),250);
+}
+
+/* Give the entry back when the match is abandoned before it starts.
+   The server owns this decision: cancelling a matched-but-unstarted ticket
+   voids the match and refunds BOTH holds; once the match has started it refuses,
+   and the player must not be told they got anything back. Returns whether the
+   ticket really came back. */
+async function _pzVoidEntry(reason){
+  let refunded=false;
+  try{
+    const r=await _pzCancelSearch(reason);
+    refunded=!!(r&&r.ok);
+  }catch(e){}
+  /* The free practice entry is a local economy and is handed back here; the
+     premium one has just been settled by the server, so only re-read it. */
+  _pzEntryRefunded=false; _pzRefundEntry();
+  return refunded||!(_pzEntryTicket||_pzEntryPlan==='premium');
 }
 
 /* Inject synced questions into duelRoundQs when the duel starts.
