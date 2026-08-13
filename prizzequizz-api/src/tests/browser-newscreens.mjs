@@ -37,6 +37,8 @@ const seen = [];
 let onlineCall = 0;
 let submitted = null;
 let patched = null;
+let friendReq = null;
+let firstFaces = '';
 await ctx.route('**/v1/**', (route) => {
   const u = new URL(route.request().url());
   const p = u.pathname.replace(/^.*\/v1/, '') + (u.search || '');
@@ -49,12 +51,19 @@ await ctx.route('**/v1/**', (route) => {
     if (refresh && onlineCall > 2) return send({ ok: false, error: { code: 'INSUFFICIENT_COINS', message: 'برای رفرش ۵ سکه لازم است.', status: 402 } }, 402);
     return send({ ok: true, data: {
       players: Array.from({ length: refresh ? 3 : 2 }, (_, i) => ({
-        userId: 'p' + onlineCall + i, username: 'p' + i, displayName: 'بازیکن ' + (refresh ? 'ب' : 'الف') + i,
+        userId: 'p' + onlineCall + i, username: 'p' + onlineCall + i, displayName: 'بازیکن ' + (refresh ? 'ب' : 'الف') + i,
         gender: i % 2 ? 'female' : 'male', level: 5, avatar: null, lastSeen: new Date().toISOString()
       })),
       charged: refresh ? 5 : 0, coins: refresh ? 355 : 360,
       nextCost: refresh ? 5 : 0, freeLeft: refresh ? 0 : 1, onlineTotal: 47
     } });
+  }
+  if (p === '/friends/requests') { friendReq = route.request().postDataJSON(); return send({ ok: true, data: { status: 'pending' } }, 201); }
+  if (/^\/users\/[^/]+\/profile/.test(p)) {
+    /* Answer about the player who was actually asked for — a fixed name here
+       would make a mismatched profile look correct. */
+    const who = p.split('/')[2];
+    return send({ ok: true, data: { id: who, username: who, level: 5, matches: 12, wins: 7, balances: {} } });
   }
   if (p === '/questions/submit') { submitted = route.request().postDataJSON(); return send({ ok: true, data: { questionId: 'q-new', status: 'pending' } }, 201); }
   if (p.startsWith('/questions/mine')) return send({ ok: true, data: { rows: [
@@ -92,7 +101,8 @@ console.log('online players:');
   const total = await page.evaluate(() => document.getElementById('onCount')?.textContent || '');
   ok('the real online total is shown', /۴۷/.test(total), total);
   const names = await page.evaluate(() => [...document.querySelectorAll('#onList .nm')].map((e) => e.textContent).join(','));
-  ok('with the names the server gave, not placeholders', /بازیکن الف0/.test(names), names);
+  ok('with the names the server gave, not placeholders', /^p\d+,p\d+$/.test(names), names);
+  firstFaces = names;
 }
 
 console.log('the paid refresh:');
@@ -102,7 +112,7 @@ console.log('the paid refresh:');
   await page.waitForTimeout(500);
   ok('pressing refresh asks for a refresh', seen.some((s) => /users\/online\?refresh=1/.test(s)), seen.join(' | '));
   const names = await page.evaluate(() => [...document.querySelectorAll('#onList .nm')].map((e) => e.textContent).join(','));
-  ok('and the faces actually change', /بازیکن ب0/.test(names), names);
+  ok('and the faces actually change', names.split(',').length === 3 && names !== firstFaces, names + ' (was ' + firstFaces + ')');
   const btn = await page.evaluate(() => document.getElementById('onRefresh')?.textContent || '');
   ok('the button then states the price before it is pressed', /۵/.test(btn) && /سکه/.test(btn), btn);
 }
@@ -220,7 +230,95 @@ console.log('an incomplete question:');
   ok('is not sent at all', submitted === null);
 }
 
+
+/* ── the friendly plan ─────────────────────────────────────────────── */
+async function setPlan(plan) {
+  await page.evaluate((pl) => {
+    (0, eval)('userPlan = ' + JSON.stringify(pl));
+    (0, eval)('planExplicitlyChosen = true');
+    (0, eval)('applyPlanTheme()');
+    (0, eval)("go('home')");
+  }, plan);
+  await page.waitForTimeout(500);
+}
+const deck = () => page.evaluate(() => (0, eval)('hmModes()').map((m) => m.key));
+
+console.log('the friendly plan:');
+{
+  await setPlan('free');
+  const d = await deck();
+  ok('carries only the friendly duel and record mode', JSON.stringify(d) === '["duel","record"]', JSON.stringify(d));
+  const dots = await page.evaluate(() => document.querySelectorAll('#mdots i').length);
+  ok('and the carousel really shows two, not four', dots === 2, String(dots));
+  const cards = await page.evaluate(() => [...document.querySelectorAll('#mtrack .mcard h2')].map((e) => e.textContent));
+  ok('no prize ladder is on screen to be refused later', !cards.some((c) => /بازمانده|همه یا هیچ|لیگ/.test(c)), JSON.stringify(cards));
+
+  const chip = await page.evaluate(() => {
+    const e = document.getElementById('hdrPlan');
+    return e ? { shown: getComputedStyle(e).display !== 'none', text: e.textContent } : null;
+  });
+  ok('the header says plainly that this is the free plan', chip && chip.shown && /رایگان/.test(chip.text), JSON.stringify(chip));
+
+  const blue = await page.evaluate(() => document.querySelector('.phone')?.classList.contains('theme-free'));
+  ok('and the theme is the blue one', !!blue);
+  const bolt = await page.evaluate(() => getComputedStyle(document.querySelector('.phone')).getPropertyValue('--bolt').trim());
+  ok('the accent colour really changed, not just a class', /73D9FF/i.test(bolt), bolt);
+}
+
+console.log('«افراد آنلاین» in the friendly plan:');
+{
+  await page.evaluate(() => { try { (0, eval)('closeAaaModal(false)'); } catch (e) {} });
+  seen.length = 0;
+  await page.evaluate(() => (0, eval)('hmOnline()'));
+  await page.waitForTimeout(400);
+  const txt = await page.evaluate(() => document.getElementById('aaaSub')?.textContent || '');
+  ok('says it belongs to the main competition', /رقابت اصلی/.test(txt), txt.slice(0, 80));
+  const opened = await page.evaluate(() => document.getElementById('online')?.classList.contains('active'));
+  ok('and does not open the screen anyway', !opened);
+  ok('nor ask the server for a list it will not show', !seen.some((x) => /users\/online/.test(x)), seen.join(' | '));
+}
+
+console.log('back in the main plan:');
+{
+  await page.evaluate(() => { try { (0, eval)('closeAaaModal(false)'); } catch (e) {} });
+  await setPlan('premium');
+  const d = await deck();
+  ok('all four modes are back', d.length >= 4 && d.includes('ls') && d.includes('league'), JSON.stringify(d));
+  const chip = await page.evaluate(() => getComputedStyle(document.getElementById('hdrPlan')).display);
+  ok('and the free-plan chip is gone', chip === 'none', chip);
+
+  seen.length = 0;
+  await page.evaluate(() => (0, eval)('hmOnline()'));
+  await page.waitForTimeout(500);
+  ok('the online list opens normally here', await page.evaluate(() => document.getElementById('online')?.classList.contains('active')));
+  ok('and asks the server', seen.some((x) => /users\/online/.test(x)), seen.join(' | '));
+}
+
+console.log('a face on the online list:');
+{
+  const cards = await page.evaluate(() => document.querySelectorAll('#onList .online-card').length);
+  ok('the list is drawn', cards > 0, String(cards));
+
+  await page.evaluate(() => document.querySelector('#onList .online-card').click());
+  await page.waitForTimeout(400);
+  const modal = await page.evaluate(() => document.getElementById('aaaModal')?.textContent || '');
+  const shownName = await page.evaluate(() => document.getElementById('aaaTitle')?.textContent || '');
+  const listName = await page.evaluate(() => document.querySelector('#onList .nm')?.textContent || '');
+  ok('tapping one opens THAT player’s profile', shownName && shownName === listName, shownName + ' vs ' + listName);
+  ok('with a way to send a friend request', /درخواست دوستی/.test(modal), modal.slice(0, 200));
+
+  await page.evaluate(() => { try { (0, eval)('closeAaaModal(false)'); } catch (e) {} });
+  await page.waitForTimeout(200);
+  friendReq = null;
+  await page.evaluate(() => document.querySelector('#onList .online-add').click());
+  await page.waitForTimeout(500);
+  ok('and the card itself can send one', friendReq && !!friendReq.userId, JSON.stringify(friendReq));
+  const t = await page.evaluate(() => document.getElementById('pzToast')?.textContent || '');
+  ok('with the player told it went', /دوست/.test(t), t);
+}
+
 ok('no script errors on the new screens', errs.length === 0, errs.join(' | '));
+
 
 console.log(`\n${pass} passed, ${fail} failed`);
 await browser.close(); server.close();
