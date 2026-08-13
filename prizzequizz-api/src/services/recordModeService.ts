@@ -60,12 +60,17 @@ export interface RecordConfig {
   coinsPerCorrect: number;
   /** A run nobody has touched for this long is abandoned and can be replaced. */
   staleMinutes: number;
+  /** Seconds each question stays open. */
+  questionSeconds: number;
 }
 
 export const RECORD_DEFAULTS: RecordConfig = {
   enabled: true, friendlyOnly: true, entryHearts: 1, runHearts: RECORD_HEARTS,
   xpPerCorrect: 0, xpPerRecord: 0, cupPerRecord: 0, coinsPerCorrect: 0,
-  staleMinutes: 30
+  staleMinutes: 30,
+  /* How long each question is open. It was a constant in the browser, so the
+   * operator could not shorten or lengthen a run without a redeploy. */
+  questionSeconds: 20
 };
 
 export interface RecordRun {
@@ -155,7 +160,10 @@ function normaliseConfig(raw: any): RecordConfig {
     xpPerRecord: n(c.xpPerRecord, d.xpPerRecord),
     cupPerRecord: n(c.cupPerRecord, d.cupPerRecord),
     coinsPerCorrect: n(c.coinsPerCorrect, d.coinsPerCorrect),
-    staleMinutes: Math.max(1, n(c.staleMinutes, d.staleMinutes, 1440))
+    staleMinutes: Math.max(1, n(c.staleMinutes, d.staleMinutes, 1440)),
+    /* A floor of five seconds: below that the question cannot be read, let
+     * alone answered, and a run would end on the first card. */
+    questionSeconds: Math.max(5, Math.min(300, n(c.questionSeconds, d.questionSeconds, 300)))
   };
 }
 export async function getRecordConfig(): Promise<RecordConfig> {
@@ -255,7 +263,7 @@ const publicQuestion = (q: Question): PublicQuestion => ({
 
 // ------------------------------------------------------------------- run ----
 
-export interface StartResult { run: PublicRun; question: PublicQuestion; heartsLeft: number }
+export interface StartResult { run: PublicRun; question: PublicQuestion; heartsLeft: number; questionSeconds: number }
 export interface PublicRun { id: string; mode: RecordMode; category: string; hearts: number; score: number }
 
 const toPublic = (r: RecordRun): PublicRun => ({ id: r.id, mode: r.mode, category: r.category, hearts: r.hearts, score: r.score });
@@ -329,7 +337,7 @@ export async function startRun(userId: string, mode: RecordMode, category = ''):
    * is the pre-spend balance. Handing that back would leave the header one
    * heart too high until something else corrected it. */
   const left = await getHearts(userId).catch(() => ({ hearts: Number(user.hearts) || 0 }));
-  return { run: toPublic(run), question: publicQuestion(q), heartsLeft: left.hearts };
+  return { run: toPublic(run), question: publicQuestion(q), heartsLeft: left.hearts, questionSeconds: cfg.questionSeconds };
 }
 
 export interface AnswerResult {
@@ -684,6 +692,7 @@ export async function overview(userId: string): Promise<{
   runHearts: number;
   enabled: boolean;
   friendlyOnly: boolean;
+  questionSeconds: number;
 }> {
   const user = await repositories.users.findById(userId).catch(() => null);
   const cats = recordCategories();
@@ -711,7 +720,8 @@ export async function overview(userId: string): Promise<{
     entryHearts: cfg.entryHearts,
     runHearts: cfg.runHearts,
     enabled: cfg.enabled,
-    friendlyOnly: cfg.friendlyOnly
+    friendlyOnly: cfg.friendlyOnly,
+    questionSeconds: cfg.questionSeconds
   };
 }
 

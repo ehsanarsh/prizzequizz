@@ -3218,6 +3218,7 @@ async function renderRecordMode(){
           '<option value="0"'+(!c.friendlyOnly?' selected':'')+'>هر دو پلن</option></select></div>'+
         num('rc_entry','قلبِ ورود (از هدر)',c.entryHearts,'هنگام ورود از قلب‌های واقعیِ هدر کم می‌شود.')+
         num('rc_run','قلبِ داخل بازی',c.runHearts,'هر جواب غلط یکی از این‌ها را خاموش می‌کند؛ روی قلب‌های هدر اثری ندارد.')+
+        num('rc_qsec','زمان هر سؤال (ثانیه)',c.questionSeconds,'ثانیه‌ای که بازیکن برای هر سؤال وقت دارد. کمتر از ۵ ثانیه پذیرفته نمی‌شود.')+
         num('rc_stale','انقضای بازیِ رهاشده (دقیقه)',c.staleMinutes,'اگر بازیکن برنامه را ببندد، بعد از این مدت بازی‌اش بسته می‌شود.')+
       '</div></div>'+
       '<div class="card"><h3>⚖️ اثر روی بقیهٔ بازی</h3>'+
@@ -3250,7 +3251,7 @@ async function rcSave(){
     RM_CFG=await api('POST','/admin/record',{
       enabled:$('#rc_en').value==='1', friendlyOnly:$('#rc_fo').value==='1',
       entryHearts:+($('#rc_entry').value||0), runHearts:+($('#rc_run').value||3),
-      staleMinutes:+($('#rc_stale').value||30),
+      staleMinutes:+($('#rc_stale').value||30), questionSeconds:+($('#rc_qsec').value||20),
       xpPerCorrect:+($('#rc_xpc').value||0), xpPerRecord:+($('#rc_xpr').value||0),
       cupPerRecord:+($('#rc_cup').value||0), coinsPerCorrect:+($('#rc_coin').value||0)});
     toast('ذخیره شد ✅','ok'); renderRecordMode();

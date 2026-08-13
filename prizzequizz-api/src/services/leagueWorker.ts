@@ -10,11 +10,8 @@
  * and the money — belongs to the match itself.
  */
 import { logger } from './logger.js';
-import { currentSeasonId, listRooms } from './leagueService.js';
+import { currentSeasonId, listRooms, LEAGUE_DOORS_MINUTES } from './leagueService.js';
 import { openForLeagueRoom, start as wtaStart, _room } from './wtaService.js';
-
-/** How long before kickoff the doors open. */
-export const LEAGUE_DOORS_MINUTES = 10;
 
 export async function leagueTick(now = Date.now()): Promise<void> {
   let rooms;

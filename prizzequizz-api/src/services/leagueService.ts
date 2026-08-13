@@ -277,6 +277,10 @@ async function ensureSchema(pool: ReturnType<typeof getPgPool>): Promise<boolean
 /** The season a set of standings belongs to: the ISO week they were earned in. */
 export function currentSeasonId(): string { return isoWeekId(); }
 
+/** How long before kickoff a room can be entered. Kept here so the screen and
+ *  the worker cannot disagree about when the doors open. */
+export const LEAGUE_DOORS_MINUTES = 10;
+
 /**
  * Kickoff for a season: the configured weekday and time, in the operator's
  * clock, on or after the moment the week closed.
@@ -586,6 +590,12 @@ export interface MyLeague {
   seasonId: string;
   rank: number | null;
   cup: number;
+  /** Every tier, with the real bands and the real prizes — so the screen can
+   *  say what is on offer instead of repeating numbers typed into the markup. */
+  tiers: LeagueTier[];
+  roomSize: number;
+  /** When the doors open, and when the first question is asked. */
+  doorsOpenAt: number;
   /** The tier they are currently inside, by live rank. */
   tier: LeagueTier | null;
   /** The tier they hold a ticket for, once the season has closed. */
@@ -622,6 +632,9 @@ export async function myLeague(userId: string): Promise<MyLeague> {
   return {
     enabled: cfg.enabled,
     seasonId,
+    tiers: cfg.tiers,
+    roomSize: cfg.roomSize,
+    doorsOpenAt: kickoffFor(cfg) - LEAGUE_DOORS_MINUTES * 60_000,
     rank, cup, tier,
     qualifiedTier: mine ? mine.tier : null,
     tickets: (user?.tickets as any) ?? {},

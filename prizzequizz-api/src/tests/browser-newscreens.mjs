@@ -39,6 +39,7 @@ let submitted = null;
 let patched = null;
 let friendReq = null;
 let firstFaces = '';
+let doorsOpen = false;
 let recordCalls = 0;
 let cutlineCalls = 0;
 let joined = 0; const answered = []; const picked = [];
@@ -87,6 +88,13 @@ await ctx.route('**/v1/**', (route) => {
         { key: 'bronze', label: 'لیگ برنزی', emoji: '🥉', rank: 45, cup: 410, exact: false }
       ],
       kickoffAt: Date.now() + 3600_000,
+      doorsOpenAt: doorsOpen ? Date.now() - 60_000 : Date.now() + 3000_000,
+      roomSize: 15,
+      tiers: [
+        { key: 'gold', label: 'لیگ طلایی', emoji: '🥇', fromRank: 1, toRank: 15, participationPrize: 50000, winnerPrize: 500000, prizeType: 'cash' },
+        { key: 'silver', label: 'لیگ نقره‌ای', emoji: '🥈', fromRank: 16, toRank: 30, participationPrize: 25000, winnerPrize: 250000, prizeType: 'cash' },
+        { key: 'bronze', label: 'لیگ برنزی', emoji: '🥉', fromRank: 31, toRank: 45, participationPrize: 10000, winnerPrize: 100000, prizeType: 'cash' }
+      ],
       room: { id: 'lr1', tier: 'gold', round: 1, roomNo: 1, startsAt: Date.now() + 3600_000, seats: 4 }
     } });
   }
@@ -115,7 +123,7 @@ await ctx.route('**/v1/**', (route) => {
   }
   if (p.startsWith('/record/overview')) {
     recordCalls++;
-    return send({ ok: true, data: { enabled: true, friendlyOnly: true, hearts: 3,
+    return send({ ok: true, data: { enabled: true, friendlyOnly: true, hearts: 3, questionSeconds: 33,
       global: { best: 12, worldBest: 40 },
       categories: [{ name: 'فوتبال', best: 7, worldBest: 21 }, { name: 'تاریخ', best: 3, worldBest: 15 }] } });
   }
@@ -545,19 +553,21 @@ console.log('the league card on the home carousel:');
 
 console.log('the league hub and the studio:');
 {
+  doorsOpen = true;
   await setPlan('premium');
   await page.evaluate(() => { try { (0, eval)('closeAaaModal(false)'); } catch (e) {} });
   await page.evaluate(() => (0, eval)("openLeagues()"));
   await page.waitForTimeout(900);
   ok('the hub is not still parked behind a «بزودی» modal',
     await page.evaluate(() => document.getElementById('leagues')?.classList.contains('active')));
-  const live = await page.evaluate(() => document.getElementById('lgLive')?.textContent || '');
-  ok('the hub says where the player actually stands', /رتبهٔ تو/.test(live) && /۴/.test(live), live.slice(0, 120));
-  ok('and that they are in a league', /لیگ طلایی/.test(live), live.slice(0, 160));
-  ok('with a way into their room', await page.evaluate(() => !!document.querySelector('#lgLive button')));
+  const live = await page.evaluate(() => document.getElementById('lgBody')?.textContent || '');
+  ok('the hub says where the player actually stands', /رتبهٔ تو این هفته/.test(live) && /۴/.test(live), live.slice(0, 90));
+  ok('and which league they are in', /لیگ طلایی/.test(live), live.slice(0, 140));
+  ok('with a way into their room once the doors are open',
+    await page.evaluate(() => !!document.querySelector('#lgBody button')));
 
   joined = 0;
-  await page.evaluate(() => document.querySelector('#lgLive button').click());
+  await page.evaluate(() => document.querySelector('#lgBody button').click());
   await page.waitForTimeout(700);
   ok('entering the studio takes the seat on the server', joined === 1, String(joined));
   ok('and the studio is on screen', await page.evaluate(() => document.getElementById('wta')?.classList.contains('active')));
@@ -709,7 +719,110 @@ console.log('the timer, in every mode:');
   ok('the old corner rings are gone', !old.recordRing, JSON.stringify(old));
 }
 
+
+console.log('the league hub explains itself:');
+{
+  doorsOpen = false;
+  await setPlan('premium');
+  await page.evaluate(() => (0, eval)("openLeagues()"));
+  await page.waitForTimeout(800);
+  const t = await page.evaluate(() => document.getElementById('lgBody')?.textContent || '');
+
+  ok('it says when the match starts', /زمان مسابقه/.test(t) && /تا شروع/.test(t), t.slice(0, 60));
+  ok('and what turning up is worth', /جایزهٔ حضور/.test(t) && /۵۰٬۰۰۰/.test(t), /جایزهٔ حضور/.test(t) + '/' + /۵۰٬۰۰۰/.test(t));
+  ok('it warns that being absent costs the prize', /حذف است/.test(t));
+  ok('the rank bands are the server’s, not typed in', /رتبهٔ ۱ تا ۱۵/.test(t) && /رتبهٔ ۳۱ تا ۴۵/.test(t));
+  ok('every tier shows both prizes', /قهرمان: ۵۰۰٬۰۰۰ تومان/.test(t), t.slice(t.indexOf('لیگ‌ها'), t.indexOf('لیگ‌ها') + 200));
+  ok('the rules of «از کی بپرسم» are spelled out', /۳ جان/.test(t) && /سؤال بعدی از چه کسی/.test(t));
+  ok('and it says the ticket is not for sale', /فروخته نمی‌شود/.test(t));
+
+  const counting = await page.evaluate(() => document.getElementById('lgCount')?.textContent || '');
+  ok('the countdown is a real time, not a placeholder', /ساعت|دقیقه|روز/.test(counting), counting);
+
+  ok('the door is shut until ten minutes before', !/ورود به استودیو/.test(t), 'entry offered too early');
+}
+
+console.log('nothing in the league plays against bots any more:');
+{
+  const gone = await page.evaluate(() => ({
+    goLive: typeof window.goLeagueLive,
+    start: typeof window.startLeagueMatch,
+    claim: typeof window.claimLeagueTicketReward,
+    screen: !!document.getElementById('league-live')
+  }));
+  ok('the bot-league entry points are gone', gone.goLive === 'undefined' && gone.start === 'undefined', JSON.stringify(gone));
+  ok('so is the fake ticket giveaway', gone.claim === 'undefined', JSON.stringify(gone));
+  ok('and the invented league table screen', gone.screen === false, JSON.stringify(gone));
+}
+
+console.log('the studio before kickoff:');
+{
+  /* Entering early used to show the question card with nothing in it. */
+  roomPhase = 'lobby'; roomMine = false;
+  await page.evaluate(() => {
+    (0, eval)('wtaLeague = {roomId:"lr1",snap:null,poll:null,lastKey:"",ended:false}');
+    (0, eval)("go('wta')");
+    const s = {
+      id: 'lr1', phase: 'lobby', turnUserId: null, endsAt: Date.now() + 300000, serverNow: Date.now(),
+      aliveCount: 4, winnerUserId: null,
+      players: [
+        { userId: 'me', username: 'ehsan', lives: 3, out: false, absent: false },
+        { userId: 'p2', username: 'زهرا', lives: 3, out: false, absent: false },
+        { userId: 'p3', username: 'رضا', lives: 3, out: false, absent: true },
+        { userId: 'p4', username: 'سینا', lives: 3, out: false, absent: true }
+      ],
+      me: { userId: 'me', lives: 3, out: false, absent: false, myTurn: false }
+    };
+    (0, eval)('wtaLeagueApply')(s);
+  });
+  await page.waitForTimeout(300);
+  const lobby = await page.evaluate(() => document.getElementById('wtaQArea')?.textContent || '');
+  ok('the studio says what it is waiting for', /استودیو هنوز باز نشده/.test(lobby), lobby.slice(0, 60));
+  ok('with a countdown', /دقیقه|ساعت/.test(lobby), lobby.slice(0, 90));
+  ok('and who has arrived so far', /۲ از ۴/.test(lobby), lobby.slice(0, 140));
+  const blank = await page.evaluate(() => document.querySelectorAll('#wtaAnswers .ans').length);
+  ok('and no empty question card behind it', blank === 0, String(blank));
+
+  /* When the first question lands, the card has to come back. */
+  await page.evaluate(() => {
+    const s = Object.assign({}, (0, eval)('wtaLeague').snap, {
+      phase: 'turn', turnUserId: 'me', endsAt: Date.now() + 15000,
+      question: { id: 'q9', text: 'پایتخت ژاپن؟', options: ['توکیو', 'اوساکا', 'کیوتو', 'ناگویا'], category: 'جغرافیا' },
+      me: { userId: 'me', lives: 3, out: false, absent: false, myTurn: true }
+    });
+    (0, eval)('wtaLeagueApply')(s);
+  });
+  await page.waitForTimeout(300);
+  const back = await page.evaluate(() => ({
+    opts: document.querySelectorAll('#wtaAnswers .ans').length,
+    text: document.getElementById('wtaText')?.textContent || ''
+  }));
+  ok('the question card comes back when play starts', back.opts === 4 && /ژاپن/.test(back.text), JSON.stringify(back));
+}
+
+console.log('record mode:');
+{
+  await page.evaluate(() => (0, eval)("go('record')"));
+  await page.waitForTimeout(700);
+  const secs = await page.evaluate(() => (0, eval)('rmQuestionSeconds()'));
+  ok('the question clock is the operator’s, not a constant in the file', secs === 33, String(secs));
+
+  const praise = await page.evaluate(() => {
+    const i = (0, eval)('rmAnswer').toString();
+    return /showAnswerCelebration/.test(i);
+  });
+  ok('an answer throws the duel’s words out of the option', praise);
+
+  const stable = await page.evaluate(() => {
+    (0, eval)('pzRM').questionSeconds = 33;
+    (0, eval)('rmTimerStart')(6);          // a shortened second-chance clock
+    return (0, eval)('rmQuestionSeconds()');
+  });
+  ok('and a shortened round does not rewrite the setting', stable === 33, String(stable));
+}
+
 ok('no script errors on the new screens', errs.length === 0, errs.join(' | '));
+
 
 
 
