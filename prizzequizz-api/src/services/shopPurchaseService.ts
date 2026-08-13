@@ -12,6 +12,7 @@ import { getItem, rewardsOf, rewardLabel } from './shopService.js';
 import { postEntry, getAccount } from './walletLedgerService.js';
 import { addHearts } from './heartService.js';
 import { grantLifeline } from './lifelineService.js';
+import { isLeagueTicketTier } from './leagueService.js';
 import { grantTickets } from './ticketService.js';
 import { repositories } from '../repositories/index.js';
 import { recordPurchase } from './missionService.js';
@@ -112,7 +113,14 @@ export async function purchase(input: {
       u.coins = (Number(u.coins) || 0) + n;
       await repositories.users.save(u);
     } else if (k2.startsWith('ticket-')) {
-      await grantTickets(userId, k2.slice('ticket-'.length) || 'green', n);
+      const tier = k2.slice('ticket-'.length) || 'green';
+      /* League entry tickets are earned on the weekly board and nowhere else.
+       * An operator can add anything to the shop catalogue, so the refusal
+       * lives here rather than in what the catalogue happens to contain. */
+      if (isLeagueTicketTier(tier)) {
+        throw new Error('LEAGUE_TICKET_NOT_FOR_SALE');
+      }
+      await grantTickets(userId, tier, n);
       ticketsGranted += n;
     } else if (k2 === 'p5050' || k2 === 'psecond' || k2 === 'pstats' || k2 === 'ptime') {
       await grantLifeline(userId, k2, n);

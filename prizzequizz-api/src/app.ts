@@ -21,6 +21,7 @@ import { registerSupportRoutes } from './modules/support/routes.js';
 import { registerOpsRoutes } from './modules/ops/routes.js';
 import { registerShopRoutes } from './modules/shop/routes.js';
 import { registerLastSurvivorRoutes } from './modules/lastSurvivor/routes.js';
+import { registerLeagueRoutes } from './modules/leagues/routes.js';
 import { registerSmsRoutes } from './modules/sms/routes.js';
 import { registerLifelineRoutes } from './modules/lifelines/routes.js';
 import { registerOnboardingRoutes } from './modules/onboarding/routes.js';
@@ -66,6 +67,7 @@ export function createApiServer(options: ApiServerOptions = {}): Server {
   registerOpsRoutes(router, base);
   registerShopRoutes(router, base);
   registerLastSurvivorRoutes(router, base);
+  registerLeagueRoutes(router, base);
   registerSmsRoutes(router, base);
   registerLifelineRoutes(router, base);
   registerOnboardingRoutes(router, base);

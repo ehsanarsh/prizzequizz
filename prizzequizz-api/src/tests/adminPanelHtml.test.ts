@@ -361,6 +361,32 @@ function run(): void {
     assert.ok(body.includes("'PUT','/admin/user-questions/config'"), 'to the config endpoint');
   });
 
+  /* ── لیگ هفتگی ────────────────────────────────────────────────────── */
+
+  check('the leagues row has a real screen, not the raw JSON editor', () => {
+    assert.ok(script.includes('async function renderLeagues('), 'the screen exists');
+    assert.ok(!/leagues:\['leagues'/.test(script), 'it must not also be a CONFIG_PAGES key — that shadows the renderer');
+  });
+
+  check('overlapping or gapped rank bands are refused before saving', () => {
+    /* Two leagues claiming rank 15 would hand that player two tickets; a gap
+       would silently drop everybody between them. */
+    const i = script.indexOf('async function lgSave(');
+    const body = script.slice(i, i + 1400);
+    assert.match(body, /روی هم افتاده/, 'overlap must be caught');
+    assert.match(body, /بی‌لیگ جا مانده/, 'and so must a gap');
+    assert.ok(body.indexOf('api(\'PUT\'') > body.indexOf('روی هم افتاده'), 'the checks come before the save');
+  });
+
+  check('filing a room result asks who actually played', () => {
+    /* The participation prize is real money and the seat is booked whether the
+       player turns up or not. */
+    const i = script.indexOf('async function lgSendResult(');
+    const body = script.slice(i, i + 700);
+    assert.match(body, /lgr_p:checked/, 'only the ticked players are sent');
+    assert.match(body, /played\.length/, 'and an empty room is refused');
+  });
+
   console.log(`[adminPanelHtml] ${passed} passed, ${failed} failed`);
   if (failed) process.exit(1);
 }

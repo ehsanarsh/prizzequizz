@@ -1,0 +1,368 @@
+/* THE WEEKLY LEAGUE — WHO GETS IN, AND WHAT IT PAYS.
+ *
+ * Everything here moves real money or a ticket that cannot be bought, so the
+ * cases are the ones where a mistake is expensive:
+ *
+ *   — closing the week twice handing out two tickets each.
+ *   — a league ticket being purchasable after all, which turns a ladder into a
+ *     price list.
+ *   — paying the participation prize to somebody who never turned up, or twice
+ *     to somebody who did.
+ *   — a bracket that leaves one player alone in a room and calls them a winner.
+ *
+ * Run: npx tsx src/tests/league.test.ts
+ */
+import assert from 'node:assert/strict';
+import {
+  getLeagueConfig, setLeagueConfig, closeSeason, drawRound, listQualifiers,
+  listRooms, listSeats, reportRoomResult, splitRooms, kickoffFor, cutLines,
+  myLeague, isLeagueTicketTier, _resetLeague, LEAGUE_DEFAULTS
+} from '../services/leagueService.js';
+import { getTickets } from '../services/ticketService.js';
+import { repositories } from '../repositories/index.js';
+import { isoWeekId } from '../services/scoringConfig.js';
+import { getAccount } from '../services/walletLedgerService.js';
+import { quote } from '../services/purchaseOrderService.js';
+
+let passed = 0, failed = 0;
+async function check(name: string, fn: () => Promise<void> | void): Promise<void> {
+  try { await fn(); passed++; console.log('  ✔ ' + name); }
+  catch (e) { failed++; console.error('  ✗ ' + name + ': ' + (e as Error).message); }
+}
+
+let seq = 0;
+/* Every board in this file shares one user table, so a second board built with
+ * the same cup values lands interleaved with the first and every rank assertion
+ * becomes a lie. Each board is therefore given a band of cup values strictly
+ * above every band before it: the newest board always holds ranks 1..n and the
+ * older players sit underneath, exactly as a real week rolling over would. */
+let bandNo = 0;
+async function player(cup: number): Promise<string> {
+  const uid = 'lg' + (++seq).toString().padStart(3, '0');
+  await repositories.users.save({
+    id: uid, username: uid, displayName: uid, phone: '0917' + String(seq).padStart(7, '0'),
+    plan: 'free', level: 1, xp: 0, weeklyScore: cup, weeklyWeek: isoWeekId(),
+    wallet: 0, coins: 0, hearts: 5, tickets: { bronze: 0, silver: 0, gold: 0 }
+  } as any);
+  return uid;
+}
+/** A board of `n` players, best first. */
+async function board(n: number): Promise<string[]> {
+  const base = ++bandNo * 1_000_000;
+  const out: string[] = [];
+  for (let i = 0; i < n; i++) out.push(await player(base - i * 10));
+  return out;
+}
+
+async function fresh(): Promise<void> {
+  _resetLeague();
+  await setLeagueConfig({ ...LEAGUE_DEFAULTS });
+}
+
+async function run(): Promise<void> {
+  /* ── who gets in ──────────────────────────────────────────────────── */
+
+  await check('the top of the board qualifies, in the configured bands', async () => {
+    await fresh();
+    const ids = await board(50);
+    const r = await closeSeason('s-bands');
+    const tierOf = (uid: string) => r.qualifiers.find((q) => q.userId === uid)?.tier ?? null;
+    assert.equal(tierOf(ids[0]!), 'gold', 'rank 1');
+    assert.equal(tierOf(ids[14]!), 'gold', 'rank 15 is the last gold place');
+    assert.equal(tierOf(ids[15]!), 'silver', 'rank 16 starts silver');
+    assert.equal(tierOf(ids[29]!), 'silver', 'rank 30');
+    assert.equal(tierOf(ids[30]!), 'bronze', 'rank 31');
+    assert.equal(tierOf(ids[44]!), 'bronze', 'rank 45');
+    assert.equal(tierOf(ids[45]!), null, 'rank 46 is outside every band');
+    assert.equal(r.qualifiers.length, 45);
+  });
+
+  await check('the bands are the operator’s to change', async () => {
+    await fresh();
+    await setLeagueConfig({ tiers: [
+      { ...LEAGUE_DEFAULTS.tiers[0]!, fromRank: 1, toRank: 10 },
+      { ...LEAGUE_DEFAULTS.tiers[1]!, fromRank: 11, toRank: 20 },
+      { ...LEAGUE_DEFAULTS.tiers[2]!, fromRank: 21, toRank: 30 }
+    ] });
+    const ids = await board(35);
+    const r = await closeSeason('s-custom');
+    assert.equal(r.qualifiers.length, 30);
+    assert.equal(r.qualifiers.find((q) => q.userId === ids[9]!)?.tier, 'gold', 'rank 10 is now the last gold');
+    assert.equal(r.qualifiers.find((q) => q.userId === ids[10]!)?.tier, 'silver');
+  });
+
+  await check('qualifying hands out exactly one ticket each', async () => {
+    await fresh();
+    const ids = await board(20);
+    await closeSeason('s-tickets');
+    const gold = await getTickets(ids[0]!);
+    assert.equal(gold.gold, 1, 'the top player has one gold ticket: ' + JSON.stringify(gold));
+    const silver = await getTickets(ids[15]!);
+    assert.equal(silver.silver, 1, JSON.stringify(silver));
+    assert.equal((await getTickets(ids[0]!)).silver ?? 0, 0, 'and only the one tier');
+  });
+
+  await check('closing the same week twice does NOT hand out a second ticket', async () => {
+    /* An operator presses the button again; a cron fires twice. */
+    await fresh();
+    const ids = await board(5);
+    const first = await closeSeason('s-twice');
+    const again = await closeSeason('s-twice');
+    assert.equal(again.ticketsGranted, 0, 'the second close granted ' + again.ticketsGranted);
+    assert.equal((await getTickets(ids[0]!)).gold, 1, 'still exactly one ticket');
+    assert.equal((await listQualifiers('s-twice')).length, first.qualifiers.length, 'and the list is not doubled');
+  });
+
+  /* ── the ticket cannot be bought ──────────────────────────────────── */
+
+  await check('a league ticket is not for sale', async () => {
+    await fresh();
+    await getLeagueConfig();
+    for (const tier of ['gold', 'silver', 'bronze']) {
+      assert.ok(isLeagueTicketTier(tier), tier + ' must be recognised as a league ticket');
+      await assert.rejects(() => quote({ kind: 'ticket', tier, qty: 1 } as any),
+        (e: any) => e?.code === 'LEAGUE_TICKET_NOT_FOR_SALE', 'buying ' + tier + ' was not refused');
+    }
+  });
+
+  await check('but the ordinary match tickets still are', async () => {
+    /* The guard must not take the shop down with it. */
+    const q = await quote({ kind: 'ticket', tier: 'green', qty: 1 } as any);
+    assert.ok(q.amount > 0, 'a green ticket still has a price: ' + JSON.stringify(q));
+    assert.ok(!isLeagueTicketTier('green'));
+  });
+
+  /* ── the draw ─────────────────────────────────────────────────────── */
+
+  await check('a tier that fits in one room plays one room', () => {
+    assert.deepEqual(splitRooms(15, 15), [15]);
+    assert.deepEqual(splitRooms(10, 15), [10]);
+    assert.deepEqual(splitRooms(2, 15), [2]);
+  });
+
+  await check('a hundred players in rooms of ten is ten rooms of ten', () => {
+    assert.deepEqual(splitRooms(100, 10), new Array(10).fill(10));
+  });
+
+  await check('and nobody is ever left alone in a room', () => {
+    /* 16 into rooms of 15 is the trap: 15 and 1, and the lone player would
+       "win" a room they never played. */
+    const sizes = splitRooms(16, 15);
+    assert.ok(!sizes.includes(1), 'a room of one was created: ' + JSON.stringify(sizes));
+    assert.equal(sizes.reduce((a, b) => a + b, 0), 16, 'and everybody still has a seat');
+    for (const n of [3, 7, 16, 31, 46, 101]) {
+      const s = splitRooms(n, 15);
+      assert.ok(!s.includes(1), n + ' → ' + JSON.stringify(s));
+      assert.equal(s.reduce((a, b) => a + b, 0), n, n + ' → ' + JSON.stringify(s));
+    }
+  });
+
+  await check('the draw seats every qualifier exactly once', async () => {
+    await fresh();
+    await setLeagueConfig({ roomSize: 10 });
+    await board(45);
+    await closeSeason('s-draw');
+    const rooms = await drawRound('s-draw', 1);
+    const gold = rooms.filter((r) => r.tier === 'gold');
+    assert.equal(gold.length, 2, '15 gold players in rooms of 10 → 2 rooms, got ' + gold.length);
+
+    const seen = new Set<string>();
+    for (const room of rooms) {
+      for (const s of await listSeats(room.id)) {
+        assert.ok(!seen.has(s.userId), 'seated twice: ' + s.userId);
+        seen.add(s.userId);
+      }
+    }
+    assert.equal(seen.size, 45, 'everybody has a seat: ' + seen.size);
+  });
+
+  await check('drawing the same round twice does not double the rooms', async () => {
+    const before = (await listRooms('s-draw', undefined, 1)).length;
+    await drawRound('s-draw', 1);
+    assert.equal((await listRooms('s-draw', undefined, 1)).length, before);
+  });
+
+  await check('the next round seats the winners of the round before', async () => {
+    await fresh();
+    await setLeagueConfig({ roomSize: 5, tiers: [{ ...LEAGUE_DEFAULTS.tiers[0]!, fromRank: 1, toRank: 20 }] });
+    const ids = await board(20);
+    await closeSeason('s-rounds');
+    const r1 = await drawRound('s-rounds', 1);
+    assert.equal(r1.length, 4, '20 players in rooms of 5: ' + r1.length);
+
+    /* Each room reports a winner. */
+    const winners: string[] = [];
+    for (const room of r1) {
+      const seats = await listSeats(room.id);
+      const w = seats[0]!.userId;
+      winners.push(w);
+      await reportRoomResult({ roomId: room.id, played: seats.map((s) => s.userId), winnerUserId: w });
+    }
+    const r2 = await drawRound('s-rounds', 2);
+    assert.equal(r2.length, 1, 'four winners meet in one final');
+    const finalSeats = (await listSeats(r2[0]!.id)).map((s) => s.userId).sort();
+    assert.deepEqual(finalSeats, winners.slice().sort(), 'and it is exactly the winners');
+    assert.ok(r2[0]!.startsAt > r1[0]!.startsAt, 'the final is after the first round');
+    void ids;
+  });
+
+  /* ── the money ────────────────────────────────────────────────────── */
+
+  async function wallet(uid: string): Promise<number> {
+    try { return (await getAccount(uid)).available; } catch { return 0; }
+  }
+
+  await check('everyone who played is paid, win or lose', async () => {
+    await fresh();
+    await setLeagueConfig({ roomSize: 5, tiers: [{ ...LEAGUE_DEFAULTS.tiers[0]!, fromRank: 1, toRank: 5, participationPrize: 1000, winnerPrize: 9000 }] });
+    const ids = await board(5);
+    await closeSeason('s-pay');
+    const [room] = await drawRound('s-pay', 1);
+    const seats = (await listSeats(room!.id)).map((s) => s.userId);
+    const winner = seats[0]!;
+    const loser = seats[1]!;
+
+    const r = await reportRoomResult({ roomId: room!.id, played: seats, winnerUserId: winner });
+    assert.equal(r.payouts.filter((p) => p.kind === 'participation').length, 5, 'five participation prizes');
+    assert.equal(r.payouts.filter((p) => p.kind === 'winner').length, 1, 'one winner prize');
+    assert.equal(await wallet(loser), 1000, 'the loser is still paid for turning up');
+    assert.equal(await wallet(winner), 10000, 'the winner gets both: ' + await wallet(winner));
+    void ids;
+  });
+
+  await check('somebody who never turned up is paid NOTHING', async () => {
+    /* The seat is booked whether they come or not, so paying for the seat
+       instead of for playing is an income for an idle account. */
+    await fresh();
+    await setLeagueConfig({ roomSize: 5, tiers: [{ ...LEAGUE_DEFAULTS.tiers[0]!, fromRank: 1, toRank: 5, participationPrize: 1000, winnerPrize: 9000 }] });
+    await board(5);
+    await closeSeason('s-absent');
+    const [room] = await drawRound('s-absent', 1);
+    const seats = (await listSeats(room!.id)).map((s) => s.userId);
+    const absent = seats[4]!;
+    await reportRoomResult({ roomId: room!.id, played: seats.slice(0, 4), winnerUserId: seats[0]! });
+    assert.equal(await wallet(absent), 0, 'the absentee was paid something');
+    const seat = (await listSeats(room!.id)).find((s) => s.userId === absent)!;
+    assert.equal(seat.status, 'absent');
+    assert.equal(seat.paid, false);
+  });
+
+  await check('filing the same result twice does not pay twice', async () => {
+    await fresh();
+    await setLeagueConfig({ roomSize: 5, tiers: [{ ...LEAGUE_DEFAULTS.tiers[0]!, fromRank: 1, toRank: 5, participationPrize: 1000, winnerPrize: 9000 }] });
+    await board(5);
+    await closeSeason('s-double');
+    const [room] = await drawRound('s-double', 1);
+    const seats = (await listSeats(room!.id)).map((s) => s.userId);
+    await reportRoomResult({ roomId: room!.id, played: seats, winnerUserId: seats[0]! });
+    const before = await wallet(seats[0]!);
+    const again = await reportRoomResult({ roomId: room!.id, played: seats, winnerUserId: seats[0]! });
+    assert.equal(again.payouts.length, 0, 'the second filing paid ' + JSON.stringify(again.payouts));
+    assert.equal(await wallet(seats[0]!), before, 'and the balance did not move');
+  });
+
+  await check('a winner who was not in the room cannot be declared', async () => {
+    await fresh();
+    await setLeagueConfig({ roomSize: 5, tiers: [{ ...LEAGUE_DEFAULTS.tiers[0]!, fromRank: 1, toRank: 5, participationPrize: 100, winnerPrize: 9000 }] });
+    await board(5);
+    const stranger = await player(1);
+    await closeSeason('s-fake');
+    const [room] = await drawRound('s-fake', 1);
+    const seats = (await listSeats(room!.id)).map((s) => s.userId);
+    const r = await reportRoomResult({ roomId: room!.id, played: seats, winnerUserId: stranger });
+    assert.equal(r.room.winnerUserId, null, 'an outsider was made champion');
+    assert.equal(await wallet(stranger), 0);
+    assert.equal(r.payouts.filter((p) => p.kind === 'winner').length, 0, 'and no winner prize was paid');
+  });
+
+  /* ── the badges on the cup rail ───────────────────────────────────── */
+
+  await check('each badge shows the cup of the last player inside that tier', async () => {
+    await fresh();
+    const ids = await board(50);
+    const lines = await cutLines();
+    const gold = lines.find((l) => l.key === 'gold')!;
+    const me15 = (await repositories.users.findById(ids[14]!))!;
+    assert.equal(gold.cup, me15.weeklyScore, 'the gold badge must read rank 15’s cup');
+    assert.equal(gold.rank, 15);
+    assert.ok(gold.exact, 'and say it is the real cut line');
+    const bronze = lines.find((l) => l.key === 'bronze')!;
+    const me45 = (await repositories.users.findById(ids[44]!))!;
+    assert.equal(bronze.cup, me45.weeklyScore, 'and bronze rank 45’s');
+  });
+
+  await check('a short board falls back to the last player, and says so', async () => {
+    /* A cut line further down than the board is long. Asked for with a rank
+       nobody can reach rather than by shrinking the board, because these tests
+       share one user table and it only ever grows. */
+    await fresh();
+    await board(20);
+    await setLeagueConfig({ tiers: [
+      { ...LEAGUE_DEFAULTS.tiers[0]!, fromRank: 1, toRank: 5 },
+      { ...LEAGUE_DEFAULTS.tiers[2]!, fromRank: 6, toRank: 99999 }
+    ] });
+    const lines = await cutLines();
+    const deep = lines.find((l) => l.key === 'bronze')!;
+    assert.equal(deep.exact, false, 'a rank the board cannot reach is not an exact cut line');
+    assert.ok(deep.cup > 0, 'and it still shows the last player’s cup rather than nothing: ' + deep.cup);
+    const gold = lines.find((l) => l.key === 'gold')!;
+    assert.ok(gold.exact, 'while a tier the board DOES reach is exact');
+    assert.ok(gold.cup >= deep.cup, 'the higher tier’s cut line is never below the lower one');
+  });
+
+  /* ── what a player is told ────────────────────────────────────────── */
+
+  await check('a player is told their rank, their tier and when it starts', async () => {
+    await fresh();
+    const ids = await board(40);
+    const mine = await myLeague(ids[3]!);
+    assert.equal(mine.rank, 4);
+    assert.equal(mine.tier?.key, 'gold');
+    assert.ok(mine.kickoffAt > Date.now(), 'kickoff is in the future');
+    assert.equal(mine.cutLines.length, 3);
+  });
+
+  await check('and which room they are in once it is drawn', async () => {
+    await fresh();
+    await setLeagueConfig({ roomSize: 5 });
+    const ids = await board(20);
+    await closeSeason(isoWeekId());
+    await drawRound(isoWeekId(), 1);
+    const mine = await myLeague(ids[0]!);
+    assert.ok(mine.room, 'no room was reported');
+    assert.equal(mine.room!.round, 1);
+    assert.ok(mine.room!.seats >= 2, 'a room with real company: ' + mine.room!.seats);
+    assert.equal(mine.qualifiedTier, 'gold');
+  });
+
+  await check('somebody outside the bands is told plainly that they are out', async () => {
+    await fresh();
+    const ids = await board(50);
+    const mine = await myLeague(ids[49]!);
+    assert.equal(mine.rank, 50);
+    assert.equal(mine.tier, null, 'rank 50 is in no tier');
+    assert.equal(mine.qualifiedTier, null);
+    assert.equal(mine.room, null);
+  });
+
+  /* ── kickoff ──────────────────────────────────────────────────────── */
+
+  await check('kickoff lands on the configured day and time, and never in the past', async () => {
+    const cfg = await getLeagueConfig();
+    for (let i = 0; i < 14; i++) {
+      const from = new Date(Date.UTC(2026, 0, 1 + i, 5, 17));
+      const at = kickoffFor(cfg, from);
+      assert.ok(at > from.getTime(), 'kickoff must be ahead of now');
+      const local = new Date(at + cfg.kickoff.tzOffsetMinutes * 60_000);
+      assert.equal(local.getUTCHours(), cfg.kickoff.hour, 'hour');
+      assert.equal(local.getUTCMinutes(), cfg.kickoff.minute, 'minute');
+      assert.equal((local.getUTCDay() + 1) % 7, cfg.kickoff.dayOfWeek, 'weekday');
+      assert.ok(at - from.getTime() <= 7 * 86400_000, 'and within the week');
+    }
+  });
+
+  console.log(`[league] ${passed} passed, ${failed} failed`);
+  if (failed) process.exit(1);
+}
+
+run().catch((e) => { console.error(e); process.exit(1); });

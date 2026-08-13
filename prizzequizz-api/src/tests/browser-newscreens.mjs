@@ -40,6 +40,7 @@ let patched = null;
 let friendReq = null;
 let firstFaces = '';
 let recordCalls = 0;
+let cutlineCalls = 0;
 await ctx.route('**/v1/**', (route) => {
   const u = new URL(route.request().url());
   const p = u.pathname.replace(/^.*\/v1/, '') + (u.search || '');
@@ -58,6 +59,14 @@ await ctx.route('**/v1/**', (route) => {
       charged: refresh ? 5 : 0, coins: refresh ? 355 : 360,
       nextCost: refresh ? 5 : 0, freeLeft: refresh ? 0 : 1, onlineTotal: 47
     } });
+  }
+  if (p.startsWith('/leagues/cutlines')) {
+    cutlineCalls++;
+    return send({ ok: true, data: { season: '2026-W07', lines: [
+      { key: 'gold',   label: 'لیگ طلایی',  emoji: '🥇', rank: 15, cup: 1240, exact: true },
+      { key: 'silver', label: 'لیگ نقره‌ای', emoji: '🥈', rank: 30, cup: 860,  exact: true },
+      { key: 'bronze', label: 'لیگ برنزی',  emoji: '🥉', rank: 45, cup: 410,  exact: false }
+    ] } });
   }
   if (p.startsWith('/record/overview')) {
     recordCalls++;
@@ -420,7 +429,44 @@ console.log('the record card and the end-of-run modal:');
   ok('with the card closed behind it', !open);
 }
 
+
+console.log('the league cut lines on the cup rail:');
+{
+  /* The badges used to be fixed thresholds, which told a player nothing about
+     whether they would actually get in. They are ranks now, so the number has
+     to come from the server and change with the board. */
+  await setPlan('premium');
+  cutlineCalls = 0;
+  await page.evaluate(() => (0, eval)("go('home')"));
+  await page.waitForTimeout(700);
+  ok('home asks the server where the cut lines are', cutlineCalls >= 1, String(cutlineCalls));
+
+  const labels = await page.evaluate(() => ({
+    gold: document.querySelector('#wpGold small')?.textContent || '',
+    silver: document.querySelector('#wpSilver small')?.textContent || '',
+    bronze: document.querySelector('#wpBronze small')?.textContent || ''
+  }));
+  ok('the gold badge shows the cup of rank 15, not a fixed number',
+    /۱٬۲۴۰|۱۲۴۰/.test(labels.gold) && !/۱۶۸۰/.test(labels.gold), labels.gold);
+  ok('silver shows rank 30’s', /۸۶۰/.test(labels.silver) && !/۹۴۰/.test(labels.silver), labels.silver);
+  ok('and each says which rank it is', /۱۵/.test(labels.gold) && /۳۰/.test(labels.silver), labels.gold + ' | ' + labels.silver);
+  ok('a cut line the board has not reached is marked as approximate', /~/.test(labels.bronze), labels.bronze);
+
+  /* The badge lights when the player is past the line — using the REAL line. */
+  const lit = await page.evaluate(() => {
+    (0, eval)('weeklyScore = 900');
+    (0, eval)('renderWeeklyProgress()');
+    return {
+      bronze: document.getElementById('wpBronze')?.classList.contains('done'),
+      silver: document.getElementById('wpSilver')?.classList.contains('done'),
+      gold: document.getElementById('wpGold')?.classList.contains('done')
+    };
+  });
+  ok('900 cup is past bronze and silver but not gold', lit.bronze && lit.silver && !lit.gold, JSON.stringify(lit));
+}
+
 ok('no script errors on the new screens', errs.length === 0, errs.join(' | '));
+
 
 
 

@@ -365,7 +365,7 @@ function modal(title,html){const bg=document.createElement('div');bg.className='
    'anticheat' was the same mistake: a purpose-built screen (settings + risky
    users + recent signals) sat behind a raw-config editor for the antiCheat
    key, so the built screen could never run. Only one of the two is kept. */
-const CONFIG_PAGES={cfg_xp:['xp','تنظیمات XP'],cfg_level:['level','تنظیمات Level'],cfg_cup:['cup','تنظیمات Cup'],cfg_gameplay:['gameplay','گیم‌پلی هر مود'],leagues:['leagues','مدیریت لیگ‌ها'],events:['events','رویدادها'],general:['general','تنظیمات عمومی'],campaign:['campaign','کمپین کاربر جدید']};
+const CONFIG_PAGES={cfg_xp:['xp','تنظیمات XP'],cfg_level:['level','تنظیمات Level'],cfg_cup:['cup','تنظیمات Cup'],cfg_gameplay:['gameplay','گیم‌پلی هر مود'],events:['events','رویدادها'],general:['general','تنظیمات عمومی'],campaign:['campaign','کمپین کاربر جدید']};
 
 async function render(){
   loading();
@@ -380,7 +380,7 @@ async function render(){
   try{
     if(CUR==='accounts')return renderAccounts();
     if(CONFIG_PAGES[CUR]){ await renderConfigSection(CONFIG_PAGES[CUR][0],CONFIG_PAGES[CUR][1]); groupBar(); if(tracked)void badgeLoad(); return; }
-    const fn={dashboard:renderDashboard,finance:renderFinance,accounting:renderAccounting,expenses:renderExpenses,backup:renderBackup,users:renderUsers,matches:renderMatches,support:renderSupport,questions:renderQuestions,qreports:renderQReports,aistudio:renderAiStudio,pipeline:renderPipeline,categories:renderCategories,wallet:renderWallet,withdrawals:renderWithdrawals,payoutpartners:renderPayoutPartners,withdrawotp:renderWithdrawOtp,smsgroups:renderSmsGroups,rewardholds:renderRewardHolds,tickets:renderTickets,giftcodes:renderGiftCodes,shop:renderShopAdmin,characters:renderCharacters,charboxes:renderCharBoxes,lifelines:renderLifelines,rewards:renderRewards,missions2:renderMissions2,recordmode:renderRecordMode,onboarding:renderOnboarding,lastsurvivor:renderLastSurvivor,sms:renderSms,payments:renderPayments,leaderboard:renderLeaderboard,banners:renderBanners,notifications:renderNotifications,anticheat:renderAntiCheat,suspicious:renderSuspicious,reports:renderReports,logs:renderLogs,reset:renderReset,roles:renderRoles,rawcfg:renderRawCfg,monitoring:renderMonitoring}[CUR];
+    const fn={dashboard:renderDashboard,finance:renderFinance,accounting:renderAccounting,expenses:renderExpenses,backup:renderBackup,users:renderUsers,matches:renderMatches,support:renderSupport,questions:renderQuestions,leagues:renderLeagues,qreports:renderQReports,aistudio:renderAiStudio,pipeline:renderPipeline,categories:renderCategories,wallet:renderWallet,withdrawals:renderWithdrawals,payoutpartners:renderPayoutPartners,withdrawotp:renderWithdrawOtp,smsgroups:renderSmsGroups,rewardholds:renderRewardHolds,tickets:renderTickets,giftcodes:renderGiftCodes,shop:renderShopAdmin,characters:renderCharacters,charboxes:renderCharBoxes,lifelines:renderLifelines,rewards:renderRewards,missions2:renderMissions2,recordmode:renderRecordMode,onboarding:renderOnboarding,lastsurvivor:renderLastSurvivor,sms:renderSms,payments:renderPayments,leaderboard:renderLeaderboard,banners:renderBanners,notifications:renderNotifications,anticheat:renderAntiCheat,suspicious:renderSuspicious,reports:renderReports,logs:renderLogs,reset:renderReset,roles:renderRoles,rawcfg:renderRawCfg,monitoring:renderMonitoring}[CUR];
     if(fn){ await fn(); groupBar(); if(tracked)void badgeLoad(); return; }
     /* No renderer for this tab. Six nav entries were in this state, and
        clicking one silently left the PREVIOUS screen's content on display —
@@ -1023,6 +1023,141 @@ function qViewBar(pending){
     '<button class="'+(Q_VIEW==='bank'?'active':'')+'" onclick="Q_VIEW=\'bank\';render()">📚 بانک سوال</button>'+
     '<button class="'+(Q_VIEW==='maker'?'active':'')+'" onclick="Q_VIEW=\'maker\';render()">✍️ کوییزساز کاربران'+
       (pending>0?' <span class="pz-badge">'+fa(pending)+'</span>':'')+'</button></div>';
+}
+
+/* ── لیگ هفتگی ─────────────────────────────────────────────────────────
+ * The rank bands decide who gets a ticket, and the ticket is the only way in —
+ * it is not for sale anywhere. So this screen shows the two things an operator
+ * has to be able to see before pressing anything: where the cut lines actually
+ * are this week, and who is already holding a ticket. */
+const LG_DOW=['شنبه','یکشنبه','دوشنبه','سه‌شنبه','چهارشنبه','پنجشنبه','جمعه'];
+let _LG=null;
+async function renderLeagues(){
+  let d; try{ d=await api('GET','/admin/leagues/config'); }
+  catch(e){ $('#main').innerHTML=head('لیگ هفتگی','')+'<div class="empty">در دسترس نیست: '+esc(e.message)+'</div>'; return; }
+  _LG=d;
+  const c=d.config||{}, tiers=c.tiers||[], lines=d.cutLines||[], quals=d.qualifiers||[], rooms=d.rooms||[];
+  const k=c.kickoff||{};
+  const byTier={}; quals.forEach(q=>{byTier[q.tier]=(byTier[q.tier]||0)+1;});
+  $('#main').innerHTML=head('لیگ هفتگی','هفتهٔ '+esc(d.season||'—')+' · بلیط لیگ فقط از همین‌جا صادر می‌شود و هیچ‌جا فروخته نمی‌شود',
+    '<button class="btn pri" onclick="lgSave()">💾 ذخیره</button> <button class="btn ok" onclick="lgClose()">🔒 بستن هفته و صدور بلیط</button> <button class="btn info" onclick="lgDraw()">🎲 قرعه‌کشی راند</button>')+
+    '<div class="grid g4">'+
+      stat('وضعیت',c.enabled?'ok':'bad',c.enabled?'روشن':'خاموش')+
+      stat('نفرات هر روم','',fa(c.roomSize||0))+
+      stat('واجدین شرایط','gold',fa(quals.length))+
+      stat('روم‌های ساخته‌شده','',fa(rooms.length))+
+    '</div>'+
+    '<div class="card" style="margin-top:12px"><b>خط برش این هفته</b>'+
+      '<div class="note">عددی که روی آیکون لیگ در بازی دیده می‌شود: کاپِ نفرِ آخرِ همان لیگ. بازیکن باید از این عدد بگذرد تا وارد شود.</div>'+
+      '<div class="grid g3" style="margin-top:8px">'+lines.map(l=>
+        stat(esc(l.emoji+' '+l.label)+' · رتبهٔ '+fa(l.rank), l.exact?'gold':'', fa(l.cup)+(l.exact?'':' *'))).join('')+'</div>'+
+      (lines.some(l=>!l.exact)?'<div class="note">* هنوز به این رتبه نرسیده‌ایم؛ کاپِ آخرین نفرِ جدول نشان داده می‌شود.</div>':'')+
+    '</div>'+
+    '<div class="card" style="margin-top:12px"><b>تنظیمات کلی</b>'+
+      '<div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-top:8px">'+
+        '<label><input type="checkbox" id="lg_on" '+(c.enabled?'checked':'')+'> فعال</label>'+
+        '<label>نفرات هر روم<input type="number" id="lg_size" min="2" max="100" value="'+(c.roomSize||15)+'" style="width:90px"></label>'+
+        '<label>روز مسابقه<select id="lg_dow">'+LG_DOW.map((n,i)=>'<option value="'+i+'" '+(Number(k.dayOfWeek)===i?'selected':'')+'>'+n+'</option>').join('')+'</select></label>'+
+        '<label>ساعت<input type="number" id="lg_h" min="0" max="23" value="'+(k.hour!=null?k.hour:21)+'" style="width:70px"></label>'+
+        '<label>دقیقه<input type="number" id="lg_m" min="0" max="59" value="'+(k.minute!=null?k.minute:0)+'" style="width:70px"></label>'+
+        '<label>فاصلهٔ راندها (دقیقه)<input type="number" id="lg_gap" min="1" max="1440" value="'+(c.roundGapMinutes||20)+'" style="width:110px"></label>'+
+      '</div>'+
+      '<div class="note">مسابقه‌ها سرِ ساعت ثابت شروع می‌شوند؛ هرکس نباشد حذف است و بازی با حاضران ادامه پیدا می‌کند.</div>'+
+    '</div>'+
+    '<div class="card" style="margin-top:12px"><b>لیگ‌ها و جوایز</b>'+
+      '<div class="note">«جایزهٔ حضور» به هر کسی که وارد شود و بازی کند می‌رسد — برد و باخت در آن اثری ندارد. «جایزهٔ قهرمانی» روی آن اضافه می‌شود.</div>'+
+      '<div class="tbl-wrap"><table><thead><tr>'+['لیگ','از رتبه','تا رتبه','جایزهٔ حضور','جایزهٔ قهرمانی','واحد','واجدین'].map(h=>'<th>'+h+'</th>').join('')+'</tr></thead><tbody id="lg_rows">'+
+      tiers.map((t,i)=>'<tr data-i="'+i+'" data-key="'+esc(t.key)+'">'+
+        '<td><input class="lg_emj" value="'+esc(t.emoji||'')+'" style="width:44px"> <input class="lg_lbl" value="'+esc(t.label||'')+'" style="width:120px"></td>'+
+        '<td><input type="number" class="lg_from" min="1" value="'+(t.fromRank||1)+'" style="width:80px"></td>'+
+        '<td><input type="number" class="lg_to" min="1" value="'+(t.toRank||1)+'" style="width:80px"></td>'+
+        '<td><input type="number" class="lg_part" min="0" value="'+(t.participationPrize||0)+'" style="width:120px"></td>'+
+        '<td><input type="number" class="lg_win" min="0" value="'+(t.winnerPrize||0)+'" style="width:120px"></td>'+
+        '<td><select class="lg_type"><option value="cash" '+(t.prizeType!=='coins'?'selected':'')+'>نقدی</option><option value="coins" '+(t.prizeType==='coins'?'selected':'')+'>سکه</option></select></td>'+
+        '<td>'+fa(byTier[t.key]||0)+'</td>'+
+      '</tr>').join('')+'</tbody></table></div></div>'+
+    lgRoomsHTML(rooms);
+}
+function lgRoomsHTML(rooms){
+  if(!rooms.length) return '<div class="card" style="margin-top:12px"><b>روم‌ها</b><div class="note">هنوز قرعه‌کشی نشده. اول هفته را ببند تا بلیط‌ها صادر شود، بعد «قرعه‌کشی راند» را بزن.</div></div>';
+  return '<div class="card" style="margin-top:12px"><b>روم‌ها</b><div class="tbl-wrap"><table><thead><tr>'+
+    ['لیگ','راند','روم','شروع','وضعیت','برنده','عملیات'].map(h=>'<th>'+h+'</th>').join('')+'</tr></thead><tbody>'+
+    rooms.map(r=>'<tr>'+
+      '<td>'+esc(r.tier)+'</td><td>'+fa(r.round)+'</td><td>'+fa(r.roomNo)+'</td>'+
+      '<td class="mono">'+esc(fmtDate(new Date(Number(r.startsAt)||0).toISOString()))+'</td>'+
+      '<td><span class="pill '+(r.status==='finished'?'ok':'pend')+'">'+({scheduled:'زمان‌بندی‌شده',playing:'در حال بازی',finished:'تمام'}[r.status]||esc(r.status))+'</span></td>'+
+      '<td>'+(r.winnerUserId?'<span class="mono">'+esc(String(r.winnerUserId).slice(0,8))+'</span>':'—')+'</td>'+
+      '<td>'+(r.status!=='finished'?'<button class="btn sm" onclick="lgResult(\''+r.id+'\')">ثبت نتیجه</button>':'<span class="note">ثبت شد</span>')+'</td>'+
+    '</tr>').join('')+'</tbody></table></div></div>';
+}
+function lgReadTiers(){
+  return [...document.querySelectorAll('#lg_rows tr')].map(tr=>({
+    key:tr.dataset.key,
+    emoji:tr.querySelector('.lg_emj').value.trim(),
+    label:tr.querySelector('.lg_lbl').value.trim(),
+    fromRank:Number(tr.querySelector('.lg_from').value||1),
+    toRank:Number(tr.querySelector('.lg_to').value||1),
+    participationPrize:Number(tr.querySelector('.lg_part').value||0),
+    winnerPrize:Number(tr.querySelector('.lg_win').value||0),
+    prizeType:tr.querySelector('.lg_type').value
+  }));
+}
+async function lgSave(){
+  const tiers=lgReadTiers();
+  /* Overlapping bands would put one rank in two leagues and hand out two
+     tickets; a gap would silently drop everybody between them. */
+  const sorted=tiers.slice().sort((a,b)=>a.fromRank-b.fromRank);
+  for(let i=0;i<sorted.length;i++){
+    if(sorted[i].toRank<sorted[i].fromRank) return toast('«تا رتبه» نمی‌تواند از «از رتبه» کمتر باشد','bad');
+    if(i&&sorted[i].fromRank<=sorted[i-1].toRank) return toast('بازهٔ رتبه‌ها روی هم افتاده: '+sorted[i-1].label+' و '+sorted[i].label,'bad');
+    if(i&&sorted[i].fromRank>sorted[i-1].toRank+1) return toast('بین '+sorted[i-1].label+' و '+sorted[i].label+' رتبه‌های بی‌لیگ جا مانده','bad');
+  }
+  try{
+    await api('PUT','/admin/leagues/config',{
+      enabled:$('#lg_on').checked, roomSize:Number($('#lg_size').value||15),
+      roundGapMinutes:Number($('#lg_gap').value||20),
+      kickoff:{dayOfWeek:Number($('#lg_dow').value||6),hour:Number($('#lg_h').value||21),minute:Number($('#lg_m').value||0),tzOffsetMinutes:210},
+      tiers});
+    toast('ذخیره شد','ok'); render();
+  }catch(e){ toast(e.message,'bad'); }
+}
+async function lgClose(){
+  if(!confirm('هفته بسته شود و بلیط لیگ برای واجدین شرایط صادر شود؟ (اجرای دوباره بلیط تکراری نمی‌دهد)'))return;
+  try{ const r=await api('POST','/admin/leagues/close',{}); toast('بسته شد — '+fa(r.qualifiers.length)+' واجد شرایط، '+fa(r.ticketsGranted)+' بلیط','ok'); render(); }
+  catch(e){ toast(e.message,'bad'); }
+}
+async function lgDraw(){
+  const round=Number(prompt('قرعه‌کشی کدام راند؟ (۱ برای شروع)','1')||0);
+  if(!round)return;
+  try{ const r=await api('POST','/admin/leagues/draw',{round}); toast(fa(r.rooms.length)+' روم ساخته شد','ok'); render(); }
+  catch(e){ toast(e.message,'bad'); }
+}
+async function lgResult(roomId){
+  const rooms=(_LG&&_LG.rooms)||[];
+  let seats=[];
+  try{ const d=await api('GET','/admin/leagues/rooms'); const r=(d.rooms||[]).find(x=>x.id===roomId); seats=(r&&r.seats)||[]; }catch(e){}
+  if(!seats.length) return toast('صندلی‌های این روم خوانده نشد','bad');
+  modal('ثبت نتیجهٔ روم',
+    '<div class="note">فقط کسانی که واقعاً بازی کرده‌اند تیک بخورند — جایزهٔ حضور به همان‌ها پرداخت می‌شود و غایب چیزی نمی‌گیرد.</div>'+
+    '<div class="tbl-wrap"><table><thead><tr><th>بازی کرد</th><th>برنده</th><th>کاربر</th></tr></thead><tbody>'+
+    seats.map(s=>'<tr>'+
+      '<td><input type="checkbox" class="lgr_p" value="'+esc(s.userId)+'" checked></td>'+
+      '<td><input type="radio" name="lgr_w" class="lgr_w" value="'+esc(s.userId)+'"></td>'+
+      '<td class="mono">'+esc(s.userId)+'</td></tr>').join('')+'</tbody></table></div>'+
+    '<div class="modal-actions" style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end">'+
+      '<button class="btn" onclick="this.closest(\'.modal-bg\').remove()">انصراف</button>'+
+      '<button class="btn pri" onclick="lgSendResult(\''+roomId+'\')">ثبت و پرداخت</button></div>');
+  void rooms;
+}
+async function lgSendResult(roomId){
+  const played=[...document.querySelectorAll('.lgr_p:checked')].map(el=>el.value);
+  const w=document.querySelector('.lgr_w:checked');
+  if(!played.length) return toast('حداقل یک نفر باید بازی کرده باشد','bad');
+  try{
+    const r=await api('POST','/admin/leagues/rooms/'+roomId+'/result',{played,winnerUserId:w?w.value:null});
+    toast('ثبت شد — '+fa(r.payouts.length)+' پرداخت','ok');
+    document.querySelector('.modal-bg').remove(); render();
+  }catch(e){ toast(e.message,'bad'); }
 }
 async function renderQuestions(){
   if(Q_VIEW==='maker') return renderQuizMaker();

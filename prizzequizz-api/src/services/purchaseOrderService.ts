@@ -20,6 +20,7 @@
  * twice, or a player who refreshes the return page, must not be given the item
  * twice.
  */
+import { isLeagueTicketTier } from './leagueService.js';
 import { isValidTier, ticketName, grantTickets } from './ticketService.js';
 import { getTicketPrices } from './economyConfig.js';
 import { getItem, rewardsOf, rewardLabel } from './shopService.js';
@@ -70,6 +71,12 @@ export function parseOrder(raw: unknown): PurchaseOrder | null {
 export async function quote(order: PurchaseOrder): Promise<OrderQuote> {
   if (order.kind === 'ticket') {
     if (!isValidTier(order.tier!)) throw new OrderError('TICKET_TIER_INVALID', 'نوع بلیط نامعتبر است.');
+    /* A league ticket is the reward for a week on the board. Being able to buy
+     * one would make the ladder a price list, so the refusal is here — before
+     * anything is quoted, let alone charged. */
+    if (isLeagueTicketTier(order.tier!)) {
+      throw new OrderError('LEAGUE_TICKET_NOT_FOR_SALE', 'بلیط لیگ خریدنی نیست — فقط از جدول هفتگی به دست می‌آید.');
+    }
     const unit = getTicketPrices()[order.tier!] ?? 0;
     return { order, amount: unit * order.qty, currency: 'cash', label: ticketName(order.tier!) + (order.qty > 1 ? ` ×${order.qty}` : '') };
   }
