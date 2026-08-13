@@ -585,9 +585,9 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
 /* The character, sized to what is left after the scoreboard and the strip —
    never the fixed 172px block that used to push the buttons off the screen. */
 /* The character gets the room the trimmed cards gave back. */
-.res-char{display:flex;align-items:flex-end;justify-content:center;height:clamp(84px,17vh,150px);margin-bottom:0}
-.res-char .mascot{width:clamp(74px,15vh,128px);height:clamp(74px,15vh,128px);border-radius:50%;overflow:hidden}
-.res-char img{width:auto;height:100%;max-width:min(48vw,180px);object-fit:contain;
+.res-char{display:flex;align-items:flex-end;justify-content:center;height:clamp(104px,21vh,186px);margin-bottom:0}
+.res-char .mascot{width:clamp(92px,19vh,160px);height:clamp(92px,19vh,160px);border-radius:50%;overflow:hidden}
+.res-char img{width:auto;height:100%;max-width:min(58vw,220px);object-fit:contain;
   filter:drop-shadow(0 10px 18px rgba(0,0,0,.45));animation:pzPop .5s cubic-bezier(.2,1.4,.4,1)}
 /* One line, loud, and coloured by the outcome — set by endGame(). */
 .res-title{font-size:clamp(21px,5.4vw,30px);font-weight:900;line-height:1.2;text-align:center;letter-spacing:.3px;
@@ -604,13 +604,23 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
 .rb-face{width:clamp(58px,18vw,84px);height:clamp(58px,18vw,84px);border-radius:20px;border:2.5px solid #000;
   overflow:hidden;background:var(--ink-3);box-shadow:0 4px 0 #000;display:grid;place-items:center;font-size:32px;cursor:pointer}
 .rb-face .pz-avc,.rb-face img{width:100%;height:100%}
-.rb-name{font-size:11.5px;font-weight:900;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:center;line-height:1.35}
+.rb-name{font-size:11.5px;font-weight:900;max-width:100%;text-align:center;line-height:1.35;
+  display:inline-flex;align-items:center;gap:4px;justify-content:center;min-width:0}
+.rb-name>*{flex:0 0 auto}
+.rb-add{width:19px;height:19px;border-radius:7px;border:1.5px solid #000;background:var(--ok,#33D97C);color:#08130c;
+  font-family:inherit;font-size:12px;font-weight:900;line-height:1;padding:0;cursor:pointer;box-shadow:0 2px 0 #000}
+.rb-add:active{transform:translateY(2px);box-shadow:0 0 0 #000}
+.rb-add.done{background:var(--ink-3);color:var(--muted)}
 .rb-role{display:none}   /* «حریف»/«تو» — the sides are obvious from the faces */
 .rb-score{flex:0 0 auto;display:flex;align-items:center;gap:clamp(4px,2vw,10px);direction:ltr}
 .rb-n{font-size:clamp(30px,10vw,44px);font-weight:900;line-height:1}
 .rb-dash{font-size:clamp(18px,5vw,26px);font-weight:900;opacity:.35}
 .rb-side.win .rb-face{border-color:var(--ok);box-shadow:0 4px 0 #000,0 0 0 3px rgba(51,217,124,.35)}
-.rb-crown{font-size:15px;line-height:1}
+.rb-face{position:relative}
+.rb-face.king{overflow:visible}
+.rb-crown{position:absolute;top:-14px;left:50%;transform:translateX(-50%) rotate(-12deg);
+  font-size:22px;line-height:1;pointer-events:none;filter:drop-shadow(0 2px 2px rgba(0,0,0,.6));
+  animation:pzPop .5s cubic-bezier(.2,1.5,.4,1)}
 .res-score{width:100%}
 .res-sc{display:flex;justify-content:center;align-items:center;gap:clamp(8px,3vw,16px);direction:ltr}
 .res-sc-side{text-align:center;min-width:72px;max-width:40vw}
@@ -5293,25 +5303,34 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
         <div class="res-amt"><span id="resultAmt">+۱۸۰٬۰۰۰</span> <small>تومان</small></div>
         <!-- Three cards became one strip: the same three figures, a third of
              the height, and no grid to collide with the buttons. -->
+        <!-- One card for everything the match earned. «رتبه» is gone: in a duel
+             it is only ever ۱ or ۲, which the score already says. -->
         <div class="res-stats">
           <div class="stat"><b class="y" id="stat-q">۹</b><span>پاسخ درست</span></div>
           <i class="rs-sep"></i>
-          <div class="stat"><b class="g" id="stat-rank">۱</b><span>رتبه</span></div>
+          <div class="stat"><b id="stat-time">—</b><span>میانگین پاسخ</span></div>
           <i class="rs-sep"></i>
-          <div class="stat"><b id="stat-time">۱۲ث</b><span>میانگین پاسخ</span></div>
+          <div class="stat"><b class="xp" id="stat-xpv">۰</b><span>XP</span></div>
+          <i class="rs-sep"></i>
+          <div class="stat"><b class="g" id="stat-cup">۰</b><span>کاپ 🏆</span></div>
+          <b id="stat-rank" style="display:none"></b>
         </div>
         <div class="duel-result-panel" id="duelResultPanel"></div>
         <span id="resultBadge" style="display:none"></span><span id="resultEmoji" style="display:none"></span>
         <b id="stat-xp" style="display:none"></b>
       </div>
       <div class="res-actions">
+        <!-- Two rows of two instead of four stacked: half the height, and the
+             room it gives back goes to the character. -->
         <div id="duelActions" style="display:none">
-          <button class="btn btn-primary" id="rematchBtn" onclick="rematch()">🔁 بازی مجدد با همین حریف</button>
-          <button class="btn btn-ghost" id="reviewBtn" onclick="pzOpenReview()">🔍 مرور مسابقه — سؤال‌ها و پاسخ‌ها</button>
+          <div class="res-row2">
+            <button class="btn btn-orange" id="rematchBtn" onclick="rematch()">🔁 بازی مجدد</button>
+            <button class="btn btn-blue" id="reviewBtn" onclick="pzOpenReview()">🔍 مرور مسابقه</button>
+          </div>
         </div>
         <div class="res-row2">
-          <button class="btn btn-orange" id="resultNewBtn" onclick="startGame()">🆕 حریف جدید</button>
-          <button class="btn btn-primary" id="resultHomeBtn" onclick="go('home')">🏠 خانه</button>
+          <button class="btn btn-green" id="resultNewBtn" onclick="startGame()">🆕 حریف جدید</button>
+          <button class="btn btn-yellow" id="resultHomeBtn" onclick="go('home')">🏠 خانه</button>
         </div>
       </div>
     </section>
@@ -8535,6 +8554,8 @@ function pickOpponent(){
 }
 let duelChain=false,vsTimer,duelTopic=null,tossPhase=false,tpTimer;
 function duelIntro(){
+  pzDuelAbort=false;                 /* a new duel: the loop may run again */
+  if(!duelChain) pzAnsTimes=[];      /* a chained rematch keeps the running average */
   gameType='duel';
   if(duelChain){duelChain=false;}
   else{duelStage=1;duelStakeVal=curStake;}
@@ -8746,6 +8767,7 @@ function pzBuildQView(qd, roundKey){
   return Object.assign({}, qd, { a:a, c:c });
 }
 function loadDuelQ(deferTimer){
+  if(pzDuelAbort) return;
   dAnswered=false;
   pzDuelStageBar();
   /* Reveal the question card only when actually SHOWING a question (not during a
@@ -8809,8 +8831,24 @@ function showLeagueDuelReward(){
   const pot=document.getElementById('duelPot');if(pot){pot.style.transform='scale(1.18)';pot.style.color='var(--ok)';setTimeout(()=>{pot.style.transform='';pot.style.color='var(--bolt)';},450);}
   sfx('correct');vib([20,30,20]);
 }
-function startDTimer(){dTimeLeft=10;/* question is now active → ensure the sheet is up */if(typeof pzHideStatus==='function'){const d=document.getElementById('duel');if(d&&d.classList.contains('active'))pzHideStatus();}runDuelTimer();}
+/* REAL answer times. «میانگین پاسخ» on the result screen was the literal string
+   «۱۲ث» written into the markup and never touched again, and every answer was
+   reported to the server as answerTimeMs:5000. Both are measured now. */
+let pzQShownAt=0, pzAnsTimes=[];
+function pzMarkQuestionShown(){ pzQShownAt=Date.now(); }
+function pzAnswerElapsedMs(){
+  if(!pzQShownAt) return 0;
+  const ms=Math.max(0,Math.min(120000,Date.now()-pzQShownAt));
+  pzQShownAt=0; pzAnsTimes.push(ms); return ms;
+}
+function pzAvgAnswerText(){
+  if(!pzAnsTimes.length) return '—';
+  const avg=pzAnsTimes.reduce((a,b)=>a+b,0)/pzAnsTimes.length/1000;
+  return fa(avg<10?Math.round(avg*10)/10:Math.round(avg))+'ث';
+}
+function startDTimer(){dTimeLeft=10;pzMarkQuestionShown();/* question is now active → ensure the sheet is up */if(typeof pzHideStatus==='function'){const d=document.getElementById('duel');if(d&&d.classList.contains('active'))pzHideStatus();}runDuelTimer();}
 function runDuelTimer(){
+  if(pzDuelAbort) return;
   const arc=document.getElementById('dTimerArc'),ring=document.getElementById('dRing'),C=151;
   document.getElementById('dTimerNum').textContent=fa(dTimeLeft);
   arc.style.strokeDashoffset=C*(1-dTimeLeft/10);updateRingDanger(ring,arc,dTimeLeft,3);pzDuelTimerBar();
@@ -8923,6 +8961,9 @@ function updateDuelScore(){
   if(typeof pzDuelHud==='function')pzDuelHud();
 }
 function answerDuel(sel,correct){
+  /* Local/practice duels record their timing here; a real match records it in
+     the payload builder, which is the only place it is also SENT. */
+  try{ if(pzQShownAt) pzAnswerElapsedMs(); }catch(e){}
   if(dAnswered)return;dAnswered=true;clearInterval(dTimer);
   const oppRight=Math.random()<0.58;
   revealAnswers('dAnswers',sel,correct,(myRight)=>{
@@ -9087,10 +9128,11 @@ function renderDuelResultPanel(won){
   }else{
     /* The result is already shown big at the top (resultDuelScore) — so no center
        result card here. Just compact, side-by-side profile / friend buttons. */
-    box.innerHTML='<div class="duel-result-actions" style="display:flex;gap:8px;justify-content:center;margin-top:6px">'+
-      '<button class="btn btn-ghost" style="width:auto;flex:0 1 auto;padding:8px 14px;font-size:12px;border-radius:13px" onclick="showCurrentOpponentProfile()">👤 پروفایل حریف</button>'+
-      '<button class="btn btn-ghost" style="width:auto;flex:0 1 auto;padding:8px 14px;font-size:12px;border-radius:13px" onclick="requestFriend(oppName||\'حریف\')">➕ درخواست دوستی</button>'+
-    '</div>';
+    /* Both of these moved onto the scoreboard: the opponent's picture IS the
+       way into their profile, and the friend request is a small ＋ beside their
+       name. Two full-width buttons for them was most of the room the character
+       needed. */
+    box.innerHTML='';
   }
 }
 function collectPracticeCoinsExit(){go('home');}
@@ -9158,38 +9200,46 @@ function pzVictoryAnim(){
 function renderResultBoard(won){
   const box=document.getElementById('resultBoard'); if(!box) return;
   const meName=((typeof pzRt!=='undefined'&&pzRt&&pzRt.myName)||window.myName||pzDisplayName&&pzDisplayName()||'تو');
-  const meFace='<div class="rb-face" onclick="go(\'profile\')">'+pzMyAvHTML()+'</div>';
+  /* The crown sits ON the winner's picture, not beside their name — it is the
+     picture the eye goes to, and a name is where it was least likely to be
+     read. */
+  const face=(tap,inner,crown)=>'<div class="rb-face'+(crown?' king':'')+'" onclick="'+tap+'">'+inner+
+    (crown?'<span class="rb-crown">👑</span>':'')+'</div>';
   const isDuel=(typeof gameType!=='undefined'&&gameType==='duel');
 
   if(!isDuel){
     box.className='res-board solo';
-    box.innerHTML='<div class="rb-side'+(won?' win':'')+'">'+meFace+
-      '<div class="rb-name">'+frEsc(meName)+(won?' <span class="rb-crown">👑</span>':'')+'</div>'+
-      '<div class="rb-role">'+(won?'برنده':'بازیکن')+'</div></div>';
+    box.innerHTML='<div class="rb-side'+(won?' win':'')+'">'+face('go(\'profile\')',pzMyAvHTML(),!!won)+
+      '<div class="rb-name">'+frEsc(meName)+'</div></div>';
     return;
   }
 
   const opName=((typeof pzRt!=='undefined'&&pzRt&&pzRt.oppName)||oppName||'حریف');
-  const opFace='<div class="rb-face" onclick="showCurrentOpponentProfile()">'+
-    pzFaceHTML({avatar:(typeof pzRt!=='undefined'&&pzRt&&pzRt.oppAv)||oppAv,character:(typeof pzRt!=='undefined'&&pzRt&&pzRt.oppCharacter)||null})+'</div>';
+  const opFace=face('showCurrentOpponentProfile()',
+    pzFaceHTML({avatar:(typeof pzRt!=='undefined'&&pzRt&&pzRt.oppAv)||oppAv,character:(typeof pzRt!=='undefined'&&pzRt&&pzRt.oppCharacter)||null}),
+    oppScore>myScore);
   const meWon=myScore>oppScore, opWon=oppScore>myScore;
   const meCol=meWon?'var(--ok)':(opWon?'var(--red)':'var(--text)');
   const opCol=opWon?'var(--ok)':(meWon?'var(--red)':'var(--text)');
-  /* direction:ltr on the score pair only — a Persian name beside it still reads
-     right-to-left, but «۵ - ۳» must not be flipped into «۳ - ۵». */
+  /* YOU are always on the right. The page is RTL, so the first child of the row
+     is the right-hand one — which is why you go first here. Wherever a player
+     looks, their own face is in the same place every time.
+     direction:ltr on the score pair only: «۵ - ۳» must not be flipped, but the
+     Persian names beside it still read right-to-left. The right-hand number is
+     the right-hand player's, so mine is written second. */
   box.className='res-board';
   box.innerHTML=
-    '<div class="rb-side'+(opWon?' win':'')+'">'+opFace+
-      '<div class="rb-name">'+frEsc(opName)+(opWon?' <span class="rb-crown">👑</span>':'')+'</div>'+
-      '<div class="rb-role">حریف</div></div>'+
+    '<div class="rb-side'+(meWon?' win':'')+'">'+face('go(\'profile\')',pzMyAvHTML(),meWon)+
+      '<div class="rb-name">'+frEsc(meName)+'</div></div>'+
     '<div class="rb-score">'+
       '<span class="rb-n" style="color:'+opCol+'">'+fa(oppScore)+'</span>'+
       '<span class="rb-dash">-</span>'+
       '<span class="rb-n" style="color:'+meCol+'">'+fa(myScore)+'</span>'+
     '</div>'+
-    '<div class="rb-side'+(meWon?' win':'')+'">'+meFace+
-      '<div class="rb-name">'+frEsc(meName)+(meWon?' <span class="rb-crown">👑</span>':'')+'</div>'+
-      '<div class="rb-role">تو</div></div>';
+    '<div class="rb-side'+(opWon?' win':'')+'">'+opFace+
+      '<div class="rb-name">'+frEsc(opName)+
+        '<button class="rb-add" id="rbAddFriend" onclick="event.stopPropagation();requestFriend(oppName||\'حریف\')" title="درخواست دوستی">＋</button>'+
+      '</div></div>';
 }
 
 /* The rematch offer only exists when a REAL match is behind it. Without this
@@ -9246,10 +9296,22 @@ function endGame(won,amount,isWithdraw,customSub){
   try{ const _rvb=document.getElementById('reviewBtn'); if(_rvb) _rvb.style.display=(isDuel&&PZ_LAST_MATCH)?'block':'none'; }catch(e){}
   renderDuelResultPanel(won);
   /* Show the server-computed XP + 🏆cup for this match under the result. */
-  try{ if(isDuel){ const _aw=pzAwardHTML(); const rs=document.getElementById('resultDuelScore'); if(_aw&&rs){ rs.innerHTML=rs.innerHTML+_aw; } } }catch(e){}
+  /* The +XP / +🏆 pills used to hang under the score. They are two of the four
+     figures in the stats card now, so printing them twice is what this used to
+     do wrong elsewhere on the same screen. */
   try{ setTimeout(pzSyncMe,600); }catch(e){}
   const _prc=document.getElementById('practiceRematchCoins'); if(_prc)_prc.textContent=fa(practiceCoinStake);
   document.getElementById('stat-q').textContent=fa(isDuel?myScore:qIndex);
+  /* Measured, not decorated. «۱۲ث» used to be a literal in the markup. */
+  try{ const st=document.getElementById('stat-time'); if(st) st.textContent=pzAvgAnswerText(); }catch(e){}
+  /* XP and 🏆 come from the server's own award for this match — the same two
+     numbers that used to sit in their own pills under the score. */
+  try{
+    const a=(typeof pzMyAward==='function')?pzMyAward():null;
+    const xv=document.getElementById('stat-xpv'), cv=document.getElementById('stat-cup');
+    if(xv) xv.textContent='+'+fa(a?a.xp:0);
+    if(cv) cv.textContent='+'+fa(a?a.cup:0);
+  }catch(e){}
   /* No local XP figure. This line printed duelStage*80 — a guess — right beside
      the server's real award, so the screen showed two different XP numbers for
      the same match. The server's is the one that is true. */
@@ -9318,6 +9380,10 @@ function resumeCurrentGameTimers(){
     if(cur&&cur.me&&qa&&qa.style.display!=='none'&&!qLocked)runWtaTimer();
   }
 }
+/* Set the moment a player leaves a duel, cleared when a new one starts. The
+   round loop is a chain of timeouts, and clearing the visible intervals does not
+   stop the next link — this does. */
+let pzDuelAbort=false;
 function quitGame(){
   if(exitPromptOpen)return;
   exitPromptOpen=true;
@@ -9330,20 +9396,32 @@ function quitGame(){
     sub:'اگر بیرون بری، از همین بازی حذف می‌شی و جایزه‌ی این دور رو از دست می‌دی.',
     primaryText:'خروج و حذف شدن',secondaryText:'انصراف',
     primaryClass:'btn-red',secondaryClass:'btn-ghost',
-    onPrimary:()=>{
+    onPrimary:async()=>{
       exitPromptOpen=false;closeAaaModal(false);
       /* REAL duel: tell the SERVER we are leaving — the server settles the
          forfeit (opponent wins, awards paid once) and pushes match_finished to
          the room so the remaining player is declared winner INSTANTLY. Exiting
          after the match already ended is a no-op server-side, so closing the
          result screen can never turn a player into a loser. */
+      /* STOP THE GAME FIRST. Everything below can take a moment, and until this
+         flag is set the round loop keeps scheduling the next question — which is
+         why a player who had already left kept hearing the game's sounds and
+         feeling its vibration on the result screen. */
+      pzDuelAbort=true;
+      clearInterval(timer);clearInterval(dTimer);clearInterval(cpTimer);clearInterval(vsTimer);clearInterval(tpTimer);if(typeof wtaTimer!=='undefined')clearInterval(wtaTimer);
+      try{ clearAaaTimers(); }catch(_){}
+      /* Tell the server, and WAIT for it. This used to fire and immediately
+         close our own WebSocket in the same breath: the socket dropping is what
+         the opponent saw first, so they were shown «اتصال حریف قطع شد» and put
+         into a 15-second grace window instead of simply being told they had
+         won. The forfeit has to land before we disappear. */
       try{
         if(typeof pzRt!=='undefined'&&pzRt&&pzRt.active&&pzRt.matchId&&!pzRt.finished){
-          pzApi('POST','/matches/'+pzRt.matchId+'/leave',{});
+          const _mid=pzRt.matchId;
+          try{ await pzApi('POST','/matches/'+_mid+'/leave',{}); }catch(_){}
           pzRt.finished=true; try{pzCleanupRt();}catch(_){}
         }
       }catch(_){}
-      clearInterval(timer);clearInterval(dTimer);clearInterval(cpTimer);clearInterval(vsTimer);clearInterval(tpTimer);if(typeof wtaTimer!=='undefined')clearInterval(wtaTimer);
       leagueDuelActive=false;leagueWtaActive=false;
       endGame(false,0,false,'از بازی خارج شدی و جایزه‌ی این دور رو از دست دادی');
     },
@@ -15537,7 +15615,7 @@ function pzWsSubmit(round,sel){
      second as a DUPLICATE and never scores it — the root cause of the wrong,
      asymmetric final scores. Per-player key → every answer is counted.
      The key uses the ORIGINAL index so it matches the value the server scores. */
-  const payload={matchId:pzRt.matchId,questionId:q._id,selectedIndex:origSel,round:round,answerTimeMs:5000,idempotencyKey:'a-'+pzRt.matchId+'-'+(pzRt.myId||'me')+'-'+round+'-'+origSel};
+  const payload={matchId:pzRt.matchId,questionId:q._id,selectedIndex:origSel,round:round,answerTimeMs:pzAnswerElapsedMs(),idempotencyKey:'a-'+pzRt.matchId+'-'+(pzRt.myId||'me')+'-'+round+'-'+origSel};
   if(pzRt.ws&&pzRt.ws.readyState===1){ try{ pzRt.ws.send(JSON.stringify({type:'client:submit_answer',payload})); return; }catch(_){} }
   /* Fallback: HTTP if the socket is momentarily down (scoring still real). */
   fetch(_A+'/matches/'+pzRt.matchId+'/answer',{method:'POST',headers:{'Authorization':'Bearer '+_tok,'Content-Type':'application/json'},body:JSON.stringify(payload)}).catch(()=>{});
@@ -15619,6 +15697,26 @@ function pzHandleWs(m){
       if(typeof pzSetOppConn==='function')pzSetOppConn('down');
       if(typeof pzDuelConnRender==='function')pzDuelConnRender();
       const _graceMid=pzRt.matchId;
+      /* ASK, do not just wait. A socket dropping looks identical whether the
+         opponent's tunnel blinked or they pressed ✕ — but the server knows,
+         because ✕ forfeits them on the spot. Two quick reads settle the second
+         case in about a second instead of leaving the winner staring at a frozen
+         question for the whole grace window and then the claim retries.
+         The 15-second grace still stands for the first case, which is the one it
+         was written for. */
+      const _peek=()=>{
+        if(pzRt.matchId!==_graceMid||!pzRt.active||pzRt.finished) return;
+        pzApi('GET','/matches/'+_graceMid).then(r=>{
+          if(pzRt.matchId!==_graceMid||!pzRt.active||pzRt.finished) return;
+          const ph=r&&r.ok&&r.data&&r.data.phase;
+          if(ph==='result'||ph==='finished'){
+            clearTimeout(pzRt.oppGraceTimer); pzRt.oppGraceTimer=null;
+            for(const k in pzRt.waiters) pzResolveWaiter(k,null);
+            try{ pzApplyServerEnd(r.data); }catch(_){}
+          }
+        }).catch(()=>{});
+      };
+      setTimeout(_peek,250); setTimeout(_peek,1500); setTimeout(_peek,4000);
       pzRt.oppGraceTimer=setTimeout(()=>{ pzRt.oppGraceTimer=null; if(pzRt.matchId!==_graceMid) return; if(pzRt.active&&!pzRt.finished){ pzRt.oppLeft=true; for(const k in pzRt.waiters) pzResolveWaiter(k,null); pzForfeitWin(); } },15000);
     }
     return;
@@ -16373,6 +16471,7 @@ readyGate=function(cb,label){
 /* ---- Result modal after each question: your result + opponent result +
    animated score, 5s countdown, then auto-advance to the next question. ---- */
 function pzResultGate(myRight,oppRight,cb,label){
+  if(pzDuelAbort) return;
   /* Warm the next round's adaptive question NOW (during the result countdown) so
      it's ready by the time we advance — both players' answers for the round just
      finished are already on the server, so the difficulty is final. */
@@ -16687,7 +16786,15 @@ async function pzSyncMe(){
   }
 }
 /* Prominent "you earned" popup after each game. */
+function pzRefreshResultAward(){
+  try{
+    const a=(typeof pzMyAward==='function')?pzMyAward():null; if(!a) return;
+    const xv=document.getElementById('stat-xpv'), cv=document.getElementById('stat-cup');
+    if(xv) xv.textContent='+'+fa(a.xp); if(cv) cv.textContent='+'+fa(a.cup);
+  }catch(e){}
+}
 function pzShowGain(xp,cup){
+  try{ pzRefreshResultAward(); }catch(e){}
   let el=document.getElementById('pzGainPop');
   if(!el){ el=document.createElement('div'); el.id='pzGainPop';
     el.style.cssText='position:fixed;left:50%;top:20%;transform:translateX(-50%);z-index:99998;display:flex;gap:12px;pointer-events:none';
@@ -16915,9 +17022,25 @@ quitGame=function(){
     icon:'🚪', title:'از بازی خارج می‌شی؟',
     sub:'اگر بیرون بری، بازندهٔ این دوئل می‌شی و حریف برنده اعلام می‌شود.',
     primaryText:'خروج و باخت', secondaryText:'انصراف', primaryClass:'btn-red', secondaryClass:'btn-ghost',
-    onPrimary:()=>{
+    onPrimary:async()=>{
       exitPromptOpen=false; closeAaaModal(false);
+      /* Silence the round loop first, or it keeps scheduling the next question
+         and the player who has already left goes on hearing the game. */
+      pzDuelAbort=true;
       clearInterval(timer);clearInterval(dTimer);clearInterval(cpTimer);clearInterval(vsTimer);clearInterval(tpTimer);
+      try{ clearAaaTimers(); }catch(_){}
+      /* TELL THE SERVER. This is the branch that runs for a REAL duel, and it
+         used to close the socket and leave — the server never heard that anyone
+         had quit. All the opponent saw was a socket dropping, so they were shown
+         «اتصال حریف قطع شد», sat through the 15-second grace, and were only
+         declared winner once the server's 45-second idle claim came round: about
+         half a minute of staring at a frozen question.
+         /leave forfeits on the spot and pushes the result to the room, so it has
+         to land BEFORE we disappear. */
+      try{
+        const _mid=pzRt&&pzRt.matchId;
+        if(_mid&&!pzRt.finished){ try{ await pzApi('POST','/matches/'+_mid+'/leave',{}); }catch(_){} }
+      }catch(_){}
       try{ pzRt.finished=true; pzCleanupRt(); if(pzRt.ws){ pzRt.ws.onclose=null; try{pzRt.ws.close();}catch(_){} } }catch(_){}
       leagueDuelActive=false; leagueWtaActive=false;
       endGame(false,0,false,'از بازی خارج شدی؛ حریف برنده شد');

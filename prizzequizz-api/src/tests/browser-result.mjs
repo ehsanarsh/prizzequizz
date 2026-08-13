@@ -54,28 +54,26 @@ async function makePage(w, h) {
 /* Every visible box inside the result screen, so overlaps can be looked for
    rather than eyeballed. Only leaf-ish boxes: a parent containing a child is
    not an overlap. */
-const boxes = (page) => page.evaluate(() => {
+/* Overlap is computed IN the page, because deciding it needs the elements
+   themselves: a child sitting inside its parent's box is nesting, not a
+   collision, and comparing bare rectangles cannot tell the two apart. */
+const overlapPairs = (page) => page.evaluate(() => {
   const sec = document.getElementById('result');
-  const out = [];
-  sec.querySelectorAll('button, .stat, .rb-side, .rb-score, .res-amt, .res-title').forEach((el) => {
-    if (!el.offsetParent && getComputedStyle(el).position !== 'fixed') return;
-    const r = el.getBoundingClientRect();
-    if (r.width < 1 || r.height < 1) return;
-    out.push({ tag: (el.textContent || '').trim().slice(0, 20), x: r.left, y: r.top, w: r.width, h: r.height });
-  });
-  return out;
-});
-function overlaps(list) {
+  const els = [...sec.querySelectorAll('button, .stat, .rb-side, .rb-score, .res-amt, .res-title')]
+    .filter((el) => (el.offsetParent || getComputedStyle(el).position === 'fixed'))
+    .filter((el) => { const r = el.getBoundingClientRect(); return r.width >= 1 && r.height >= 1; });
   const bad = [];
-  for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) {
-    const a = list[i], b = list[j];
-    const ix = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x);
-    const iy = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
-    /* A couple of px of rounding is not an overlap; a real collision is not. */
-    if (ix > 2 && iy > 2) bad.push(a.tag + ' × ' + b.tag);
+  for (let i = 0; i < els.length; i++) for (let j = i + 1; j < els.length; j++) {
+    const A = els[i], B = els[j];
+    if (A.contains(B) || B.contains(A)) continue;          // nesting
+    const a = A.getBoundingClientRect(), b = B.getBoundingClientRect();
+    const ix = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+    const iy = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+    /* A couple of px of rounding is not an overlap; a real collision is. */
+    if (ix > 2 && iy > 2) bad.push((A.textContent || '').trim().slice(0, 16) + ' × ' + (B.textContent || '').trim().slice(0, 16));
   }
   return bad;
-}
+});
 
 async function showDuelResult(page, won = true) {
   await page.evaluate((w) => {
@@ -93,8 +91,7 @@ for (const [w, h] of [[360, 640], [390, 844], [320, 568]]) {
   console.log(`the duel result at ${w}×${h}:`);
   await showDuelResult(page, true);
 
-  const b = await boxes(page);
-  const bad = overlaps(b);
+  const bad = await overlapPairs(page);
   ok('nothing overlaps anything', bad.length === 0, bad.join(' | '));
 
   const geom = await page.evaluate(() => {
@@ -129,7 +126,21 @@ for (const [w, h] of [[360, 640], [390, 844], [320, 568]]) {
       statCards: sec.querySelectorAll('.res-stats').length,
       statsInOneCard: (function(){ const g=sec.querySelector('.res-stats'); if(!g) return false;
         const r=g.getBoundingClientRect(); const kids=[...g.querySelectorAll('.stat')];
-        return kids.length===3 && kids.every(k=>{const kr=k.getBoundingClientRect(); return kr.top>=r.top-1 && kr.bottom<=r.bottom+1;}); })(),
+        return kids.length===4 && kids.every(k=>{const kr=k.getBoundingClientRect(); return kr.top>=r.top-1 && kr.bottom<=r.bottom+1;}); })(),
+      sides: (function(){ const ss=[...document.querySelectorAll('#resultBoard .rb-side')];
+        return ss.map(x=>({ n:(x.querySelector('.rb-name')||{}).textContent||'', x:Math.round(x.getBoundingClientRect().left) })); })(),
+      meIsRight: (function(){ const ss=[...document.querySelectorAll('#resultBoard .rb-side')];
+        if(ss.length!==2) return false;
+        const me=ss.find(x=>/ehsan|احسان/.test((x.querySelector('.rb-name')||{}).textContent||''));
+        const op=ss.find(x=>x!==me);
+        if(!me||!op) return false;
+        return me.getBoundingClientRect().left > op.getBoundingClientRect().left; })(),
+      crownOnFace: !!document.querySelector('#resultBoard .rb-face .rb-crown'),
+      crownWhere: (function(){ const c=document.querySelector('#resultBoard .rb-crown');
+        return c? (c.parentElement.className||'') : '(no crown)'; })(),
+      avgTime: (document.getElementById('stat-time')||{}).textContent || '',
+      hasProfileBtn: /پروفایل حریف/.test(sec.innerText),
+      hasAddChip: !!document.getElementById('rbAddFriend'),
       titleCls: (document.getElementById('resultTitle')||{}).className || '',
       subShown: !!(document.getElementById('resultSub')||{}).offsetParent,
       actionsAtBottom: (function(){ const a=sec.querySelector('.res-actions'), m=sec.querySelector('.res-mid');
@@ -141,11 +152,21 @@ for (const [w, h] of [[360, 640], [390, 844], [320, 568]]) {
   /* The «حریف»/«تو» captions are gone — the two faces and the two names are
      what separate the sides now. */
   ok('both players are named, one per side', /زهرا/.test(content.board) && /ehsan|احسان/.test(content.board), content.board.replace(/\n/g, ' '));
+  /* Whatever the outcome, YOUR face is on the right. A player should not have to
+     work out which side they are on before reading the score. */
+  ok('you are on the RIGHT of the board', content.meIsRight, JSON.stringify(content.sides));
+  ok('the crown is on the winner’s picture', content.crownOnFace, content.crownWhere);
   ok('the character has real room', content.charShown && content.charFrac > 0.10, content.charFrac.toFixed(2));
   ok('without taking over the screen', content.charFrac < 0.26, content.charFrac.toFixed(2));
   ok('the headline is coloured by the outcome', /win|lose/.test(content.titleCls), content.titleCls);
   ok('and the line under it is gone', !content.subShown, String(content.subShown));
-  ok('there is no second XP figure among the stats', !content.statLabels.some((s) => /XP|امتیاز/.test(s)), JSON.stringify(content.statLabels));
+  /* One card now carries all four: right answers, real average time, XP, cup.
+     «رتبه» is gone — in a duel it is only ever ۱ or ۲. */
+  ok('the card carries XP and cup', content.statLabels.some((s) => /XP/.test(s)) && content.statLabels.some((s) => /کاپ/.test(s)), JSON.stringify(content.statLabels));
+  ok('and no longer a rank', !content.statLabels.some((s) => /رتبه/.test(s)), JSON.stringify(content.statLabels));
+  ok('the average answer time is not the hardcoded ۱۲ث', content.avgTime !== '۱۲ث', content.avgTime);
+  ok('the opponent-profile button is gone from the panel', !content.hasProfileBtn);
+  ok('a small ＋ sits beside the opponent’s name instead', content.hasAddChip);
   ok('the score is printed once, not twice', content.scoreCount <= 1, String(content.scoreCount));
   ok('the three figures share ONE card, on one line', content.statsInOneCard, String(content.statCards));
   ok('and the buttons sit below everything else', content.actionsAtBottom);
@@ -170,8 +191,8 @@ for (const [w, h] of [[360, 640], [390, 844], [320, 568]]) {
   }));
   ok('collapses to a single face', c.faces === 1, String(c.faces));
   ok('and does not invent an opponent', !/حریف/.test(c.text), c.text.replace(/\n/g, ' '));
-  const bad = overlaps(await boxes(page));
-  ok('still nothing overlaps', bad.length === 0, bad.join(' | '));
+  const bad2 = await overlapPairs(page);
+  ok('still nothing overlaps', bad2.length === 0, bad2.join(' | '));
   ok('no script errors', errs.length === 0, errs.join(' | '));
   await ctx.close();
 }

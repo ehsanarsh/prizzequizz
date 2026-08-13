@@ -34,7 +34,7 @@ await ctx.addInitScript(() => {
 
 /* The server side of the rule: /start is what spends the ticket, and a cancel
    only refunds while the match has NOT started. */
-let tickets = 3, started = false;
+let tickets = 3, started = false, matchPhase = 'question';
 const calls = [];
 await ctx.route('**/v1/**', (route) => {
   const u = new URL(route.request().url()); const p = u.pathname.replace(/^.*\/v1/, '');
@@ -50,7 +50,9 @@ await ctx.route('**/v1/**', (route) => {
     return send({ ok: true, data: { status: 'cancelled', cancelled: true } });
   }
   if (/^\/matches\/m1\/start$/.test(p)) { started = true; return send({ ok: true, data: snap }); }
-  if (/^\/matches\/m1$/.test(p)) return send({ ok: true, data: snap });
+  if (/^\/matches\/m1\/leave$/.test(p)) { matchPhase = 'result'; return send({ ok: true, data: { ...snap, phase: 'result', winnerUserId: 'p2' } }); }
+  if (/^\/matches\/m1$/.test(p)) return send({ ok: true, data: matchPhase === 'result'
+    ? { ...snap, phase: 'result', winnerUserId: 'me' } : snap });
   if (/^\/matches\/m1\/question/.test(p)) {
     const rd = Number(u.searchParams.get('round') || 0);
     return send({ ok: true, data: { id: 'q' + rd, text: 'سوال ' + rd, options: ['الف','ب','ج','د'], correctIndex: rd % 4, category: 'عمومی', difficulty: 'easy' } });
@@ -152,6 +154,85 @@ console.log('the search is cancellable after an instant pairing:');
   await page.waitForTimeout(900);
   const mmt = await page.evaluate(() => (0, eval)('_mmt'));
   ok('the queue ticket is recorded', !!mmt, String(mmt));
+}
+
+console.log('the opponent’s socket drops because they pressed X:');
+{
+  /* A dropped socket looks the same whether their tunnel blinked or they left —
+     but the server already forfeited them in the second case. Waiting out the
+     15-second grace and then the claim retries is what made the winner sit on a
+     frozen question for half a minute. */
+  matchPhase = 'result';
+  await page.evaluate(() => {
+    (0, eval)("showScreen('duel')");
+    (0, eval)("pzRt.active=true; pzRt.finished=false; pzRt._deciding=false; pzRt.matchId='m1'; pzRt.myId='me'; pzRt.oppId='p2'; pzRt.waiters={}; pzRt.oppGraceTimer=null;");
+    window.__ended = null;
+    (0, eval)("duelRoundWin = function(){ window.__ended='win'; }");
+    (0, eval)("duelRoundLose = function(){ window.__ended='lose'; }");
+    (0, eval)("pzHandleWs({type:'server:opponent_left',payload:{}})");
+  });
+  await page.waitForTimeout(2500);
+  const e = await page.evaluate(() => window.__ended);
+  ok('the winner is declared in a couple of seconds, not thirty', e === 'win', String(e));
+  matchPhase = 'question';
+}
+
+console.log('a genuine disconnect still gets its grace window:');
+{
+  await page.evaluate(() => {
+    (0, eval)("pzRt.active=true; pzRt.finished=false; pzRt._deciding=false; pzRt.matchId='m1'; pzRt.myId='me'; pzRt.waiters={}; pzRt.oppGraceTimer=null;");
+    window.__ended = null;
+    (0, eval)("pzHandleWs({type:'server:opponent_left',payload:{}})");
+  });
+  await page.waitForTimeout(5000);
+  const e = await page.evaluate(() => window.__ended);
+  /* The match is NOT finished server-side here, so nothing may end yet. */
+  ok('a blink does not end the match', e === null, String(e));
+  await page.evaluate(() => { (0, eval)("clearTimeout(pzRt.oppGraceTimer); pzRt.oppGraceTimer=null; pzRt.active=false;"); });
+}
+
+console.log('pressing ✕ stops the game making noise:');
+{
+  /* Driven through the real quit flow — modal and all — because the point is
+     that LEAVING silences the loop, not that a flag set by hand does. */
+  matchPhase = 'result';
+  await page.evaluate(() => {
+    (0, eval)("showScreen('duel')");
+    (0, eval)("pzDuelAbort=false; dAnswered=false; exitPromptOpen=false;");
+    (0, eval)("pzRt.active=true; pzRt.finished=false; pzRt.matchId='m1'; pzRt.myId='me'; pzRt.waiters={};");
+    window.__gate = 0; window.__lq = 0;
+    (0, eval)("endGame = function(){ };");        // stay put; the result screen is tested elsewhere
+    (0, eval)("quitGame()");
+  });
+  await page.waitForTimeout(300);
+  const modal = await page.evaluate(() => {
+    const ov = document.getElementById('aaaModal');
+    return { shown: ov ? ov.className : '(none)', title: (document.getElementById('aaaTitle')||{}).textContent || '', prompt: (0, eval)('exitPromptOpen') };
+  });
+  ok('the exit prompt opens', /خارج/.test(modal.title), JSON.stringify(modal));
+  /* Confirm the exit prompt and let the leave settle. */
+  const clicked = await page.evaluate(() => {
+    const b = document.getElementById('aaaPrimary');
+    return { exists: !!b, hasHandler: !!(b && b.onclick), disabled: b ? b.disabled : null, res: b && b.onclick ? (b.onclick(), 'called') : 'no-handler' };
+  });
+  ok('the confirm button carries a handler', clicked.hasHandler, JSON.stringify(clicked));
+  await page.waitForTimeout(1400);
+
+  const after = await page.evaluate(() => {
+    /* Each guarded entry point is called for real. They must all decline; if a
+       guard is missing, the call runs on and throws on the half-torn-down duel
+       state — which is itself the failure, so it is caught and reported. */
+    const errs = [];
+    try{ (0, eval)("loadDuelQ(false)"); }catch(e){ errs.push('loadDuelQ: ' + e.message); }
+    try{ (0, eval)("runDuelTimer()"); }catch(e){ errs.push('runDuelTimer: ' + e.message); }
+    try{ (0, eval)("pzResultGate(true,false,function(){ window.__gate++; },'')"); }catch(e){ errs.push('pzResultGate: ' + e.message); }
+    return { aborted: (0, eval)('pzDuelAbort'), gate: window.__gate, errs: errs.join(' | ') };
+  });
+  ok('none of the loop entry points even ran', after.errs === '', after.errs);
+  ok('leaving marks the duel aborted', after.aborted === true, String(after.aborted));
+  ok('so the round loop will not run again', after.gate === 0, String(after.gate));
+  ok('and the leave really reached the server', calls.some((c) => /POST \/matches\/m1\/leave/.test(c)), calls.filter((c)=>/leave/.test(c)).join(','));
+  matchPhase = 'question';
 }
 
 console.log('the opponent presses X:');
