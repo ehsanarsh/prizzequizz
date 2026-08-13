@@ -7,6 +7,10 @@ import {
   listQualifiers, listRooms, listSeats, reportRoomResult, currentSeasonId,
   LeagueError
 } from '../../services/leagueService.js';
+import {
+  openForLeagueRoom, join as wtaJoin, answer as wtaAnswer, pick as wtaPick,
+  snapshot as wtaSnapshot, start as wtaStart, WtaError
+} from '../../services/wtaService.js';
 
 export function registerLeagueRoutes(router: Router, base: string): void {
   /* ── what a player sees ───────────────────────────────────────────── */
@@ -21,6 +25,55 @@ export function registerLeagueRoutes(router: Router, base: string): void {
   router.add('GET', `${base}/leagues/me`, async (ctx) => {
     if (!ctx.userId) return error(ctx.res, 401, 'UNAUTHORIZED', 'ابتدا وارد شو.');
     json(ctx.res, 200, await myLeague(ctx.userId));
+  });
+
+  /* ── «از کی بپرسم؟» — the match itself ───────────────────────────── */
+
+  /* A seat in a league room is an invitation; taking it is what makes you a
+   * player. Opening the room here rather than on a timer means a player who
+   * arrives early is seated whether or not anyone else has arrived yet. */
+  router.add('POST', `${base}/leagues/rooms/:id/join`, async (ctx) => {
+    if (!ctx.userId) return error(ctx.res, 401, 'UNAUTHORIZED', 'ابتدا وارد شو.');
+    const rooms = await listRooms(currentSeasonId());
+    const room = rooms.find((r) => r.id === ctx.params.id);
+    if (!room) return error(ctx.res, 404, 'ROOM_NOT_FOUND', 'این اتاق پیدا نشد.');
+    await openForLeagueRoom(room);
+    try {
+      wtaJoin(room.id, ctx.userId);
+      json(ctx.res, 200, await wtaSnapshot(room.id, ctx.userId));
+    } catch (e) {
+      if (e instanceof WtaError) return error(ctx.res, e.code === 'NOT_INVITED' ? 403 : 409, e.code, e.message);
+      throw e;
+    }
+  });
+
+  router.add('GET', `${base}/leagues/rooms/:id`, async (ctx) => {
+    if (!ctx.userId) return error(ctx.res, 401, 'UNAUTHORIZED', 'ابتدا وارد شو.');
+    const snap = await wtaSnapshot(String(ctx.params.id), ctx.userId);
+    if (!snap) return error(ctx.res, 404, 'ROOM_NOT_FOUND', 'این اتاق هنوز باز نشده است.');
+    json(ctx.res, 200, snap);
+  });
+
+  router.add('POST', `${base}/leagues/rooms/:id/answer`, async (ctx) => {
+    if (!ctx.userId) return error(ctx.res, 401, 'UNAUTHORIZED', 'ابتدا وارد شو.');
+    try {
+      const r = await wtaAnswer(String(ctx.params.id), ctx.userId, Number((ctx.body as any)?.selectedIndex));
+      json(ctx.res, 200, { ...r, room: await wtaSnapshot(String(ctx.params.id), ctx.userId) });
+    } catch (e) {
+      if (e instanceof WtaError) return error(ctx.res, 409, e.code, e.message);
+      throw e;
+    }
+  });
+
+  router.add('POST', `${base}/leagues/rooms/:id/pick`, async (ctx) => {
+    if (!ctx.userId) return error(ctx.res, 401, 'UNAUTHORIZED', 'ابتدا وارد شو.');
+    try {
+      await wtaPick(String(ctx.params.id), ctx.userId, String((ctx.body as any)?.userId || ''));
+      json(ctx.res, 200, await wtaSnapshot(String(ctx.params.id), ctx.userId));
+    } catch (e) {
+      if (e instanceof WtaError) return error(ctx.res, 409, e.code, e.message);
+      throw e;
+    }
   });
 
   /* ── the operator ─────────────────────────────────────────────────── */
@@ -70,6 +123,19 @@ export function registerLeagueRoutes(router: Router, base: string): void {
     await recordAdmin({ action: 'league_draw', meta: { season: seasonId, round, rooms: rooms.length } });
     const withSeats = await Promise.all(rooms.map(async (r) => ({ ...r, seats: (await listSeats(r.id)).map((s) => s.userId) })));
     json(ctx.res, 200, { season: seasonId, round, rooms: withSeats });
+  });
+
+  /* Start a room by hand — for a rehearsal, or when a kickoff has to be moved
+   * on the night. */
+  router.add('POST', `${base}/admin/leagues/rooms/:id/start`, async (ctx) => {
+    if (!requireAdmin(ctx, { tab: 'leagues' })) return;
+    const rooms = await listRooms(currentSeasonId());
+    const room = rooms.find((r) => r.id === ctx.params.id);
+    if (!room) return error(ctx.res, 404, 'ROOM_NOT_FOUND', 'این اتاق پیدا نشد.');
+    await openForLeagueRoom(room);
+    await wtaStart(room.id);
+    await recordAdmin({ action: 'league_room_start', meta: { roomId: room.id } });
+    json(ctx.res, 200, await wtaSnapshot(room.id));
   });
 
   router.add('GET', `${base}/admin/leagues/rooms`, async (ctx) => {

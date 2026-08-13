@@ -35,6 +35,8 @@ import { registerAdminRoutes } from './modules/admin/routes.js';
 import { attachRealtimeGateway } from './realtime/gateway.js';
 import { startMatchmakingWorker } from './services/matchmakingWorker.js';
 import { startLastSurvivorWorker } from './services/lastSurvivorWorker.js';
+import { startWtaWorker } from './services/wtaService.js';
+import { startLeagueWorker } from './services/leagueWorker.js';
 
 export interface ApiServerOptions {
   attachRealtime?: boolean;
@@ -89,6 +91,7 @@ export function createApiServer(options: ApiServerOptions = {}): Server {
   if (options.attachRealtime !== false) attachRealtimeGateway(server);
   if (process.env.MATCHMAKING_WORKER !== 'false') startMatchmakingWorker();
   if (process.env.LAST_SURVIVOR_WORKER !== 'false') startLastSurvivorWorker();
+  if (process.env.LEAGUE_WORKER !== 'false') { startWtaWorker(); startLeagueWorker(); }
   if (process.env.SERVER_MONITOR !== 'false') startServerMonitorCollector();
   return server;
 }

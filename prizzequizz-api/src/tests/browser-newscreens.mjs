@@ -41,6 +41,22 @@ let friendReq = null;
 let firstFaces = '';
 let recordCalls = 0;
 let cutlineCalls = 0;
+let joined = 0; const answered = []; const picked = [];
+let roomPhase = 'turn', roomMine = true;
+function wtaSnap(phase, mine) {
+  return {
+    id: 'lr1', phase, turnUserId: mine ? 'me' : 'p2', endsAt: Date.now() + 15000, serverNow: Date.now(),
+    aliveCount: 4, winnerUserId: phase === 'finished' ? 'me' : null,
+    players: [
+      { userId: 'me', username: 'ehsan', lives: 3, out: false, absent: false },
+      { userId: 'p2', username: 'زهرا', lives: 2, out: false, absent: false },
+      { userId: 'p3', username: 'رضا', lives: 3, out: false, absent: false },
+      { userId: 'p4', username: 'سینا', lives: 1, out: false, absent: false }
+    ],
+    question: phase === 'turn' ? { id: 'q1', text: 'پایتخت ژاپن؟', options: ['توکیو', 'اوساکا', 'کیوتو', 'ناگویا'], category: 'جغرافیا', difficulty: 'easy' } : undefined,
+    me: { userId: 'me', lives: 3, out: false, absent: false, myTurn: mine }
+  };
+}
 await ctx.route('**/v1/**', (route) => {
   const u = new URL(route.request().url());
   const p = u.pathname.replace(/^.*\/v1/, '') + (u.search || '');
@@ -60,6 +76,35 @@ await ctx.route('**/v1/**', (route) => {
       nextCost: refresh ? 5 : 0, freeLeft: refresh ? 0 : 1, onlineTotal: 47
     } });
   }
+  if (p === '/leagues/me') {
+    return send({ ok: true, data: {
+      enabled: true, seasonId: '2026-W07', rank: 4, cup: 980,
+      tier: { key: 'gold', label: 'لیگ طلایی', emoji: '🥇' },
+      qualifiedTier: 'gold', tickets: { gold: 1 },
+      cutLines: [
+        { key: 'gold', label: 'لیگ طلایی', emoji: '🥇', rank: 15, cup: 1240, exact: true },
+        { key: 'silver', label: 'لیگ نقره‌ای', emoji: '🥈', rank: 30, cup: 860, exact: true },
+        { key: 'bronze', label: 'لیگ برنزی', emoji: '🥉', rank: 45, cup: 410, exact: false }
+      ],
+      kickoffAt: Date.now() + 3600_000,
+      room: { id: 'lr1', tier: 'gold', round: 1, roomNo: 1, startsAt: Date.now() + 3600_000, seats: 4 }
+    } });
+  }
+  if (/^\/leagues\/rooms\/[^/]+\/join$/.test(p)) { joined++; return send({ ok: true, data: wtaSnap('turn', true) }); }
+  if (/^\/leagues\/rooms\/[^/]+\/answer$/.test(p)) {
+    answered.push(route.request().postDataJSON());
+    /* The server's state really does move to «picking» after a right answer,
+       so the fake one must too — otherwise the poll a second later drags the
+       screen back and the test passes or fails for the wrong reason. */
+    roomPhase = 'picking'; roomMine = true;
+    return send({ ok: true, data: { correct: true, correctIndex: 0, picking: true, eliminated: false, livesLeft: 3, room: wtaSnap('picking', true) } });
+  }
+  if (/^\/leagues\/rooms\/[^/]+\/pick$/.test(p)) {
+    picked.push(route.request().postDataJSON());
+    roomPhase = 'turn'; roomMine = false;
+    return send({ ok: true, data: wtaSnap('turn', false) });
+  }
+  if (/^\/leagues\/rooms\/[^/]+$/.test(p)) return send({ ok: true, data: wtaSnap(roomPhase, roomMine) });
   if (p.startsWith('/leagues/cutlines')) {
     cutlineCalls++;
     return send({ ok: true, data: { season: '2026-W07', lines: [
@@ -81,6 +126,12 @@ await ctx.route('**/v1/**', (route) => {
     ] } });
   }
   if (p === '/friends/requests') { friendReq = route.request().postDataJSON(); return send({ ok: true, data: { status: 'pending' } }, 201); }
+  /* The signed-in player. Without this the catch-all answers with {} and the
+     client ends up with a user that has no id — which quietly breaks anything
+     that compares "is this me". */
+  if (p === '/users/me' && route.request().method() === 'GET') {
+    return send({ ok: true, data: { id: 'me', username: 'ehsan', displayName: 'احسان', level: 3, xp: 120, weeklyScore: 980, balances: { wallet: 0, coins: 360, hearts: 5, tickets: {} } } });
+  }
   if (/^\/users\/[^/]+\/profile/.test(p)) {
     /* Answer about the player who was actually asked for — a fixed name here
        would make a mismatched profile look correct. */
@@ -94,7 +145,7 @@ await ctx.route('**/v1/**', (route) => {
   ] } });
   if (route.request().method() === 'PATCH' && p === '/users/me') {
     patched = route.request().postDataJSON();
-    return send({ ok: true, data: { id: 'u1', username: 'ehsan', displayName: 'احسان', gender: patched.gender ?? null, level: 3, xp: 120 } });
+    return send({ ok: true, data: { id: 'me', username: 'ehsan', displayName: 'احسان', gender: patched.gender ?? null, level: 3, xp: 120 } });
   }
   if (p === '/leaderboards/weekly-winnings' || p === '/leaderboards/weekly') return send({ ok: true, data: { entries: [] } });
   return send({ ok: true, data: {} });
@@ -465,7 +516,80 @@ console.log('the league cut lines on the cup rail:');
   ok('900 cup is past bronze and silver but not gold', lit.bronze && lit.silver && !lit.gold, JSON.stringify(lit));
 }
 
+
+console.log('the league hub and the studio:');
+{
+  await setPlan('premium');
+  await page.evaluate(() => { try { (0, eval)('closeAaaModal(false)'); } catch (e) {} });
+  await page.evaluate(() => (0, eval)("openLeagues()"));
+  await page.waitForTimeout(900);
+  ok('the hub is not still parked behind a «بزودی» modal',
+    await page.evaluate(() => document.getElementById('leagues')?.classList.contains('active')));
+  const live = await page.evaluate(() => document.getElementById('lgLive')?.textContent || '');
+  ok('the hub says where the player actually stands', /رتبهٔ تو/.test(live) && /۴/.test(live), live.slice(0, 120));
+  ok('and that they are in a league', /لیگ طلایی/.test(live), live.slice(0, 160));
+  ok('with a way into their room', await page.evaluate(() => !!document.querySelector('#lgLive button')));
+
+  joined = 0;
+  await page.evaluate(() => document.querySelector('#lgLive button').click());
+  await page.waitForTimeout(700);
+  ok('entering the studio takes the seat on the server', joined === 1, String(joined));
+  ok('and the studio is on screen', await page.evaluate(() => document.getElementById('wta')?.classList.contains('active')));
+
+  const seats = await page.evaluate(() => document.querySelectorAll('#wtaStage .wta-seat').length);
+  ok('the other players are seated from the server list', seats === 3, String(seats));
+  const qtext = await page.evaluate(() => document.getElementById('wtaText')?.textContent || '');
+  ok('the question is the server’s', /ژاپن/.test(qtext), qtext);
+  const enabled = await page.evaluate(() => [...document.querySelectorAll('#wtaAnswers .ans')].filter((b) => !b.disabled).length);
+  ok('and it is answerable because it is my turn', enabled === 4, String(enabled));
+}
+
+console.log('answering and choosing who is next:');
+{
+  answered.length = 0; picked.length = 0;
+  await page.evaluate(() => document.querySelector('#wtaAnswers .ans').click());
+  await page.waitForTimeout(1400);
+  ok('the answer goes to the server, not to a local coin flip', answered.length === 1 && answered[0].selectedIndex === 0, JSON.stringify(answered));
+
+  const picking = await page.evaluate(() => document.getElementById('wtaPickArea')?.style.display !== 'none');
+  ok('a right answer opens the choice of who answers next', picking);
+
+  await page.evaluate(() => {
+    const seat = [...document.querySelectorAll('#wtaStage .wta-seat')].find((e) => e.dataset.uid && e.dataset.uid !== 'me');
+    seat.click();
+  });
+  await page.waitForTimeout(600);
+  ok('and naming somebody sends THEIR id', picked.length === 1 && !!picked[0].userId && picked[0].userId !== 'me', JSON.stringify(picked));
+}
+
+console.log('when it is somebody else’s turn:');
+{
+  roomPhase = 'turn'; roomMine = false;
+  for (let i = 0; i < 3; i++) { await page.evaluate(() => (0, eval)('wtaLeagueTick()')); await page.waitForTimeout(250); }
+  await page.waitForTimeout(400);
+  const locked = await page.evaluate(() => [...document.querySelectorAll('#wtaAnswers .ans')].every((b) => b.disabled));
+  ok('the answers are locked — you cannot answer for another player', locked);
+  const clock = await page.evaluate(() => document.getElementById('wtaNum')?.textContent || '');
+  ok('and the timer shows you are watching', /👀/.test(clock), clock);
+}
+
+console.log('the end of the match:');
+{
+  answered.length = 0;
+  await page.evaluate(() => {
+    const s = (0, eval)('wtaLeague').snap;
+    (0, eval)('wtaLeagueApply')(Object.assign({}, s, { phase: 'finished', winnerUserId: 'me' }));
+  });
+  await page.waitForTimeout(600);
+  const txt = await page.evaluate(() => document.getElementById('aaaModal')?.textContent || '');
+  const who = await page.evaluate(() => (0, eval)('_usr') && (0, eval)('_usr').id);
+  ok('a winner is told they won', /قهرمان شدی/.test(txt), txt.slice(0, 60) + ' [_usr.id=' + who + ']');
+  const polling = await page.evaluate(() => !!((0, eval)('wtaLeague') && (0, eval)('wtaLeague').poll));
+  ok('and the room stops polling once it is over', !polling);
+}
+
 ok('no script errors on the new screens', errs.length === 0, errs.join(' | '));
+
 
 
 
