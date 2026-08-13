@@ -38,10 +38,16 @@ await ctx.addInitScript(() => {
    controls it: `snapshotMode` decides what the next GET returns. */
 let snapshotMode = 'full';
 const polls = [];
+const answersSent = [];
 await ctx.route('**/v1/**', (route) => {
   const u = new URL(route.request().url());
   const p = u.pathname.replace(/^.*\/v1/, '');
   const send = (d, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(d) });
+  if (/^\/last-survivor\/rooms\/[^/]+\/answer$/.test(p)) {
+    let b = {}; try { b = JSON.parse(route.request().postData() || '{}'); } catch (e) {}
+    answersSent.push(b);
+    return send({ ok: true, data: { recorded: true } });
+  }
   if (/^\/last-survivor\/rooms\/[^/]+$/.test(p)) {
     polls.push(snapshotMode);
     if (snapshotMode === 'fail') return send({ ok: false, error: { code: 'RATE_LIMITED', message: 'Too many requests.' } }, 429);
@@ -223,6 +229,98 @@ console.log('lifelines:');
   await page.waitForTimeout(150);
   const stillUsed = await page.evaluate(() => (0, eval)('JSON.stringify(lsPuUsed)'));
   ok('a new round does not hand the help back', /"5050":true/.test(stillUsed), stillUsed);
+}
+
+/* ── tapping an option must light up THAT option ──────────────────────
+   The card is shuffled per player, so every option carries two indexes: where
+   it sits on this screen, and what the server calls it. Tapping «الف» used to
+   highlight whichever option the server happened to call 0 — the answer sent
+   was right, the one that lit up was not. */
+console.log('tapping an option:');
+{
+  snapshotMode = 'full';
+  for (const tapAt of [0, 1, 2, 3]) {
+    await openRound(true);
+    answersSent.length = 0;
+    const r = await page.evaluate(async (idx) => {
+      const btns = [...document.querySelectorAll('#lsBody #lsOpts .ans')];
+      const tapped = btns[idx];
+      const label = tapped.querySelector('.atxt').textContent;
+      await (0, eval)('lsAnswer')(idx);
+      const lit = [...document.querySelectorAll('#lsBody #lsOpts .ans.selected')];
+      return {
+        label,
+        litCount: lit.length,
+        litLabel: lit[0] ? lit[0].querySelector('.atxt').textContent : null,
+        litIndex: lit[0] ? Number(lit[0].dataset.i) : -1
+      };
+    }, tapAt);
+    ok('option ' + tapAt + ' lights up exactly one option', r.litCount === 1, String(r.litCount));
+    ok('and it is the one that was tapped', r.litLabel === r.label && r.litIndex === tapAt, r.label + ' vs ' + r.litLabel);
+
+    /* And the answer that went to the server is still the right one — the fix
+       must not have swapped the bug from the screen to the wire. */
+    await page.waitForTimeout(150);
+    const sentIdx = answersSent.length ? answersSent[answersSent.length - 1].selectedIndex : null;
+    const serverLabel = await page.evaluate((i) => (0, eval)('lsSnap').question.options[i], sentIdx);
+    ok('and the option sent to the server is that same option', serverLabel === r.label, serverLabel + ' vs ' + r.label);
+  }
+}
+
+console.log('a shield breaking:');
+{
+  await openRound(true);
+  const v = await page.evaluate(() => {
+    const s = JSON.parse(JSON.stringify(window.__snapFull));
+    s.room.phase = 'elimination';
+    s.me.shieldBroke = true; s.me.shields = 1;      // had a red shield, one left
+    s.me.reveal = { options: ['توکیو', 'اوساکا', 'کیوتو', 'ناگویا'], correctIndex: 0, yourIndex: 2 };
+    (0, eval)('lsRender')(s);
+    const card = document.querySelector('.ls-verdict');
+    const cs = getComputedStyle(card);
+    return {
+      cls: card.className,
+      color: cs.color,
+      fontSize: parseFloat(getComputedStyle(card.querySelector('.lsv-head')).fontSize),
+      halves: document.querySelectorAll('.lsb-half').length,
+      broken: (document.querySelector('.lsb-half') || {}).className || '',
+      fresh: (document.querySelector('.lsb-new') || {}).className || '',
+      anim: getComputedStyle(document.querySelector('.lsb-half')).animationName
+    };
+  });
+  const rgb = (v.color.match(/\d+/g) || []).map(Number);
+  ok('the card is red — the answer was wrong', rgb[0] > 150 && rgb[1] < 130 && rgb[2] < 130, v.color);
+  ok('not the old calm blue', !/shield/.test(v.cls.replace('ls-shield-break', '')), v.cls);
+  ok('the headline is big enough to read at a glance', v.fontSize >= 18, String(v.fontSize));
+  ok('the shield is drawn in two halves', v.halves === 2, String(v.halves));
+  ok('the broken one is the shield that was held — red', /red/.test(v.broken), v.broken);
+  ok('and the one left is blue', /blue/.test(v.fresh), v.fresh);
+  ok('the halves really animate apart', /lsbFly|lsbShake/.test(v.anim), v.anim);
+}
+
+console.log('the last shield breaking:');
+{
+  const v = await page.evaluate(() => {
+    /* The client skips a redraw when nothing about the round changed, and the
+       previous case left it on the same round+phase — so the guard is cleared
+       here. In a real match a player only breaks one shield per round. */
+    (0, eval)("lsLastKey=''");
+    const s = JSON.parse(JSON.stringify(window.__snapFull));
+    s.room.phase = 'elimination';
+    s.me.shieldBroke = true; s.me.shields = 0;      // had a blue shield, none left
+    s.me.reveal = { options: ['توکیو', 'اوساکا', 'کیوتو', 'ناگویا'], correctIndex: 0, yourIndex: 2 };
+    (0, eval)('lsRender')(s);
+    return {
+      broken: (document.querySelector('.lsb-half') || {}).className || '',
+      fresh: (document.querySelector('.lsb-new') || {}).className || '',
+      freshShape: (document.querySelector('.lsb-new svg') || {}).innerHTML || '',
+      text: document.querySelector('.ls-verdict').innerText
+    };
+  });
+  ok('a blue shield breaks', /blue/.test(v.broken), v.broken);
+  ok('and green is what is left', /green/.test(v.fresh), v.fresh);
+  ok('drawn as the circle, not a shield', /circle/.test(v.freshShape), v.freshShape.slice(0, 40));
+  ok('and the player is told the next mistake ends it', /اشتباه بعدی/.test(v.text), v.text.replace(/\n/g, ' ').slice(0, 90));
 }
 
 ok('no script errors through all of it', errs.length === 0, errs.join(' | '));

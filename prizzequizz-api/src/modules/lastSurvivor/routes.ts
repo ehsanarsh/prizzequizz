@@ -6,6 +6,7 @@ import { repositories } from '../../repositories/index.js';
 import { bodyObject } from '../../utils/validation.js';
 import { getConfig, updateConfig, setTopicEnabled, isTopicPlayable, isTopicHidden, removeTopic,
          addTopic, setTopicHidden, RANDOM_TOPIC, isRandomTopic,
+         isInRandomPool, randomPoolCategories, setRandomCategories,
          type LastSurvivorConfig } from '../../services/lastSurvivorConfig.js';
 import { joinTopic, snapshot, addVote, addChat, listChat, getRoom, saveRoom, listAllRooms, listPlayers,
          leaveRoom, touchPlayer, sweepIdlePlayers, LastSurvivorError, listActiveRooms,
@@ -63,7 +64,9 @@ async function buildTopics(opts: { includeHidden: boolean }): Promise<any[]> {
       image: art[name] ?? '',
       /* «تصادفی» draws from every category, so its bank is the whole bank —
        * reporting a per-category count would show 0 and read as broken. */
-      questionCount: isRandomTopic(name) ? questions.length : (counts.get(name) ?? 0),
+      questionCount: isRandomTopic(name)
+        ? questions.filter((q) => isInRandomPool(cfg, q.category)).length
+        : (counts.get(name) ?? 0),
       random: isRandomTopic(name),
       /* Invented here rather than discovered from the bank — the panel needs
        * this to say whether «حذف» really deletes or only hides. */
@@ -97,7 +100,48 @@ export function registerLastSurvivorRoutes(router: Router, base: string): void {
    * back. */
   router.add('GET', `${base}/admin/last-survivor/topics`, async (ctx) => {
     if (!requireAdmin(ctx, { tab: 'lastsurvivor' })) return;
-    json(ctx.res, 200, { topics: await buildTopics({ includeHidden: true }) });
+    const cfg = await getConfig();
+    const approved = await repositories.questions.listApproved();
+    /* Every category that actually has approved questions, with its count —
+     * this is the checklist the operator ticks to build the «تصادفی» pool.
+     * Categories with no questions are left out: ticking one would add nothing
+     * and only make the chosen pool look bigger than it is. */
+    const counts = new Map<string, number>();
+    for (const q of approved) counts.set(q.category, (counts.get(q.category) ?? 0) + 1);
+    json(ctx.res, 200, {
+      topics: await buildTopics({ includeHidden: true }),
+      randomTopic: RANDOM_TOPIC,
+      randomCategories: randomPoolCategories(cfg),
+      categories: [...counts.entries()]
+        .map(([name, questionCount]) => ({ name, questionCount }))
+        .sort((a, b) => b.questionCount - a.questionCount)
+    });
+  });
+
+  /* Which categories «تصادفی» draws from. An empty list means every one of
+   * them, which is what the mode did before this existed. */
+  router.add('PUT', `${base}/admin/last-survivor/random-categories`, async (ctx) => {
+    if (!requireAdmin(ctx, { tab: 'lastsurvivor' })) return;
+    const body = bodyObject(ctx.body) as any;
+    const list = Array.isArray(body.categories) ? body.categories : null;
+    if (!list) return error(ctx.res, 422, 'BAD_INPUT', 'فهرست موضوع‌ها فرستاده نشده است.');
+    const approved = await repositories.questions.listApproved();
+    /* A named pool with no approved questions behind it would leave the picker
+     * with nothing to draw and every round would fall back to the whole bank —
+     * exactly the thing the operator was trying to prevent. Refuse instead. */
+    if (list.length) {
+      const have = approved.filter((q) => list.includes(q.category)).length;
+      if (!have) {
+        return error(ctx.res, 422, 'RANDOM_POOL_EMPTY',
+          'موضوع‌های انتخاب‌شده هیچ سؤال تأییدشده‌ای ندارند؛ «تصادفی» با آن‌ها چیزی برای پخش نخواهد داشت.');
+      }
+    }
+    const cfg = await setRandomCategories(list);
+    const picked = randomPoolCategories(cfg);
+    json(ctx.res, 200, {
+      randomCategories: picked,
+      questionCount: approved.filter((q) => isInRandomPool(cfg, q.category)).length
+    });
   });
   /* Invent a topic. The Last Survivor list is no longer limited to whatever the
    * question bank happens to hold — an operator can announce a topic here long
@@ -131,9 +175,11 @@ export function registerLastSurvivorRoutes(router: Router, base: string): void {
          * eliminates nobody. «تصادفی» draws from the whole bank, so it is only
          * empty when the bank is. */
         if (body.enabled) {
+          const approved = await repositories.questions.listApproved();
+          const lsCfg = await getConfig();
           const have = isRandomTopic(topic)
-            ? (await repositories.questions.listApproved()).length
-            : (await repositories.questions.listApproved()).filter((q) => q.category === topic).length;
+            ? approved.filter((q) => isInRandomPool(lsCfg, q.category)).length
+            : approved.filter((q) => q.category === topic).length;
           if (!have) {
             return error(ctx.res, 422, 'TOPIC_EMPTY',
               'موضوع «' + topic + '» هیچ سؤال تأییدشده‌ای ندارد و فعال نمی‌شود؛ اول سؤال اضافه کن.');

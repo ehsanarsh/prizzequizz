@@ -6,7 +6,7 @@
  * connection recovers from the stored room/player rows. Each transition also
  * publishes to the realtime topic `ls:{roomId}` for instant client updates;
  * REST snapshot polling is the authoritative fallback. */
-import { isRandomTopic } from './lastSurvivorConfig.js';
+import { getConfig, isInRandomPool, isRandomTopic, randomPoolCategories } from './lastSurvivorConfig.js';
 import { repositories } from '../repositories/index.js';
 import { realtimeRooms } from '../realtime/roomRegistry.js';
 import { logger } from './logger.js';
@@ -116,14 +116,31 @@ export function difficultyForRound(round: number, totalRounds: number): 'easy' |
   return tiers[idx]!;
 }
 
-async function pickQuestion(topic: string, roomId: string, round = 1, totalRounds = 12): Promise<{ id: string; correctIndex: number; text: string; options: string[]; difficulty?: string } | null> {
+/* Exported as a test seam. Which questions a topic is allowed to draw is the
+ * whole point of the random pool, and driving a full room to find out would
+ * test the room rather than the rule. */
+export async function pickQuestion(topic: string, roomId: string, round = 1, totalRounds = 12): Promise<{ id: string; correctIndex: number; text: string; options: string[]; difficulty?: string } | null> {
   const all = await repositories.questions.listApproved();
   /* «تصادفی» is not a category — it is every category. Filtering by name would
    * match nothing and the room would stall on an empty bank, so the whole
    * approved pool is the pool. It is also what makes the mode work at all
    * early on: one category rarely has enough questions for twelve rounds
    * across four difficulty tiers, the union always does. */
-  const pool = isRandomTopic(topic) ? all : all.filter((q) => q.category === topic);
+  let pool = isRandomTopic(topic) ? all : all.filter((q) => q.category === topic);
+  /* «تصادفی» is every category by default, but an operator can name the ones it
+   * is allowed to use — some topics are simply not wanted in the random mix.
+   * If that narrowing leaves nothing, the whole bank is used anyway and it is
+   * logged: a paid match stalling on an empty pool is worse than a round drawn
+   * from a category the operator would rather not have seen. */
+  if (isRandomTopic(topic)) {
+    const cfg = await getConfig();
+    const picked = randomPoolCategories(cfg);
+    if (picked.length) {
+      const narrowed = all.filter((q) => isInRandomPool(cfg, q.category));
+      if (narrowed.length) pool = narrowed;
+      else logger.warn('ls_random_pool_empty', { roomId, categories: picked });
+    }
+  }
   if (!pool.length) return null;
   let used = usedQuestions.get(roomId); if (!used) { used = new Set(); usedQuestions.set(roomId, used); }
   const fresh = pool.filter((q) => !used!.has(q.id));

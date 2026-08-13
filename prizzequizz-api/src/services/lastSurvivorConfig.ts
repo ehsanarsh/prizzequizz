@@ -40,6 +40,12 @@ export interface LastSurvivorConfig {
   // enabled shows the "به‌زودی…" badge in the client. minUsers can override the
   // room default per topic.
   topics: Record<string, TopicSettings>;
+  /* Which categories «تصادفی» actually draws from.
+   * Empty means every category, which is what the mode has always done and
+   * stays the default — an operator who never opens this screen sees no
+   * change. Naming categories here narrows the pool to exactly those, so a
+   * topic can be live on its own without also turning up inside «تصادفی». */
+  randomCategories: string[];
 }
 
 export interface TopicSettings {
@@ -88,8 +94,27 @@ export const LS_DEFAULT_CONFIG: LastSurvivorConfig = {
      * long match never runs short and never repeats early. Every real category
      * stays "coming soon" until an operator turns it on. */
     [RANDOM_TOPIC]: { enabled: true }
-  }
+  },
+  randomCategories: []
 };
+
+/* The categories «تصادفی» is allowed to draw from, or an empty list meaning
+ * "no restriction". One reader for the question picker, the topic list and the
+ * admin screen, so the three can never disagree about what the pool is. */
+export function randomPoolCategories(cfg: LastSurvivorConfig): string[] {
+  const raw = Array.isArray(cfg?.randomCategories) ? cfg.randomCategories : [];
+  const out: string[] = [];
+  for (const c of raw) {
+    const t = String(c ?? '').trim();
+    if (t && !out.includes(t)) out.push(t);
+  }
+  return out;
+}
+/** Is this question's category in the «تصادفی» pool? Everything is, when unset. */
+export function isInRandomPool(cfg: LastSurvivorConfig, category: string): boolean {
+  const list = randomPoolCategories(cfg);
+  return !list.length || list.includes(String(category ?? ''));
+}
 
 function pg(): ReturnType<typeof getPgPool> | null {
   try { return process.env.DATABASE_URL ? getPgPool() : null; } catch { return null; }
@@ -203,6 +228,20 @@ export async function addTopic(
     ...(opts.minUsers != null ? { minUsers: Number(opts.minUsers) } : {})
   };
   return persistConfig({ ...cfg, topics: { ...cfg.topics, [topic]: entry } });
+}
+
+/* Narrow (or reopen) the pool «تصادفی» draws from.
+ * Written whole rather than merged: taking a category OUT is the whole point,
+ * and a deep merge of arrays would never remove one. */
+export async function setRandomCategories(list: unknown): Promise<LastSurvivorConfig> {
+  if (!Array.isArray(list)) throw new Error('فهرست موضوع‌ها فرستاده نشده است.');
+  const out: string[] = [];
+  for (const c of list) {
+    const t = String(c ?? '').trim().slice(0, 60);
+    if (t && !out.includes(t)) out.push(t);
+  }
+  const cfg = await getConfig();
+  return persistConfig({ ...cfg, randomCategories: out });
 }
 
 /** Take a topic off the picker, or put it back, without touching its settings. */

@@ -2966,12 +2966,58 @@ async function renderLastSurvivor(){
                : '<button class="btn sm bad" onclick="lsDeleteTopic('+q+','+(tp.custom?'true':'false')+')">'+(tp.custom?'حذف':'برداشتن از فهرست')+'</button>')))+
         '</td></tr>';}).join('')+
       '</tbody></table></div></div>'+
+    lsRandomPoolCard(topics)+
     '<div class="card"><h3>📡 مسابقات</h3>'+
       '<div class="note">همهٔ مسابقات — در حال اجرا و تمام‌شده. «لغو» فقط پیش از شروع ممکن است و بلیط همه را برمی‌گرداند؛ '+
       'مسابقهٔ در حال اجرا لغو نمی‌شود، چون پول از قبل حرکت کرده.</div>'+
       tbl(['روم','موضوع','وضعیت','مرحله','بازیکنان','استخر','زمان','عملیات'],liveRows)+'</div>'+
     '<div id="lsRoomBox"></div>';
 }
+/* WHICH TOPICS «تصادفی» IS ALLOWED TO USE.
+   «تصادفی» draws from the whole approved bank, which is right by default and
+   wrong the moment an operator has a category they do not want turning up in
+   the random mix. Ticking nothing keeps the old behaviour — every category —
+   so this screen changes nothing until it is used. */
+function lsRandomPoolCard(topics){
+  const cats=(topics&&topics.categories)||[];
+  const picked=(topics&&topics.randomCategories)||[];
+  const name=(topics&&topics.randomTopic)||'تصادفی';
+  if(!cats.length){
+    return '<div class="card"><h3>🎲 موضوع‌های «'+esc(name)+'»</h3>'+
+      '<div class="empty">هنوز هیچ موضوعی سؤال تأییدشده ندارد.</div></div>';
+  }
+  const total=cats.reduce((n,c)=>n+(Number(c.questionCount)||0),0);
+  const inPool=picked.length
+    ? cats.filter(c=>picked.indexOf(c.name)>=0).reduce((n,c)=>n+(Number(c.questionCount)||0),0)
+    : total;
+  return '<div class="card"><h3>🎲 موضوع‌های «'+esc(name)+'»</h3>'+
+    '<div class="note">سؤال‌های «'+esc(name)+'» از این موضوع‌ها بیرون می‌آید. اگر <b>هیچ‌کدام</b> تیک نخورده باشد، از <b>همهٔ</b> موضوع‌ها استفاده می‌شود — یعنی همان رفتار قبلی. '+
+    'موضوعی که اینجا تیک نخورده باشد همچنان می‌تواند به‌صورت مستقل در فهرست بالا فعال باشد؛ فقط داخل «'+esc(name)+'» نمی‌آید.<br>'+
+    'الان استخر «'+esc(name)+'»: <b>'+fa(inPool)+'</b> سؤال از مجموع '+fa(total)+'.</div>'+
+    '<div id="lsRndBox" style="display:flex;flex-wrap:wrap;gap:8px;margin:10px 0">'+
+      cats.map((c,i)=>'<label style="display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line,#333);border-radius:10px;padding:6px 10px;cursor:pointer">'+
+        '<input type="checkbox" class="ls_rnd" data-name="'+esc(c.name)+'"'+(picked.indexOf(c.name)>=0?' checked':'')+'>'+
+        '<span>'+esc(c.name)+' <span class="mono" style="opacity:.6">'+fa(c.questionCount)+'</span></span></label>').join('')+
+    '</div>'+
+    '<button class="btn pri" onclick="lsSaveRandomPool()">💾 ذخیرهٔ استخر تصادفی</button> '+
+    '<button class="btn" onclick="lsRndAll(true)">تیک همه</button> '+
+    '<button class="btn" onclick="lsRndAll(false)">برداشتن همه (=همهٔ موضوع‌ها)</button></div>';
+}
+function lsRndAll(on){ document.querySelectorAll('.ls_rnd').forEach(b=>{b.checked=!!on;}); }
+async function lsSaveRandomPool(){
+  const picked=[...document.querySelectorAll('.ls_rnd:checked')].map(b=>b.dataset.name);
+  /* Ticking every one of them means the same thing as ticking none, and an
+     empty list is the honest way to store "no restriction" — otherwise a
+     category added later would silently be left out of the pool. */
+  const all=document.querySelectorAll('.ls_rnd').length;
+  const send=(picked.length===all)?[]:picked;
+  try{
+    const r=await api('PUT','/admin/last-survivor/random-categories',{categories:send});
+    toast(send.length?('استخر تصادفی: '+fa(r.questionCount)+' سؤال از '+fa(send.length)+' موضوع'):'تصادفی از همهٔ موضوع‌ها استفاده می‌کند','ok');
+    render();
+  }catch(e){ toast(e.message||'خطا','bad'); }
+}
+
 async function lsSaveConfig(){
   const n=id=>Number(($('#'+id)||{}).value||0);
   const b=id=>($('#'+id)||{}).value==='1';

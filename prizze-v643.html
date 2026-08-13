@@ -4810,12 +4810,56 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
       /* elimination fullscreen */
       .ls-pl.pending-out .xx{display:none}
       .ls-pl.pending-out .av{filter:none!important}
-      .ls-verdict{margin:8px 14px;padding:12px 14px;border-radius:16px;font-weight:900;font-size:14px;text-align:center;border:var(--stroke);box-shadow:var(--hard-sm);animation:lsPop .35s}
+      /* The verdict is the one line that says what just happened to you, read in
+         a few seconds while the next round loads — so it is set at a size you
+         can take in at a glance rather than the 14px caption it used to be. */
+      .ls-verdict{margin:8px 14px;padding:15px 16px;border-radius:16px;font-weight:900;font-size:17px;line-height:1.85;text-align:center;border:var(--stroke);box-shadow:var(--hard-sm);animation:lsPop .35s}
+      .ls-verdict b{font-size:1.06em}
       .ls-verdict.ok{background:var(--ok-soft);color:var(--ok);border-color:var(--ok)}
       .ls-verdict.bad{background:var(--bad-soft);color:var(--bad);border-color:var(--bad)}
-      /* Saved by a shield: neither a win nor a knock-out, so neither green nor
-         red — the answer was wrong, but the player is still in the match. */
-      .ls-verdict.shield{background:rgba(93,183,236,.14);color:var(--info);border-color:var(--info);line-height:1.9}
+      .ls-verdict .lsv-head{font-size:20px;line-height:1.5;margin-bottom:4px}
+      .ls-verdict .lsv-line{font-size:16px}
+      /* Saved by a shield. The card is RED — the answer was wrong, and telling
+         somebody that in calm blue reads as "nothing happened". The shield is
+         the second line, and it is shown breaking rather than described. */
+      .ls-verdict .lsv-save{font-size:17px;color:var(--info);margin:7px 0 3px}
+
+      .lsb-stage{position:relative;width:86px;height:93px;margin:2px auto 10px}
+      .lsb-stage span{position:absolute;inset:0;display:block;line-height:0}
+      .lsb-stage svg{width:86px;height:93px;display:block;stroke:#0a0d0c;stroke-width:1.5;
+        paint-order:stroke fill;stroke-linejoin:round;filter:drop-shadow(0 2px 0 rgba(0,0,0,.55))}
+      .lsb-stage .red svg{fill:url(#lsGRed)}
+      .lsb-stage .blue svg{fill:url(#lsGBlue)}
+      .lsb-stage .green svg{fill:url(#lsGGreen)}
+      /* Each half shows one side of the SAME shield, so the split runs down the
+         real middle instead of between two shapes that merely sit together. */
+      .lsb-half{overflow:hidden;width:43px}
+      .lsb-half.r{left:43px}
+      .lsb-half.r svg{margin-left:-43px}
+      .lsb-half.l{animation:lsbShake .34s ease-in-out,lsbFlyL .62s .34s cubic-bezier(.3,.1,.5,1) forwards}
+      .lsb-half.r{animation:lsbShake .34s ease-in-out,lsbFlyR .62s .34s cubic-bezier(.3,.1,.5,1) forwards}
+      /* The crack: a thin bright seam that opens down the middle at the moment
+         the halves start to part. */
+      .lsb-crack{left:50%;width:3px;inset-block:6px;transform:translateX(-50%) scaleY(0);
+        background:linear-gradient(180deg,transparent,#fff,#ffd9a0,transparent);
+        filter:drop-shadow(0 0 6px rgba(255,255,255,.9));
+        animation:lsbCrack .34s ease-out forwards}
+      /* The shield you have LEFT, dropping into the gap the old one leaves. */
+      .lsb-new{opacity:0;animation:lsbNew .5s .58s cubic-bezier(.2,1.5,.4,1) forwards}
+      @keyframes lsbShake{0%,100%{transform:translateX(0)}25%{transform:translateX(-3px)}50%{transform:translateX(3px)}75%{transform:translateX(-2px)}}
+      @keyframes lsbCrack{0%{transform:translateX(-50%) scaleY(0);opacity:0}30%{opacity:1}100%{transform:translateX(-50%) scaleY(1);opacity:0}}
+      @keyframes lsbFlyL{to{transform:translate(-46px,26px) rotate(-38deg);opacity:0}}
+      @keyframes lsbFlyR{to{transform:translate(46px,26px) rotate(38deg);opacity:0}}
+      @keyframes lsbNew{0%{opacity:0;transform:scale(.35)}70%{opacity:1;transform:scale(1.16)}100%{opacity:1;transform:scale(1)}}
+      /* Reduced motion: no flight, no shake — the old shield simply gives way to
+         the new one, which is still the whole message. */
+      @media (prefers-reduced-motion:reduce){
+        .lsb-half{animation:lsbFade .4s .1s forwards}
+        .lsb-crack{display:none}
+        .lsb-new{animation:lsbNewStill .3s .3s forwards}
+        @keyframes lsbFade{to{opacity:0}}
+        @keyframes lsbNewStill{to{opacity:1}}
+      }
       .ls-elim-hd{text-align:center;padding:16px 14px 4px}
       .ls-elim-hd h2{color:#ff4d4d;font-size:20px;font-weight:900;margin:0;letter-spacing:1px}
       .ls-elim-hd p{color:#c9c2b3;font-size:12px;margin:4px 0 0}
@@ -7232,10 +7276,19 @@ function lsBuild(snap){
   if(r.phase==='elimination'&&myVerdict==='right'){
     verdict='<div class="ls-verdict ok">✅ جواب شما درست بود — تبریک! می‌تونی به مرحلهٔ بعد بری</div>';
   } else if(r.phase==='elimination'&&myVerdict==='shield'){
+    /* The answer was WRONG — the card says so in red, because that is what
+       happened. The shield is the consolation, not the headline: it breaks on
+       screen and comes back one colour down, so the player sees what the
+       mistake actually cost instead of reading a calm blue paragraph. */
     const left=Number(me.shields||0);
-    verdict='<div class="ls-verdict shield">🛡️ '+(timedOut?'زمان شما تمام شد':'پاسخ شما اشتباه بود')+
-      ' — پاسخ درست: <b>'+(correctTxt||'—')+'</b><br>سپر شما شکست و جای شما را نجات داد؛ '+
-      (left>0?('<b>'+lsFa(left)+'</b> سپر برایتان مانده'):'دیگر سپری ندارید — اشتباه بعدی یعنی حذف')+'</div>';
+    verdict='<div class="ls-verdict bad ls-shield-break">'+
+      lsShieldBreakHTML(left+1,left)+
+      '<div class="lsv-head">'+(timedOut?'⏳ زمان شما تمام شد':'❌ پاسخ شما اشتباه بود')+'</div>'+
+      '<div class="lsv-line">پاسخ درست: <b>'+(correctTxt||'—')+'</b></div>'+
+      '<div class="lsv-save">🛡️ سپرت شکست و جایت را نجات داد</div>'+
+      '<div class="lsv-line">'+(left>0
+        ?('حالا <b>'+lsFa(left)+'</b> سپر برایت مانده')
+        :'دیگر سپری نداری — اشتباه بعدی یعنی حذف')+'</div></div>';
   } else if(r.phase==='elimination'&&myVerdict==='wrong'){
     verdict='<div class="ls-verdict bad">'+(timedOut?'⏳ زمان شما به پایان رسید — ':'❌ ')+
       'پاسخ درست: <b>'+(correctTxt||'—')+'</b> — شما حذف شدید</div>';
@@ -7313,6 +7366,27 @@ function lsMarkHTML(p){
 }
 const LS_SHIELD_SVG='<svg viewBox="0 0 24 26" aria-hidden="true"><path d="M12 1.2 22.2 5.4v7.1c0 6-4.4 10.2-10.2 12.3C6.2 22.7 1.8 18.5 1.8 12.5V5.4Z"/></svg>';
 const LS_CIRCLE_SVG='<svg viewBox="0 0 24 26" aria-hidden="true"><circle cx="12" cy="13" r="10.2"/></svg>';
+
+/* THE SHIELD BREAKING.
+   Before, a spent shield simply came back a different colour on the little
+   badge, one round later — the moment it was actually spent showed nothing but
+   a line of blue text. This is that moment: the shield you HAD splits down the
+   middle, the halves fall away, and the one you have LEFT drops into the gap.
+   Red → blue, blue → green circle, which is exactly the ladder the badge uses,
+   so the animation teaches the badge rather than competing with it. */
+function lsMarkClass(n){ return n>=2?'red':(n===1?'blue':'green'); }
+function lsMarkSVG(n){ return n>=1?LS_SHIELD_SVG:LS_CIRCLE_SVG; }
+function lsShieldBreakHTML(before,after){
+  const b=Math.max(0,Number(before)||0), a=Math.max(0,Number(after)||0);
+  /* Each half is the WHOLE shield inside a box that shows half of it — a real
+     split, rather than two separate shapes that only look like one. */
+  const half=(side)=>'<span class="lsb-half '+side+' '+lsMarkClass(b)+'">'+lsMarkSVG(b)+'</span>';
+  return '<div class="lsb-stage" aria-hidden="true">'+
+      '<span class="lsb-new '+lsMarkClass(a)+'">'+lsMarkSVG(a)+'</span>'+
+      half('l')+half('r')+
+      '<span class="lsb-crack"></span>'+
+    '</div>';
+}
 
 function lsPlayersCells(snap,markElim){
   return snap.players.map(p=>{
@@ -7502,21 +7576,27 @@ async function lsAnswer(i){
   if(lsAnswered||!lsSnap||!lsSnap.me||lsSnap.me.status!=='alive')return;
   if(lsSnap.room.phase!=='question')return;           // gate still closed
   lsAnswered=true;
-  /* `i` is where the option sits on THIS player's screen. The server stores one
-     order for everybody, so the pick is translated back before it is sent —
-     otherwise a shuffled card would grade against the wrong option. */
+  /* TWO indexes, and they must never be confused again.
+     `disp` is where the option sits on THIS player's screen — the only thing
+     the DOM knows about, because data-i is written in display order.
+     `orig` is what the server calls the same option; the card is shuffled per
+     player, so the pick is translated before it is sent.
+     Overwriting `i` with the translated value is what made tapping «الف» light
+     up «ب»: the highlight was then looked up by the server's index against
+     buttons numbered in screen order. */
   const _vk=lsViewKey(lsSnap);
-  i=pzToOriginal(_vk,i);
+  const disp=i;
+  const orig=pzToOriginal(_vk,i);
   /* SECOND CHANCE: when armed, we submit FIRST and only lock the UI if the
      server doesn't hand back a retry — otherwise the player could never make
      their second pick (that was the bug). */
   if(lsSecondArmed){
-    const pre=await pzApi('POST','/last-survivor/rooms/'+lsRoomId+'/answer',{round:lsSnap.room.round,selectedIndex:i});
+    const pre=await pzApi('POST','/last-survivor/rooms/'+lsRoomId+'/answer',{round:lsSnap.room.round,selectedIndex:orig});
     const d=(pre&&pre.data)||{};
     if(d.retry){
       lsAnswered=false;                       // pick again
       const box=document.getElementById('lsOpts');
-      if(box){ const b=box.querySelector('.ans[data-i="'+pzToDisplay(_vk,i)+'"]'); if(b){ b.classList.add('dim','pz-removed','ls-gone'); b.disabled=true; } }
+      if(box){ const b=box.querySelector('.ans[data-i="'+disp+'"]'); if(b){ b.classList.add('dim','pz-removed','ls-gone'); b.disabled=true; } }
       toast('🔁 جواب اولت غلط بود — یک انتخاب دیگر داری',2400);
       try{sfx('wrong');vib([40,30]);}catch(e){}
       return;
@@ -7529,7 +7609,7 @@ async function lsAnswer(i){
   const opts=document.getElementById('lsOpts');
   if(opts){
     const kids=[...opts.children];
-    const pick=kids.find(el=>Number(el.dataset.i)===i);
+    const pick=kids.find(el=>Number(el.dataset.i)===disp);
     const py=pick?pick.getBoundingClientRect().top:0;
     kids.forEach(el=>{
       el.disabled=true;
@@ -7553,7 +7633,7 @@ async function lsAnswer(i){
   }
   try{sfx('select');vib(20);}catch(e){}
   // (When second chance was armed the answer was already submitted above.)
-  if(!lsSecondSubmitted) await pzApi('POST','/last-survivor/rooms/'+lsRoomId+'/answer',{round:lsSnap.room.round,selectedIndex:i});
+  if(!lsSecondSubmitted) await pzApi('POST','/last-survivor/rooms/'+lsRoomId+'/answer',{round:lsSnap.room.round,selectedIndex:orig});
   lsSecondSubmitted=false;
 }
 

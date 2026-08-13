@@ -387,6 +387,23 @@ function run(): void {
     assert.match(body, /played\.length/, 'and an empty room is refused');
   });
 
+  /* ── استخر «تصادفی» ───────────────────────────────────────────────── */
+
+  check('the operator can choose which topics feed «تصادفی»', () => {
+    assert.ok(script.includes('function lsRandomPoolCard('), 'the card exists');
+    assert.ok(script.includes('lsRandomPoolCard(topics)'), 'and it is actually placed on the screen');
+    assert.ok(script.includes("api('PUT','/admin/last-survivor/random-categories'"), 'and it saves to the endpoint');
+  });
+
+  check('ticking every topic is stored as "no restriction", not as a fixed list', () => {
+    /* Otherwise a category added next month would silently be left out of a
+       pool the operator believes is "everything". */
+    const i = script.indexOf('async function lsSaveRandomPool(');
+    const body = script.slice(i, i + 800);
+    assert.match(body, /picked\.length===all/, 'the all-ticked case is detected');
+    assert.match(body, /\?\[\]:picked/, 'and sent as an empty list');
+  });
+
   /* ── پک‌های چت ────────────────────────────────────────────────────── */
 
   check('the chat-pack row has a screen and a nav entry', () => {
