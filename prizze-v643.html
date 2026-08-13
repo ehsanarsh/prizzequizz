@@ -7698,6 +7698,15 @@ function go(id){
   if(id==='friends'&&typeof friendsLoad==='function'){try{friendsLoad();}catch(e){}}
   if(id==='shop'&&typeof pzLoadShop==='function'){try{pzLoadShop();}catch(e){}}
   if(id==='support'){ _supLoaded=false; _supOpenId=null; supportActiveTab='home'; try{renderSupport();}catch(e){} }
+  /* THE RECORD SCREEN FETCHES ITS OWN CONTENT.
+     It never did. rmOpen() — the one function that showed the screen AND loaded
+     it — was called from the old home's record tile, and the home rebuild
+     removed that tile; every other route in is a bare go('record'), so the
+     screen opened on its «در حال بارگذاری…» skeleton and stayed there, with no
+     topics and no records. Loading here covers every way in, including coming
+     back from a run, where stale numbers would otherwise be shown as current. */
+  if(id==='record'&&typeof rmLoadOverview==='function'){ try{ rmLoadOverview(); }catch(e){} }
+  if(id==='recordBoard'&&typeof rmRenderBoard==='function'){ try{ rmRenderBoard(); }catch(e){} }
   /* Home is rebuilt on every visit: the rails carry live counts (unread mail,
      claimable missions) and a stale badge is worse than none. */
   if(id==='home'){ try{ hmBoot(); }catch(e){} }
@@ -11107,10 +11116,8 @@ function pzTopicStyle(name){
   return '--th:'+h+';--tc1:hsl('+h+' 46% 34%);--tc2:hsl('+h+' 52% 19%);--tc3:hsl('+h+' 60% 12%)';
 }
 
-async function rmOpen(){
-  go('record');
-  await rmLoadOverview();
-}
+/* go('record') loads the screen itself now, so this is simply the door. */
+function rmOpen(){ go('record'); }
 async function rmLoadOverview(){
   try{
     const r=await pzApi('GET','/record/overview');
@@ -11152,7 +11159,14 @@ async function rmLoadOverview(){
         '</div>'
       ).join(''):'<div class="rm-skel">هنوز موضوعی تعریف نشده.</div>';
     }
-  }catch(e){ try{console.warn('[PZ-RECORD]',e);}catch(_){} }
+  }catch(e){
+    try{console.warn('[PZ-RECORD]',e);}catch(_){}
+    /* Failing into the skeleton means «در حال بارگذاری…» for ever, which reads
+       as a hang rather than a problem — the same silence that made this screen
+       impossible to tell apart from a slow one. */
+    const box=document.getElementById('rmCats');
+    if(box&&/rm-skel/.test(box.innerHTML)) box.innerHTML='<div class="rm-skel">فهرست موضوع‌ها گرفته نشد.<br><button class="btn btn-ghost btn-sm" style="margin-top:10px;width:auto" onclick="rmLoadOverview()">تلاش دوباره</button></div>';
+  }
 }
 
 function rmHeartsHTML(n,total){
@@ -11683,15 +11697,13 @@ function rmFinish(res){
       onSecondary:()=>{ closeAaaModal(false); rmOpenBoard(res.mode,res.category||''); }});
   }, isPb?1300:420);
   go('record');
-  rmLoadOverview();
 }
 
 /* ── leaderboard ── */
 const RM_PERIODS=[['day','امروز'],['week','این هفته'],['month','این ماه'],['all','کل زمان']];
 function rmOpenBoard(mode,category){
   pzRM.board={mode:mode||'global',category:category||'',period:pzRM.board.period||'all'};
-  go('recordBoard');
-  rmRenderBoard();
+  go('recordBoard');            // go() renders it
 }
 function rmSetPeriod(p){ pzRM.board.period=p; rmRenderBoard(); }
 async function rmRenderBoard(){

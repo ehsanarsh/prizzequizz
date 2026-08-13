@@ -39,6 +39,7 @@ let submitted = null;
 let patched = null;
 let friendReq = null;
 let firstFaces = '';
+let recordCalls = 0;
 await ctx.route('**/v1/**', (route) => {
   const u = new URL(route.request().url());
   const p = u.pathname.replace(/^.*\/v1/, '') + (u.search || '');
@@ -57,6 +58,18 @@ await ctx.route('**/v1/**', (route) => {
       charged: refresh ? 5 : 0, coins: refresh ? 355 : 360,
       nextCost: refresh ? 5 : 0, freeLeft: refresh ? 0 : 1, onlineTotal: 47
     } });
+  }
+  if (p.startsWith('/record/overview')) {
+    recordCalls++;
+    return send({ ok: true, data: { enabled: true, friendlyOnly: true, hearts: 3,
+      global: { best: 12, worldBest: 40 },
+      categories: [{ name: 'فوتبال', best: 7, worldBest: 21 }, { name: 'تاریخ', best: 3, worldBest: 15 }] } });
+  }
+  if (p.startsWith('/record/leaderboard')) {
+    return send({ ok: true, data: { rows: [
+      { userId: 'me', username: 'ehsan', score: 12, rank: 1 },
+      { userId: 'z', username: 'زهرا', score: 9, rank: 2 }
+    ] } });
   }
   if (p === '/friends/requests') { friendReq = route.request().postDataJSON(); return send({ ok: true, data: { status: 'pending' } }, 201); }
   if (/^\/users\/[^/]+\/profile/.test(p)) {
@@ -317,7 +330,54 @@ console.log('a face on the online list:');
   ok('with the player told it went', /دوست/.test(t), t);
 }
 
+
+/* ── ثبت رکورد ─────────────────────────────────────────────────────── */
+console.log('record mode:');
+{
+  /* The screen used to be opened by a tile the home rebuild deleted, and that
+     tile was the only thing that ever loaded it. Every other way in is a bare
+     go('record'), so the screen sat on «در حال بارگذاری…» with no topics and
+     no records — which is exactly what was reported. */
+  await setPlan('free');
+  recordCalls = 0;
+  await page.evaluate(() => (0, eval)("go('record')"));
+  await page.waitForTimeout(600);
+  ok('opening it asks the server for the overview', recordCalls >= 1, String(recordCalls));
+
+  const cats = await page.evaluate(() => [...document.querySelectorAll('#rmCats .rm-c-txt b')].map((e) => e.textContent));
+  ok('the topics are on screen, not a skeleton', cats.length === 2 && /فوتبال/.test(cats.join(',')), JSON.stringify(cats));
+  const stillLoading = await page.evaluate(() => /در حال بارگذاری/.test(document.getElementById('rmCats')?.textContent || ''));
+  ok('and «در حال بارگذاری» is gone', !stillLoading);
+
+  const best = await page.evaluate(() => document.getElementById('rmGlobalBest')?.textContent || '');
+  ok('the player’s own record is shown', /۱۲/.test(best), best);
+  const mineInCat = await page.evaluate(() => document.querySelector('#rmCats .rm-c-best b')?.textContent || '');
+  ok('and their record in each topic', /۷/.test(mineInCat), mineInCat);
+
+  /* Reaching it from the friendly carousel, the way a player actually would. */
+  await setPlan('free');
+  recordCalls = 0;
+  await page.evaluate(() => {
+    const i = (0, eval)('hmModes()').findIndex((m) => m.key === 'record');
+    (0, eval)('hmSet')(i, 1);
+  });
+  await page.waitForTimeout(700);
+  await page.evaluate(() => (0, eval)('hmStart()'));
+  await page.waitForTimeout(700);
+  ok('the card on the home carousel opens a LOADED screen', recordCalls >= 1, String(recordCalls));
+  const onScreen = await page.evaluate(() => document.getElementById('record')?.classList.contains('active'));
+  ok('and it really is the record screen', !!onScreen);
+
+  /* The board of previous records. */
+  await page.evaluate(() => (0, eval)("rmOpenBoard('global','')"));
+  await page.waitForTimeout(600);
+  const rows = await page.evaluate(() => document.querySelectorAll('#rmBoardRows .rm-skel').length === 0
+    ? document.getElementById('rmBoardRows').children.length : 0);
+  ok('the previous records are listed', rows >= 2, String(rows));
+}
+
 ok('no script errors on the new screens', errs.length === 0, errs.join(' | '));
+
 
 
 console.log(`\n${pass} passed, ${fail} failed`);
