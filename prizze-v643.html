@@ -574,20 +574,28 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
    Now three zones share the height: hero and actions take what they need, the
    middle takes the rest, and every size scales with the viewport so the layout
    keeps its shape from a small phone to a large one. */
-/* SCROLLS, does not clip. The old rule was overflow:hidden with
-   justify-content:space-between, so on a short phone the buttons and the stats
-   were pushed into each other and whatever did not fit was silently cut. A
-   result screen has to hold a scoreboard, a prize, stats and four buttons —
-   that cannot be promised to fit, so it is allowed to scroll instead. */
+/* FOUR ZONES, IN READING ORDER: scoreboard, celebration, stats, buttons.
+   Only the celebration flexes — it absorbs every spare pixel, which is what
+   makes the character big on a tall phone and merely smaller on a short one
+   instead of pushing the buttons off the screen. The scoreboard, the stats and
+   the buttons each take exactly the height they need, so they can never be
+   pushed into one another.
+   It may still scroll as a last resort (a very short phone in landscape), but
+   with three fixed zones and one elastic one it does not need to. */
 .res{overflow-y:auto;-webkit-overflow-scrolling:touch;display:flex;flex-direction:column;justify-content:flex-start;
   padding:10px 16px calc(12px + env(safe-area-inset-bottom,0px));gap:6px}
-.res-hero{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;width:100%}
-/* The character, sized to what is left after the scoreboard and the strip —
-   never the fixed 172px block that used to push the buttons off the screen. */
-/* The character gets the room the trimmed cards gave back. */
-.res-char{display:flex;align-items:flex-end;justify-content:center;height:clamp(104px,21vh,186px);margin-bottom:0}
-.res-char .mascot{width:clamp(92px,19vh,160px);height:clamp(92px,19vh,160px);border-radius:50%;overflow:hidden}
-.res-char img{width:auto;height:100%;max-width:min(58vw,220px);object-fit:contain;
+/* 1 — the scoreboard, at the top. */
+.res-top{flex:0 0 auto;width:100%;display:flex;flex-direction:column;align-items:center;gap:6px}
+/* 2 — the celebration: character, headline and prize, centred in the gap
+   between the scoreboard and the stats. */
+.res-hero{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  width:100%;gap:4px}
+/* The character takes the room this zone was given rather than a fixed block —
+   the bigger the phone, the bigger it gets. */
+.res-char{flex:0 1 auto;min-height:0;display:flex;align-items:flex-end;justify-content:center;
+  height:clamp(112px,26vh,230px);margin-bottom:0}
+.res-char .mascot{width:clamp(96px,23vh,190px);height:clamp(96px,23vh,190px);border-radius:50%;overflow:hidden}
+.res-char img{width:auto;height:100%;max-width:min(66vw,260px);object-fit:contain;
   filter:drop-shadow(0 10px 18px rgba(0,0,0,.45));animation:pzPop .5s cubic-bezier(.2,1.4,.4,1)}
 /* One line, loud, and coloured by the outcome — set by endGame(). */
 .res-title{font-size:clamp(21px,5.4vw,30px);font-weight:900;line-height:1.2;text-align:center;letter-spacing:.3px;
@@ -595,6 +603,7 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
 .res-title.win{color:var(--ok)}
 .res-title.lose{color:var(--red)}
 .res-sub{display:none}
+/* 3 — the stats, sitting on the buttons. */
 .res-mid{flex:0 0 auto;width:100%;display:flex;flex-direction:column;align-items:center;gap:6px}
 
 /* THE SCOREBOARD: a face on each side of the score. */
@@ -634,9 +643,9 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
   background:var(--ink-2);border:var(--stroke);border-radius:14px;padding:6px 6px;box-shadow:var(--hard-sm)}
 .res-stats .stat{flex:1 1 0;min-width:0;background:none;border:0;box-shadow:none;padding:0;text-align:center}
 .res-stats .rs-sep{flex:0 0 auto;width:2px;align-self:stretch;background:rgba(255,255,255,.10);border-radius:2px}
-/* The actions sit at the BOTTOM of the screen, pushed there by the gap above
-   them rather than crowding whatever the middle happens to be. */
-.res-actions{margin-top:auto;padding-top:6px;flex:0 0 auto;width:100%;display:flex;flex-direction:column;gap:8px}
+/* 4 — the actions, at the bottom. The celebration zone above already absorbs
+   the slack, so these need no margin trick to stay down here. */
+.res-actions{padding-top:6px;flex:0 0 auto;width:100%;display:flex;flex-direction:column;gap:8px}
 .res-actions #duelActions{flex-direction:column;gap:8px}
 /* Two side by side instead of two full-width rows: the same targets, half the
    height. */
@@ -5267,44 +5276,46 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
     </section>
 
     <!-- ============ RESULT ============ -->
-    <!-- RESULT — one screen, no scroll.
-         Three fixed zones: the hero (who won), the figures (score, prize, the
-         four stats) and the actions. Only the middle flexes, and it shrinks by
-         tightening rather than by hiding a number, so nothing a player is owed
-         ends up below the fold. Every element ID is unchanged — endGame() and
+    <!-- THE RESULT SCREEN — one screen for EVERY mode (duel, آخرین بازمانده,
+         همه یا هیچ, لیگ, practice), no scroll.
+
+         Four zones, top to bottom:
+           1. the SCOREBOARD  — who beat whom, the first thing you look for;
+           2. the CELEBRATION — the big win/lose character, the headline and the
+              prize, together in the middle where the eye lands;
+           3. the STATS strip — one card, sitting directly on the buttons;
+           4. the ACTIONS.
+         Only zone 2 flexes: it takes whatever height is left, so the character
+         is as big as the phone can afford and nothing ever overlaps. Every
+         element ID is unchanged — endGame(), lsFinish() and
          renderDuelResultPanel() still fill exactly what they always did. -->
-    <!-- THE RESULT SCREEN.
-         The character portrait that used to fill the top is gone: on a phone it
-         ate half the height and pushed the buttons into the stats, which is
-         what made this screen overlap. The scoreboard is the hero now — the two
-         faces flank the score, so who won what is one glance.
-         The page SCROLLS. It used to be a fixed column with overflow:hidden, so
-         anything that did not fit was simply cut off; a screen that has to hold
-         a scoreboard, a prize, stats and four buttons cannot promise to fit. -->
     <section class="screen pad res" id="result">
+      <!-- Faces + score, built by renderResultBoard(). -->
+      <div class="res-top">
+        <div id="resultBoard" class="res-board"></div>
+        <div id="resultDuelScore" class="res-score" style="display:none"></div>
+      </div>
       <div class="res-hero">
-        <!-- The character is back, but compact: the stats below it are one strip
-             now instead of three cards, and that is the room it sits in. -->
         <div class="res-char" id="resultCharSlot">
           <div class="mascot pop" id="mascotResult"></div>
           <img id="resultChar" alt="" style="display:none">
         </div>
         <h1 class="res-title" id="resultTitle">برنده شدی!</h1>
-        <!-- The explanatory line under the title is gone: the scoreboard right
-             below already says what happened, and it was a third block of text
+        <!-- The explanatory line under the title is gone: the scoreboard above
+             already says what happened, and it was a third block of text
              competing with the two that matter. Kept in the DOM (hidden) because
              several modes still write their own wording into it. -->
         <p class="res-sub" id="resultSub" style="display:none"></p>
+        <!-- THE PRIZE. Always the take-home figure — the commission is off it
+             before it is printed (see pzNetPrize). -->
+        <div class="res-amt"><span id="resultAmt">+۱۸۰٬۰۰۰</span> <small>تومان</small></div>
       </div>
       <div class="res-mid">
-        <!-- Faces + score, built by renderResultBoard(). -->
-        <div id="resultBoard" class="res-board"></div>
-        <div id="resultDuelScore" class="res-score" style="display:none"></div>
-        <div class="res-amt"><span id="resultAmt">+۱۸۰٬۰۰۰</span> <small>تومان</small></div>
-        <!-- Three cards became one strip: the same three figures, a third of
-             the height, and no grid to collide with the buttons. -->
-        <!-- One card for everything the match earned. «رتبه» is gone: in a duel
-             it is only ever ۱ or ۲, which the score already says. -->
+        <!-- One card for everything the match earned, resting on the buttons.
+             «رتبه» is hidden by default: in a duel it is only ever ۱ or ۲,
+             which the score already says. Only آخرین بازمانده — where you
+             finish somewhere among many players — turns it on, via
+             pzResultRank(). -->
         <div class="res-stats">
           <div class="stat"><b class="y" id="stat-q">۹</b><span>پاسخ درست</span></div>
           <i class="rs-sep"></i>
@@ -5313,7 +5324,8 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
           <div class="stat"><b class="xp" id="stat-xpv">۰</b><span>XP</span></div>
           <i class="rs-sep"></i>
           <div class="stat"><b class="g" id="stat-cup">۰</b><span>کاپ 🏆</span></div>
-          <b id="stat-rank" style="display:none"></b>
+          <i class="rs-sep" id="stat-rank-sep" style="display:none"></i>
+          <div class="stat" id="stat-rank-cell" style="display:none"><b id="stat-rank">—</b><span>رتبه</span></div>
         </div>
         <div class="duel-result-panel" id="duelResultPanel"></div>
         <span id="resultBadge" style="display:none"></span><span id="resultEmoji" style="display:none"></span>
@@ -6798,7 +6810,12 @@ function lsHost(){ return document.getElementById('vp')||document.querySelector(
 const LS_ICONS={'فیلم و سریال':'🎬','سینما':'🎬','فیلم':'🎬','سریال':'📺','ورزش':'⚽','فوتبال':'⚽','والیبال':'🏐','بسکتبال':'🏀','تاریخ و فرهنگ':'📜','تاریخ':'📜','فرهنگ':'🏛️','موسیقی':'🎵','غذا و خوراکی':'🍔','غذا و نوشیدنی':'🍔','غذا':'🍔','علم و دانش':'🔬','علوم':'🔬','دانش':'🔬','جغرافیا':'🌍','اطلاعات عمومی':'🧠','عمومی':'🧠','هنر':'🎨','ادبیات':'📚','فناوری':'💻','تکنولوژی':'💻','دین':'🕌','مذهب':'🕌','ریاضی':'➗','حیوانات':'🐾','طبیعت':'🌿','سیاست':'🏛️','اقتصاد':'💹','بازی':'🎮','بازی و سرگرمی':'🎮','ماشین':'🚗','خودرو':'🚗','نجوم':'🔭','فضا':'🚀','کامپیوتر':'🖥️','سلامت':'🩺','پزشکی':'🩺','مشاهیر':'⭐','برند':'™️','پرچم':'🚩','کشورها':'🌐'};
 function lsIcon(name){ if(LS_ICONS[name])return LS_ICONS[name]; const n=String(name||''); for(const k in LS_ICONS){ if(n.indexOf(k)>=0)return LS_ICONS[k]; } return '🎯'; }
 
-function lsStart(){ showRules('lastSurvivor',()=>{ lsEndShown=false; showScreen('lsTopics'); lsLoadTopics(); }); }
+/* The XP and 🏆 on the result card are a DELTA — what the server's numbers were
+   before this match against what they are after. Last Survivor never took the
+   'before' reading, so its result card kept whatever the last duel had put
+   there. It is taken here, at the door. */
+function lsStart(){ try{ _pzPreXp=(_usr&&_usr.xp)||0; _pzPreCup=weeklyScore; }catch(e){}
+  showRules('lastSurvivor',()=>{ lsEndShown=false; showScreen('lsTopics'); lsLoadTopics(); }); }
 /* Leaving the room.
    The websocket message only unsubscribes this tab from updates — it never told
    the SERVER the player had gone, so the seat, the ticket and the stake all
@@ -7781,7 +7798,10 @@ function lsFinish(snap){
      no winner to pay. Saying only «حذف شدی» left everyone wondering where the
      pot went — the honest line is that it went nowhere, and that no one took it. */
   const noWinner = !won && lsForfeited>0;
-  if(title) title.textContent = won ? (cashedOut?'جایزه‌ت رو برداشتی! 💰':'برنده شدی! 🏆')
+  /* ONE word for a win, however it was won. «جایزه‌ت رو برداشتی» and «برنده
+     شدی» were two headlines for the same outcome, and the second one is the
+     one players read as winning. */
+  if(title) title.textContent = won ? 'برنده شدی! 🏆'
                                     : (noWinner?'کسی زنده نموند 💀':'حذف شدی');
   if(sub) sub.textContent = won
     ? (cashedOut?'سهمت پرداخت و به کیف پولت واریز شد':'تو آخرین بازمانده بودی — جایزه به کیف پولت واریز شد')
@@ -7824,7 +7844,25 @@ function lsFinish(snap){
   }catch(e){}
   try{ const nb=$id('resultNewBtn'); if(nb){ nb.textContent='🏆 مسابقهٔ جدید'; nb.onclick=function(){ lsStart(); }; } }catch(e){}
   try{ const hb=$id('resultHomeBtn'); if(hb){ hb.onclick=function(){ lsResetResultButtons(); go('home'); }; } }catch(e){}
-  try{ const sq=$id('stat-q'), sr=$id('stat-rank'); if(sr)sr.textContent=won?'۱':'—'; if(sq)sq.textContent=lsFa((me.eliminatedRound||snap.room.round||1)-(won?0:1)); }catch(e){}
+  /* The other three figures belong to whatever was played LAST. Blank them
+     before this match writes its own, so a duel's average and award can never
+     be read as this room's. */
+  try{ const st=$id('stat-time'); if(st) st.textContent='—';
+       const xv=$id('stat-xpv'); if(xv) xv.textContent='+۰';
+       const cv=$id('stat-cup'); if(cv) cv.textContent='+۰'; }catch(e){}
+  /* THE ONE MODE THAT HAS A RANK. A winner is ۱; anyone else finished in the
+     order they went out — the players still standing when you were knocked out,
+     plus you. */
+  try{ const sq=$id('stat-q'); if(sq)sq.textContent=lsFa((me.eliminatedRound||snap.room.round||1)-(won?0:1)); }catch(e){}
+  try{
+    let rank=null;
+    if(won) rank='۱';
+    else{
+      const alive=(snap.players||[]).filter(p=>p.status==='alive'&&p.userId!==me.userId).length;
+      rank=lsFa(alive+1);
+    }
+    pzResultRank(rank);
+  }catch(e){ try{ pzResultRank(won?'۱':'—'); }catch(_){} }
 
   go('result');
   if(won){
@@ -7835,7 +7873,7 @@ function lsFinish(snap){
     setTimeout(()=>{ try{
       if(typeof showAaaModal==='function') showAaaModal({
         icon:cashedOut?'💰':'🏆',
-        title:cashedOut?'جایزه‌ت رو برداشتی!':'برنده شدی! 🎉',
+        title:'برنده شدی! 🎉',
         sub:lsFa(mine)+' تومان به کیف پولت اضافه شد',
         primaryText:'عالیه',secondaryText:''
       });
@@ -7844,7 +7882,10 @@ function lsFinish(snap){
   // Pull the real wallet/level so the header shows the new balance immediately.
   try{ if(typeof pzApplyServerTickets==='function')pzApplyServerTickets(); }catch(e){}
   try{ if(typeof loadWallet==='function')loadWallet(); }catch(e){}
-  try{ if(typeof hydrateMe==='function')hydrateMe(); }catch(e){}
+  /* pzSyncMe, not hydrateMe: it hydrates the same values AND turns the
+     before/after readings taken in lsStart() into this match's real XP and 🏆,
+     which is what the stats card shows. */
+  try{ if(typeof pzSyncMe==='function')pzSyncMe(); else if(typeof hydrateMe==='function')hydrateMe(); }catch(e){}
 }
 /* Put the shared result screen back the way the duel expects it. */
 function lsResetResultButtons(){
@@ -7855,6 +7896,8 @@ function lsResetResultButtons(){
      would open the last Last Survivor room. */
   try{ const mb=document.getElementById('rematchBtn'); if(mb) mb.style.display=''; }catch(e){}
   try{ const rb=document.getElementById('reviewBtn'); if(rb){ rb.onclick=function(){ pzOpenReview(); }; } }catch(e){}
+  /* And «رتبه» goes away with it — it is Last Survivor's cell alone. */
+  try{ pzResultRank(null); }catch(e){}
 }
 function lsEndHtml(snap){ lsFinish(snap); return '<div class="ls-end"><div class="cup">🏁</div><h2>پایان مسابقه</h2></div>'; }
 
@@ -8559,7 +8602,12 @@ function duelIntro(){
   gameType='duel';
   if(duelChain){duelChain=false;}
   else{duelStage=1;duelStakeVal=curStake;}
-  prize=duelStakeVal*2;acStrikes=0;puUsed={};pzLLNewMatch();
+  /* THE PRIZE IS THE TAKE-HOME FIGURE, NOT THE POT. `duelStakeVal*2` is the
+     gross pot — the commission has not come off it yet, so quoting it promised
+     ۲۵٬۰۰۰ and paid less. pzDuelPrizeNow() is the server's after-commission
+     number, and every screen that shows a prize reads it from here. */
+  try{ pzLoadPrizes(); }catch(e){}   /* in case boot could not reach the server */
+  prize=pzDuelPrizeNow();acStrikes=0;puUsed={};pzLLNewMatch();
   pickOpponent();updateDuelVs();go('duel-vs');
   /* Real online match: keep the VS reveal SHORT (2s) so play starts fast; the
      offline/practice path keeps the original 5s. */
@@ -8605,7 +8653,7 @@ const TOSS_QS=[
 ];
 function refreshDuelPot(){
   const el=document.getElementById('duelPot');
-  if(el)el.textContent=(userPlan==='free'?fa(practiceCoinStake*2)+' 🪙':fa(leagueDuelActive?prize:duelStakeVal*2));
+  if(el)el.textContent=(userPlan==='free'?fa(practiceCoinStake*2)+' 🪙':fa(leagueDuelActive?prize:pzDuelPrizeNow()));
 }
 function duelToss(){
   clearInterval(vsTimer);tossPhase=true;
@@ -8693,7 +8741,7 @@ function pzDuelStageBar(){
 }
 function duelContinue(){
   if(duelStage>=10){endGame(true,prize,false,'هر ۱۰ مرحله رو بردی! قهرمان مطلق 👑');return;}
-  duelStage++;duelStakeVal*=2;prize=duelStakeVal*2;
+  duelStage++;duelStakeVal*=2;prize=pzDuelPrizeNow();
   /* Ascension: compete at the NEW value tier (winnings), no new ticket needed.
      e.g. green winner now at 25,000 meets fresh blue entrants (also 25,000). */
   window.matchValue=duelStakeVal; duelTicket=null;
@@ -8739,10 +8787,10 @@ function animateProfile(){
 function updateDuelVs(){
   document.getElementById('duelStage').textContent=fa(duelStage);
   document.getElementById('duelStake').textContent=(userPlan==='free'?'❤️ ۱ قلب':fa(duelStakeVal));
-  document.getElementById('duelWin').textContent=(userPlan==='free'?fa(practiceCoinStake*2)+' سکه':fa(duelStakeVal*2));
+  document.getElementById('duelWin').textContent=(userPlan==='free'?fa(practiceCoinStake*2)+' سکه':fa(pzDuelPrizeNow()));
   const ps=document.getElementById('duelPracticeStake');if(ps)ps.textContent=fa(practiceCoinStake);
   const pw=document.getElementById('duelPracticeWin');if(pw)pw.textContent=fa(practiceCoinStake*2)+' 🪙';
-  const w=document.getElementById('duelPracticeWouldWin');if(w)w.textContent=fa(duelStakeVal*2)+' تومان';
+  const w=document.getElementById('duelPracticeWouldWin');if(w)w.textContent=fa(pzDuelPrizeNow())+' تومان';
 }
 /* ---- Per-player OPTION SHUFFLE (Item 9) ----
    The four options are shown in a RANDOM order that is INDEPENDENT for each
@@ -8993,7 +9041,7 @@ function answerDuel(sel,correct){
     }
   });
 }
-function duelRoundWin(){clearInterval(dTimer);recordMissionEvent('duelWin',1);if(leagueDuelActive){endGame(true,prize,false,'🏆 فینال لیگ رو بردی! جایزه‌ات با پاسخ‌های درست بیشتر شد');leagueDuelActive=false;leagueWtaActive=false;return;}if(userPlan==='free'){endGame(true,0,false,'دوئل تمرینی رو بردی!');return;}prize=duelStakeVal*2;showCheckpoint('duel');}
+function duelRoundWin(){clearInterval(dTimer);recordMissionEvent('duelWin',1);if(leagueDuelActive){endGame(true,prize,false,'🏆 فینال لیگ رو بردی! جایزه‌ات با پاسخ‌های درست بیشتر شد');leagueDuelActive=false;leagueWtaActive=false;return;}if(userPlan==='free'){endGame(true,0,false,'دوئل تمرینی رو بردی!');return;}prize=pzDuelPrizeNow();showCheckpoint('duel');}
 function duelRoundLose(){clearInterval(dTimer);endGame(false,0,false,oppName+' این مرحله رو برد');}
 
 function practiceCoinRewardForProgress(kind){
@@ -9190,6 +9238,19 @@ function pzVictoryAnim(){
   try{ vib([40,60,120,60,160]); }catch(e){}
   setTimeout(()=>{ ov.classList.add('out'); setTimeout(()=>{try{ov.remove();}catch(e){}},480); },2600);
 }
+/* «رتبه» ON THE STATS CARD — Last Survivor only.
+   It is a real figure exactly once: in آخرین بازمانده you finish somewhere
+   among many players. In a duel it is «۱ or ۲», which the scoreboard beside it
+   already says, and in همه یا هیچ it is the same. So the cell (and its divider)
+   are hidden by default and only that one mode turns them on. */
+function pzResultRank(text){
+  const cell=document.getElementById('stat-rank-cell'), sep=document.getElementById('stat-rank-sep'),
+        b=document.getElementById('stat-rank');
+  const show=text!=null&&text!=='';
+  if(b&&show) b.textContent=text;
+  if(cell) cell.style.display=show?'':'none';
+  if(sep) sep.style.display=show?'':'none';
+}
 /* THE RESULT SCOREBOARD.
    Two faces with the score between them, in the same order the match itself
    used: opponent on the left, you on the right. It replaces the win/lose
@@ -9319,10 +9380,11 @@ function endGame(won,amount,isWithdraw,customSub){
     recordMissionEvent('win',1);
     const final=amount!=null?amount:prize;
     badge.classList.remove('lose');emoji.textContent=isWithdraw?'💰':'🏆';
-    title.textContent=isWithdraw?'جایزه‌ت رو برداشتی!':'برنده شدی!';
+    /* A withdrawal IS a win — same headline. */
+    title.textContent='برنده شدی!';
     sub.textContent=customSub||(isDuel?'دوئل رو بردی':'تو آخرین بازمانده بودی');
     amt.parentElement.style.color='var(--ok)';
-    document.getElementById('stat-rank').textContent='۱';
+    pzResultRank(null);              /* no رتبه outside Last Survivor */
     vib([40,60,120]);
     removeUpsell();
     const isLeague=(gameType==='wta'||leagueDuelActive||leagueWtaActive);
@@ -9361,7 +9423,7 @@ function endGame(won,amount,isWithdraw,customSub){
   title.textContent='حذف شدی!';
   sub.textContent=customSub||'پاسخ اشتباه بود و از بازی خارج شدی';
   amt.textContent=(userPlan==='free'?'تمرین تمام شد':'−'+fa(isDuel?duelStakeVal:curStake));amt.parentElement.style.color='var(--bad)';
-  document.getElementById('stat-rank').textContent=fa(isDuel?2:(arenaOthers+2));
+  pzResultRank(null);
   vib([120]);
   go('result');
 }
@@ -11287,6 +11349,50 @@ async function pzLoadPrizes(force){
 }
 /** Take-home prize for a tier, or null while the server figure is still loading. */
 function pzPrizeFor(key){ return (PZ_PRIZES&&PZ_PRIZES[key])?PZ_PRIZES[key].prize:null; }
+
+/* THE TAKE-HOME FIGURE FOR ANY POT.
+   Every prize the player is shown has to be what actually lands in the wallet —
+   the commission comes off FIRST. The percentage lives in the admin panel and
+   is applied by the server; the client never carries a number of its own. What
+   it does carry is the pair the server sends for each ticket tier (entry price
+   + already-net prize), and that is enough to price anything:
+
+     • a pot that IS a tier's pot → the server's own figure, verbatim;
+     • any other pot (the ascension chain doubles the stake, «همه یا هیچ» pools
+       several entries) → the SAME commission, recovered from a priced tier and
+       applied with the server's own formula, so the two can never drift.
+
+   Returns null while the table is still loading, so a caller can decide whether
+   to wait or to show the gross for a moment and correct itself. */
+function pzRakePercent(){
+  if(!PZ_PRIZES) return null;
+  const keys=Object.keys(PZ_PRIZES);
+  for(let i=0;i<keys.length;i++){
+    const r=PZ_PRIZES[keys[i]];
+    if(r&&Number(r.value)>0&&r.prize!=null){
+      const gross=Number(r.value)*2;
+      return Math.max(0,Math.min(100,(1-Number(r.prize)/gross)*100));
+    }
+  }
+  return null;
+}
+function pzNetPrize(gross){
+  const g=Math.max(0,Math.round(Number(gross)||0));
+  if(!g||!PZ_PRIZES) return null;
+  const keys=Object.keys(PZ_PRIZES);
+  for(let i=0;i<keys.length;i++){
+    const r=PZ_PRIZES[keys[i]];
+    if(r&&Number(r.value)*2===g&&r.prize!=null) return Number(r.prize);
+  }
+  const pct=pzRakePercent(); if(pct==null) return null;
+  return Math.max(0,g-Math.round((g*pct)/100));   /* the server's own arithmetic */
+}
+/** Take-home prize for the duel stake in play right now. */
+function pzDuelPrizeNow(){
+  const gross=(Number(duelStakeVal)||0)*2;
+  const net=pzNetPrize(gross);
+  return net==null?gross:net;
+}
 
 /* ---- ADMIN-OWNED BANNER ON THE TICKET SCREENS ----
    The duel entry, the Last Survivor entry and the shop's ticket tab each have
@@ -14215,7 +14321,9 @@ function beginWTA(){
   for(let i=0;i<15;i++)wtaPlayers.push({name:i===meIdx?'تو':names[i%names.length],av:'',lives:3,out:false,me:i===meIdx});
   wtaCur=0;wtaPickMode=false;
   go('wta');
-  document.getElementById('wtaPot').textContent=(userPlan==='free'?'تمرینی':fa(wtaPot));
+  /* The pot is what everyone paid in; the prize is what the winner takes home.
+     This slot is labelled «جایزه استودیو», so it shows the prize. */
+  document.getElementById('wtaPot').textContent=(userPlan==='free'?'تمرینی':fa((function(){const n=pzNetPrize(wtaPot);return n==null?wtaPot:n;})()));
   wtaBuildStage();
   readyGate(()=>{
     // نمایش صفحه اولین بازیکن بعد از آماده‌شدن استودیو
@@ -14469,7 +14577,7 @@ function startLeagueDuelFromWTA(finalists){
   const me=finalists.find(p=>p.me),other=finalists.find(p=>!p.me);
   if(!me||!other){endWTA(!!me);return;}
   leagueDuelActive=leagueWtaActive||true;
-  gameType='duel';curMode='duel';duelStage=1;duelStakeVal=curStake;prize=wtaPot;
+  gameType='duel';curMode='duel';duelStage=1;duelStakeVal=curStake;prize=(function(){const n=pzNetPrize(wtaPot);return n==null?wtaPot:n;})();
   myScore=0;oppScore=0;dQ=0;suddenDeath=false;myResults=[];oppResults=[];tossPhase=false;
   oppName=other.name;oppAv=other.av;
   ['duelOppName','duelOppName2'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent=oppName;});
@@ -14482,7 +14590,10 @@ function endWTA(won){
   clearInterval(wtaTimer);
   const aliveN=wtaPlayers.filter(p=>!p.out).length;
   qIndex=0;arenaOthers=Math.max(0,aliveN-1);
-  if(won){const fee=Math.round(wtaPot*0.1);endGame(true,wtaPot-fee,false,'🏆 آخرین بازمانده بودی! کل جایزه مال توئه');setTimeout(showPromotion,4200);}
+  /* The commission on this pot, taken the same way as every other prize in the
+     app. It used to be a hard-coded 10% right here, which meant «همه یا هیچ»
+     quietly ignored the percentage set in the admin panel. */
+  if(won){const _n=pzNetPrize(wtaPot);endGame(true,_n==null?wtaPot:_n,false,'🏆 آخرین بازمانده بودی! کل جایزه مال توئه');setTimeout(showPromotion,4200);}
   else{endGame(false,0,false,'جون‌هات تموم شد؛ از بازی حذف شدی');}
 }
 
@@ -16786,15 +16897,22 @@ async function pzSyncMe(){
   }
 }
 /* Prominent "you earned" popup after each game. */
-function pzRefreshResultAward(){
+/* Writes the match's real XP and 🏆 onto the stats card. The duel has a server
+   award snapshot to read; every other mode only has the before/after delta, so
+   the caller may hand the two figures in directly. */
+function pzRefreshResultAward(xp,cup){
   try{
-    const a=(typeof pzMyAward==='function')?pzMyAward():null; if(!a) return;
+    const a=(typeof pzMyAward==='function')?pzMyAward():null;
+    const gx=(xp!=null)?xp:(a?a.xp:null);
+    const gc=(cup!=null)?cup:(a?a.cup:null);
+    if(gx==null&&gc==null) return;
     const xv=document.getElementById('stat-xpv'), cv=document.getElementById('stat-cup');
-    if(xv) xv.textContent='+'+fa(a.xp); if(cv) cv.textContent='+'+fa(a.cup);
+    if(xv&&gx!=null) xv.textContent='+'+fa(gx);
+    if(cv&&gc!=null) cv.textContent='+'+fa(gc);
   }catch(e){}
 }
 function pzShowGain(xp,cup){
-  try{ pzRefreshResultAward(); }catch(e){}
+  try{ pzRefreshResultAward(xp,cup); }catch(e){}
   let el=document.getElementById('pzGainPop');
   if(!el){ el=document.createElement('div'); el.id='pzGainPop';
     el.style.cssText='position:fixed;left:50%;top:20%;transform:translateX(-50%);z-index:99998;display:flex;gap:12px;pointer-events:none';
@@ -16808,8 +16926,13 @@ function pzShowGain(xp,cup){
   pzShowGain._t=setTimeout(()=>{ el.style.transition='opacity .5s,transform .5s'; el.style.opacity='0'; el.style.transform='translateX(-50%) translateY(-16px)'; setTimeout(()=>{ el.style.display='none'; el.style.opacity=''; el.style.transform='translateX(-50%)'; el.style.transition=''; },520); },2600);
 }
 function pzWinModal(){
-  prize=duelStakeVal*2;            /* current winnings (same as the old win path) */
-  const cur=prize||0, next=cur*2;
+  /* After-commission, both of them: what this win is worth, and what the next
+     stage would be worth. The next stage's pot is double, but its commission is
+     taken the same way — so `cur*2` would have over-quoted it. */
+  prize=pzDuelPrizeNow();          /* current winnings, net */
+  const cur=prize||0;
+  const nextGross=(Number(duelStakeVal)||0)*4, nextNet=pzNetPrize(nextGross);
+  const next=(nextNet==null?nextGross:nextNet);
   clearInterval(dTimer);
   try{ pzVictoryAnim(); }catch(e){}                 /* confetti + VICTORY burst = excitement */
   try{ sfx('found'); vib([40,60,120,60,160]); }catch(e){}
@@ -17542,6 +17665,11 @@ document.addEventListener('DOMContentLoaded',()=>{
   /* Straight into the one loading screen — nothing to tap first. */
   try{ pzApplyIconArt(); }catch(e){}
   try{ pzStartIconArt(); }catch(e){}
+  /* THE PRIZE TABLE, FETCHED AT BOOT. Every prize figure in the app is the
+     server's after-commission number, and the only way the client knows the
+     commission is this table — so it is loaded before any screen can quote a
+     prize, not on the way into one. */
+  try{ pzLoadPrizes(); }catch(e){}
   try{ startIntroFlow(); }catch(e){}
 });
 
