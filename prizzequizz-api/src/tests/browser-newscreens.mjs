@@ -517,6 +517,32 @@ console.log('the league cut lines on the cup rail:');
 }
 
 
+console.log('the league card on the home carousel:');
+{
+  /* Two separate switches said «بزودی»: the card's own flag and a gate at the
+     bottom of the file that replaced openLeagues entirely. Removing one left
+     the other, and the one the player actually sees is the card. */
+  await setPlan('premium');
+  await page.evaluate(() => {
+    const M = (0, eval)('hmModes)'.slice(0, -1) + '()');
+    const i = M.findIndex((m) => m.key === 'league');
+    (0, eval)('hmSet')(i, 1);
+  });
+  await page.waitForTimeout(800);
+  const card = await page.evaluate(() => ({
+    title: document.querySelector('#mcard h2')?.textContent || '',
+    btn: document.querySelector('#mcard .mk-start')?.textContent || '',
+    soon: !!document.querySelector('#mcard .mk-start.soon')
+  }));
+  ok('the league card is the one on screen', /لیگ/.test(card.title), card.title);
+  ok('its button no longer says «بزودی»', !card.soon && !/بزودی/.test(card.btn), JSON.stringify(card));
+
+  await page.evaluate(() => (0, eval)('hmStart()'));
+  await page.waitForTimeout(800);
+  ok('and pressing it actually opens the league hub',
+    await page.evaluate(() => document.getElementById('leagues')?.classList.contains('active')));
+}
+
 console.log('the league hub and the studio:');
 {
   await setPlan('premium');

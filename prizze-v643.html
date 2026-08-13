@@ -12771,9 +12771,13 @@ const HOME_MODES=[
   {key:'aon',    title:'همه یا هیچ',     sub:'تیمی · سرنوشت با رأی جمع', badge:'تیمی',
    art:'mode-aon',  emj:'🤝', tint:'radial-gradient(70% 70% at 50% 40%,#FFE3D6,#F5A98A)',
    soon:true, facts:['🗳️ رأی جمعی','💬 چت‌روم'], go:()=>enterMode('consensus')},
+  /* No `soon` flag: the weekly league is real. The card carried its own
+     «بزودی» badge as well as the gate at the bottom of the file, so removing
+     only the gate left the button still refusing to start — two switches for
+     one feature, and the second one is the one the player sees. */
   {key:'league', title:'لیگ هفتگی',      sub:'طلایی · نقره‌ای · برنزی',  badge:'هفتگی',
    art:'mode-league', emj:'🏆', tint:'radial-gradient(70% 70% at 50% 40%,#FFE9A8,#E8B14A)',
-   soon:true, facts:['📅 هر هفته','🥇 سه لیگ'], go:()=>openLeagues()}
+   facts:['📅 هر هفته','🥇 سه لیگ'], go:()=>openLeagues()}
 ];
 /* «دوستانه» is the practice half: a friendly duel and record mode, and nothing
    else. The prize ladders are not shown there and then refused at the door —
