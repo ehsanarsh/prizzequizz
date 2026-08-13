@@ -376,7 +376,52 @@ console.log('record mode:');
   ok('the previous records are listed', rows >= 2, String(rows));
 }
 
+
+console.log('the record card and the end-of-run modal:');
+{
+  /* The list was a wall of near-black blocks. Contrast is the point, so the
+     check is on the rendered colours, not on whether a class is present. */
+  const look = await page.evaluate(() => {
+    const c = document.querySelector('#rmCats .rm-card');
+    if (!c) return null;
+    const cs = getComputedStyle(c);
+    const lum = (rgb) => {
+      const m = /rgba?\((\d+),\s*(\d+),\s*(\d+)/.exec(rgb);
+      if (!m) return null;
+      return (0.2126 * +m[1] + 0.7152 * +m[2] + 0.0722 * +m[3]) / 255;
+    };
+    const best = c.querySelector('.rm-c-best b');
+    return { bg: cs.backgroundImage, text: lum(cs.color), bestText: best ? lum(getComputedStyle(best).color) : null };
+  });
+  ok('a topic card is drawn', !!look);
+  const bgLight = /hsl\(|rgb\(/.test(look.bg) && !/#1B1630/i.test(look.bg);
+  ok('its background is a light tint, not a near-black shade', bgLight, look.bg.slice(0, 90));
+  ok('and the writing on it is dark, so it can be read', look.text !== null && look.text < 0.4, String(look.text));
+  ok('including the record number, which used to be the yellow accent', look.bestText !== null && look.bestText < 0.4, String(look.bestText));
+
+  /* The end-of-run card had «دوباره» and «جدول رکورد» and no way out. */
+  await page.evaluate(() => {
+    (0, eval)('rmFinish')({ score: 14, correct: 14, wrong: 3, durationMs: 95000, isPersonalBest: true,
+                            mode: 'category', category: 'فوتبال', previousBest: 9, rank: 2, totalPlayers: 40 });
+  });
+  await page.waitForTimeout(1800);
+  const exit = await page.evaluate(() => {
+    const e = document.getElementById('aaaTertiary');
+    return e ? { shown: getComputedStyle(e).display !== 'none', text: e.textContent } : null;
+  });
+  ok('the result card offers a way out', exit && exit.shown && /خروج/.test(exit.text), JSON.stringify(exit));
+  await page.evaluate(() => document.getElementById('aaaTertiary').click());
+  await page.waitForTimeout(500);
+  ok('and pressing it leaves the mode', await page.evaluate(() => document.getElementById('home')?.classList.contains('active')));
+  const open = await page.evaluate(() => {
+    const m = document.getElementById('aaaModal');
+    return !!m && getComputedStyle(m).display !== 'none' && m.classList.contains('show');
+  });
+  ok('with the card closed behind it', !open);
+}
+
 ok('no script errors on the new screens', errs.length === 0, errs.join(' | '));
+
 
 
 

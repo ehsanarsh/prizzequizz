@@ -3802,26 +3802,27 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
    are fixed here, so twenty different colours still read as one family. */
 .rm-card{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:17px;cursor:pointer;
   border:var(--stroke);box-shadow:var(--hard);margin-bottom:10px;position:relative;overflow:hidden;
-  background:linear-gradient(180deg,var(--tc1,#3A2E6B),var(--tc2,#1B1630));color:var(--paper);
+  background:linear-gradient(180deg,var(--tc1,#EDE7FF),var(--tc2,#C2B4F0));color:#12121a;
   transition:transform .08s,box-shadow .08s}
 .rm-card:active{transform:translateY(4px);box-shadow:0 1px 0 #000}
 /* A faint sheen so the flat gradient does not look printed. */
 .rm-card::after{content:"";position:absolute;inset:0;pointer-events:none;
-  background:linear-gradient(105deg,rgba(255,255,255,.10) 0%,rgba(255,255,255,0) 42%)}
+  background:linear-gradient(105deg,rgba(255,255,255,.42) 0%,rgba(255,255,255,0) 46%)}
 /* The all-topics card: gold rather than a hue, because it is the one that is
    not a topic. Same layout as the rest, exactly as asked. */
-.rm-card.rm-global{background:linear-gradient(180deg,#5A4A12,#241D06);border-color:#000;
-  box-shadow:var(--hard),inset 0 0 0 1.5px rgba(255,210,31,.5)}
+.rm-card.rm-global{background:linear-gradient(180deg,#FFF3C4,#FFD966);border-color:#000;
+  box-shadow:var(--hard),inset 0 0 0 1.5px rgba(120,80,0,.35)}
 .rm-card.rm-global .rm-c-ico{background:linear-gradient(180deg,#FFE24A,#E8A00B);border-color:#000}
-.rm-card.rm-global .rm-c-txt b{color:#FFE9A8}
+.rm-card.rm-global .rm-c-txt b{color:#3A2A00}
 .rm-c-ico{width:40px;height:40px;border-radius:13px;display:grid;place-items:center;font-size:21px;
-  background:hsl(var(--th,262) 45% 12%);border:2px solid #000;flex:0 0 auto}
+  background:hsl(var(--th,262) 70% 68%);border:2px solid #000;flex:0 0 auto}
 .rm-c-txt{flex:1;min-width:0}
 .rm-c-txt b{display:block;font-size:14.5px;font-weight:900;line-height:1.4}
 .rm-c-best{text-align:center;flex:0 0 auto;min-width:50px}
-.rm-c-best small{display:block;font-size:8.5px;font-weight:900;color:rgba(255,255,255,.62)}
-.rm-c-best b{display:block;font-size:19px;font-weight:900;color:var(--bolt);line-height:1.15}
-.rm-c-best .rm-world{color:rgba(255,255,255,.45);margin-top:1px}
+.rm-c-best small{display:block;font-size:8.5px;font-weight:900;color:rgba(15,15,25,.62)}
+/* var(--bolt) is the yellow accent — invisible on a light card. */
+.rm-c-best b{display:block;font-size:19px;font-weight:900;color:#12121a;line-height:1.15}
+.rm-c-best .rm-world{color:rgba(15,15,25,.5);margin-top:1px}
 .rm-cats{display:grid;gap:8px}
 /* A topic row: the wide topic button plus the small square that opens that
    topic's record table. The square alternates side down the list (`.flip`
@@ -3833,8 +3834,8 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
   background:linear-gradient(180deg,var(--tc2,#3A2E6B),var(--tc3,#1B1630));box-shadow:var(--hard);
   display:grid;place-items:center;padding:0;transition:transform .08s,box-shadow .08s}
 .rm-rank-btn:active{transform:translateY(4px);box-shadow:0 1px 0 #000}
-.rm-rank-btn.rm-rank-global{background:linear-gradient(180deg,#241D06,#120E02);
-  box-shadow:var(--hard),inset 0 0 0 1.5px rgba(255,210,31,.5)}
+.rm-rank-btn.rm-rank-global{background:linear-gradient(180deg,#FFD966,#E8A00B);
+  box-shadow:var(--hard),inset 0 0 0 1.5px rgba(120,80,0,.35)}
 .rm-rank-btn .rank-ico{width:38px;height:38px;object-fit:contain;display:block;
   filter:drop-shadow(0 2px 3px rgba(0,0,0,.55))}
 /* The global row's rank button has no inline hue, so it needs its badge too. */
@@ -5782,6 +5783,9 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
       </div>
       <label class="aaa-check" id="aaaCheckRow"><input type="checkbox" id="aaaCheck"> <span id="aaaCheckText">دیگر این پیام را نمایش نده</span></label>
       <div class="aaa-actions" id="aaaActions">
+        <!-- A third action, hidden unless a caller asks for one. The end-of-run
+             card offered «دوباره» and «جدول رکورد» and no way out at all. -->
+        <button class="btn btn-ghost" id="aaaTertiary" style="display:none">خروج</button>
         <button class="btn btn-ghost" id="aaaSecondary">بعداً</button>
         <button class="btn btn-primary" id="aaaPrimary">متوجه شدم</button>
       </div>
@@ -8111,6 +8115,7 @@ function showAaaModal(opts){
   const reward=document.getElementById('aaaReward'),cw=document.getElementById('aaaCountWrap'),cnt=document.getElementById('aaaCount'),bar=document.getElementById('aaaBar');
   const checkRow=document.getElementById('aaaCheckRow'),check=document.getElementById('aaaCheck'),checkText=document.getElementById('aaaCheckText');
   const actions=document.getElementById('aaaActions'),primary=document.getElementById('aaaPrimary'),secondary=document.getElementById('aaaSecondary');
+  const tertiary=document.getElementById('aaaTertiary');
   /* `art` shows a character on a lit stage instead of the emoji tile. The emoji
      stays as the fallback, so a missing file degrades to what it looked like
      before rather than to an empty circle. */
@@ -8132,6 +8137,12 @@ function showAaaModal(opts){
   secondary.className='btn '+(opts.secondaryClass||'btn-ghost');
   primary.textContent=opts.primaryText||'متوجه شدم';secondary.textContent=opts.secondaryText||'بعداً';
   secondary.style.display=opts.secondaryText?'flex':'none';
+  if(tertiary){
+    tertiary.className='btn '+(opts.tertiaryClass||'btn-ghost');
+    tertiary.textContent=opts.tertiaryText||'';
+    tertiary.style.display=opts.tertiaryText?'flex':'none';
+    tertiary.onclick=()=>{ if(opts.onTertiary) opts.onTertiary(); else closeAaaModal(false); };
+  }
   primary.onclick=()=>{if(opts.onPrimary)opts.onPrimary(check.checked);else closeAaaModal(true);};
   secondary.onclick=()=>{if(opts.onSecondary)opts.onSecondary(check.checked);else closeAaaModal(true);};
   cw.classList.toggle('show',!!opts.seconds);
@@ -11113,7 +11124,11 @@ function pzTopicHue(name){
    stylesheet holds the shape and only the hue travels with the row. */
 function pzTopicStyle(name){
   const h=pzTopicHue(name);
-  return '--th:'+h+';--tc1:hsl('+h+' 46% 34%);--tc2:hsl('+h+' 52% 19%);--tc3:hsl('+h+' 60% 12%)';
+  /* Light cards. They were near-black with white text, which made the list a
+     wall of dark blocks; the hue is what tells the topics apart, and it reads
+     far better as a tint than as a shade. The square ranking button keeps a
+     deeper stop of the SAME hue so the pair still looks like one row. */
+  return '--th:'+h+';--tc1:hsl('+h+' 86% 92%);--tc2:hsl('+h+' 64% 78%);--tc3:hsl('+h+' 52% 62%)';
 }
 
 /* go('record') loads the screen itself now, so this is simply the door. */
@@ -11692,9 +11707,12 @@ function rmFinish(res){
             (res.rank?line('📊','رتبهٔ تو',faDigits(res.rank)+' از '+faDigits(res.totalPlayers)):'')+
             line('🎯','نوع',res.mode==='category'?('موضوعی · '+esc4(res.category)):'اصلی (همهٔ موضوعات)')+
           '</div>',
-      primaryText:'دوباره', secondaryText:'جدول رکورد',
+      primaryText:'دوباره', secondaryText:'جدول رکورد', tertiaryText:'خروج',
       onPrimary:()=>{ closeAaaModal(false); rmStart(res.mode,res.category||''); },
-      onSecondary:()=>{ closeAaaModal(false); rmOpenBoard(res.mode,res.category||''); }});
+      onSecondary:()=>{ closeAaaModal(false); rmOpenBoard(res.mode,res.category||''); },
+      /* Out of the mode entirely, not just out of the card — the player who is
+         done is done. */
+      onTertiary:()=>{ closeAaaModal(false); go('home'); }});
   }, isPb?1300:420);
   go('record');
 }

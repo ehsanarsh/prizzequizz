@@ -90,6 +90,10 @@ export interface RecordRun {
   /** Which question it was spent on, so a run cannot arm it twice for one
    *  question by buying a second copy. */
   secondChanceUsedOn?: string | null;
+  /** Where this run is on the difficulty ladder, and how many correct answers
+   *  in a row it has at that step. See RECORD_LADDER. */
+  level: number;
+  streak: number;
 }
 
 export interface PublicQuestion {
@@ -191,6 +195,31 @@ export function recordCategories(): { name: string; icon: string }[] {
 
 // -------------------------------------------------------------- questions ----
 
+/* THE LADDER.
+ *
+ * A run used to draw from the whole bank at random, so the second question
+ * could be harder than the tenth and getting further meant nothing. It climbs
+ * now: start easy, and every THREE correct answers in a row move up one step.
+ *
+ * A wrong answer holds you where you are — it does not push you back down and
+ * it does not let you through. That is the point of the rule: the run gets
+ * harder only by being earned, and a mistake costs a heart, not the level you
+ * already reached. The streak restarts, so it is three more in a row from
+ * there.
+ */
+export const RECORD_LADDER: Array<Question['difficulty']> = ['easy', 'medium', 'hard', 'veryhard'];
+export const RECORD_STEP = 3;
+
+/** What the ladder does to (level, streak) when an answer comes in. */
+export function ladderAfter(level: number, streak: number, correct: boolean): { level: number; streak: number } {
+  const top = RECORD_LADDER.length - 1;
+  const lv = Math.max(0, Math.min(top, Math.floor(level) || 0));
+  if (!correct) return { level: lv, streak: 0 };
+  const next = streak + 1;
+  if (next < RECORD_STEP) return { level: lv, streak: next };
+  return { level: Math.min(top, lv + 1), streak: 0 };
+}
+
 async function pickQuestion(run: RecordRun): Promise<Question> {
   const all = await repositories.questions.listApproved();
   if (!all.length) throw new RecordError('NO_QUESTIONS', 'هنوز سؤالی برای این حالت ثبت نشده.');
@@ -205,6 +234,17 @@ async function pickQuestion(run: RecordRun): Promise<Question> {
   const fresh = pool.filter((q) => !run.asked.includes(q.id));
   if (fresh.length) pool = fresh;
   else run.asked = [];   // bank exhausted — start the cycle over
+
+  /* The step this run has climbed to, then the nearest step that has anything
+   * in it. A topic with no «سخت» questions must not end the run — it simply
+   * gives what it has, nearest first. */
+  const want = Math.max(0, Math.min(RECORD_LADDER.length - 1, run.level || 0));
+  let tier = pool.filter((q) => q.difficulty === RECORD_LADDER[want]);
+  for (let d = 1; !tier.length && d < RECORD_LADDER.length; d++) {
+    const near = [RECORD_LADDER[want - d], RECORD_LADDER[want + d]].filter(Boolean);
+    tier = pool.filter((q) => near.includes(q.difficulty));
+  }
+  if (tier.length) pool = tier;
 
   return pool[Math.floor(Math.random() * pool.length)]!;
 }
@@ -276,7 +316,9 @@ export async function startRun(userId: string, mode: RecordMode, category = ''):
      * next entry. */
     hearts: cfg.runHearts, score: 0, correct: 0, wrong: 0,
     startedAt: Date.now(), lastSeenAt: Date.now(), endedAt: null, currentQuestionId: null, asked: [],
-    secondChance: false, secondChanceUsedOn: null
+    secondChance: false, secondChanceUsedOn: null,
+    /* Every run starts at the bottom of the ladder. */
+    level: 0, streak: 0
   };
   const q = await pickQuestion(run);
   run.currentQuestionId = q.id;
@@ -337,6 +379,11 @@ export async function answerRun(runId: string, userId: string, selectedIndex: nu
     run.secondChanceUsedOn = run.currentQuestionId;
     return { correct: false, correctIndex: -1, run: toPublic(run), retry: true, ruledOut: Number(selectedIndex) };
   }
+
+  /* The ladder moves BEFORE the next question is drawn, so the step this
+   * answer earned is the step the next question comes from. A second-chance
+   * retry returns above and never reaches here — it is not an answer yet. */
+  { const st = ladderAfter(run.level, run.streak, correct); run.level = st.level; run.streak = st.streak; }
 
   if (correct) {
     run.score += 1; run.correct += 1;
