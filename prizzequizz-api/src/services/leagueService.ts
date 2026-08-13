@@ -166,15 +166,23 @@ export interface CutLine {
   exact: boolean;
 }
 
+/* Exported so a test can run the REAL string against a real Postgres.
+ * It was `id NOT LIKE` — and `users.id` is a uuid column, which Postgres has no
+ * NOT LIKE operator for. Every call threw «operator does not exist: uuid !~~
+ * unknown», the board silently fell through to the in-memory path, and a warn
+ * line was the only trace. A source-level check would not have caught it; only
+ * running the SQL does. */
+export const WEEKLY_BOARD_SQL =
+  `SELECT id AS user_id, weekly_score AS cup FROM users
+    WHERE weekly_week = $1 AND weekly_score > 0 AND id::text NOT LIKE 'bot\\_%'
+    ORDER BY weekly_score DESC, id LIMIT $2`;
+
 /** The weekly board as (userId, cup), best first. */
 async function weeklyBoard(limit = 500): Promise<Array<{ userId: string; cup: number }>> {
   const pool = pg();
   if (pool) {
     try {
-      const { rows } = await pool.query(
-        `SELECT id AS user_id, weekly_score AS cup FROM users
-          WHERE weekly_week = $1 AND weekly_score > 0 AND id NOT LIKE 'bot\\_%'
-          ORDER BY weekly_score DESC, id LIMIT $2`, [isoWeekId(), limit]);
+      const { rows } = await pool.query(WEEKLY_BOARD_SQL, [isoWeekId(), limit]);
       return rows.map((r: any) => ({ userId: String(r.user_id), cup: Number(r.cup) || 0 }));
     } catch (e) { logger.warn('league_board_failed', { message: (e as Error).message }); }
   }

@@ -101,7 +101,11 @@ export class MemoryMatchmakingQueue extends BaseMatchmakingQueue {
     const ticket: MatchmakingTicket = { id: id(), userId: input.userId, modeId: input.modeId, economyType: input.economyType, coinStake: input.coinStake, skill, status: 'queued', createdAt: now, updatedAt: now };
     if (compatible) return this.matchTickets(ticket, compatible, skill);
     this.tickets.set(ticket.id, ticket);
-    logger.info('matchmaking_queued', { ticketId: ticket.id, userId: input.userId, modeId: input.modeId });
+    /* economyType and skill are what pairing is actually done on, so a player
+       who waits forever is only explainable with them in the line: two people
+       pressing «دوئل» at the same moment still never meet if they queued into
+       different value buckets. */
+    logger.info('matchmaking_queued', { ticketId: ticket.id, userId: input.userId, modeId: input.modeId, economyType: ticket.economyType, coinStake: ticket.coinStake, skill });
     return ticket;
   }
 
@@ -192,7 +196,7 @@ export class RedisMatchmakingQueue extends BaseMatchmakingQueue {
     }
     const ticket: MatchmakingTicket = { id: id(), userId: input.userId, modeId: input.modeId, economyType: input.economyType, coinStake: input.coinStake, skill, status: 'queued', createdAt: now, updatedAt: now };
     await this.saveTicket(ticket); await client.zAdd(queueKey, { score: skill, value: ticket.id });
-    logger.info('redis_matchmaking_queued', { ticketId: ticket.id, modeId: ticket.modeId });
+    logger.info('redis_matchmaking_queued', { ticketId: ticket.id, userId: ticket.userId, modeId: ticket.modeId, economyType: ticket.economyType, coinStake: ticket.coinStake, skill });
     return ticket;
   }
 
