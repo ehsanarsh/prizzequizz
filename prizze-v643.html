@@ -1199,13 +1199,48 @@ input,textarea,select,[contenteditable="true"],.pz-selectable,.pz-selectable *{
 .wheel-hub{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:56px;height:56px;border-radius:50%;background:var(--ink);border:var(--stroke);display:grid;place-items:center;font-size:24px;z-index:2;box-shadow:var(--hard-sm)}
 .wheel-pointer{position:absolute;top:-12px;left:50%;transform:translateX(-50%);width:0;height:0;border-left:13px solid transparent;border-right:13px solid transparent;border-top:24px solid var(--bolt);z-index:3;filter:drop-shadow(0 3px 0 #000)}
 
-/* ===== QUICK CHAT / TAUNTS ===== */
-.qc-fab{position:absolute;top:64px;left:12px;z-index:30;width:44px;height:44px;border-radius:50%;background:var(--ink-2);border:var(--stroke);display:grid;place-items:center;font-size:20px;cursor:pointer;box-shadow:var(--hard-sm);opacity:.9}
-.qc-fab:active{transform:translateY(4px);box-shadow:0 1px 0 #000}
-.qc-bar{position:absolute;bottom:82px;left:16px;z-index:30;display:flex;gap:6px;flex-wrap:wrap;max-width:230px;background:var(--ink-2);border:var(--stroke);border-radius:20px;padding:10px;transform:scale(0);transform-origin:bottom left;transition:transform .2s cubic-bezier(.2,1.2,.4,1);box-shadow:var(--hard)}
-.qc-bar.show{transform:scale(1)}
-.qc-bar button{background:var(--ink-3);border:2px solid #000;border-radius:12px;padding:8px 10px;font-family:inherit;font-size:15px;font-weight:700;color:var(--text);cursor:pointer}
-.qc-bar button:active{transform:scale(.9)}
+/* ===== QUICK CHAT / TAUNTS =====
+   The floating circle is gone. The chat is a named yellow button under your own
+   face, and it opens a sheet of packs instead of one flat row of eight taunts. */
+.pzm-avstack{display:flex;flex-direction:column;align-items:center;gap:4px;flex:0 0 auto}
+.pzm-chatbtn{border:2px solid #000;border-radius:11px;padding:3px 9px;font-family:inherit;font-size:10.5px;
+  font-weight:900;color:#141414;background:linear-gradient(180deg,#FFE24A,var(--bolt-2));
+  box-shadow:0 3px 0 #000;cursor:pointer;white-space:nowrap;line-height:1.5}
+.pzm-chatbtn:active{transform:translateY(3px);box-shadow:0 0 0 #000}
+
+.qcp-sheet{position:absolute;inset:0;z-index:60;display:none;background:rgba(0,0,0,.5);backdrop-filter:blur(2px)}
+.qcp-sheet.show{display:block}
+.qcp-panel{position:absolute;left:0;right:0;bottom:0;max-height:74%;display:flex;flex-direction:column;
+  background:var(--ink-2);border-top:var(--stroke);border-radius:24px 24px 0 0;box-shadow:0 -10px 34px rgba(0,0,0,.5);
+  padding:8px 12px 14px;animation:qcpUp .24s cubic-bezier(.2,1,.3,1)}
+@keyframes qcpUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
+@media (prefers-reduced-motion:reduce){.qcp-panel{animation:none}}
+.qcp-grip{width:44px;height:4px;border-radius:99px;background:rgba(255,255,255,.24);margin:2px auto 8px}
+.qcp-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.qcp-head b{font-size:14px;font-weight:900}
+.qcp-x{width:32px;height:32px;border-radius:11px;border:2px solid #000;background:var(--ink-3);color:var(--text);
+  font-family:inherit;font-size:14px;font-weight:900;cursor:pointer}
+.qcp-tabs{display:flex;gap:6px;overflow-x:auto;padding-bottom:8px;flex:0 0 auto}
+.qcp-tab{flex:0 0 auto;border:2px solid #000;border-radius:999px;background:var(--ink-3);color:var(--muted);
+  font-family:inherit;font-size:11.5px;font-weight:900;padding:7px 12px;cursor:pointer;white-space:nowrap}
+.qcp-tab.on{background:linear-gradient(180deg,#FFE24A,var(--bolt-2));color:#141414}
+.qcp-tab .lk{opacity:.85;margin-inline-start:3px}
+.qcp-body{flex:1 1 auto;overflow-y:auto;min-height:0}
+.qcp-grid{display:flex;flex-wrap:wrap;gap:7px;padding:2px 0 4px}
+.qcp-grid button{border:2px solid #000;border-radius:13px;background:var(--ink-3);color:var(--text);
+  font-family:inherit;font-size:13px;font-weight:800;padding:9px 12px;cursor:pointer;box-shadow:0 3px 0 #000}
+.qcp-grid button:active{transform:translateY(3px);box-shadow:0 0 0 #000}
+.qcp-lock{text-align:center;padding:16px 10px}
+.qcp-lock .big{font-size:40px;display:block;margin-bottom:6px}
+.qcp-lock b{display:block;font-size:14px;font-weight:900;margin-bottom:4px}
+.qcp-lock p{color:var(--muted);font-size:12px;font-weight:700;line-height:1.9}
+.qcp-price{display:inline-block;margin:10px 0 8px;font-size:14px;font-weight:900;color:var(--bolt);
+  border:2px solid #000;border-radius:999px;padding:6px 14px;background:rgba(255,210,31,.12)}
+.qcp-buy{width:100%;border:2px solid #000;border-radius:15px;padding:12px;font-family:inherit;font-size:14px;
+  font-weight:900;color:#141414;background:linear-gradient(180deg,#FFE24A,var(--bolt-2));box-shadow:0 4px 0 #000;cursor:pointer}
+.qcp-buy:active{transform:translateY(4px);box-shadow:0 0 0 #000}
+.qcp-buy[disabled]{opacity:.6;cursor:default}
+.qcp-note{color:var(--muted);font-size:11px;font-weight:700;line-height:1.9;text-align:center;margin-top:8px}
 @keyframes tauntIn{0%{opacity:0;transform:translateY(10px) scale(.7)}60%{transform:translateY(0) scale(1.08)}100%{opacity:1;transform:scale(1)}}
 @keyframes tauntOut{to{opacity:0;transform:translateY(-24px) scale(.9)}}
 .taunt{position:absolute;z-index:45;padding:10px 15px;border-radius:16px;font-weight:800;font-size:15px;max-width:180px;border:2px solid #000;box-shadow:var(--hard-sm);animation:tauntIn .3s both}
@@ -5036,7 +5071,13 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
         <button class="pzm-quit" onclick="quitGame()">✕</button>
         <div class="pzm-players">
           <div class="pzm-player pzm-me">
-            <div class="pzm-av pzm-av-me"><div class="mascot" id="mascotDuelMe2" style="width:30px;height:30px;border-radius:50%;overflow:hidden"></div></div>
+            <div class="pzm-avstack">
+              <div class="pzm-av pzm-av-me"><div class="mascot" id="mascotDuelMe2" style="width:30px;height:30px;border-radius:50%;overflow:hidden"></div></div>
+              <!-- The quick chat used to be a floating circle over the board.
+                   It sits under your own face now, named, so it reads as a
+                   thing you own rather than a control hovering over the game. -->
+              <button class="pzm-chatbtn" id="duelChatBtn" onclick="qcOpen()">💬 چت</button>
+            </div>
             <div class="pzm-pmeta"><b class="pzm-pname" id="duelMeName2">تو</b><span class="pzm-pscore duel-me-score">۰</span></div>
           </div>
           <div class="pzm-center">
@@ -5084,8 +5125,16 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
         <div class="timer-ring" id="dRing"><svg width="54" height="54"><circle cx="27" cy="27" r="23" fill="none" stroke="rgba(255,255,255,.14)" stroke-width="5"/><circle id="dTimerArc" cx="27" cy="27" r="23" fill="none" stroke="#FFD23F" stroke-width="5" stroke-linecap="round" stroke-dasharray="145"/></svg></div>
         <div class="pen-slots" id="myDots"></div><div class="pen-slots" id="oppDots"></div>
       </div>
-      <div class="qc-fab" onclick="toggleQC('dAnswers')">💬</div>
-      <div class="qc-bar" id="qc-dAnswers"></div>
+      <!-- QUICK-CHAT SHEET: the packs, their sentences, and the lock on the
+           ones not bought yet. Everything in it comes from /chat-packs. -->
+      <div class="qcp-sheet" id="qcpSheet" aria-hidden="true">
+        <div class="qcp-panel" role="dialog" aria-label="چت سریع">
+          <div class="qcp-grip"></div>
+          <div class="qcp-head"><b>چت سریع</b><button class="qcp-x" onclick="qcClose()" aria-label="بستن">✕</button></div>
+          <div class="qcp-tabs" id="qcpTabs"></div>
+          <div class="qcp-body" id="qcpBody"></div>
+        </div>
+      </div>
       <!-- Duel toss intro overlay -->
       <div id="duelTossIntro">
         <div class="dti-rays"></div>
@@ -5192,6 +5241,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
         <button class="tab active" onclick="shopTab(this,'util')">آیتم‌های کاربردی</button>
         <button class="tab" onclick="shopTab(this,'cosmetic')">آیتم‌های تزئینی</button>
         <button class="tab" onclick="shopTab(this,'gift')">هدیه به دوست</button>
+        <button class="tab" onclick="shopTab(this,'chat')">💬 پک‌های چت</button>
       </div>
       <div id="shopContent"></div>
       <nav class="bottomnav" id="nav-shop"></nav>
@@ -8133,7 +8183,13 @@ function showAaaModal(opts){
     im.onerror=()=>{ icon.classList.remove('has-art'); icon.style.removeProperty('--aaa-accent'); icon.innerHTML=opts.icon||'⚡'; };
   }else{
     icon.classList.remove('has-art'); icon.style.removeProperty('--aaa-accent');
-    icon.innerHTML=opts.iconHTML||opts.icon||'⚡';
+    /* `icon` has always meant "an emoji", and every caller that had a real
+       player to show was supposed to use `iconHTML` instead. When one forgot,
+       the modal printed the picture's web address as a line of text where the
+       face belonged. Rather than chase the call sites one at a time, an `icon`
+       that is a URL is drawn as the picture it is — this is the last place the
+       value passes through, so it catches the ones not yet written too. */
+    icon.innerHTML=opts.iconHTML||pzAvCell(opts.icon||'⚡',null);
   }
   title.innerHTML=opts.title||'آماده‌ای؟';sub.innerHTML=opts.sub||'';
   reward.classList.toggle('show',!!opts.reward);reward.innerHTML=opts.reward||'';
@@ -8357,7 +8413,7 @@ const oppNames=['رضا','مریم','امیر','نگار','حسن','سارا'];
 function pickOpponent(){
   const i=Math.floor(Math.random()*oppNames.length);oppName=oppNames[i];oppAv='';
   ['duelOppName','duelOppName2'].forEach(id=>document.getElementById(id).textContent=oppName);
-  ['duelOppAv','duelOppAv2'].forEach(id=>document.getElementById(id).textContent=oppAv);
+  ['duelOppAv','duelOppAv2'].forEach(id=>document.getElementById(id).innerHTML=pzAvCell(oppAv,null));
 }
 let duelChain=false,vsTimer,duelTopic=null,tossPhase=false,tpTimer;
 function duelIntro(){
@@ -9387,7 +9443,10 @@ function loadSettings(){
 function saveSettings(){try{localStorage.setItem(SETTINGS_KEY,JSON.stringify(window.appSettings));}catch(e){}applySettings();renderSettingsSummary();}
 function applySettings(){
   const ph=document.querySelector('.phone');if(ph){ph.classList.toggle('compact-ui',!!appSettings.compactUI);ph.classList.toggle('high-contrast',!!appSettings.highContrast);ph.classList.toggle('no-motion',!!appSettings.reducedMotion);}
-  document.querySelectorAll('.qc-fab').forEach(e=>e.style.display=appSettings.quickChat?'':'none');
+  /* «چت سریع» now hides the named button under your face; the floating circle
+     it used to hide no longer exists, so the setting had nothing to act on. */
+  document.querySelectorAll('.pzm-chatbtn').forEach(e=>e.style.display=appSettings.quickChat?'':'none');
+  if(!appSettings.quickChat){ try{ qcClose(); }catch(e){} }
   const walletEls=['hdrWallet','walletBal'];walletEls.forEach(id=>{const el=document.getElementById(id);if(el&&id==='hdrWallet')el.parentElement.style.display=appSettings.showWallet?'':'none';});
 }
 function onOff(v){return v?'روشن':'خاموش';}
@@ -9449,7 +9508,7 @@ function renderSettingDetail(type){
     html+=settingSwitch('showWallet','نمایش موجودی در هدر','موجودی کیف پول در صفحه خانه نمایش داده شود');
     html+=settingAction('👁️','پیش‌نمایش پروفایل عمومی','چیزی که دیگران از پروفایل تو می‌بینند','previewPublicProfile()');
   }else if(type==='gameplay'){
-    html+=settingSwitch('quickChat','چت سریع داخل بازی','نمایش دکمه ایموجی و کری‌خوانی در مسابقه');
+    html+=settingSwitch('quickChat','چت سریع داخل بازی','نمایش دکمهٔ «چت» زیر عکس تو در مسابقه');
     html+=settingSwitch('autoNext','ادامه خودکار سؤال بعدی','بعد از تایمر مودال، سؤال بعدی خودکار نمایش داده شود');
     html+=settingSwitch('leagueGuide','نمایش راهنمای لیگ','راهنمای ورود لیگ هفتگی در اولین ورود نشان داده شود');
     html+=settingAction('🏆','نمایش دوباره راهنمای لیگ','راهنمای لیگ را برای ورود بعدی فعال کن','resetLeagueGuide()');
@@ -10580,6 +10639,7 @@ function renderShop(tab){
   _shopCurTab=tab||_shopCurTab;
   if(_shopCurTab==='tickets'){ renderTicketShop(); return; }
   if(_shopCurTab==='characters'){ renderCharacterShop(); return; }
+  if(_shopCurTab==='chat'){ renderChatPackShop(); return; }
   const c=document.getElementById('shopContent');if(!c)return;
   /* Helps are prepended from the admin catalogue, with their own prices and
      the player's current count shown on the card. */
@@ -10610,6 +10670,52 @@ function pzShopCard(it){
   d.onclick=()=>buyItem(it,d);
   return d;
 }
+/* THE CHAT-PACK SHELF.
+   The same packs the duel's چت button opens, on the shop's own screen — the
+   player asked to buy one mid-match is sent here as often as not, and a price
+   they can only see inside a live duel is a price they cannot think about. */
+async function renderChatPackShop(){
+  const c=document.getElementById('shopContent'); if(!c) return;
+  c.innerHTML='<div style="text-align:center;color:var(--muted);padding:26px;font-weight:800">در حال بارگذاری…</div>';
+  const packs=await qcLoadPacks(true);
+  if(!packs){
+    c.innerHTML='<div class="wallet-empty" style="text-align:center;padding:30px;color:var(--muted)"><div style="font-size:40px">💬</div><p style="margin-top:8px">پک‌های چت در دسترس نیست — اتصالت را بررسی کن.</p></div>';
+    return;
+  }
+  if(!packs.length){
+    c.innerHTML='<div class="wallet-empty" style="text-align:center;padding:30px;color:var(--muted)"><div style="font-size:40px">💬</div><p style="margin-top:8px">فعلاً پکی برای فروش نیست.</p></div>';
+    return;
+  }
+  c.innerHTML='<div style="margin:14px 18px 2px;padding:10px 12px;background:rgba(255,255,255,.06);'+
+    'border:1px solid rgba(255,255,255,.10);border-radius:14px;color:var(--muted);'+
+    'font-size:12px;font-weight:700;line-height:1.9">جمله‌های آمادهٔ داخل مسابقه. پک «دوستانه» رایگان است؛ بقیه یک بار خریداری می‌شوند و برای همیشه فعال می‌مانند. دکمهٔ <b>چت</b> زیر عکس خودت در دوئل بازشان می‌کند.</div>'+
+    '<div class="shop-grid"></div>';
+  const g=c.querySelector('.shop-grid');
+  packs.forEach(p=>{
+    const d=document.createElement('div'); d.className='item'; d.style.position='relative';
+    const owned=!!p.owned;
+    d.innerHTML=(owned?'<span class="shop-badge" style="position:absolute;top:8px;left:8px;background:var(--ok,#33D97C);color:#08130c;font-size:9px;font-weight:900;padding:2px 7px;border-radius:8px">'+(p.free?'رایگان':'خریداری شده')+'</span>':'')+
+      '<div class="it-ico">'+frEsc(p.emoji)+'</div>'+
+      '<b>'+frEsc(p.name)+'</b>'+
+      '<p>'+fa(p.phraseCount)+' جمله آماده</p>'+
+      '<div class="price">'+(owned?'فعال ✅':qcMoney(p))+'</div>';
+    if(!owned) d.onclick=()=>qcBuyFromShop(p.key);
+    g.appendChild(d);
+  });
+}
+/* Buying from the shelf is the same purchase as buying from the sheet — same
+   endpoint, same idempotency — so the two can never disagree about ownership. */
+async function qcBuyFromShop(key){
+  const p=(QC_PACKS||[]).find(x=>x.key===key); if(!p) return;
+  showAaaModal({
+    icon:p.emoji,title:'خرید پک «'+p.name+'»',
+    sub:fa(p.phraseCount)+' جملهٔ آماده برای فرستادن در مسابقه.<br>قیمت: <b>'+qcMoney(p)+'</b><br>یک بار خرید، برای همیشه فعال.',
+    primaryText:'خرید',secondaryText:'انصراف',
+    onPrimary:async()=>{ closeAaaModal(false); await qcBuy(key); renderChatPackShop(); },
+    onSecondary:()=>closeAaaModal(false)
+  });
+}
+
 /* THE CHARACTER SHOP.
    The roster has always carried a price and a «خرید» unlock route with nothing
    able to take the money. It is a real shelf now: the ones marked for sale are
@@ -11143,17 +11249,107 @@ function resumeGame(){
   else if(a&&a.id==='duel'&&!dAnswered)runDuelTimer();
 }
 
-/* ============ QUICK CHAT / TAUNTS ============ */
-const TAUNTS=['😎','🤯','🔥','😂','⚡','خیلی کندی!','ایول!','تسلیم شو!'];
-function toggleQC(target){
-  const bar=document.getElementById('qc-'+target);
-  const wasOpen=bar.classList.contains('show');
-  document.querySelectorAll('.qc-bar').forEach(b=>b.classList.remove('show'));
-  if(wasOpen)return;
-  if(!bar.dataset.built){bar.dataset.built='1';
-    TAUNTS.forEach(t=>{const b=document.createElement('button');b.textContent=t;b.onclick=()=>{sendTaunt(t);bar.classList.remove('show');};bar.appendChild(b);});}
-  bar.classList.add('show');
+/* ============ QUICK CHAT / TAUNTS ============
+ * The eight taunts that used to be written on this line are gone. What a player
+ * may say is a set of PACKS held on the server — «دوستانه» free for everyone,
+ * the rest bought once and owned — so the sentences, the names, the prices and
+ * the currency are all the operator's to change without touching this file.
+ *
+ * A locked pack's sentences never arrive here. That is deliberate: shipping
+ * them with a flag set would put the whole paid catalogue one devtools tab
+ * away, which is the same as not selling it. */
+const TAUNTS=['😎','🤯','🔥','😂','⚡'];   /* the fallback if the packs cannot be fetched */
+let QC_PACKS=null, QC_TAB='', _qcBusy=false;
+
+async function qcLoadPacks(force){
+  if(QC_PACKS&&!force) return QC_PACKS;
+  const r=await pzApi('GET','/chat-packs');
+  if(r&&r.ok&&r.data&&Array.isArray(r.data.packs)) QC_PACKS=r.data.packs;
+  return QC_PACKS;
 }
+function qcOpen(){
+  const sh=document.getElementById('qcpSheet'); if(!sh) return;
+  sh.classList.add('show'); sh.setAttribute('aria-hidden','false');
+  try{ sfx('blip'); }catch(e){}
+  if(QC_PACKS){ qcRender(); }
+  else{
+    document.getElementById('qcpBody').innerHTML='<div class="qcp-note">در حال بارگذاری…</div>';
+    document.getElementById('qcpTabs').innerHTML='';
+    qcLoadPacks().then(qcRender);
+  }
+}
+function qcClose(){
+  const sh=document.getElementById('qcpSheet'); if(!sh) return;
+  sh.classList.remove('show'); sh.setAttribute('aria-hidden','true');
+}
+function qcCur(){
+  if(!QC_PACKS||!QC_PACKS.length) return null;
+  return QC_PACKS.find(p=>p.key===QC_TAB) || QC_PACKS.find(p=>p.owned) || QC_PACKS[0];
+}
+function qcTab(k){ QC_TAB=k; qcRender(); }
+function qcMoney(p){
+  return p.currency==='cash' ? (fa(p.price)+' تومان') : (fa(p.price)+' سکه 🪙');
+}
+function qcRender(){
+  const tabs=document.getElementById('qcpTabs'), body=document.getElementById('qcpBody');
+  if(!tabs||!body) return;
+  if(!QC_PACKS||!QC_PACKS.length){
+    /* Offline, or the operator disabled everything. Say which, and still let
+       the player send something rather than opening onto nothing. */
+    tabs.innerHTML='';
+    body.innerHTML='<div class="qcp-grid">'+TAUNTS.map((t,i)=>'<button onclick="qcSay(\'\','+i+')">'+frEsc(t)+'</button>').join('')+'</div>'+
+      '<div class="qcp-note">پک‌های چت در دسترس نیست — اتصالت را بررسی کن.</div>';
+    return;
+  }
+  const cur=qcCur(); QC_TAB=cur.key;
+  tabs.innerHTML=QC_PACKS.map(p=>'<button class="qcp-tab'+(p.key===cur.key?' on':'')+'" onclick="qcTab(\''+jsStr(p.key)+'\')">'+
+    frEsc(p.emoji)+' '+frEsc(p.name)+(p.locked?'<span class="lk">🔒</span>':'')+'</button>').join('');
+
+  if(cur.locked){
+    body.innerHTML='<div class="qcp-lock"><span class="big">'+frEsc(cur.emoji)+'</span>'+
+      '<b>پک «'+frEsc(cur.name)+'» قفل است</b>'+
+      '<p>'+fa(cur.phraseCount)+' جمله آمادهٔ ارسال در مسابقه. یک بار می‌خری و برای همیشه مال توست.</p>'+
+      '<div class="qcp-price">'+qcMoney(cur)+'</div>'+
+      '<button class="qcp-buy" id="qcpBuyBtn" onclick="qcBuy(\''+jsStr(cur.key)+'\')">خرید و فعال‌سازی</button>'+
+      '<div class="qcp-note">این پک را از فروشگاه هم می‌توانی بخری.</div></div>';
+    return;
+  }
+  body.innerHTML='<div class="qcp-grid">'+cur.phrases.map((t,i)=>
+    '<button onclick="qcSay(\''+jsStr(cur.key)+'\','+i+')">'+frEsc(t)+'</button>').join('')+'</div>';
+}
+/* Sent by index into the pack, never by the text on the button: the text is in
+   the DOM and the DOM is the player's to edit. */
+function qcSay(packKey,i){
+  let text='';
+  if(packKey){
+    const p=(QC_PACKS||[]).find(x=>x.key===packKey);
+    if(!p||p.locked) return;
+    text=p.phrases[i];
+  }else{ text=TAUNTS[i]; }
+  if(!text) return;
+  qcClose(); sendTaunt(text);
+}
+async function qcBuy(key){
+  if(_qcBusy) return; _qcBusy=true;
+  const btn=document.getElementById('qcpBuyBtn');
+  if(btn){ btn.disabled=true; btn.textContent='در حال خرید…'; }
+  /* One key per attempt on one pack: a double tap or a retry over a bad
+     connection reaches the server as the same purchase, not two. */
+  const idem='cp:'+key+':'+((_usr&&_usr.id)||'me')+':'+Date.now();
+  const r=await pzApi('POST','/chat-packs/'+encodeURIComponent(key)+'/purchase',{idempotencyKey:idem});
+  _qcBusy=false;
+  if(r&&r.ok&&r.data){
+    try{ if(r.data.balances){ if(typeof _usr!=='undefined'&&_usr){ _usr.coins=r.data.balances.coins; _usr.wallet=r.data.balances.wallet; } updateWalletUI(); } }catch(e){}
+    await qcLoadPacks(true);
+    QC_TAB=key; qcRender();
+    try{ toast('پک «'+r.data.name+'» فعال شد ✅'); sfx('found'); }catch(e){}
+  }else{
+    if(btn){ btn.disabled=false; btn.textContent='خرید و فعال‌سازی'; }
+    try{ toast((r&&r.error&&r.error.message)||'خرید انجام نشد'); }catch(e){}
+  }
+}
+/* The old entry point, kept so nothing that still calls it breaks. */
+function toggleQC(){ qcOpen(); }
 function sendTaunt(text){
   spawnTaunt(text,'me');
   if(Math.random()<0.7)setTimeout(()=>spawnTaunt(TAUNTS[Math.floor(Math.random()*TAUNTS.length)],'them'),700+Math.random()*700);
@@ -13815,7 +14011,7 @@ function wtaBuildStage(){
       el.className='wta-seat';
       el.style.left=px+'px';el.style.top=py+'px';
       el.innerHTML='<div class="wnum">'+fa(k+1)+'</div>'+
-        '<div class="wav">'+p.av+'<span class="wx">✕</span></div>'+
+        '<div class="wav">'+pzAvCell(p.av,p.character||null)+'<span class="wx">✕</span></div>'+
         '<div class="lamps">'+[0,1,2].map(l=>'<span class="lamp'+(l<p.lives?'':' off')+'"></span>').join('')+'</div>'+
         '<small>'+p.name+'</small>';
       st.appendChild(el);wtaSeatEls[i]=el;
@@ -14026,7 +14222,7 @@ function startLeagueDuelFromWTA(finalists){
   myScore=0;oppScore=0;dQ=0;suddenDeath=false;myResults=[];oppResults=[];tossPhase=false;
   oppName=other.name;oppAv=other.av;
   ['duelOppName','duelOppName2'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent=oppName;});
-  ['duelOppAv','duelOppAv2'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent=oppAv;});
+  ['duelOppAv','duelOppAv2'].forEach(id=>{const el=document.getElementById(id);if(el)el.innerHTML=pzAvCell(oppAv,other.character||null);});
   document.getElementById('duelStage2').textContent=fa(duelStage);refreshDuelPot();updateDuelScore();
   duelTopic=QUESTIONS[Math.floor(Math.random()*QUESTIONS.length)].t;
   runDuelRound();
@@ -14711,6 +14907,17 @@ function pzFaceHTML(p,opts){
       +'<div class="pz-avc-f">'+img(f.photo,'pz-avc-img')+'</div>'
       +'<div class="pz-avc-b">'+img(f.ch,'pz-avc-img')+'</div>'
     +'</div></div>';
+}
+
+/* AN AVATAR IS EITHER A PICTURE OR AN EMOJI — never a line of text.
+   Half the screens in this file take `av` and drop it straight into the DOM,
+   which is right for the emoji stand-ins and catastrophic for a real uploaded
+   photo: the player saw the ADDRESS of their opponent's picture sitting where
+   the picture belonged. This is the one call that decides which of the two it
+   is, so a call site never has to. */
+function pzAvCell(av,character){
+  if(character||pzAvIsUrl(av)) return pzFaceHTML({avatar:av,character:character||null});
+  return frEsc(String(av==null?'':av));
 }
 
 /* One delegated listener for every card on the page, however it got there.

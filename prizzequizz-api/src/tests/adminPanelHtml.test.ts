@@ -387,6 +387,49 @@ function run(): void {
     assert.match(body, /played\.length/, 'and an empty room is refused');
   });
 
+  /* ── پک‌های چت ────────────────────────────────────────────────────── */
+
+  check('the chat-pack row has a screen and a nav entry', () => {
+    assert.ok(script.includes('async function renderChatPacks('), 'the screen exists');
+    assert.ok(/chatpacks:renderChatPacks/.test(script), 'and the router reaches it');
+    assert.ok(/\['chatpacks','💬'/.test(script), 'and there is a way in from the sidebar');
+    assert.ok(!/chatpacks:\['chatpacks'/.test(script), 'it must not also be a CONFIG_PAGES key — that shadows the renderer');
+  });
+
+  check('every field an operator was promised is on the form', () => {
+    const i = script.indexOf('function cpDraw(');
+    const body = script.slice(i, i + 3500);
+    /* Name, emoji, price, coins-or-cash, and the sentences themselves. */
+    for (const f of ['cp_n', 'cp_e', 'cp_p', 'cp_c', 'cp_t', 'cp_f', 'cp_en']) {
+      assert.ok(body.includes('id="' + f), 'missing field ' + f);
+    }
+    assert.match(body, /نقدی/, 'cash must be an option');
+    assert.match(body, /سکه/, 'and so must coins');
+  });
+
+  check('saving sends the sentences as a list, one per line', () => {
+    const i = script.indexOf('function cpCollect(');
+    const body = script.slice(i, i + 900);
+    assert.match(body, /split\('\\n'\)/, 'the textarea is split into lines');
+    assert.match(body, /filter\(Boolean\)/, 'and blank lines are dropped');
+    assert.ok(script.includes("api('PUT','/admin/chat-packs'"), 'and it goes to the chat-pack endpoint');
+  });
+
+  check('a free pack cannot be given a price in the form', () => {
+    /* The server stores a free pack at zero regardless; the form must not
+       invite an operator to type a number that will be thrown away. */
+    const i = script.indexOf('function cpCollect(');
+    const body = script.slice(i, i + 900);
+    assert.match(body, /free\?0:/, 'the collected price is zeroed for a free pack');
+  });
+
+  check('deleting a pack warns that it takes the buyers with it', () => {
+    const i = script.indexOf('function cpRemove(');
+    const body = script.slice(i, i + 400);
+    assert.match(body, /confirm\(/, 'it must ask first');
+    assert.match(body, /خرید/, 'and say what else goes');
+  });
+
   console.log(`[adminPanelHtml] ${passed} passed, ${failed} failed`);
   if (failed) process.exit(1);
 }

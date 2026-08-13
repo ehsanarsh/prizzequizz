@@ -203,7 +203,7 @@ function groupMembers(g){ return (TAB_GROUPS[g]?TAB_GROUPS[g].tabs:[]).filter(t=
 const NAV=[
   ['اصلی',[['dashboard','📊','داشبورد'],['g_money','💰','مالی و حسابداری'],['users','👤','کاربران'],['matches','🎮','مسابقات'],['lastsurvivor','🏆','آخرین بازمانده'],['support','🎧','پشتیبانی']]],
   ['محتوا',[['g_qhub','❓','سوالات'],['categories','🏷️','موضوعات'],['g_chars','🎭','کاراکترها'],['lifelines','🧩','کمک‌ها'],['rewards','🎡','گردونه و جایزه روزانه'],['recordmode','🏅','ثبت رکورد'],['onboarding','👋','خوش‌آمدگویی']]],
-  ['اقتصاد',[['wallet','🏆','صندوق جایزه'],['g_payout','💸','دریافت جایزه'],['tickets','🎫','بلیط‌ها'],['shop','🛒','فروشگاه'],['giftcodes','🎁','کدهای هدیه'],['payments','🏦','درگاه پرداخت']]],
+  ['اقتصاد',[['wallet','🏆','صندوق جایزه'],['g_payout','💸','دریافت جایزه'],['tickets','🎫','بلیط‌ها'],['shop','🛒','فروشگاه'],['chatpacks','💬','پک‌های چت'],['giftcodes','🎁','کدهای هدیه'],['payments','🏦','درگاه پرداخت']]],
   ['بالانس بازی (Data-Driven)',[['g_balance','⚖️','بالانس بازی'],['leagues','🛡️','لیگ‌ها'],['missions2','🎯','مأموریت‌ها']]],
   ['رشد و تعامل',[['leaderboard','📈','لیدربرد'],['campaign','🎁','کمپین کاربر جدید'],['events','📅','رویدادها'],['banners','🖼️','بنرها'],['notifications','🔔','اعلان‌ها'],['g_sms','📱','پنل پیامکی']]],
   ['سیستم',[['monitoring','🖥️','مانیتورینگ سرور'],['g_security','🛡️','امنیت و ضدتقلب'],['g_audit','📑','گزارش و لاگ'],['reset','♻️','ابزار ریست'],['accounts','🔐','حساب‌ها و دسترسی'],['backup','💾','پشتیبان‌گیری'],['general','⚙️','تنظیمات عمومی'],['rawcfg','🧩','ویرایش خام Config']]]
@@ -380,7 +380,7 @@ async function render(){
   try{
     if(CUR==='accounts')return renderAccounts();
     if(CONFIG_PAGES[CUR]){ await renderConfigSection(CONFIG_PAGES[CUR][0],CONFIG_PAGES[CUR][1]); groupBar(); if(tracked)void badgeLoad(); return; }
-    const fn={dashboard:renderDashboard,finance:renderFinance,accounting:renderAccounting,expenses:renderExpenses,backup:renderBackup,users:renderUsers,matches:renderMatches,support:renderSupport,questions:renderQuestions,leagues:renderLeagues,qreports:renderQReports,aistudio:renderAiStudio,pipeline:renderPipeline,categories:renderCategories,wallet:renderWallet,withdrawals:renderWithdrawals,payoutpartners:renderPayoutPartners,withdrawotp:renderWithdrawOtp,smsgroups:renderSmsGroups,rewardholds:renderRewardHolds,tickets:renderTickets,giftcodes:renderGiftCodes,shop:renderShopAdmin,characters:renderCharacters,charboxes:renderCharBoxes,lifelines:renderLifelines,rewards:renderRewards,missions2:renderMissions2,recordmode:renderRecordMode,onboarding:renderOnboarding,lastsurvivor:renderLastSurvivor,sms:renderSms,payments:renderPayments,leaderboard:renderLeaderboard,banners:renderBanners,notifications:renderNotifications,anticheat:renderAntiCheat,suspicious:renderSuspicious,reports:renderReports,logs:renderLogs,reset:renderReset,roles:renderRoles,rawcfg:renderRawCfg,monitoring:renderMonitoring}[CUR];
+    const fn={dashboard:renderDashboard,finance:renderFinance,accounting:renderAccounting,expenses:renderExpenses,backup:renderBackup,users:renderUsers,matches:renderMatches,support:renderSupport,questions:renderQuestions,leagues:renderLeagues,qreports:renderQReports,aistudio:renderAiStudio,pipeline:renderPipeline,categories:renderCategories,wallet:renderWallet,withdrawals:renderWithdrawals,payoutpartners:renderPayoutPartners,withdrawotp:renderWithdrawOtp,smsgroups:renderSmsGroups,rewardholds:renderRewardHolds,tickets:renderTickets,giftcodes:renderGiftCodes,shop:renderShopAdmin,chatpacks:renderChatPacks,characters:renderCharacters,charboxes:renderCharBoxes,lifelines:renderLifelines,rewards:renderRewards,missions2:renderMissions2,recordmode:renderRecordMode,onboarding:renderOnboarding,lastsurvivor:renderLastSurvivor,sms:renderSms,payments:renderPayments,leaderboard:renderLeaderboard,banners:renderBanners,notifications:renderNotifications,anticheat:renderAntiCheat,suspicious:renderSuspicious,reports:renderReports,logs:renderLogs,reset:renderReset,roles:renderRoles,rawcfg:renderRawCfg,monitoring:renderMonitoring}[CUR];
     if(fn){ await fn(); groupBar(); if(tracked)void badgeLoad(); return; }
     /* No renderer for this tab. Six nav entries were in this state, and
        clicking one silently left the PREVIOUS screen's content on display —
@@ -3196,6 +3196,102 @@ let RW_HOLD={enabled:false,riskThreshold:90};
    mode is meant to be its own thing, and turning any of them up makes it feed
    XP, cup or coins into the parts of the game that carry real prizes. */
 let RM_CFG=null;
+/* ================= CHAT PACKS =================
+   Everything the player can say mid-match: the group names, their emoji, their
+   prices, whether a price is in coins or in cash, and every sentence in every
+   group. The client holds none of it — what is typed here is what the game
+   offers on the next request. */
+let CP_PACKS=[], CP_MAX={phrases:40,length:80};
+async function renderChatPacks(){
+  $('#main').innerHTML=head('پک‌های چت','جمله‌های آمادهٔ داخل مسابقه — نام، قیمت و متن هر گروه')+
+    '<div id="cpBody"><div class="skel"></div></div>';
+  const b=$('#cpBody');
+  try{
+    const d=await api('GET','/admin/chat-packs');
+    CP_PACKS=(d.packs||[]).map(p=>({...p,phrases:[...(p.phrases||[])]}));
+    CP_MAX={phrases:d.maxPhrases||40,length:d.maxLength||80};
+    cpDraw();
+  }catch(e){ b.innerHTML='<div class="card empty">'+esc(e.message||'خطا')+'</div>'; }
+}
+function cpDraw(){
+  const b=$('#cpBody'); if(!b) return;
+  const cards=CP_PACKS.map((p,i)=>
+    '<div class="card">'+
+      '<h3>'+esc(p.emoji||'💬')+' '+esc(p.name||p.key)+' <span class="sub" style="font-weight:400">('+esc(p.key)+')</span></h3>'+
+      '<div class="grid g4">'+
+        '<div class="field"><label>نام گروه</label><input id="cp_n'+i+'" value="'+esc(p.name||'')+'" maxlength="60"></div>'+
+        '<div class="field"><label>ایموجی</label><input id="cp_e'+i+'" value="'+esc(p.emoji||'💬')+'" maxlength="8"></div>'+
+        '<div class="field"><label>رایگان؟</label><select id="cp_f'+i+'" onchange="cpSync('+i+')">'+
+          '<option value="1"'+(p.free?' selected':'')+'>رایگان برای همه</option>'+
+          '<option value="0"'+(!p.free?' selected':'')+'>فروشی</option></select></div>'+
+        '<div class="field"><label>فعال؟</label><select id="cp_en'+i+'">'+
+          '<option value="1"'+(p.enabled!==false?' selected':'')+'>فعال</option>'+
+          '<option value="0"'+(p.enabled===false?' selected':'')+'>غیرفعال</option></select></div>'+
+        '<div class="field"><label>قیمت</label><input id="cp_p'+i+'" type="number" min="0" value="'+(Number(p.price)||0)+'"'+(p.free?' disabled':'')+'></div>'+
+        '<div class="field"><label>واحد فروش</label><select id="cp_c'+i+'"'+(p.free?' disabled':'')+'>'+
+          '<option value="coins"'+(p.currency!=='cash'?' selected':'')+'>سکه</option>'+
+          '<option value="cash"'+(p.currency==='cash'?' selected':'')+'>نقدی (تومان)</option></select></div>'+
+        '<div class="field"><label>ترتیب نمایش</label><input id="cp_s'+i+'" type="number" value="'+(Number(p.sortOrder)||0)+'"></div>'+
+        '<div class="field" style="align-self:end"><button class="btn dan" onclick="cpRemove('+i+')">حذف این گروه</button></div>'+
+      '</div>'+
+      '<div class="field" style="margin-top:10px"><label>جمله‌ها — هر خط یک جمله (حداکثر '+fa(CP_MAX.phrases)+' خط، هر خط تا '+fa(CP_MAX.length)+' نویسه)</label>'+
+        '<textarea id="cp_t'+i+'" rows="9" style="width:100%;font-family:inherit" oninput="cpCount('+i+')">'+esc((p.phrases||[]).join('\n'))+'</textarea>'+
+        '<small id="cp_ct'+i+'" style="display:block;color:var(--muted);font-size:11px;margin-top:4px">'+fa((p.phrases||[]).length)+' جمله</small></div>'+
+    '</div>').join('');
+  b.innerHTML=
+    '<div class="card"><div class="note">حداقل یک گروه باید <b>رایگان و فعال</b> باشد؛ وگرنه بازیکن تازه‌وارد هیچ جمله‌ای برای فرستادن ندارد و دکمهٔ چت روی صفحهٔ خالی باز می‌شود. گروه فروشی هم نمی‌تواند قیمت صفر داشته باشد — یا رایگانش کن یا قیمت بگذار.<br>شناسهٔ هر گروه (<span class="sub">key</span>) ثابت می‌ماند: مالکیتِ خریدارها روی همان ذخیره شده، پس تغییر نام آزاد است ولی شناسه نه. حذف یک گروه، خریدِ خریدارانش را هم پاک می‌کند.</div></div>'+
+    cards+
+    '<div style="margin:14px 0"><button class="btn pri" onclick="cpSave()">ذخیرهٔ همه</button> '+
+    '<button class="btn" onclick="cpAdd()">+ گروه تازه</button> '+
+    '<button class="btn" onclick="renderChatPacks()">بازخوانی</button></div>';
+}
+/* Read the form back into CP_PACKS. Every redraw goes through this first, so an
+   edit typed into one card is never lost by touching another. */
+function cpCollect(){
+  CP_PACKS=CP_PACKS.map((p,i)=>{
+    const free=$('#cp_f'+i).value==='1';
+    return {
+      key:p.key,
+      name:$('#cp_n'+i).value.trim()||p.key,
+      emoji:$('#cp_e'+i).value.trim()||'💬',
+      free,
+      enabled:$('#cp_en'+i).value==='1',
+      price:free?0:Math.max(0,parseInt($('#cp_p'+i).value,10)||0),
+      currency:$('#cp_c'+i).value==='cash'?'cash':'coins',
+      sortOrder:parseInt($('#cp_s'+i).value,10)||0,
+      phrases:$('#cp_t'+i).value.split('\n').map(s=>s.trim()).filter(Boolean)
+    };
+  });
+  return CP_PACKS;
+}
+function cpSync(i){ cpCollect(); cpDraw(); }
+function cpCount(i){
+  const n=$('#cp_t'+i).value.split('\n').map(s=>s.trim()).filter(Boolean).length;
+  const el=$('#cp_ct'+i); if(el) el.textContent=fa(n)+' جمله'+(n>CP_MAX.phrases?' — بیشتر از سقف؛ اضافه‌ها ذخیره نمی‌شوند':'');
+}
+function cpRemove(i){
+  cpCollect();
+  if(!confirm('گروه «'+CP_PACKS[i].name+'» حذف شود؟ خریدِ کسانی که آن را خریده‌اند هم پاک می‌شود.')) return;
+  CP_PACKS.splice(i,1); cpDraw();
+}
+function cpAdd(){
+  cpCollect();
+  const key=(prompt('شناسهٔ انگلیسی گروه تازه (مثلاً sport):','')||'').trim().toLowerCase().replace(/[^a-z0-9_-]/g,'');
+  if(!key) return;
+  if(CP_PACKS.some(p=>p.key===key)){ toast('این شناسه از قبل هست','err'); return; }
+  CP_PACKS.push({key,name:key,emoji:'💬',free:false,enabled:true,price:1000,currency:'coins',
+    sortOrder:CP_PACKS.length+1,phrases:[]});
+  cpDraw();
+}
+async function cpSave(){
+  const packs=cpCollect();
+  try{
+    const d=await api('PUT','/admin/chat-packs',{packs});
+    CP_PACKS=(d.packs||[]).map(p=>({...p,phrases:[...(p.phrases||[])]}));
+    cpDraw(); toast('پک‌های چت ذخیره شد','ok');
+  }catch(e){ toast(e.message||'خطا در ذخیره','err'); }
+}
+
 async function renderRecordMode(){
   $('#main').innerHTML=head('ثبت رکورد','ورود، مصرف قلب، و اینکه چقدر روی بقیهٔ بازی اثر بگذارد')+
     '<div id="rcBody"><div class="skel"></div></div>';

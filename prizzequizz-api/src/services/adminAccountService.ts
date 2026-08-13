@@ -199,6 +199,7 @@ export function tabForPath(path: string): string | null {
   const p = path;
   if (p.includes('/admin/accounts')) return 'accounts';
   if (p.includes('/admin/shop')) return 'shop';
+  if (p.includes('/admin/chat-packs')) return 'chatpacks';
   // Boxes are a separate permission from the roster: handing someone the right
   // to edit artwork should not also hand them the right to run a lottery.
   if (p.includes('/admin/character-boxes')) return 'charboxes';
