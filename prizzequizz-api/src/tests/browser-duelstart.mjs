@@ -154,6 +154,42 @@ console.log('the search is cancellable after an instant pairing:');
   ok('the queue ticket is recorded', !!mmt, String(mmt));
 }
 
+console.log('the opponent presses X:');
+{
+  /* The server forfeits them the instant they leave and pushes
+     server:match_finished with the winner. The client used to only file that
+     away and carry on until the round timer lapsed — which is why «حریف خارج
+     شد» took many seconds to appear. */
+  await page.evaluate(() => {
+    (0, eval)("showScreen('duel')");
+    (0, eval)("pzRt.active=true; pzRt.finished=false; pzRt._deciding=false; pzRt.matchId='m1'; pzRt.myId='me'; pzRt.oppId='p2'; pzRt.waiters={};");
+    window.__ended = null;
+    (0, eval)("duelRoundWin = function(){ window.__ended='win'; }");
+    (0, eval)("duelRoundLose = function(){ window.__ended='lose'; }");
+    (0, eval)("pzHandleWs({type:'server:match_finished',payload:{winnerUserId:'me',players:[{userId:'me',score:3},{userId:'p2',score:1}]}})");
+  });
+  /* Nothing should have happened yet — a normal finish is given its moment. */
+  await page.waitForTimeout(300);
+  let e = await page.evaluate(() => window.__ended);
+  ok('it does not cut a normal finish short', e === null, String(e));
+
+  await page.waitForTimeout(1200);
+  e = await page.evaluate(() => window.__ended);
+  ok('but the match is settled within about a second', e === 'win', String(e));
+}
+
+console.log('a normal finish is still decided by the normal flow:');
+{
+  await page.evaluate(() => {
+    (0, eval)("pzRt.active=true; pzRt.finished=false; pzRt._deciding=true; pzRt.matchId='m1'; pzRt.myId='me'; pzRt.waiters={};");
+    window.__ended = null;
+    (0, eval)("pzHandleWs({type:'server:match_finished',payload:{winnerUserId:'me',players:[]}})");
+  });
+  await page.waitForTimeout(1600);
+  const e = await page.evaluate(() => window.__ended);
+  ok('the shortcut stays out of the way while we are deciding', e === null, String(e));
+}
+
 ok('no script errors through any of it', errs.length === 0, errs.join(' | '));
 console.log(`\n${pass} passed, ${fail} failed`);
 await browser.close(); server.close();

@@ -582,6 +582,12 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
 .res{overflow-y:auto;-webkit-overflow-scrolling:touch;display:flex;flex-direction:column;justify-content:flex-start;
   padding:14px 20px calc(16px + env(safe-area-inset-bottom,0px));gap:10px}
 .res-hero{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;width:100%}
+/* The character, sized to what is left after the scoreboard and the strip —
+   never the fixed 172px block that used to push the buttons off the screen. */
+.res-char{display:flex;align-items:flex-end;justify-content:center;height:clamp(70px,13vh,116px);margin-bottom:2px}
+.res-char .mascot{width:clamp(60px,12vh,100px);height:clamp(60px,12vh,100px);border-radius:50%;overflow:hidden}
+.res-char img{width:auto;height:100%;max-width:min(40vw,150px);object-fit:contain;
+  filter:drop-shadow(0 10px 18px rgba(0,0,0,.45));animation:pzPop .5s cubic-bezier(.2,1.4,.4,1)}
 .res-title{font-size:clamp(19px,4.6vw,26px);font-weight:900;line-height:1.25;text-align:center}
 .res-sub{color:var(--muted);margin-top:3px;font-size:clamp(11.5px,3vw,14px);line-height:1.5;text-align:center}
 .res-mid{flex:0 0 auto;width:100%;display:flex;flex-direction:column;align-items:center;gap:10px}
@@ -608,8 +614,14 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
 .res-sc-dash{font-size:clamp(20px,6vw,30px);font-weight:900;opacity:.35}
 .res-amt{font-size:clamp(24px,7vw,38px);font-weight:900;color:var(--green);line-height:1.1;margin:2px 0}
 .res-amt small{font-size:.42em;color:var(--muted);font-weight:800}
-.res-stats{width:100%}
-.res-actions{flex:0 0 auto;width:100%;display:flex;flex-direction:column;gap:8px}
+/* ONE card, three figures, dividers between them. */
+.res-stats{width:100%;display:flex;align-items:center;justify-content:space-around;gap:4px;
+  background:var(--ink-2);border:var(--stroke);border-radius:16px;padding:9px 6px;box-shadow:var(--hard-sm)}
+.res-stats .stat{flex:1 1 0;min-width:0;background:none;border:0;box-shadow:none;padding:0;text-align:center}
+.res-stats .rs-sep{flex:0 0 auto;width:2px;align-self:stretch;background:rgba(255,255,255,.10);border-radius:2px}
+/* The actions sit at the BOTTOM of the screen, pushed there by the gap above
+   them rather than crowding whatever the middle happens to be. */
+.res-actions{margin-top:auto;padding-top:6px;flex:0 0 auto;width:100%;display:flex;flex-direction:column;gap:8px}
 .res-actions #duelActions{flex-direction:column;gap:8px}
 /* Two side by side instead of two full-width rows: the same targets, half the
    height. */
@@ -5255,6 +5267,12 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
          a scoreboard, a prize, stats and four buttons cannot promise to fit. -->
     <section class="screen pad res" id="result">
       <div class="res-hero">
+        <!-- The character is back, but compact: the stats below it are one strip
+             now instead of three cards, and that is the room it sits in. -->
+        <div class="res-char" id="resultCharSlot">
+          <div class="mascot pop" id="mascotResult"></div>
+          <img id="resultChar" alt="" style="display:none">
+        </div>
         <h1 class="res-title" id="resultTitle">برنده شدی!</h1>
         <p class="res-sub" id="resultSub">تو آخرین بازمانده بودی</p>
       </div>
@@ -5263,16 +5281,18 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
         <div id="resultBoard" class="res-board"></div>
         <div id="resultDuelScore" class="res-score" style="display:none"></div>
         <div class="res-amt"><span id="resultAmt">+۱۸۰٬۰۰۰</span> <small>تومان</small></div>
-        <div class="stat-grid res-stats">
+        <!-- Three cards became one strip: the same three figures, a third of
+             the height, and no grid to collide with the buttons. -->
+        <div class="res-stats">
           <div class="stat"><b class="y" id="stat-q">۹</b><span>پاسخ درست</span></div>
+          <i class="rs-sep"></i>
           <div class="stat"><b class="g" id="stat-rank">۱</b><span>رتبه</span></div>
+          <i class="rs-sep"></i>
           <div class="stat"><b id="stat-time">۱۲ث</b><span>میانگین پاسخ</span></div>
         </div>
         <div class="duel-result-panel" id="duelResultPanel"></div>
         <span id="resultBadge" style="display:none"></span><span id="resultEmoji" style="display:none"></span>
-        <!-- Kept so older code that still writes to them cannot crash; they are
-             not part of the layout any more. -->
-        <div id="resultCharSlot" style="display:none"><div class="mascot" id="mascotResult"></div><img id="resultChar" alt="" style="display:none"><b id="stat-xp"></b></div>
+        <b id="stat-xp" style="display:none"></b>
       </div>
       <div class="res-actions">
         <div id="duelActions" style="display:none">
@@ -5425,7 +5445,11 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
     <!-- ============ SETTINGS ============ -->
     <section class="screen pad" id="settings">
       <div class="topbar" style="padding:0 0 14px;background:none"><button class="iconbtn" onclick="menuBack('home')">→</button><h1>تنظیمات ⚙️</h1></div>
-      <div class="settings-hero"><div class="gear">⚙️</div><div><b>مرکز کنترل پرایز کوییز</b><p>همه چیز قابل تنظیمه؛ صدا، اعلان، امنیت، ظاهر و تجربه بازی.</p></div></div>
+      <div class="settings-hero"><div class="gear">⚙️</div><div><b>مرکز کنترل پرایز کوییز</b><p>همه چیز قابل تنظیمه؛ صدا، اعلان، امنیت، ظاهر و تجربه بازی.</p>
+        <!-- Which build this phone is actually running. Without it, "it works on
+             my laptop but not my phone" cannot be told apart from "the phone is
+             on last week's file", and both were guessed at for a whole evening. -->
+        <p style="opacity:.62;font-size:11px;margin-top:4px" dir="ltr">build <b id="setBuild">?</b></p></div></div>
       <div class="set-group-title">تجربه بازی</div>
       <div class="row" onclick="openSettingDetail('notifications')"><div class="r-ico">🔔</div><div class="r-txt"><b>اعلان‌ها</b><span id="setSumNotifications">مدیریت پیام‌ها و یادآوری‌ها</span></div><span class="r-arrow">‹</span></div>
       <div class="row" onclick="openSettingDetail('audio')"><div class="r-ico">🔊</div><div class="r-txt"><b>صدا و لرزش</b><span id="setSumAudio">افکت‌های صوتی بازی</span></div><span class="r-arrow">‹</span></div>
@@ -9164,11 +9188,22 @@ function renderResultBoard(won){
 function endGame(won,amount,isWithdraw,customSub){
   clearInterval(timer);clearInterval(dTimer);
   if(won){ try{ pzVictoryAnim(); }catch(e){} }   /* full-screen VICTORY (winner only) */
-  /* The win/lose portrait is no longer part of this screen — it filled the top
-     third of a phone and pushed the buttons into the stats. The scoreboard
-     below is the hero instead, and it says the same thing with the players'
-     own faces. */
   try{ renderResultBoard(won); }catch(e){}
+  /* The win/lose character, at a size the rest of the screen can afford. Falls
+     back to the SVG mascot, and to a plain emoji when neither file is on the
+     server — an emoji always renders, so the slot is never blank. */
+  (function(){ const rc=document.getElementById('resultChar'), ms=document.getElementById('mascotResult');
+    if(!rc) return;
+    const giveUp=()=>{ try{ if(ms)ms.style.display='none'; rc.style.display='none';
+      let e=document.getElementById('resultCharEmoji');
+      if(!e){ e=document.createElement('div'); e.id='resultCharEmoji'; e.style.cssText='font-size:clamp(48px,11vh,74px);line-height:1;text-align:center;animation:pzPop .5s cubic-bezier(.2,1.5,.4,1)'; rc.parentNode&&rc.parentNode.insertBefore(e,rc); }
+      e.style.display=''; e.textContent=won?'🏆':'😢'; }catch(_){ rc.style.display='none'; if(ms)ms.style.display=''; } };
+    pzTryArt(rc, won ? 'winchar' : 'losechar', ok=>{
+      if(!ok){ giveUp(); return; }
+      rc.style.display=''; if(ms)ms.style.display='none';
+      const e=document.getElementById('resultCharEmoji'); if(e)e.style.display='none';
+    });
+  })();
   const badge=document.getElementById('resultBadge'),emoji=document.getElementById('resultEmoji');
   const title=document.getElementById('resultTitle'),sub=document.getElementById('resultSub'),amt=document.getElementById('resultAmt');
   const isDuel=gameType==='duel';
@@ -9543,6 +9578,9 @@ function closeStatSheet(){const s=document.getElementById('statSheet');if(s)s.cl
 
 /* ============ SETTINGS CENTER ============ */
 const SETTINGS_KEY='pq_app_settings_v2';
+/* Bumped by hand on every client release. It is printed in تنظیمات so the build
+   a device is running can be read off the screen instead of inferred. */
+const PZ_BUILD='2026-08-13.4';
 const DEFAULT_SETTINGS={
   notifications:true,notifMatch:true,notifLeague:true,notifRewards:true,notifFriends:true,quietHours:'off',
   sound:true,vibration:true,volume:'normal',countdownSound:true,
@@ -9557,6 +9595,7 @@ function loadSettings(){
 }
 function saveSettings(){try{localStorage.setItem(SETTINGS_KEY,JSON.stringify(window.appSettings));}catch(e){}applySettings();renderSettingsSummary();}
 function applySettings(){
+  try{ const bv=document.getElementById('setBuild'); if(bv) bv.textContent=PZ_BUILD; }catch(e){}
   const ph=document.querySelector('.phone');if(ph){ph.classList.toggle('compact-ui',!!appSettings.compactUI);ph.classList.toggle('high-contrast',!!appSettings.highContrast);ph.classList.toggle('no-motion',!!appSettings.reducedMotion);}
   /* «چت سریع» now hides the named button under your face; the floating circle
      it used to hide no longer exists, so the setting had nothing to act on. */
@@ -15565,7 +15604,35 @@ function pzHandleWs(m){
     }
     return;
   }
-  if(m.type==='server:match_finished'){ pzRt.serverFinished=true; pzRt.srvPhase='result'; if(Array.isArray(p.players))pzRt.snapshot=p.players; if(p.winnerUserId!=null)pzRt.srvWinner=p.winnerUserId; if(p.duelPointsFinal)pzRt.awardFinal=p.duelPointsFinal; return; }
+  if(m.type==='server:match_finished'){
+    pzRt.serverFinished=true; pzRt.srvPhase='result';
+    if(Array.isArray(p.players))pzRt.snapshot=p.players;
+    if(p.winnerUserId!=null)pzRt.srvWinner=p.winnerUserId;
+    if(p.duelPointsFinal)pzRt.awardFinal=p.duelPointsFinal;
+    /* ACT on it. This used to only store the news and return, so a match the
+       server had already settled kept running here until the round timer lapsed
+       or a poll noticed — which is why «حریف خارج شد» took so long to arrive.
+       An opponent pressing X is forfeited server-side the instant they leave and
+       nothing else is coming for us to wait for.
+       Two things are still allowed to go first: our own end-of-match decision if
+       it has already started (_deciding), and an open result gate — cutting a
+       NORMAL finish short would skip the last question's result. */
+    if(pzRt.active&&!pzRt.finished&&!pzRt._deciding){
+      const _finMid=pzRt.matchId;
+      const gateOpen=(function(){ try{ const el=document.getElementById('aaaModal'); return !!(el&&(el.classList.contains('show')||el.classList.contains('active'))); }catch(_){ return false; } })();
+      clearTimeout(pzRt._srvEndTimer);
+      pzRt._srvEndTimer=setTimeout(()=>{
+        pzRt._srvEndTimer=null;
+        if(pzRt.matchId!==_finMid) return;
+        if(!pzRt.active||pzRt.finished||pzRt._deciding) return;
+        try{ clearInterval(dTimer); }catch(_){}
+        try{ clearTimeout(pzRt.oppGraceTimer); pzRt.oppGraceTimer=null; }catch(_){}
+        for(const k in pzRt.waiters) pzResolveWaiter(k,null);
+        try{ pzApplyServerEnd({phase:'result',winnerUserId:pzRt.srvWinner,players:pzRt.snapshot,duelPointsFinal:pzRt.awardFinal}); }catch(_){}
+      }, gateOpen?4500:900);
+    }
+    return;
+  }
   if(m.type==='server:chat'){
     const t=String(p.text||''); const uid=p.userId;
     if(uid&&uid!==pzRt.myId){ pzRt.oppPresent=true; pzOppBack();

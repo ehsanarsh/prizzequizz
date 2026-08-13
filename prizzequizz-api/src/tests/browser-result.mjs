@@ -133,14 +133,24 @@ for (const [w, h] of [[360, 640], [390, 844], [320, 568]]) {
       board: (document.getElementById('resultBoard') || {}).innerText || '',
       statLabels: [...sec.querySelectorAll('.stat span')].map((x) => x.textContent),
       charShown: !!(document.getElementById('resultCharSlot') || {}).offsetParent,
+      charFrac: (document.getElementById('resultCharSlot')||{getBoundingClientRect:()=>({height:0})}).getBoundingClientRect().height / window.innerHeight,
+      statCards: sec.querySelectorAll('.res-stats').length,
+      statsInOneCard: (function(){ const g=sec.querySelector('.res-stats'); if(!g) return false;
+        const r=g.getBoundingClientRect(); const kids=[...g.querySelectorAll('.stat')];
+        return kids.length===3 && kids.every(k=>{const kr=k.getBoundingClientRect(); return kr.top>=r.top-1 && kr.bottom<=r.bottom+1;}); })(),
+      actionsAtBottom: (function(){ const a=sec.querySelector('.res-actions'), m=sec.querySelector('.res-mid');
+        if(!a||!m) return false; return a.getBoundingClientRect().top >= m.getBoundingClientRect().bottom - 1; })(),
       scoreCount: (sec.innerText.match(/۵\s*-\s*۳|۳\s*-\s*۵/g) || []).length
     };
   });
   ok('two faces flank the score', content.faces === 2, String(content.faces));
   ok('the opponent is on one side and you on the other', /حریف/.test(content.board) && /تو/.test(content.board), content.board.replace(/\n/g, ' '));
-  ok('the character portrait is gone', !content.charShown);
+  ok('the character has room again', content.charShown, String(content.charShown));
+  ok('but not more than a fifth of the screen', content.charFrac < 0.22, content.charFrac.toFixed(2));
   ok('there is no second XP figure among the stats', !content.statLabels.some((s) => /XP|امتیاز/.test(s)), JSON.stringify(content.statLabels));
   ok('the score is printed once, not twice', content.scoreCount <= 1, String(content.scoreCount));
+  ok('the three figures share ONE card, on one line', content.statsInOneCard, String(content.statCards));
+  ok('and the buttons sit below everything else', content.actionsAtBottom);
   ok('no script errors', errs.length === 0, errs.join(' | '));
   await ctx.close();
 }
