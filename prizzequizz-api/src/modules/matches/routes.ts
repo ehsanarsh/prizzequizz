@@ -1,6 +1,6 @@
 import type { Router } from '../../http/router.js';
 import { error, json } from '../../http/response.js';
-import { claimTimeout, createMatch, createMatchForPlayers, forfeitMatch, getMatch, startMatch, submitAnswer } from '../../services/matchEngine.js';
+import { claimTimeout, createMatch, createMatchForPlayers, currentMatchOf, forfeitMatch, getMatch, startMatch, submitAnswer } from '../../services/matchEngine.js';
 import { realtimeRooms } from '../../realtime/roomRegistry.js';
 import { validateAnswer } from '../../services/questionEngine.js';
 import { repositories } from '../../repositories/index.js';
@@ -51,7 +51,14 @@ export function registerMatchRoutes(router: Router, base: string): void {
   });
   router.add('GET', `${base}/matches/:id/rematch`, async (ctx) => {
     const match = await getMatch(ctx.params.id!);
-    json(ctx.res, 200, match.rematch ?? { status: 'none' });
+    const me = ctx.userId ?? 'u1';
+    /* The offer is only real while the other player is still on this match.
+     * Once they have started a different one, the client must say so instead of
+     * leaving a button that can never be answered. */
+    const opp = match.players.find((p) => p.userId !== me);
+    const oppAt = opp ? currentMatchOf(opp.userId) : null;
+    const opponentBusy = !!(oppAt && oppAt !== match.id);
+    json(ctx.res, 200, { ...(match.rematch ?? { status: 'none' }), opponentBusy });
   });
   router.add('POST', `${base}/matches/:id/rematch/respond`, async (ctx) => {
     const match = await getMatch(ctx.params.id!);

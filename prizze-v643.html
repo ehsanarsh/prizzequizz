@@ -574,16 +574,32 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
    Now three zones share the height: hero and actions take what they need, the
    middle takes the rest, and every size scales with the viewport so the layout
    keeps its shape from a small phone to a large one. */
-.res{overflow:hidden;display:flex;flex-direction:column;justify-content:space-between;
-  padding:14px 20px calc(12px + env(safe-area-inset-bottom,0px));gap:6px}
+/* SCROLLS, does not clip. The old rule was overflow:hidden with
+   justify-content:space-between, so on a short phone the buttons and the stats
+   were pushed into each other and whatever did not fit was silently cut. A
+   result screen has to hold a scoreboard, a prize, stats and four buttons —
+   that cannot be promised to fit, so it is allowed to scroll instead. */
+.res{overflow-y:auto;-webkit-overflow-scrolling:touch;display:flex;flex-direction:column;justify-content:flex-start;
+  padding:14px 20px calc(16px + env(safe-area-inset-bottom,0px));gap:10px}
 .res-hero{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;width:100%}
-.res-char{display:flex;align-items:flex-end;justify-content:center;height:clamp(74px,17vh,148px);margin-bottom:4px}
-.res-char .mascot{width:clamp(64px,15vh,120px);height:clamp(64px,15vh,120px);border-radius:50%;overflow:hidden}
-.res-char img{width:auto;height:100%;max-width:min(46vw,160px);object-fit:contain;
-  filter:drop-shadow(0 10px 18px rgba(0,0,0,.45));animation:pzPop .5s cubic-bezier(.2,1.4,.4,1)}
-.res-title{font-size:clamp(19px,4.6vw,26px);font-weight:900;line-height:1.25}
-.res-sub{color:var(--muted);margin-top:3px;font-size:clamp(11.5px,3vw,14px);line-height:1.5}
-.res-mid{flex:1 1 auto;min-height:0;width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px}
+.res-title{font-size:clamp(19px,4.6vw,26px);font-weight:900;line-height:1.25;text-align:center}
+.res-sub{color:var(--muted);margin-top:3px;font-size:clamp(11.5px,3vw,14px);line-height:1.5;text-align:center}
+.res-mid{flex:0 0 auto;width:100%;display:flex;flex-direction:column;align-items:center;gap:10px}
+
+/* THE SCOREBOARD: a face on each side of the score. */
+.res-board{width:100%;display:flex;align-items:center;justify-content:center;gap:clamp(6px,2.5vw,14px);
+  background:var(--ink-2);border:var(--stroke);border-radius:20px;padding:12px 10px;box-shadow:var(--hard-sm)}
+.rb-side{flex:1 1 0;min-width:0;display:flex;flex-direction:column;align-items:center;gap:6px}
+.rb-face{width:clamp(52px,16vw,72px);height:clamp(52px,16vw,72px);border-radius:20px;border:2.5px solid #000;
+  overflow:hidden;background:var(--ink-3);box-shadow:0 4px 0 #000;display:grid;place-items:center;font-size:30px;cursor:pointer}
+.rb-face .pz-avc,.rb-face img{width:100%;height:100%}
+.rb-name{font-size:12px;font-weight:900;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:center}
+.rb-role{font-size:10px;font-weight:800;color:var(--muted)}
+.rb-score{flex:0 0 auto;display:flex;align-items:center;gap:clamp(4px,2vw,10px);direction:ltr}
+.rb-n{font-size:clamp(30px,10vw,44px);font-weight:900;line-height:1}
+.rb-dash{font-size:clamp(18px,5vw,26px);font-weight:900;opacity:.35}
+.rb-side.win .rb-face{border-color:var(--ok);box-shadow:0 4px 0 #000,0 0 0 3px rgba(51,217,124,.35)}
+.rb-crown{font-size:15px;line-height:1}
 .res-score{width:100%}
 .res-sc{display:flex;justify-content:center;align-items:center;gap:clamp(8px,3vw,16px);direction:ltr}
 .res-sc-side{text-align:center;min-width:72px;max-width:40vw}
@@ -611,16 +627,11 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
   .res .btn{padding:9.5px 10px;font-size:12.5px}
   .res-actions{gap:6px}
 }
-/* Very short screens: the character is the one element whose job is decoration. */
-@media (max-height:600px){
-  .res-char{height:0;overflow:hidden;margin:0}
-  .res-sub{display:none}
-}
+@media (max-height:600px){ .res-sub{display:none} }
 /* The free-plan duel prints its own full summary card in the panel, which
    repeats «پاسخ درست» and «XP». Showing both is duplication AND overflow. */
 .res.duel-free-result .res-stats{display:none}
 .res.duel-free-result .res-amt{font-size:clamp(19px,5vw,26px);margin:0}
-.res.duel-free-result .res-char{height:clamp(0px,8vh,74px)}
 .res.duel-free-result .res-title{font-size:clamp(16px,4vw,20px)}
 .res.duel-free-result .res-sub{display:none}
 .res.duel-free-result .duel-summary-aaa{margin:2px 0 0}
@@ -631,7 +642,6 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
    second pass. Everything here trims spacing and decoration — the six figures,
    the four social actions and both buttons all stay. */
 @media (max-height:700px){
-  .res.duel-free-result .res-char{height:0;overflow:hidden;margin:0}
   .res.duel-free-result .res-title{font-size:15px}
   .res.duel-free-result .res-amt{display:none}          /* the card states the coins itself */
   .res.duel-free-result .duel-summary-card{padding:7px 8px;border-radius:18px}
@@ -3744,10 +3754,6 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
 /* The winner/loser mascot, larger — it is the point of the screen. The result
    screen still has to fit a phone without scrolling, so the short-screen step
    below stays and is what protects it. */
-#result #resultCharSlot{height:172px!important;flex-shrink:0}
-#result #resultChar{max-height:168px!important;width:auto}
-@media(max-height:760px){#result #resultCharSlot{height:140px!important}#result #resultChar{max-height:136px!important}}
-@media(max-height:680px){#result #resultCharSlot{height:108px!important}#result #resultChar{max-height:104px!important}}
 @keyframes pzGainIn{0%{opacity:0;transform:translateY(14px) scale(.7)}100%{opacity:1;transform:translateY(0) scale(1)}}
 </style>
 </head>
@@ -5239,34 +5245,39 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
          tightening rather than by hiding a number, so nothing a player is owed
          ends up below the fold. Every element ID is unchanged — endGame() and
          renderDuelResultPanel() still fill exactly what they always did. -->
-    <section class="screen pad center res" id="result">
+    <!-- THE RESULT SCREEN.
+         The character portrait that used to fill the top is gone: on a phone it
+         ate half the height and pushed the buttons into the stats, which is
+         what made this screen overlap. The scoreboard is the hero now — the two
+         faces flank the score, so who won what is one glance.
+         The page SCROLLS. It used to be a fixed column with overflow:hidden, so
+         anything that did not fit was simply cut off; a screen that has to hold
+         a scoreboard, a prize, stats and four buttons cannot promise to fit. -->
+    <section class="screen pad res" id="result">
       <div class="res-hero">
-        <div id="resultCharSlot" class="res-char">
-          <div class="mascot pop" id="mascotResult"></div>
-          <!-- endGame() shows this with style.display='', so the hidden default
-               must stay INLINE: a stylesheet rule would win once the inline
-               value is cleared and the character would never appear. -->
-          <img id="resultChar" alt="" style="display:none">
-        </div>
         <h1 class="res-title" id="resultTitle">برنده شدی!</h1>
         <p class="res-sub" id="resultSub">تو آخرین بازمانده بودی</p>
       </div>
       <div class="res-mid">
+        <!-- Faces + score, built by renderResultBoard(). -->
+        <div id="resultBoard" class="res-board"></div>
         <div id="resultDuelScore" class="res-score" style="display:none"></div>
         <div class="res-amt"><span id="resultAmt">+۱۸۰٬۰۰۰</span> <small>تومان</small></div>
         <div class="stat-grid res-stats">
           <div class="stat"><b class="y" id="stat-q">۹</b><span>پاسخ درست</span></div>
           <div class="stat"><b class="g" id="stat-rank">۱</b><span>رتبه</span></div>
-          <div class="stat"><b id="stat-xp">+۴۵۰</b><span>امتیاز (XP)</span></div>
           <div class="stat"><b id="stat-time">۱۲ث</b><span>میانگین پاسخ</span></div>
         </div>
         <div class="duel-result-panel" id="duelResultPanel"></div>
         <span id="resultBadge" style="display:none"></span><span id="resultEmoji" style="display:none"></span>
+        <!-- Kept so older code that still writes to them cannot crash; they are
+             not part of the layout any more. -->
+        <div id="resultCharSlot" style="display:none"><div class="mascot" id="mascotResult"></div><img id="resultChar" alt="" style="display:none"><b id="stat-xp"></b></div>
       </div>
       <div class="res-actions">
         <div id="duelActions" style="display:none">
-          <button class="btn btn-ghost" id="reviewBtn" onclick="pzOpenReview()">🔍 مرور مسابقه — سؤال‌ها و پاسخ‌ها</button>
           <button class="btn btn-primary" id="rematchBtn" onclick="rematch()">🔁 بازی مجدد با همین حریف</button>
+          <button class="btn btn-ghost" id="reviewBtn" onclick="pzOpenReview()">🔍 مرور مسابقه — سؤال‌ها و پاسخ‌ها</button>
         </div>
         <div class="res-row2">
           <button class="btn btn-orange" id="resultNewBtn" onclick="startGame()">🆕 حریف جدید</button>
@@ -7727,11 +7738,7 @@ function lsFinish(snap){
     : (noWinner?'همهٔ بازیکنان باقی‌مانده جواب را غلط دادند، پس این دور برنده‌ای نداشت و جایزه به کسی تعلق نگرفت.'
               :'این بار شانس یارت نبود — دفعهٔ بعد بترکون!');
   if(amt){ amt.textContent=(won?'+':'')+lsFa(mine); amt.parentElement.style.color=won?'var(--ok)':'var(--muted)'; }
-  // win/lose character, same as the duel result
-  try{ const rc=$id('resultChar'), ms=$id('mascotResult');
-    if(rc){ rc.onerror=()=>{ rc.style.display='none'; if(ms)ms.style.display=''; };
-      rc.onload=()=>{ rc.style.display=''; if(ms)ms.style.display='none'; };
-      rc.src = won ? 'winchar.png' : 'losechar.png'; } }catch(e){}
+  try{ renderResultBoard(won); }catch(e){}
   /* LS has no bot rematch, but it DOES have a match worth looking back at — so
      the review button keeps its place, in the same spot the duel puts it, and
      only the rematch beside it goes away. */
@@ -9110,45 +9117,66 @@ function pzVictoryAnim(){
   try{ vib([40,60,120,60,160]); }catch(e){}
   setTimeout(()=>{ ov.classList.add('out'); setTimeout(()=>{try{ov.remove();}catch(e){}},480); },2600);
 }
+/* THE RESULT SCOREBOARD.
+   Two faces with the score between them, in the same order the match itself
+   used: opponent on the left, you on the right. It replaces the win/lose
+   portrait, which was decoration that cost half the screen.
+   When there is no opponent — ثبت رکورد, آخرین بازمانده, لیگ — there is nothing
+   to put on the other side, so it collapses to one face and the run's own
+   number. */
+function renderResultBoard(won){
+  const box=document.getElementById('resultBoard'); if(!box) return;
+  const meName=((typeof pzRt!=='undefined'&&pzRt&&pzRt.myName)||window.myName||pzDisplayName&&pzDisplayName()||'تو');
+  const meFace='<div class="rb-face" onclick="go(\'profile\')">'+pzMyAvHTML()+'</div>';
+  const isDuel=(typeof gameType!=='undefined'&&gameType==='duel');
+
+  if(!isDuel){
+    box.className='res-board solo';
+    box.innerHTML='<div class="rb-side'+(won?' win':'')+'">'+meFace+
+      '<div class="rb-name">'+frEsc(meName)+(won?' <span class="rb-crown">👑</span>':'')+'</div>'+
+      '<div class="rb-role">'+(won?'برنده':'بازیکن')+'</div></div>';
+    return;
+  }
+
+  const opName=((typeof pzRt!=='undefined'&&pzRt&&pzRt.oppName)||oppName||'حریف');
+  const opFace='<div class="rb-face" onclick="showCurrentOpponentProfile()">'+
+    pzFaceHTML({avatar:(typeof pzRt!=='undefined'&&pzRt&&pzRt.oppAv)||oppAv,character:(typeof pzRt!=='undefined'&&pzRt&&pzRt.oppCharacter)||null})+'</div>';
+  const meWon=myScore>oppScore, opWon=oppScore>myScore;
+  const meCol=meWon?'var(--ok)':(opWon?'var(--red)':'var(--text)');
+  const opCol=opWon?'var(--ok)':(meWon?'var(--red)':'var(--text)');
+  /* direction:ltr on the score pair only — a Persian name beside it still reads
+     right-to-left, but «۵ - ۳» must not be flipped into «۳ - ۵». */
+  box.className='res-board';
+  box.innerHTML=
+    '<div class="rb-side'+(opWon?' win':'')+'">'+opFace+
+      '<div class="rb-name">'+frEsc(opName)+(opWon?' <span class="rb-crown">👑</span>':'')+'</div>'+
+      '<div class="rb-role">حریف</div></div>'+
+    '<div class="rb-score">'+
+      '<span class="rb-n" style="color:'+opCol+'">'+fa(oppScore)+'</span>'+
+      '<span class="rb-dash">-</span>'+
+      '<span class="rb-n" style="color:'+meCol+'">'+fa(myScore)+'</span>'+
+    '</div>'+
+    '<div class="rb-side'+(meWon?' win':'')+'">'+meFace+
+      '<div class="rb-name">'+frEsc(meName)+(meWon?' <span class="rb-crown">👑</span>':'')+'</div>'+
+      '<div class="rb-role">تو</div></div>';
+}
+
 function endGame(won,amount,isWithdraw,customSub){
   clearInterval(timer);clearInterval(dTimer);
   if(won){ try{ pzVictoryAnim(); }catch(e){} }   /* full-screen VICTORY (winner only) */
-  /* Win/lose character image (happy on win, sad on loss). Falls back to the SVG
-     mascot if the image file hasn't been uploaded to the web root yet. */
-  (function(){ const rc=document.getElementById('resultChar'), ms=document.getElementById('mascotResult');
-    if(!rc) return;
-    /* If the character PNG isn't on the server (or won't render on Android), show a
-       big win/lose EMOJI in its place — emoji always render, so the character is
-       never blank. */
-    const giveUp=()=>{ try{ if(ms)ms.style.display='none'; rc.style.display='none';
-      let e=document.getElementById('resultCharEmoji');
-      if(!e){ e=document.createElement('div'); e.id='resultCharEmoji'; e.style.cssText='font-size:78px;line-height:1;text-align:center;animation:pzPop .5s cubic-bezier(.2,1.5,.4,1)'; rc.parentNode&&rc.parentNode.insertBefore(e,rc); }
-      e.style.display=''; e.textContent=won?'🏆':'😢'; }catch(_){ rc.style.display='none'; if(ms)ms.style.display=''; } };
-    /* .webp first (what the panel's uploader produces), then .png (what a
-       hand-copied file usually is), and only if neither exists the emoji. */
-    pzTryArt(rc, won ? 'winchar' : 'losechar', ok=>{
-      if(!ok){ giveUp(); return; }
-      rc.style.display=''; if(ms)ms.style.display='none';
-      const e=document.getElementById('resultCharEmoji'); if(e)e.style.display='none';
-    });
-  })();
+  /* The win/lose portrait is no longer part of this screen — it filled the top
+     third of a phone and pushed the buttons into the stats. The scoreboard
+     below is the hero instead, and it says the same thing with the players'
+     own faces. */
+  try{ renderResultBoard(won); }catch(e){}
   const badge=document.getElementById('resultBadge'),emoji=document.getElementById('resultEmoji');
   const title=document.getElementById('resultTitle'),sub=document.getElementById('resultSub'),amt=document.getElementById('resultAmt');
   const isDuel=gameType==='duel';
-  /* Big, distinct final score — the focal point of the result screen. */
+  /* The score itself now lives on the board with the two faces, so this slot
+     carries only what the server awarded — printing the score twice was part of
+     what made the screen crowded. */
   (function(){ const el=document.getElementById('resultDuelScore'); if(!el) return;
-    if(!isDuel){ el.style.display='none'; return; }
-    const meN=((pzRt&&pzRt.myName)||window.myName||'تو'), opN=((pzRt&&pzRt.oppName)||oppName||'حریف');
-    const meCol=won?'var(--ok)':'var(--red)', opCol=won?'var(--red)':'var(--ok)';
-    el.style.display='';
-    /* Sized by CSS, not by fixed pixels: this is the biggest thing on the
-       result screen and a hard 46px is what pushed the buttons off a small
-       phone. */
-    el.innerHTML='<div class="res-sc">'+
-      '<div class="res-sc-side"><div class="res-sc-nm">'+opN+'</div><div class="res-sc-n" style="color:'+opCol+'">'+fa(oppScore)+'</div></div>'+
-      '<div class="res-sc-dash">-</div>'+
-      '<div class="res-sc-side"><div class="res-sc-nm">'+meN+'</div><div class="res-sc-n" style="color:'+meCol+'">'+fa(myScore)+'</div></div>'+
-    '</div>';
+    el.style.display=''; el.innerHTML='';
   })();
   if(userPlan==='free'&&isDuel&&won&&!leagueDuelActive&&!leagueWtaActive){
     lastPracticeCoinsEarned=Math.max(0,duelStage*45+80);
@@ -9164,7 +9192,9 @@ function endGame(won,amount,isWithdraw,customSub){
   try{ setTimeout(pzSyncMe,600); }catch(e){}
   const _prc=document.getElementById('practiceRematchCoins'); if(_prc)_prc.textContent=fa(practiceCoinStake);
   document.getElementById('stat-q').textContent=fa(isDuel?myScore:qIndex);
-  document.getElementById('stat-xp').textContent='+'+fa(isDuel?duelStage*80:qIndex*50);
+  /* No local XP figure. This line printed duelStage*80 — a guess — right beside
+     the server's real award, so the screen showed two different XP numbers for
+     the same match. The server's is the one that is true. */
   if(won){
     recordMissionEvent('win',1);
     const final=amount!=null?amount:prize;
@@ -9195,7 +9225,12 @@ function endGame(won,amount,isWithdraw,customSub){
     showChest(final,()=>{
       earn(final,isWithdraw?'برداشت جایزه':'جایزه برد',isWithdraw?'💰':'🏆');recordMissionEvent('cashEarn',1);
       go('result');
-      countUp(amt,final,900);setTimeout(()=>animateXPGain(isDuel?duelStage*80:qIndex*50),650);
+      /* animateXPGain has never existed in this file — this line threw an
+         uncaught ReferenceError on every prize win, 650ms after the chest. It
+         also carried the same invented XP figure (duelStage*80) that the stats
+         used to print. The real award is animated by pzShowGain from the
+         server's own numbers, so there is nothing to replace it with. */
+      countUp(amt,final,900);
       winsThisSession++;
       if(winsThisSession%2===1)setTimeout(showLevelUp,1200);
     });
@@ -15185,7 +15220,7 @@ startMatchmaking = async function(){
   _mmCancelled=false;                 // a fresh search is not a cancelled one
   /* A fresh search abandons any pending rematch handshake, and clears any stuck
      flag/modal from a previous game so entry can NEVER be permanently blocked. */
-  try{ _pzRematchMid=null; clearInterval(_pzRematchPoll); clearInterval(_pzRematchWatch); _pzRematchModalOpen=false; }catch(_){}
+  try{ _pzRematchMid=null; _pzRematchStopAll(); _pzRematchModalOpen=false; }catch(_){}
   try{ exitPromptOpen=false; if(typeof closeAaaModal==='function') closeAaaModal(false); const ro=document.getElementById('readyOverlay'); if(ro)ro.classList.remove('show'); }catch(_){}
 
   /* Clear any questions/match from a previous game so we never reuse stale data */
@@ -16536,7 +16571,7 @@ answerDuel=function(sel,correct){
    match so a rematch can be offered, and start watching for the opponent's
    rematch request. */
 const _origDRW=duelRoundWin, _origDRL=duelRoundLose;
-function _pzOnRealDuelEnd(){ if(pzRt.active){ _pzRematchMid=pzRt.matchId; pzRt.finished=true; try{ _pzPreXp=(_usr&&_usr.xp)||0; _pzPreCup=weeklyScore; }catch(_){} pzCleanupRt(); setTimeout(_pzWatchRematchAsOpponent,600); try{ setTimeout(pzSyncMe,900); }catch(_){} } }
+function _pzOnRealDuelEnd(){ if(pzRt.active){ _pzRematchMid=pzRt.matchId; pzRt.finished=true; try{ _pzRematchBtnState('idle'); setTimeout(_pzWatchOpponentAvailability,1200); }catch(_){} try{ _pzPreXp=(_usr&&_usr.xp)||0; _pzPreCup=weeklyScore; }catch(_){} pzCleanupRt(); setTimeout(_pzWatchRematchAsOpponent,600); try{ setTimeout(pzSyncMe,900); }catch(_){} } }
 /* Post-win prize modal (replaces the old full victory screen for a paid duel):
    green «ادامه می‌دهم» → next stage (double-or-nothing), red «برداشت و خروج». */
 /* My server-computed award for the just-finished match (XP + 🏆cup), and a chip
@@ -16610,19 +16645,42 @@ duelRoundLose=function(){ const real=pzRt.active; if(real)_pzOnRealDuelEnd(); re
 /* ---- Real rematch: request → opponent accept/reject → both enter a fresh
    match (same opponent, same stake) via the same tested match-start path. ---- */
 let _pzRematchMid=null,_pzRematchPoll=null,_pzRematchWatch=null,_pzRematchModalOpen=false;
+/* THE REMATCH BUTTON.
+   One button that always says what is actually happening, and always comes back
+   to its own name so it can be tried again:
+     idle      «🔁 بازی مجدد با همین حریف»
+     tapped    «⏳ منتظر پاسخ حریف…»        + disabled
+     rejected  «حریف درخواست شما را رد کرد»  → then back to idle
+     gone      «حریف وارد مسابقهٔ دیگری شد»  → stays disabled, it cannot work
+   It is offered for as long as the opponent is still on their own result screen;
+   the server says when they have started another match. */
+const REMATCH_LABEL='🔁 بازی مجدد با همین حریف';
+let _pzRematchBusy=false, _pzRematchResetT=null;
+function _pzRematchBtnState(state,text){
+  const btn=document.getElementById('rematchBtn'); if(!btn) return;
+  clearTimeout(_pzRematchResetT);
+  if(state==='idle'){ btn.disabled=false; btn.textContent=REMATCH_LABEL; _pzRematchBusy=false; return; }
+  if(state==='waiting'){ btn.disabled=true; btn.textContent=text||'⏳ منتظر پاسخ حریف…'; return; }
+  /* A refusal is written ON the button, not thrown into a toast that is gone
+     before it is read — then the button gives itself back so another try is
+     possible while the opponent is still there. */
+  btn.disabled=true; btn.textContent=text||'';
+  if(state==='rejected'){ _pzRematchResetT=setTimeout(()=>_pzRematchBtnState('idle'),3200); }
+}
 const _origRematch=rematch;
 rematch=function(){
   if(!_pzRematchMid) return _origRematch.apply(this,arguments);   /* non-real → keep original */
+  if(_pzRematchBusy) return;                                      /* one tap, one request */
+  _pzRematchBusy=true;
   clearInterval(_pzRematchWatch);
-  const btn=document.getElementById('rematchBtn');
   const oppLbl=((pzRt&&pzRt.oppName)||oppName||'حریف');
-  if(btn){ btn.disabled=true; btn.textContent='⏳ منتظر پاسخ '+oppLbl+'...'; }
+  _pzRematchBtnState('waiting','⏳ منتظر پاسخ '+oppLbl+'…');
   pzApi('POST','/matches/'+_pzRematchMid+'/rematch/request',{}).then(r=>{
-    if(!r||!r.ok){ if(btn){btn.disabled=false;btn.textContent='🔁 بازی مجدد با همین حریف';} toast('خطا در ارسال درخواست'); _pzWatchRematchAsOpponent(); return; }
+    if(!r||!r.ok){ _pzRematchBtnState('idle'); toast('درخواست ارسال نشد'); _pzWatchRematchAsOpponent(); return; }
     _pzPollRematchAsRequester();
   });
 };
-function _pzResetRematchBtn(){ const btn=document.getElementById('rematchBtn'); if(btn){ btn.disabled=false; btn.textContent='🔁 بازی مجدد با همین حریف'; } }
+function _pzResetRematchBtn(){ _pzRematchBtnState('idle'); }
 function _pzPollRematchAsRequester(){
   clearInterval(_pzRematchPoll); const mid=_pzRematchMid; const t0=Date.now();
   _pzRematchPoll=setInterval(async()=>{
@@ -16631,11 +16689,36 @@ function _pzPollRematchAsRequester(){
       const r=await pzApi('GET','/matches/'+mid+'/rematch');
       if(r.ok&&r.data){
         if(r.data.status==='accepted'&&r.data.newMatchId){ clearInterval(_pzRematchPoll); return pzEnterRematch(r.data.newMatchId); }
-        if(r.data.status==='rejected'){ clearInterval(_pzRematchPoll); _pzResetRematchBtn(); toast(((pzRt&&pzRt.oppName)||'حریف')+' درخواست بازی مجدد را رد کرد',2600); return; }
+        if(r.data.status==='rejected'){ clearInterval(_pzRematchPoll); _pzRematchBusy=false;
+          _pzRematchBtnState('rejected','حریف درخواست شما را رد کرد'); return; }
+        /* They left for another match while we were waiting — the offer is dead
+           and no amount of waiting will answer it. */
+        if(r.data.opponentBusy){ clearInterval(_pzRematchPoll); _pzRematchBusy=false;
+          _pzRematchBtnState('gone','حریف وارد مسابقهٔ دیگری شد'); return; }
       }
     }catch(e){}
-    if(Date.now()-t0>60000){ clearInterval(_pzRematchPoll); _pzResetRematchBtn(); toast('پاسخی از حریف نیامد',2600); }
+    if(Date.now()-t0>60000){ clearInterval(_pzRematchPoll); _pzRematchBusy=false;
+      _pzRematchBtnState('rejected','حریف پاسخی نداد'); }
   },1500);
+}
+/* While we are just sitting on the result screen: keep the button honest about
+   whether the other player is still there to answer it. */
+let _pzRematchAvail=null;
+function _pzWatchOpponentAvailability(){
+  clearInterval(_pzRematchAvail);
+  if(!_pzRematchMid) return;
+  const mid=_pzRematchMid;
+  _pzRematchAvail=setInterval(async()=>{
+    if(!_pzRematchMid||_pzRematchMid!==mid){ clearInterval(_pzRematchAvail); return; }
+    if(_pzRematchBusy) return;                       /* a request is in flight */
+    try{
+      const r=await pzApi('GET','/matches/'+mid+'/rematch');
+      if(r&&r.ok&&r.data&&r.data.opponentBusy){
+        clearInterval(_pzRematchAvail);
+        _pzRematchBtnState('gone','حریف وارد مسابقهٔ دیگری شد');
+      }
+    }catch(e){}
+  },4000);
 }
 /* Watch for an incoming rematch request. Runs regardless of which post-game
    screen we're on (a premium WINNER sits on the checkpoint screen, not the
@@ -16670,8 +16753,14 @@ function _pzRespondRematch(accept){
     else { toast('درخواست رد شد'); _pzWatchRematchAsOpponent(); }
   });
 }
+/* Stop every rematch timer. Called when the screen is left, so a poll from a
+   finished match can never write onto the next one's button. */
+function _pzRematchStopAll(){
+  clearInterval(_pzRematchPoll); clearInterval(_pzRematchWatch); clearInterval(_pzRematchAvail);
+  clearTimeout(_pzRematchResetT); _pzRematchBusy=false;
+}
 function pzEnterRematch(newMid){
-  clearInterval(_pzRematchPoll); clearInterval(_pzRematchWatch); _pzRematchModalOpen=false; _pzRematchMid=null;
+  _pzRematchStopAll(); _pzRematchModalOpen=false; _pzRematchMid=null;
   leagueDuelActive=false; leagueWtaActive=false; gameType='duel';
   _pzEntryRefunded=true;   /* friendly rematch, same stake → nothing charged/refunded */
   go('matchmaking');

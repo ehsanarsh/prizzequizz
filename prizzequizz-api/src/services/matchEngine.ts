@@ -139,8 +139,23 @@ export async function getMatch(matchId: string): Promise<Match> {
   return match;
 }
 
+/* WHICH MATCH EACH PLAYER IS IN RIGHT NOW.
+ * The rematch offer on the result screen is only honest while the other player
+ * is still there — once they have started a different match, «بازی مجدد با همین
+ * حریف» is a button that cannot work. startMatch is the single point where a
+ * player really enters a match, so it is the only place this has to be kept.
+ * In memory on purpose: it is a liveness hint, not a record, and a restart
+ * losing it simply makes the button optimistic again. */
+const _currentMatch = new Map<string, string>();
+export function currentMatchOf(userId: string): string | null {
+  return _currentMatch.get(userId) ?? null;
+}
+/** Test seam. */
+export function _resetCurrentMatches(): void { _currentMatch.clear(); }
+
 export async function startMatch(matchId: string): Promise<Match> {
   const match = await getMatch(matchId);
+  for (const p of match.players) _currentMatch.set(p.userId, match.id);
   match.phase = 'question';
   /* The moment the first question is served the entry tickets are really
    * spent — no ending after this refunds them. Recorded once, so a 'continue'
