@@ -5571,7 +5571,14 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
               <span class="chip q-topic" id="wtaTopic" style="margin:0">موضوع</span>
               <span class="spectate" id="wtaSpectate" style="display:none">👀 در حال تماشا</span>
             </div>
-            <div class="q-text" id="wtaText" style="font-size:16px;padding:18px 14px 14px;margin-bottom:10px">سوال</div>
+            <div class="q-text" id="wtaText" style="font-size:16px;padding:18px 14px 14px;margin-bottom:4px">سوال</div>
+            <!-- The duel's timer, between the question and the options. The ring
+                 that used to sit in the studio header is gone. -->
+            <div class="pzm-timer" id="wtaTimer">
+              <div class="pzm-timer-bar pzm-timer-left"><i id="wtaTimerL"></i></div>
+              <div class="pzm-timer-circle"><span id="wtaTimerN">—</span></div>
+              <div class="pzm-timer-bar pzm-timer-right"><i id="wtaTimerR"></i></div>
+            </div>
             <div class="powerups" data-pwslot style="margin:0 0 10px;padding:0"></div>
             <div class="answers" id="wtaAnswers"></div>
           </div>
@@ -5648,14 +5655,17 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
           <!-- Armed «انتخاب دوم». Visible for as long as it is unspent, so the
                next wrong answer is not a surprise reprieve. -->
           <span class="rmp-second" id="rmSecondBadge">🔁 انتخاب دوم</span></div>
-        <div class="rmp-timer" id="rmTimer">
-          <svg viewBox="0 0 60 60"><circle class="trk" cx="30" cy="30" r="25"></circle>
-            <circle class="arc" id="rmTimerArc" cx="30" cy="30" r="25"></circle></svg>
-          <b id="rmTimerNum">۲۰</b>
-        </div>
       </div>
       <div class="rmp-card">
         <div class="rmp-q" id="rmQ">…</div>
+        <!-- The duel's timer, in the duel's place: between the question and
+             the options, where the eye already is. The ring that used to sit
+             up in the header is gone. -->
+        <div class="pzm-timer" id="rmTimer">
+          <div class="pzm-timer-bar pzm-timer-left"><i id="rmTimerL"></i></div>
+          <div class="pzm-timer-circle"><span id="rmTimerN">—</span></div>
+          <div class="pzm-timer-bar pzm-timer-right"><i id="rmTimerR"></i></div>
+        </div>
         <div class="rmp-opts" id="rmOpts"></div>
       </div>
       <div class="rmp-helps" id="rmHelps"></div>
@@ -7221,19 +7231,18 @@ function lsBuild(snap){
 function lsLive(snap){
   const r=snap.room, s=snap.stats;
   const set=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=v;};
-  /* Duel-identical ring: seconds in the middle, arc drains, danger shake under
-     3s — driven by the SERVER deadline so every player's ring matches. */
+  /* The duel's timer — a circle between two bars that close inward — driven by
+     the SERVER deadline so every player's clock agrees. */
   try{
-    const arc=document.getElementById('lsTimerArc'), ring=document.getElementById('lsRing'), C=151;
-    if(arc&&r.phase==='question'&&r.phaseEndsAt){
+    if(r.phase==='question'&&r.phaseEndsAt){
       const off=(r.serverNow||Date.now())-Date.now();
       if(lsQRound!==r.round||!lsQTotal){ lsQRound=r.round; lsQTotal=Math.max(1,Math.round((r.phaseEndsAt-(Date.now()+off))/1000)); }
       const secs=Math.max(0,Math.ceil((r.phaseEndsAt-(Date.now()+off))/1000));
-      const num=document.getElementById('lsTimer'); if(num)num.textContent=lsFa(secs);
-      arc.style.strokeDashoffset=C*(1-secs/lsQTotal);
-      if(typeof updateRingDanger==='function') updateRingDanger(ring,arc,secs,3);
-    } else set('lsTimer',lsTimer(snap));
-  }catch(e){ set('lsTimer',lsTimer(snap)); }
+      pzTimerSet('lsTimer',secs,lsQTotal);
+    } else {
+      pzTimerSet('lsTimer',0,1,{idle:true,text:lsTimer(snap)});
+    }
+  }catch(e){}
   set('lsCount',lsFa(snap.players.length)); set('lsCap',lsFa(r.capacity));
   set('lsPrize',lsFa(r.grossPool)+' تومان'); set('lsRemain',lsFa(s.remainingPot));
   set('lsAlive',lsFa(s.alive)); set('lsElim',lsFa(s.eliminated)); set('lsCash',lsFa(s.cashedOut));
@@ -7344,19 +7353,30 @@ function lsDashHtml(snap,compact){
   return `<div class="ls-top" style="padding-bottom:0"><div class="ls-ttl" style="text-align:center;width:100%"><h1>داشبورد مسابقه</h1><p>مرحله ${lsFa(r.round)} از ${lsFa(r.totalRounds)} · <span id="lsTimer">${lsTimer(snap)}</span></p></div></div><div class="ls-dash" id="lsDashGrid">${lsDashCells(snap)}</div>`;
 }
 
+/* The key this round's option order is remembered under. Per room AND per
+   round, so a re-render keeps the order and the next round gets a new one. */
+function lsViewKey(snap){
+  const r=(snap&&snap.room)||{};
+  return 'ls:'+(r.id||lsRoomId||'x')+':'+(r.round||0)+':'+((snap&&snap.question&&snap.question.id)||'-');
+}
 function lsQuestionHtml(snap,locked){
-  const q=snap.question||{}; const opts=q.options||[]; const alive=snap.me&&snap.me.status==='alive';
+  const q=snap.question||{}; const alive=snap.me&&snap.me.status==='alive';
   const badge=(typeof pzDiffBadge==='function'&&q.difficulty)?pzDiffBadge(q.difficulty):'';
   const K=(typeof keysFA!=='undefined')?keysFA:['الف','ب','ج','د'];
+  /* The options in THIS player's order. The bank stores most questions with
+     the answer first, so serving them as they arrive made «الف» the answer
+     almost every round. */
+  const view=pzShuffleView(q.options||[],null,lsViewKey(snap));
+  const opts=view.options;
   /* EXACTLY the duel's answer markup: .answers > .ans with the yellow .k letter
-     badge, dash and .atxt — white paper background, black text, hard shadow. */
-  /* EXACTLY the duel's timer: the same .timer-ring SVG arc + danger state. */
-  return `<div class="ls-qwrap"><div class="ls-ring-wrap">
-    <div class="timer-ring" id="lsRing"><svg width="54" height="54"><circle cx="27" cy="27" r="23" fill="none" stroke="rgba(255,255,255,.14)" stroke-width="5"/><circle id="lsTimerArc" cx="27" cy="27" r="23" fill="none" stroke="#FFD23F" stroke-width="5" stroke-linecap="round" stroke-dasharray="145"/></svg><div class="timer-num" id="lsTimer">${lsTimer(snap)}</div></div>
-  </div>
+     badge, dash and .atxt — white paper background, black text, hard shadow.
+     And the duel's timer, in the duel's place: between the question and the
+     options rather than off in a corner of its own. */
+  return `<div class="ls-qwrap">
   ${badge?`<div style="text-align:center;margin-bottom:8px">${badge}</div>`:''}
   <div class="ls-qcard"><div class="ls-qtext">${q.text||'…'}</div>
-  <div class="answers" id="lsOpts" style="margin-top:12px;grid-template-columns:1fr">${opts.map((o,i)=>`<button class="ans" data-i="${i}"${locked?' disabled':` onclick="lsAnswer(${i})"`}><span class="k">${K[i]||''}</span><span class="dash">—</span><span class="atxt">${o}</span></button>`).join('')}</div>
+  ${pzTimerHTML('lsTimer')}
+  <div class="answers" id="lsOpts" style="margin-top:2px;grid-template-columns:1fr">${opts.map((o,i)=>`<button class="ans" data-i="${i}"${locked?' disabled':` onclick="lsAnswer(${i})"`}><span class="k">${K[i]||''}</span><span class="dash">—</span><span class="atxt">${o}</span></button>`).join('')}</div>
   <div class="powerups" data-ls-pwslot style="margin-top:10px"></div>
   ${alive?'':'<div class="ls-ack" style="color:#ff8a8a">شما در این مرحله حضور ندارید</div>'}</div></div>`;
 }
@@ -7420,7 +7440,10 @@ async function lsUsePower(type,el){
   if(pzLL&&pzLL.inv&&typeof d.remaining==='number') pzLL.inv[key]=d.remaining;
   if(type==='5050'&&Array.isArray(d.removeIndexes)){
     const opts=document.getElementById('lsOpts');
-    if(opts) d.removeIndexes.forEach(i=>{ const b=opts.querySelector('.ans[data-i="'+i+'"]'); if(b){ b.classList.add('dim','pz-removed','ls-gone'); b.disabled=true; } });
+    /* removeIndexes are in the server's option order; the card is in this
+       player's. Dimming by the raw index would grey out the wrong answers. */
+    const vk=lsViewKey(lsSnap);
+    if(opts) d.removeIndexes.forEach(i=>{ const b=opts.querySelector('.ans[data-i="'+pzToDisplay(vk,i)+'"]'); if(b){ b.classList.add('dim','pz-removed','ls-gone'); b.disabled=true; } });
     try{sfx('select');vib([15,10]);}catch(e){}
   } else if(type==='second'){
     lsSecondArmed=true;
@@ -7432,8 +7455,9 @@ async function lsUsePower(type,el){
     const opts=document.getElementById('lsOpts');
     const pcts=Array.isArray(d.percents)?d.percents:null;
     if(opts&&pcts){
+      const vkp=lsViewKey(lsSnap);
       [...opts.querySelectorAll('.ans')].forEach(b=>{
-        const idx=Number(b.dataset.i); const pct=Number(pcts[idx]||0);
+        const idx=pzToOriginal(vkp,Number(b.dataset.i)); const pct=Number(pcts[idx]||0);
         const f=document.createElement('i'); f.className='pfill'; b.appendChild(f);
         const t=document.createElement('span'); t.className='pct'; t.textContent=lsFa(pct)+'٪'; b.appendChild(t);
         requestAnimationFrame(()=>{ f.style.width=pct+'%'; });
@@ -7456,6 +7480,11 @@ async function lsAnswer(i){
   if(lsAnswered||!lsSnap||!lsSnap.me||lsSnap.me.status!=='alive')return;
   if(lsSnap.room.phase!=='question')return;           // gate still closed
   lsAnswered=true;
+  /* `i` is where the option sits on THIS player's screen. The server stores one
+     order for everybody, so the pick is translated back before it is sent —
+     otherwise a shuffled card would grade against the wrong option. */
+  const _vk=lsViewKey(lsSnap);
+  i=pzToOriginal(_vk,i);
   /* SECOND CHANCE: when armed, we submit FIRST and only lock the UI if the
      server doesn't hand back a retry — otherwise the player could never make
      their second pick (that was the bug). */
@@ -7465,7 +7494,7 @@ async function lsAnswer(i){
     if(d.retry){
       lsAnswered=false;                       // pick again
       const box=document.getElementById('lsOpts');
-      if(box){ const b=box.querySelector('.ans[data-i="'+i+'"]'); if(b){ b.classList.add('dim','pz-removed','ls-gone'); b.disabled=true; } }
+      if(box){ const b=box.querySelector('.ans[data-i="'+pzToDisplay(_vk,i)+'"]'); if(b){ b.classList.add('dim','pz-removed','ls-gone'); b.disabled=true; } }
       toast('🔁 جواب اولت غلط بود — یک انتخاب دیگر داری',2400);
       try{sfx('wrong');vib([40,30]);}catch(e){}
       return;
@@ -11409,8 +11438,14 @@ function rmShowQuestion(q){
   const qe=document.getElementById('rmQ'), oe=document.getElementById('rmOpts');
   if(!qe||!oe||!q) return;
   pzRM.q=q;
+  /* The bank stores most questions with the answer first, so serving the
+     options as they arrive made «الف» the answer nearly every time. Keyed on
+     the run and the question, so redrawing the same card keeps its order. */
+  pzRM.viewKey='rm:'+((pzRM.run&&pzRM.run.id)||'x')+':'+(q.id||'-');
+  const view=pzShuffleView(q.options||[],null,pzRM.viewKey);
+  pzRM.qView=view;
   qe.textContent=q.text||'';
-  oe.innerHTML=(q.options||[]).map((o,i)=>
+  oe.innerHTML=view.options.map((o,i)=>
     '<button class="rmp-opt" data-i="'+i+'" onclick="rmAnswer('+i+')">'+esc4(o)+'</button>').join('');
   /* Which topic this question came from. In a global run it changes every
      question, and not saying so leaves the player guessing why the subject
@@ -11443,18 +11478,10 @@ function rmTimerStart(secs){
   const total=Math.max(3,Number(secs||pzRM.timeLimit||RM_TIME));
   pzRM.timeLimit=total;
   pzRM.tEnd=Date.now()+total*1000;
-  const arc=document.getElementById('rmTimerArc'), box=document.getElementById('rmTimer'),
-        num=document.getElementById('rmTimerNum');
-  if(!arc||!box) return;
-  const R=25, C=2*Math.PI*R;
-  arc.style.strokeDasharray=C+' '+C;
+  if(!document.getElementById('rmTimer')) return;
   const tick=()=>{
     const left=Math.max(0,pzRM.tEnd-Date.now())/1000;
-    const frac=Math.max(0,Math.min(1,left/total));
-    arc.style.strokeDasharray=(C*frac).toFixed(1)+' '+C;
-    if(num) num.textContent=faDigits(Math.ceil(left));
-    box.classList.toggle('warn',left<=total*0.5&&left>total*0.25);
-    box.classList.toggle('danger',left<=total*0.25);
+    pzTimerSet('rmTimer',left,total);
     if(left<=0){ rmTimerStop(); rmTimeUp(); }
   };
   tick();
@@ -11633,8 +11660,11 @@ async function rmAnswer(i){
   rmTimerStop();
   const opts=document.querySelectorAll('#rmOpts .rmp-opt');
   opts.forEach((b)=>b.setAttribute('disabled','disabled'));
+  /* `i` is the position on screen; the server grades in its own order. */
+  const vk=pzRM.viewKey;
+  const orig=pzToOriginal(vk,i);
   try{
-    const r=await pzApi('POST','/record/'+pzRM.run.id+'/answer',{selectedIndex:i});
+    const r=await pzApi('POST','/record/'+pzRM.run.id+'/answer',{selectedIndex:orig});
     const d=(r&&r.data)||r;
     if(!d||typeof d.correct!=='boolean') throw new Error((r&&r.error&&r.error.message)||'ثبت نشد');
 
@@ -11643,7 +11673,7 @@ async function rmAnswer(i){
        is nothing here that could leak the answer. */
     if(d.retry){
       pzRM.secondArmed=false; rmPaintSecond();
-      const bad=opts[d.ruledOut];
+      const bad=opts[pzToDisplay(vk,d.ruledOut)];
       if(bad){ bad.classList.add('dim'); bad.setAttribute('disabled','disabled'); }
       opts.forEach((b)=>{ if(b!==bad&&!b.classList.contains('dim')) b.removeAttribute('disabled'); });
       pzRM.run=d.run;
@@ -11654,7 +11684,7 @@ async function rmAnswer(i){
       return;
     }
 
-    const chosen=opts[i], right=opts[d.correctIndex];
+    const chosen=opts[i], right=opts[pzToDisplay(vk,d.correctIndex)];
     if(d.correct){
       if(chosen)chosen.classList.add('ok');
       sfx('correct'); vib([18]);
@@ -11683,7 +11713,9 @@ async function rmAnswer(i){
           correctText:list[d.correctIndex]||'',
           /* A timeout answers with an index past the end, so there is nothing
              to show as "your answer" — and saying so beats an empty box. */
-          chosenText:(i>=0&&i<list.length)?list[i]:'' };
+          /* `list` is the server's order, so the pick has to be the server's
+             index too — the display one would name a different option. */
+          chosenText:(orig>=0&&orig<list.length)?list[orig]:'' };
     setTimeout(()=>rmGate(d.question,outcome), d.correct?520:900);
   }catch(e){
     pzRM.answering=false;
@@ -13607,6 +13639,82 @@ function castVote(myVote){
   },1300);
 }
 
+
+/* ============ ONE ANSWER LAYOUT FOR EVERY MODE ============
+ *
+ * Two things the duel got right and the other modes did not.
+ *
+ * THE ORDER OF THE OPTIONS. The bank stores most questions with the correct
+ * answer first, so a mode that renders `options` as they arrive shows «الف»
+ * as the answer nearly every time — a player learns that long before they
+ * learn any trivia. The duel already shuffles per player and translates the
+ * pick back before it reaches the server; record mode, Last Survivor and the
+ * league did not, so they do now, through the same pair of functions.
+ *
+ * The shuffle is presentation, not protection: the server never sends the
+ * correct index while a question is open, so reordering on the phone cannot
+ * help anybody cheat. What it does is make «گزینهٔ ب» meaningless between two
+ * players, and stop one question always having the same answer.
+ *
+ * THE TIMER. The duel's — a circle between two bars that close inward — sits
+ * between the question and the options, where the eye already is. The other
+ * modes each had their own, in their own corner.
+ */
+const PZ_VIEWS={};
+/* Build the display order for one question. `key` identifies the question
+   occurrence (mode + room + round), so the same card re-rendered keeps the
+   order it already had — a card that reshuffles under the player's finger is
+   worse than one that never shuffles at all. */
+function pzShuffleView(options,correctIndex,key){
+  const opts=Array.isArray(options)?options:[];
+  const n=opts.length;
+  if(key&&PZ_VIEWS[key]&&PZ_VIEWS[key].n===n) {
+    const v=PZ_VIEWS[key];
+    return {options:v.perm.map(i=>opts[i]),correct:(correctIndex!=null&&v.inv[correctIndex]!=null)?v.inv[correctIndex]:correctIndex,perm:v.perm,inv:v.inv};
+  }
+  const perm=[]; for(let i=0;i<n;i++) perm[i]=i;
+  for(let i=n-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); const t=perm[i]; perm[i]=perm[j]; perm[j]=t; }
+  const inv=[]; perm.forEach((oi,dp)=>{ inv[oi]=dp; });
+  if(key) PZ_VIEWS[key]={perm,inv,n};
+  return {options:perm.map(i=>opts[i]),correct:(correctIndex!=null&&inv[correctIndex]!=null)?inv[correctIndex]:correctIndex,perm,inv};
+}
+/* The option the player actually tapped, in the order the SERVER stores. */
+function pzToOriginal(key,displayIndex){
+  const v=key&&PZ_VIEWS[key];
+  if(!v||v.perm[displayIndex]==null) return displayIndex;
+  return v.perm[displayIndex];
+}
+/* And the server's answer, in the order the player is looking at. */
+function pzToDisplay(key,originalIndex){
+  const v=key&&PZ_VIEWS[key];
+  if(!v||originalIndex==null||v.inv[originalIndex]==null) return originalIndex;
+  return v.inv[originalIndex];
+}
+function pzForgetView(key){ if(key) delete PZ_VIEWS[key]; }
+
+/* The duel's timer, as markup any mode can drop between its question and its
+   options. `id` prefixes the three parts so several can coexist. */
+function pzTimerHTML(id){
+  return '<div class="pzm-timer" id="'+id+'">'+
+    '<div class="pzm-timer-bar pzm-timer-left"><i id="'+id+'L"></i></div>'+
+    '<div class="pzm-timer-circle"><span id="'+id+'N">—</span></div>'+
+    '<div class="pzm-timer-bar pzm-timer-right"><i id="'+id+'R"></i></div>'+
+  '</div>';
+}
+/* Drive it. `left` and `total` are seconds; the bars close in from both sides
+   and the last five seconds turn red, exactly as in a duel. */
+function pzTimerSet(id,left,total,opts){
+  opts=opts||{};
+  const T=document.getElementById(id); if(!T) return;
+  const L=document.getElementById(id+'L'), R=document.getElementById(id+'R'), N=document.getElementById(id+'N');
+  const t=Math.max(0,Math.min(total||1,Number(left)||0));
+  const frac=(total>0)?t/total:0;
+  if(L) L.style.transform='scaleX('+frac+')';
+  if(R) R.style.transform='scaleX('+frac+')';
+  if(N) N.textContent=(opts.text!=null)?opts.text:fa(Math.ceil(t));
+  T.classList.toggle('danger',!opts.idle&&t<=5&&t>0);
+}
+
 /* ============ WTA — از کی بپرسم؟ ============ */
 let wtaPlayers=[],wtaCur=0,wtaTimeLeft=15,wtaTimer,wtaPickMode=false,wtaCorrect=0,wtaPot=0;
 /* ============ WTA — TV STUDIO ENGINE ============ */
@@ -13943,14 +14051,13 @@ function wtaLeagueClock(){
   const s=wtaLeague&&wtaLeague.snap; if(!s) return;
   const off=(s.serverNow||Date.now())-(s.readAt||Date.now());
   const left=Math.max(0,Math.round(((s.endsAt||0)-(Date.now()+off))/1000));
-  const num=document.getElementById('wtaNum'), arc=document.getElementById('wtaArc'), ring=document.getElementById('wtaRing');
-  if(!num) return;
   const total=(s.phase==='picking')?10:15;
-  if(s.phase==='turn'&&s.me&&s.me.myTurn){ num.textContent=fa(left); }
-  else if(s.phase==='picking'&&s.me&&s.me.myTurn){ num.textContent=fa(left); }
-  else { num.textContent='👀'; }
-  if(arc){ const C=145; arc.style.strokeDashoffset=C*(1-Math.max(0,Math.min(1,left/total))); }
-  if(ring&&typeof updateRingDanger==='function'){ try{ updateRingDanger(ring,arc,left,5); }catch(e){} }
+  const mine=!!(s.me&&s.me.myTurn);
+  /* Watching somebody else's turn still shows the clock draining — it is their
+     time running out, and it is the only thing happening on screen. */
+  pzTimerSet('wtaTimer',left,total,mine?{}:{idle:true,text:'👀'});
+  const legacy=document.getElementById('wtaNum');
+  if(legacy) legacy.textContent=mine?fa(left):'👀';
 }
 
 function wtaLeagueApply(snap){
@@ -14003,7 +14110,10 @@ function wtaLeagueApply(snap){
   const box=document.getElementById('wtaAnswers');
   if(box){
     const K=(typeof keysFA!=='undefined')?keysFA:['الف','ب','ج','د'];
-    box.innerHTML=(q.options||[]).map((o,i)=>
+    /* This player's own order, remembered for as long as the turn lasts. */
+    wtaLeague.viewKey='wta:'+wtaLeague.roomId+':'+(q.id||'-')+':'+(snap.turnUserId||'-');
+    const view=pzShuffleView(q.options||[],null,wtaLeague.viewKey);
+    box.innerHTML=view.options.map((o,i)=>
       '<button class="ans" data-i="'+i+'"'+(mine?'':' disabled')+'><span class="k">'+(K[i]||'')+'</span><span class="dash">—</span><span class="atxt">'+pzEsc(o)+'</span></button>').join('');
     if(mine) box.querySelectorAll('.ans').forEach(b=>{ b.onclick=()=>wtaLeagueAnswer(Number(b.dataset.i)); });
   }
@@ -14030,13 +14140,15 @@ async function wtaLeagueAnswer(i){
   if(_wtaSending||!wtaLeague) return;
   _wtaSending=true;
   document.querySelectorAll('#wtaAnswers .ans').forEach(b=>b.disabled=true);
-  const r=await pzApi('POST','/leagues/rooms/'+wtaLeague.roomId+'/answer',{selectedIndex:i});
+  const vk=wtaLeague.viewKey;
+  const r=await pzApi('POST','/leagues/rooms/'+wtaLeague.roomId+'/answer',{selectedIndex:pzToOriginal(vk,i)});
   _wtaSending=false;
   if(!r||r.ok===false){ toast((r&&r.error&&r.error.message)||'ثبت نشد',2200); return; }
   const d=r.data||{};
   /* Show what the answer was before the next state lands, so the reveal is not
-     a card that simply vanishes. */
-  try{ revealAnswers('wtaAnswers',i,d.correctIndex,()=>{}); }catch(e){}
+     a card that simply vanishes. Both indexes are put back into the order this
+     player is looking at. */
+  try{ revealAnswers('wtaAnswers',i,pzToDisplay(vk,d.correctIndex),()=>{}); }catch(e){}
   try{ d.correct?sfx('correct'):sfx('wrong'); vib(d.correct?[30]:[60,40,60]); }catch(e){}
   if(d.room) setTimeout(()=>wtaLeagueApply(d.room),900);
 }

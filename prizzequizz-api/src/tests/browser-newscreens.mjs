@@ -573,9 +573,20 @@ console.log('the league hub and the studio:');
 console.log('answering and choosing who is next:');
 {
   answered.length = 0; picked.length = 0;
-  await page.evaluate(() => document.querySelector('#wtaAnswers .ans').click());
+  /* The options are shuffled per player now, so «the first button» is not
+     «option 0». Tap the one whose TEXT is the first option the server sent and
+     the server must receive index 0 — that is the whole translation, checked
+     end to end rather than by trusting the map. */
+  const tapped = await page.evaluate(() => {
+    const b = [...document.querySelectorAll('#wtaAnswers .ans')].find((x) => /توکیو/.test(x.textContent));
+    const shownAt = Number(b.dataset.i);
+    b.click();
+    return shownAt;
+  });
   await page.waitForTimeout(1400);
-  ok('the answer goes to the server, not to a local coin flip', answered.length === 1 && answered[0].selectedIndex === 0, JSON.stringify(answered));
+  ok('the answer goes to the server in the server’s own option order',
+    answered.length === 1 && answered[0].selectedIndex === 0,
+    'tapped display slot ' + tapped + ' → sent ' + JSON.stringify(answered));
 
   const picking = await page.evaluate(() => document.getElementById('wtaPickArea')?.style.display !== 'none');
   ok('a right answer opens the choice of who answers next', picking);
@@ -614,7 +625,92 @@ console.log('the end of the match:');
   ok('and the room stops polling once it is over', !polling);
 }
 
+
+/* ── one answer layout everywhere ──────────────────────────────────── */
+console.log('the option order:');
+{
+  /* The bank stores most questions with the answer first, so a mode that draws
+     `options` as they arrive makes «الف» the answer nearly every time. */
+  const spread = await page.evaluate(() => {
+    const seen = {};
+    for (let i = 0; i < 200; i++) {
+      const v = (0, eval)('pzShuffleView')(['A', 'B', 'C', 'D'], 0, null);
+      seen[v.correct] = (seen[v.correct] || 0) + 1;
+    }
+    return seen;
+  });
+  const slots = Object.keys(spread).length;
+  ok('the correct answer lands in every slot, not always the first', slots === 4, JSON.stringify(spread));
+  ok('and no slot takes more than half of them', Math.max(...Object.values(spread)) < 100, JSON.stringify(spread));
+
+  const stable = await page.evaluate(() => {
+    const a = (0, eval)('pzShuffleView')(['A', 'B', 'C', 'D'], 0, 'k1');
+    const b = (0, eval)('pzShuffleView')(['A', 'B', 'C', 'D'], 0, 'k1');
+    return { a: a.options.join(''), b: b.options.join('') };
+  });
+  ok('a card redrawn keeps the order it already had', stable.a === stable.b, JSON.stringify(stable));
+
+  const roundTrip = await page.evaluate(() => {
+    (0, eval)('pzForgetView')('k2');
+    const v = (0, eval)('pzShuffleView')(['A', 'B', 'C', 'D'], 2, 'k2');
+    const out = [];
+    for (let d = 0; d < 4; d++) {
+      const orig = (0, eval)('pzToOriginal')('k2', d);
+      out.push({ shown: v.options[d], orig, back: (0, eval)('pzToDisplay')('k2', orig) === d });
+    }
+    return { out, correctShown: v.options[v.correct] };
+  });
+  ok('the option tapped maps back to the one the server stores',
+    roundTrip.out.every((r, d) => r.back && r.shown === ['A', 'B', 'C', 'D'][r.orig]), JSON.stringify(roundTrip.out));
+  ok('and the correct answer still points at the right text', roundTrip.correctShown === 'C', roundTrip.correctShown);
+}
+
+console.log('the timer, in every mode:');
+{
+  /* The duel's: a circle between two bars that close inward, sitting between
+     the question and the options. */
+  const shape = await page.evaluate(() => {
+    document.body.insertAdjacentHTML('beforeend', '<div id="tprobe">' + (0, eval)('pzTimerHTML')('tp') + '</div>');
+    (0, eval)('pzTimerSet')('tp', 5, 20);
+    const L = document.getElementById('tpL'), R = document.getElementById('tpR'), N = document.getElementById('tpN');
+    const out = { l: L.style.transform, r: R.style.transform, n: N.textContent,
+                  danger: document.getElementById('tp').classList.contains('danger') };
+    (0, eval)('pzTimerSet')('tp', 18, 20);
+    out.wide = document.getElementById('tpL').style.transform;
+    out.calm = !document.getElementById('tp').classList.contains('danger');
+    document.getElementById('tprobe').remove();
+    return out;
+  });
+  ok('both bars close in as the time goes', /scaleX\(0.25\)/.test(shape.l) && /scaleX\(0.25\)/.test(shape.r), JSON.stringify(shape));
+  ok('the circle counts the seconds', /۵/.test(shape.n), shape.n);
+  ok('the last five seconds turn red', shape.danger === true && shape.calm === true, JSON.stringify(shape));
+
+  /* And it is between the question and the options in each mode's markup. */
+  const between = await page.evaluate(() => {
+    const check = (card, q, t, o) => {
+      const C = document.querySelector(card); if (!C) return 'no card';
+      const Q = C.querySelector(q), T = C.querySelector(t), O = C.querySelector(o);
+      if (!Q || !T || !O) return 'missing ' + (!Q ? 'question' : !T ? 'timer' : 'options');
+      const pos = (a, b) => a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING;
+      return (pos(Q, T) && pos(T, O)) ? 'between' : 'out of order';
+    };
+    return {
+      record: check('#recordPlay .rmp-card', '#rmQ', '#rmTimer', '#rmOpts'),
+      studio: check('#wta .wta-qpanel', '#wtaText', '#wtaTimer', '#wtaAnswers')
+    };
+  });
+  ok('record mode puts it between the question and the options', between.record === 'between', between.record);
+  ok('and so does the league studio', between.studio === 'between', between.studio);
+
+  const old = await page.evaluate(() => ({
+    recordRing: !!document.getElementById('rmTimerArc'),
+    lsRing: /timer-ring[^>]*id="lsRing"/.test(document.documentElement.innerHTML)
+  }));
+  ok('the old corner rings are gone', !old.recordRing, JSON.stringify(old));
+}
+
 ok('no script errors on the new screens', errs.length === 0, errs.join(' | '));
+
 
 
 
