@@ -734,18 +734,89 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
 .ls-entry-name span{font-size:11.5px;color:var(--muted)}
 .ls-entry-card{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;justify-content:center;gap:2px;overflow:hidden;margin:0}
 .ls-entry-go{flex:0 0 auto;margin-top:12px}
-/* The promo is an extra, not a requirement: it keeps its place when it has
-   something to say and takes none at all when it is empty. */
-.ls-entry .tk-promo-host{flex:0 0 auto}
-.ls-entry .tk-promo-host:empty{display:none}
+/* THE BANNER TAKES THE ROOM, THE TEXT GIVES IT UP.
+   Everything else on this screen is a label — a topic name, a prize figure, a
+   ticket count — and labels do not need air around them. The picture does: it
+   is the only thing here anyone looks AT. So the gaps close and whatever is
+   left over goes to the banner, which grows to fill it instead of sitting at a
+   fixed 172px with margin above and below. */
+.ls-entry{gap:0}
+.ls-entry .topbar{padding-bottom:4px!important}
+.ls-entry-head{margin-bottom:4px}
+/* THE HOST IS THE FRAME; THE BANNER IS PINNED INSIDE IT.
+   Neither `align-self:stretch` nor a 1fr grid row filled it — the host's own
+   height comes from `flex:1 1 auto` in the column above, and a child sizing
+   itself against that kept falling back to its minimum. Absolute positioning
+   inside a relative host has no such argument: inset:0 is inset:0. */
+.ls-entry .tk-promo-host{flex:1 1 auto;min-height:150px;position:relative;display:block;margin:2px 0 4px}
+.ls-entry .tk-promo-host>.tk-promo{margin:0!important}
+.ls-entry .tk-promo-host:empty{display:none;flex:0 0 auto}
+/* STRETCH, not height:100%. An explicit percentage cross-size beats
+   `align-items:stretch` and then resolves against a height the flex host has
+   not committed to — so the banner sat at its minimum inside a box twice its
+   size. Letting it stretch is what actually fills the space. */
+
+.ls-entry .tk-promo-txt{min-height:0!important;height:100%;padding:14px 16px}
+.ls-entry .tk-promo-img,.ls-entry .tk-promo-img img{height:100%}
+.ls-entry-card{flex:0 0 auto!important;padding:9px 11px}
+.ls-entry-go{margin-top:7px!important}
+
+/* THE DUEL'S TICKET SCREEN, the same way. It is the same errand — pick a
+   ticket, look at the picture, go in — so it should not be a looser screen
+   than the other one. */
+#mode-entry{display:flex;flex-direction:column;gap:0;padding:14px 16px calc(12px + env(safe-area-inset-bottom,0px));overflow:hidden}
+#mode-entry .topbar{padding-bottom:4px!important;flex:0 0 auto}
+#mode-entry>.center{padding:2px 0 6px!important;flex:0 0 auto}
+#mode-entry #me-ico{width:52px!important;height:52px!important;font-size:28px!important;border-radius:16px!important}
+#mode-entry #me-desc{font-size:12px!important;line-height:1.55!important;margin-top:5px!important;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+#mode-entry .tk-promo-host{flex:1 1 auto;min-height:150px;position:relative;display:block;margin:2px 0 5px}
+#mode-entry .tk-promo-host>.tk-promo{margin:0!important}
+#mode-entry .tk-promo-host:empty{display:none;flex:0 0 auto}
+
+#mode-entry .tk-promo-txt{min-height:0!important;height:100%;padding:14px 16px}
+#mode-entry .tk-promo-img,#mode-entry .tk-promo-img img{height:100%}
+#mode-entry .card{flex:0 0 auto;margin-bottom:6px!important;padding:10px 12px!important}
+#mode-entry .section-title{margin-bottom:6px!important}
+#mode-entry .grow{flex:0 0 0;height:0}
+#mode-entry #mePlanNote{margin-bottom:5px!important}
+#mode-entry #meStartBtn{flex:0 0 auto;margin-top:0}
 @media (max-height:700px){
-  .ls-entry{padding:12px 16px calc(10px + env(safe-area-inset-bottom,0px))}
+  #mode-entry{padding:10px 14px calc(8px + env(safe-area-inset-bottom,0px))}
+  #mode-entry .tk-promo{min-height:120px}
+  #mode-entry #me-ico{width:44px!important;height:44px!important;font-size:24px!important}
+  #mode-entry #me-desc{-webkit-line-clamp:1}
+}
+@media (max-height:700px){
+  .ls-entry{padding:10px 14px calc(8px + env(safe-area-inset-bottom,0px))}
+  .ls-entry .tk-promo{min-height:120px}
   .ls-entry-ic{width:44px;height:44px;font-size:25px;border-radius:13px}
   .ls-entry-name b{font-size:15.5px}
   .ls-entry .tk-prize-val{font-size:25px}
   .ls-entry .tk-prize{padding:2px 6px 8px}
   .ls-entry .ls-share-note{font-size:10.5px;line-height:1.75}
   .ls-entry-go{margin-top:9px}
+}
+/* A SHORT PHONE HAS THE SAME SCREEN TO SHOW AND LESS ROOM TO SHOW IT IN.
+   On a 640-tall phone the labels alone were eating four fifths of the screen
+   and the picture got what nobody else wanted. Every line below takes a few
+   pixels off something that is read once — the back button, the paddings, the
+   height of a ticket tile, the note under the prize — and hands them to the
+   one thing that is looked at. Nothing is hidden; it is all still legible,
+   just not padded. */
+@media (max-height:700px){
+  .ls-entry .topbar,#mode-entry .topbar{padding-top:6px!important}
+  .ls-entry .topbar .iconbtn,#mode-entry .topbar .iconbtn{width:38px;height:38px}
+  .ls-entry .topbar h1,#mode-entry .topbar h1{font-size:16px}
+  .ls-entry-head{margin-bottom:2px}
+  .ls-entry .ls-share-note{padding:6px 9px;margin-top:6px;line-height:1.6}
+  .ls-entry-card{padding:7px 10px!important}
+  .ls-entry-go,#mode-entry #meStartBtn{padding-top:12px!important;padding-bottom:12px!important}
+  .ls-entry-go{margin-top:6px!important}
+  .tk-opt{padding:5px 4px 5px!important;gap:1px}
+  .tk-opt-meta{min-height:0}
+  #mode-entry>.center{padding:0 0 4px!important}
+  #mode-entry .card{margin-bottom:4px!important;padding:8px 10px!important}
 }
 @media (max-height:600px){
   .ls-entry .tk-prize-val{font-size:22px}
@@ -4536,7 +4607,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
       <div class="card" style="display:flex;gap:12px;align-items:center;background:linear-gradient(180deg,#FFDD5C,#F1B211);color:var(--gold-ink);margin-bottom:20px">
         <span style="font-size:26px">🎁</span><div style="font-size:13px;font-weight:700;line-height:1.6">با هر دوستی که دعوت کنی، هر دو <b>پاداش نقدی</b> می‌گیرید!</div></div>
       <div class="grow"></div>
-      <button class="btn btn-primary" onclick="submitRegister()">ثبت و ساخت کاراکتر</button>
+      <button class="btn btn-primary" onclick="submitRegister()">ثبت اطلاعات</button>
     </section>
 
     <!-- ============ CHARACTER (AAA) ============ -->
@@ -11885,7 +11956,51 @@ function renderHeaderTickets(){
   const el=document.getElementById('hdrTickets'); if(!el)return;
   /* One colored pill per MATCH-ticket type (green/blue/red), driven by real counts. */
   /* Solid dark base UNDER the colour tint so the chip reads on any wallpaper. */
-  el.innerHTML=TICKET_DEFS.map(t=>'<span class="pzh-pill p-tk" style="border-color:'+t.color+';background:linear-gradient(180deg,'+t.color+'3d,'+t.color+'1f),linear-gradient(180deg,#262730,#171820)" onclick="goShopTickets()" title="'+t.name+'">'+pzTicketArt(t.key,'🎫')+'<b style="color:'+t.color+'">'+fa(mTickets[t.key]||0)+'</b></span>').join('');
+  /* Tapping a ticket EXPLAINS it. It used to jump straight to the shop, which
+     answers a question nobody asked — a player looking at a ticket they already
+     hold wants to know what it is for, not to buy another. The shop is one
+     button away inside the explanation. */
+  el.innerHTML=TICKET_DEFS.map(t=>'<span class="pzh-pill p-tk" style="border-color:'+t.color+';background:linear-gradient(180deg,'+t.color+'3d,'+t.color+'1f),linear-gradient(180deg,#262730,#171820)" onclick="pzTicketInfo(\''+t.key+'\')" title="'+t.name+'">'+pzTicketArt(t.key,'🎫')+'<b style="color:'+t.color+'">'+fa(mTickets[t.key]||0)+'</b></span>').join('');
+}
+/* WHAT THIS TICKET IS, WHERE IT IS USED, WHEN, AND WHAT IT PAYS.
+   Everything a player can be told without guessing: how many they hold, the two
+   games it opens, its entry value, and the take-home prize the SERVER quotes
+   for it — never a figure worked out here. */
+function pzTicketInfo(key){
+  const t=tDef(key);
+  const have=Number((mTickets&&mTickets[key])||0);
+  const prize=(typeof pzPrizeFor==='function')?pzPrizeFor(key):null;
+  /* Shields are a Last Survivor property of the tier, carried on the topic list
+     the room screen already loads. Zero when it has not been loaded yet, which
+     simply leaves the line out rather than inventing one. */
+  const shields=(function(){ try{ return Number((lsTickets&&lsTickets[key]&&lsTickets[key].shields)||0); }catch(e){ return 0; } })();
+  const units=(function(){ try{ return Number((lsTickets&&lsTickets[key]&&lsTickets[key].units)||0); }catch(e){ return 0; } })();
+  const row=(k,v)=>'<div style="display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px dashed rgba(255,255,255,.10);font-size:12.5px;font-weight:800"><span style="color:var(--muted)">'+k+'</span><b>'+v+'</b></div>';
+  const sub=
+    '<div style="text-align:right;line-height:1.95">'+
+      row('تعداد تو', have>0?fa(have)+' عدد':'نداری')+
+      row('ارزش ورودی', fa(t.value)+' تومان')+
+      row('جایزهٔ برد در دوئل', prize==null?'…':fa(prize)+' تومان')+
+      (shields>0?row('سپر داخل بازی', fa(shields)+' عدد'):'')+
+      (units>0?row('ضریب سهم در آخرین بازمانده', '×'+fa(units)):'')+
+      '<div style="margin-top:10px;font-size:12px;font-weight:800;color:var(--muted);line-height:2">'+
+        '<b style="color:'+t.color+'">کجا استفاده می‌شود؟</b><br>'+
+        '۱) <b>دوئل یک‌به‌یک</b> — ورودی مسابقه با همین بلیط پرداخت می‌شود و برنده جایزهٔ بالا را می‌گیرد.<br>'+
+        '۲) <b>آخرین بازمانده</b> — با همین بلیط وارد اتاق می‌شوی؛ ارزش بلیطت به جایزهٔ کل اضافه می‌شود و سهم تو از جایزه به‌نسبت همین بلیط حساب می‌شود.'+
+      '</div>'+
+      '<div style="margin-top:10px;font-size:12px;font-weight:800;color:var(--muted);line-height:2">'+
+        '<b style="color:'+t.color+'">چه زمانی؟</b><br>'+
+        'هر وقت خواستی — بلیط تاریخ انقضا ندارد و تا وقتی استفاده نکنی برایت می‌ماند. اگر وارد اتاقی شدی و قبل از شروع بیرون آمدی، بلیطت برمی‌گردد.'+
+      '</div>'+
+    '</div>';
+  showAaaModal({
+    iconHTML:'<div style="font-size:44px;line-height:1">'+pzTicketArt(t.key,'🎫')+'</div>',
+    title:t.name, sub:sub,
+    primaryText:'خرید این بلیط', primaryClass:'btn-yellow',
+    secondaryText:'بستن',
+    onPrimary:()=>{ closeAaaModal(true); goShopTickets(); },
+    onSecondary:()=>closeAaaModal(false)
+  });
 }
 /* SENT TO THE SHOP FROM A DOOR THAT WAS LOCKED.
    A player who taps «ورود با بلیط» without a ticket is not shopping — they are
@@ -12122,9 +12237,35 @@ function pzPromoHTML(slot){
   if(!p||!p.enabled) return '';
   return pzBannerHTML({slot,title:p.title,text:p.text,media:p.image,link:p.link,kind:'image'});
 }
+/* THE BANNER FILLS THE ROOM IT IS GIVEN.
+ *
+ * On the two ticket screens the banner is the only thing anyone looks AT — the
+ * rest is labels — so it gets whatever height is left after them. Getting it
+ * there in CSS alone did not work: the host's own height comes from `flex:1 1
+ * auto` in the column above, and a child sizing itself against that (stretch,
+ * a 1fr grid row, a percentage, even inset:0) kept falling back to the banner's
+ * minimum. So the height is measured and set, the same way the home screen
+ * already fits its own banner, and re-set whenever the screen changes size. */
+function pzPromoFit(hostId){
+  const host=document.getElementById(hostId); if(!host) return;
+  const promo=host.querySelector('.tk-promo'); if(!promo) return;
+  const h=Math.round(host.getBoundingClientRect().height);
+  if(h>60){ promo.style.height=h+'px'; promo.style.minHeight='0'; promo.style.marginBottom='0'; }
+}
+let _pzPromoFitHooked=false;
+function pzPromoFitLater(hostId){
+  requestAnimationFrame(()=>pzPromoFit(hostId));
+  setTimeout(()=>pzPromoFit(hostId),160);
+  if(!_pzPromoFitHooked){
+    _pzPromoFitHooked=true;
+    /* A rotation or a keyboard opening changes the room available; the banner
+       follows it instead of staying at whatever it was when it was drawn. */
+    window.addEventListener('resize',()=>{ ['promoLs','promoDuel'].forEach(pzPromoFit); });
+  }
+}
 /** Paint a slot into its own host element, above (and separate from) the tickets. */
 function pzPromoRender(slot,hostId){
-  const paint=()=>{ const host=document.getElementById(hostId); if(host) host.innerHTML=pzPromoHTML(slot); };
+  const paint=()=>{ const host=document.getElementById(hostId); if(host){ host.innerHTML=pzPromoHTML(slot); pzPromoFitLater(hostId); } };
   paint();
   if(!PZ_BANNERS) pzLoadBanners().then(paint);
   if(!PZ_PROMOS) pzLoadPromos().then(paint);
@@ -15850,11 +15991,40 @@ async function submitRegister(){
   if(btn){btn.disabled=false;btn.textContent=_t;}
   if(r.ok){
     _usr=r.data; try{localStorage.setItem('pz_usr',JSON.stringify(_usr));}catch(e){}
-    applyMyName(); toast('اطلاعاتت ثبت شد ✅'); charBack='plans'; try{localStorage.setItem('pz_charDone','1');}catch(e){} go('plans');
+    applyMyName(); toast('اطلاعاتت ثبت شد ✅');
+    /* CHOOSE THE CHARACTER NOW, not «later, somewhere». Registration used to
+       mark the character step DONE without ever showing it — the player was
+       sent to the plans screen with a default face and had to go and find the
+       picker on their own. The details are saved, and the next thing on this
+       screen is the button that picks a character. */
+    charBack='plans';
+    pzRegisterCharStep();
   } else {
     toast(r.error?.message || 'این نام کاربری قبلاً گرفته شده — یکی دیگه بزن');
   }
 }
+/* The last step of registration, on the registration screen: details saved,
+   now pick a face. The button replaces «ثبت و ساخت کاراکتر» rather than being a
+   second one, so there is exactly one thing to press at any moment. */
+function pzRegisterCharStep(){
+  const sec=document.getElementById('register'); if(!sec) return;
+  const btn=sec.querySelector('.btn-primary'); if(!btn) return;
+  let note=document.getElementById('regSavedNote');
+  if(!note){
+    note=document.createElement('div'); note.id='regSavedNote';
+    note.style.cssText='display:flex;gap:10px;align-items:center;background:var(--ok-soft);border:2px solid var(--ok);'+
+      'border-radius:16px;padding:12px 14px;margin-bottom:12px;box-shadow:var(--hard-sm)';
+    note.innerHTML='<span style="font-size:24px">✅</span><div style="font-size:12.5px;font-weight:800;line-height:1.7;color:var(--ok)">'+
+      'اطلاعاتت ذخیره شد — حالا کاراکترت رو انتخاب کن</div>';
+    btn.parentNode.insertBefore(note,btn);
+  }
+  btn.className='btn btn-yellow';
+  btn.textContent='🎭 انتخاب کاراکتر';
+  btn.disabled=false;
+  btn.onclick=function(){ go('character'); };
+  try{ btn.scrollIntoView({block:'end',behavior:'smooth'}); }catch(e){}
+}
+
 /* Profile-edit screen: fill from the SINGLE shared source (_usr) — no hardcoded name. */
 function populateProfileEdit(){
   const nEl=document.getElementById('profEditName'); if(nEl) nEl.value=(_usr&&_usr.displayName&&_usr.displayName!=='بازیکن جدید')?_usr.displayName:'';

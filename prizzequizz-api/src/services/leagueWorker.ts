@@ -10,10 +10,45 @@
  * and the money — belongs to the match itself.
  */
 import { logger } from './logger.js';
-import { currentSeasonId, listRooms, LEAGUE_DOORS_MINUTES } from './leagueService.js';
+import {
+  currentSeasonId, listRooms, listQualifiers, closeSeason, getLeagueConfig,
+  weekResetAt, LEAGUE_CLOSE_LEAD_MS, LEAGUE_DOORS_MINUTES
+} from './leagueService.js';
 import { openForLeagueRoom, start as wtaStart, _room } from './wtaService.js';
 
+/**
+ * FREEZE THE WEEK BEFORE THE BOARD IS WIPED.
+ *
+ * The cup board is scoped to the ISO week: one second after the boundary every
+ * weekly score reads as zero and there is nobody left to reward. So the last
+ * few minutes of the week are when the standings are frozen and the tickets go
+ * out — «در آخرین لحظه که می‌خواد ری‌استارت بشه». Closing is idempotent by
+ * season, so a tick every five seconds through those minutes hands out one set
+ * of tickets, not sixty.
+ */
+export async function closeTick(now = Date.now()): Promise<boolean> {
+  let cfg;
+  try { cfg = await getLeagueConfig(); } catch { return false; }
+  if (!cfg.enabled) return false;
+  if (now < weekResetAt(now) - LEAGUE_CLOSE_LEAD_MS) return false;
+
+  const seasonId = currentSeasonId();
+  try {
+    if ((await listQualifiers(seasonId)).length) return false;   // already frozen
+    const r = await closeSeason(seasonId);
+    logger.info('league_auto_closed', {
+      season: r.seasonId, qualifiers: r.qualifiers.length,
+      tickets: r.ticketsGranted, voided: r.ticketsVoided
+    });
+    return true;
+  } catch (e) {
+    logger.warn('league_auto_close_failed', { season: seasonId, message: (e as Error).message });
+    return false;
+  }
+}
+
 export async function leagueTick(now = Date.now()): Promise<void> {
+  await closeTick(now);
   let rooms;
   try { rooms = await listRooms(currentSeasonId()); }
   catch (e) { logger.warn('league_tick_list_failed', { message: (e as Error).message }); return; }

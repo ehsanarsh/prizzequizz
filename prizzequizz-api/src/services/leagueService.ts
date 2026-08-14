@@ -25,7 +25,7 @@ import { getPgPool } from '../database/postgres.js';
 import { repositories } from '../repositories/index.js';
 import { logger } from './logger.js';
 import { isoWeekId, effectiveWeeklyScore } from './scoringConfig.js';
-import { grantTickets } from './ticketService.js';
+import { grantTickets, getTickets } from './ticketService.js';
 import { grantReward } from './rewardsService.js';
 import { randomInt } from 'node:crypto';
 
@@ -319,6 +319,65 @@ export interface CloseResult {
   qualifiers: Qualifier[];
   ticketsGranted: number;
   kickoffAt: number;
+  /** League tickets from earlier weeks that were voided by this close. */
+  ticketsVoided: number;
+}
+
+/**
+ * The instant the weekly board resets — the ISO week boundary, which is what
+ * `isoWeekId` counts in. Everything about the cup is scoped to that id, so at
+ * this moment every weekly score in the game becomes worthless.
+ */
+export function weekResetAt(from = Date.now()): number {
+  const d = new Date(from);
+  const t = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+  /* JS Sunday=0; the ISO week starts on Monday, so Sunday is day 7. */
+  const dow = d.getUTCDay() || 7;
+  return t + (8 - dow) * 86_400_000;
+}
+
+/**
+ * How long before the reset the week is frozen and the tickets handed out.
+ *
+ * It has to happen BEFORE the boundary, not after: one second past it every
+ * weekly score in the table reads as zero, the board is empty, and there is
+ * nobody left to reward. «در آخرین لحظه که می‌خواد ری‌استارت بشه» is exactly
+ * right, and this is how much of a last moment the worker is given.
+ */
+export const LEAGUE_CLOSE_LEAD_MS = 3 * 60_000;
+
+/**
+ * Void the league tickets of a week that is over.
+ *
+ * A league ticket is a seat at ONE week's kickoff. A player who did not turn up
+ * has missed it — the seat was held for them and the match was played without
+ * them — so carrying the ticket into the next week would mean a single good
+ * week bought a place in the league forever. Only the players the previous
+ * close actually recorded are touched, and only in the tiers the league itself
+ * issues, so nothing a player bought is ever taken.
+ */
+export async function voidStaleLeagueTickets(keepSeasonId: string): Promise<number> {
+  const cfg = await getLeagueConfig();
+  const tiers = cfg.tiers.map((t) => t.key);
+  const seen = new Set<string>();
+  let voided = 0;
+  for (const season of await listClosedSeasons()) {
+    if (season === keepSeasonId) continue;
+    for (const q of await listQualifiers(season)) {
+      const mark = q.userId + '|' + q.tier;
+      if (seen.has(mark)) continue;
+      seen.add(mark);
+      if (tiers.indexOf(q.tier) < 0) continue;
+      try {
+        const held = (await getTickets(q.userId))[q.tier] ?? 0;
+        if (held <= 0) continue;
+        await grantTickets(q.userId, q.tier, -1);
+        voided++;
+      } catch (e) { logger.warn('league_ticket_void_failed', { userId: q.userId, message: (e as Error).message }); }
+    }
+  }
+  if (voided) logger.info('league_tickets_voided', { keepSeasonId, voided });
+  return voided;
 }
 
 /**
@@ -333,8 +392,13 @@ export async function closeSeason(seasonId = currentSeasonId()): Promise<CloseRe
 
   const existing = await listQualifiers(seasonId);
   if (existing.length) {
-    return { seasonId, qualifiers: existing, ticketsGranted: 0, kickoffAt: kickoffFor(cfg) };
+    return { seasonId, qualifiers: existing, ticketsGranted: 0, ticketsVoided: 0, kickoffAt: kickoffFor(cfg) };
   }
+
+  /* Last week's seats expire as this week's are handed out — before the grant,
+   * so a player who qualifies again is left holding exactly one ticket rather
+   * than having the new one taken with the old. */
+  const voided = await voidStaleLeagueTickets(seasonId);
 
   const maxRank = Math.max(...cfg.tiers.map((t) => t.toRank));
   const board = await weeklyBoard(maxRank);
@@ -356,8 +420,8 @@ export async function closeSeason(seasonId = currentSeasonId()): Promise<CloseRe
     try { await grantTickets(q.userId, q.tier, 1); granted++; }
     catch (e) { logger.warn('league_ticket_failed', { userId: q.userId, message: (e as Error).message }); }
   }
-  logger.info('league_season_closed', { seasonId, qualifiers: quals.length, granted });
-  return { seasonId, qualifiers: quals, ticketsGranted: granted, kickoffAt: kickoffFor(cfg) };
+  logger.info('league_season_closed', { seasonId, qualifiers: quals.length, granted, voided });
+  return { seasonId, qualifiers: quals, ticketsGranted: granted, ticketsVoided: voided, kickoffAt: kickoffFor(cfg) };
 }
 
 async function saveQualifiers(quals: Qualifier[]): Promise<void> {
@@ -387,6 +451,19 @@ export async function listQualifiers(seasonId: string, tier?: string): Promise<Q
     } catch (e) { logger.warn('league_qualifiers_read_failed', { message: (e as Error).message }); }
   }
   return memQual.filter((q) => q.seasonId === seasonId && (!tier || q.tier === tier)).sort((a, b) => a.rank - b.rank);
+}
+
+/** Every season that has ever been frozen, newest first. */
+export async function listClosedSeasons(limit = 8): Promise<string[]> {
+  const pool = pg();
+  if (pool && await ensureSchema(pool)) {
+    try {
+      const { rows } = await pool.query(
+        `SELECT DISTINCT season_id FROM league_qualifiers ORDER BY season_id DESC LIMIT $1`, [limit]);
+      return rows.map((r: any) => String(r.season_id));
+    } catch (e) { logger.warn('league_seasons_read_failed', { message: (e as Error).message }); }
+  }
+  return [...new Set(memQual.map((q) => q.seasonId))].sort().reverse().slice(0, limit);
 }
 
 /* ── the draw ──────────────────────────────────────────────────────────── */

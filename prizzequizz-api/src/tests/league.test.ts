@@ -16,9 +16,10 @@ import assert from 'node:assert/strict';
 import {
   getLeagueConfig, setLeagueConfig, closeSeason, drawRound, listQualifiers,
   listRooms, listSeats, reportRoomResult, splitRooms, kickoffFor, cutLines,
-  myLeague, isLeagueTicketTier, _resetLeague, LEAGUE_DEFAULTS
+  myLeague, isLeagueTicketTier, _resetLeague, LEAGUE_DEFAULTS, weekResetAt
 } from '../services/leagueService.js';
-import { getTickets } from '../services/ticketService.js';
+import { closeTick, leagueTick } from '../services/leagueWorker.js';
+import { getTickets, grantTickets } from '../services/ticketService.js';
 import { repositories } from '../repositories/index.js';
 import { isoWeekId } from '../services/scoringConfig.js';
 import { getAccount } from '../services/walletLedgerService.js';
@@ -359,6 +360,90 @@ async function run(): Promise<void> {
       assert.equal((local.getUTCDay() + 1) % 7, cfg.kickoff.dayOfWeek, 'weekday');
       assert.ok(at - from.getTime() <= 7 * 86400_000, 'and within the week');
     }
+  });
+
+  /* ── the week closing itself ──────────────────────────────────────── */
+
+  /* The board is scoped to the ISO week, so a close that happens after the
+   * boundary rewards nobody: every weekly score reads as zero. The worker
+   * therefore has to fire in the last minutes of the week, and not before. */
+  await check('the week is frozen in its final minutes, and not a day early', async () => {
+    const reset = weekResetAt(Date.UTC(2026, 2, 4, 11, 0));   // a Wednesday
+    const at = new Date(reset);
+    assert.equal(at.getUTCDay(), 1, 'the board resets on a Monday');
+    assert.equal(at.getUTCHours(), 0, 'at midnight');
+    assert.ok(reset > Date.UTC(2026, 2, 4, 11, 0), 'and it is ahead of the Wednesday');
+    /* isoWeekId is what everything else is keyed by — a second before the
+     * boundary must still be this week, a second after must not. */
+    assert.equal(isoWeekId(new Date(reset - 1000)), isoWeekId(new Date(Date.UTC(2026, 2, 4, 11, 0))));
+    assert.notEqual(isoWeekId(new Date(reset + 1000)), isoWeekId(new Date(Date.UTC(2026, 2, 4, 11, 0))));
+  });
+
+  await check('the worker does nothing mid-week and closes once at the end', async () => {
+    await fresh();
+    const ids = await board(20);
+    const reset = weekResetAt();
+
+    assert.equal(await closeTick(reset - 6 * 60_000), false, 'six minutes out is not the last moment');
+    assert.equal((await listQualifiers(isoWeekId())).length, 0, 'and nothing was frozen');
+
+    assert.equal(await closeTick(reset - 60_000), true, 'a minute out is');
+    const quals = await listQualifiers(isoWeekId());
+    assert.ok(quals.length >= 20, 'the board was frozen');
+    assert.equal((await getTickets(ids[0]!)).gold, 1, 'and the top player has their ticket');
+
+    /* Every tick until the boundary must not hand out a second one. */
+    assert.equal(await closeTick(reset - 30_000), false);
+    assert.equal(await closeTick(reset - 1000), false);
+    assert.equal((await getTickets(ids[0]!)).gold, 1, 'still exactly one ticket');
+  });
+
+  /* The worker's own tick is what actually runs in production — closing the
+   * week has to be wired INTO it, not merely available beside it. */
+  await check('the worker’s tick is what closes the week', async () => {
+    await fresh();
+    const ids = await board(20);
+    await leagueTick(weekResetAt() - 60_000);
+    assert.ok((await listQualifiers(isoWeekId())).length >= 20, 'the tick froze the board');
+    assert.equal((await getTickets(ids[0]!)).gold, 1, 'and handed out the ticket');
+  });
+
+  /* «بلیطم همون‌جوری مونده و باطل نشده» — a league ticket is a seat at ONE
+   * kickoff. Carrying it into the next week would mean one good week bought a
+   * place in the league for good. */
+  await check('an unused league ticket is voided when the next week closes', async () => {
+    await fresh();
+    const lastWeek = await board(20);
+    await closeSeason('2020-W01');                       // a season id of its own
+    assert.equal((await getTickets(lastWeek[0]!)).gold, 1, 'last week they qualified');
+
+    /* This week somebody else is on top and the old ticket is gone. */
+    const thisWeek = await board(20);
+    const r = await closeSeason(isoWeekId());
+    assert.ok(r.ticketsVoided >= 1, 'the stale tickets were voided: ' + r.ticketsVoided);
+    assert.equal((await getTickets(lastWeek[0]!)).gold, 0, 'the absentee no longer holds one');
+    assert.equal((await getTickets(thisWeek[0]!)).gold, 1, 'and this week’s leader does');
+  });
+
+  await check('a player who qualifies two weeks running keeps exactly one', async () => {
+    await fresh();
+    const ids = await board(20);
+    await closeSeason('2020-W02');
+    assert.equal((await getTickets(ids[0]!)).gold, 1);
+    /* Same board, next season: the old one is voided and a new one granted, and
+     * the order of those two operations is what decides whether they end the
+     * week holding one ticket or none. */
+    await closeSeason(isoWeekId());
+    assert.equal((await getTickets(ids[0]!)).gold, 1, 'one ticket, not zero and not two');
+  });
+
+  await check('voiding never touches a ticket the player bought', async () => {
+    await fresh();
+    const ids = await board(20);
+    await grantTickets(ids[0]!, 'red', 3);
+    await closeSeason('2020-W03');
+    await closeSeason(isoWeekId());
+    assert.equal((await getTickets(ids[0]!)).red, 3, 'the bought tickets are untouched');
   });
 
   console.log(`[league] ${passed} passed, ${failed} failed`);
