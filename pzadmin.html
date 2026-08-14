@@ -2366,8 +2366,61 @@ const SHOP_TICKET_EFFECTS=['ticket-green','ticket-blue','ticket-red','ticket-bro
    this never had. Two editors for one thing means one of them is always the
    stale one, so this one is gone; the old promos were migrated into banners. */
 
+/* THE HELPS ALSO SIT ON THE «کاربردی» SHELF.
+   They are not shop items — they live in their own catalogue (محتوا ← کمک‌ها)
+   and the game prepends every one marked «فروش» to that tab. So the shop page
+   showed nine and the game showed thirteen, and the four extra ones could not
+   be found here to be removed. They are listed now, on the same page, with the
+   switch that takes them off the shelf. */
+async function shopLifelineRows(){
+  try{ const d=await api('GET','/admin/lifelines'); return {rows:d.rows||[]}; }
+  catch(e){ return {rows:[],error:e&&e.message}; }
+}
+async function shopLifelineOff(key){
+  if(!confirm('این کمک از تب «آیتم‌های کاربردی» فروشگاه برداشته شود؟ (خودِ کمک در بازی می‌ماند و فقط فروشش متوقف می‌شود)')) return;
+  try{
+    const d=await api('GET','/admin/lifelines');
+    const rows=(d.rows||[]).map(r=>r.key===key?Object.assign({},r,{sellable:false}):r);
+    await api('PUT','/admin/lifelines',{rows});
+    toast('از فروشگاه برداشته شد ✅','ok'); render();
+  }catch(e){ toast(e.message,'bad'); }
+}
+async function shopLifelineOn(key){
+  try{
+    const d=await api('GET','/admin/lifelines');
+    const rows=(d.rows||[]).map(r=>r.key===key?Object.assign({},r,{sellable:true}):r);
+    await api('PUT','/admin/lifelines',{rows});
+    toast('به فروشگاه اضافه شد ✅','ok'); render();
+  }catch(e){ toast(e.message,'bad'); }
+}
+function shopLifelineCard(ll){
+  if(ll.error){
+    return '<div class="card" style="margin-bottom:14px"><b>🧩 کمک‌ها روی شلف «کاربردی»</b>'+
+      '<div class="sub">این فهرست باز نشد ('+esc(ll.error)+'). از بخش «محتوا ← کمک‌ها» قابل مدیریت است.</div></div>';
+  }
+  const list=(ll.rows||[]).filter(r=>r.enabled&&r.sellable&&Number(r.price)>0);
+  const off =(ll.rows||[]).filter(r=>!(r.enabled&&r.sellable&&Number(r.price)>0));
+  return '<div class="card" style="margin-bottom:14px">'+
+    '<b>🧩 کمک‌ها — این‌ها هم در تب «آیتم‌های کاربردی» بازی دیده می‌شوند</b>'+
+    '<div class="sub">کمک‌ها آیتم فروشگاه نیستند؛ از «محتوا ← کمک‌ها» می‌آیند و بازی هرکدام را که «فروش» داشته باشد به این تب اضافه می‌کند. پس تعداد کارت‌های تب کاربردی در بازی = آیتم‌های جدول پایین + این '+fa(list.length)+' کمک.</div>'+
+    (list.length
+      ? '<div class="tbl-wrap" style="margin-top:10px"><table><thead><tr>'+['','نام','قیمت','عملیات'].map(c=>'<th>'+c+'</th>').join('')+'</tr></thead><tbody>'+
+        list.map(r=>'<tr>'+
+          '<td style="font-size:22px">'+esc(r.icon||'🧩')+'</td>'+
+          '<td><b>'+esc(r.label)+'</b><br><span class="sub">'+esc(String(r.description||'').slice(0,50))+'</span></td>'+
+          '<td><b>'+fa(r.price|0)+'</b> تومان</td>'+
+          '<td><button class="btn sm bad" onclick="shopLifelineOff('+JSON.stringify(r.key).replace(/"/g,'&quot;')+')">برداشتن از فروشگاه</button></td>'+
+        '</tr>').join('')+'</tbody></table></div>'
+      : '<div class="sub" style="margin-top:8px">هیچ کمکی الان روی این شلف نیست.</div>')+
+    (off.length
+      ? '<div class="sub" style="margin-top:10px">خارج از فروشگاه: '+off.map(r=>esc(r.icon+' '+r.label)+
+          ' <button class="btn sm ok" onclick="shopLifelineOn('+JSON.stringify(r.key).replace(/"/g,'&quot;')+')">افزودن</button>').join(' · ')+'</div>'
+      : '')+
+  '</div>';
+}
 async function renderShopAdmin(){
   let rows=[];try{const r=await api('GET','/admin/shop/items');rows=r.rows||[];}catch(e){}
+  const ll=await shopLifelineRows();
   window._SHOP_ROWS={};rows.forEach(it=>window._SHOP_ROWS[it.id]=it);
   const cats=[...new Set(rows.map(i=>i.category))];
   Object.keys(SHOP_CATS).forEach(k=>{if(cats.indexOf(k)<0)cats.push(k);});
@@ -2383,6 +2436,7 @@ async function renderShopAdmin(){
       '<div style="flex:1;min-width:220px"><b>آیتم‌های پیش‌فرض</b><div class="sub">اگر فروشگاهت پیش از اضافه‌شدن یک دسته ساخته شده باشد (مثلاً بسته‌های سکه)، آن آیتم‌ها هیچ‌وقت خودبه‌خود اضافه نمی‌شوند. این دکمه فقط چیزهای <b>جا افتاده</b> را می‌سازد و به آنچه خودت ساخته یا حذف کرده‌ای دست نمی‌زند.</div></div>'+
       '<button class="btn ok" onclick="shopSeedMissing()">➕ افزودن آیتم‌های جا افتاده</button>'+
     '</div>'+
+    shopLifelineCard(ll)+
     catTabs+
     '<div class="tbl-wrap"><table><thead><tr>'+['','نام','دسته','قیمت','ارز','اثر','ترتیب','وضعیت','عملیات'].map(c=>'<th>'+c+'</th>').join('')+'</tr></thead><tbody>'+
     (list.length?list.map(it=>'<tr>'+

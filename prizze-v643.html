@@ -2,14 +2,26 @@
 <html lang="fa" dir="rtl">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<!-- viewport-fit=cover lets the page draw UNDER the phone's status bar and
+     gesture bar, which is what fullscreen needs; the layout already keeps its
+     own content clear of them with env(safe-area-inset-*). -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>Prizze Quizz!</title>
 <!-- App icon on the phone home screen (Add to Home Screen). Place appicon.png
      (a square PNG, ideally 512x512) in the same web folder as this file. -->
 <link rel="apple-touch-icon" sizes="180x180" href="appicon.png">
 <link rel="icon" type="image/png" sizes="512x512" href="appicon.png">
 <link rel="manifest" href="manifest.webmanifest">
+<!-- FULLSCREEN. Three things have to agree before the phone's own header and
+     its home/back bar go away:
+       • these two flags (the second is the modern spelling of the first),
+       • "display":"fullscreen" in manifest.webmanifest — used once the game is
+         added to the home screen, which is the ONLY way iOS ever hides them,
+       • and the Fullscreen API, requested on the first tap (pzFullscreen), for
+         a game opened in an ordinary Android browser tab. -->
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="PrizeQuizz">
 <meta name="theme-color" content="#0f0f14">
 <!-- eNamad (اینماد) domain ownership. Harmless to leave in place permanently —
@@ -7110,7 +7122,7 @@ function lsRenderEntry(){
 }
 function lsEntryStart(){
   const have=(typeof mTickets!=='undefined'&&mTickets)||{};
-  if((have[lsEntryColor]||0)<1){ try{ goShopTickets(); }catch(e){ toast('بلیط کافی نداری'); } return; }
+  if((have[lsEntryColor]||0)<1){ try{ goShopTickets('lsEntry'); }catch(e){ toast('بلیط کافی نداری'); } return; }
   lsDoJoin(lsEntryTopic,lsEntryColor);
 }
 
@@ -7937,6 +7949,9 @@ function go(id){
   showScreen(id);
   if(id==='friends'&&typeof friendsLoad==='function'){try{friendsLoad();}catch(e){}}
   if(id==='shop'&&typeof pzLoadShop==='function'){try{pzLoadShop();}catch(e){}}
+  /* Walked out of the shop without buying — the errand is over, and a purchase
+     made on some later visit must not teleport the player somewhere. */
+  if(id!=='shop'){ try{ _pzShopReturn=null; }catch(e){} }
   if(id==='support'){ _supLoaded=false; _supOpenId=null; supportActiveTab='home'; try{renderSupport();}catch(e){} }
   /* THE RECORD SCREEN FETCHES ITS OWN CONTENT.
      It never did. rmOpen() — the one function that showed the screen AND loaded
@@ -7986,19 +8001,112 @@ let toastT;
  *
  * `onDone(false)` runs only when every candidate has failed, which is what
  * "the file has not been uploaded yet" looks like. */
-function pzTryArt(el, base, onDone){
-  if(!el) return;
-  const tries = [base + '.webp', base + '.png', base + '.jpg'];
-  let i = -1;
-  const next = () => {
-    i++;
-    if (i >= tries.length){ if (onDone) onDone(false); return; }
-    el.src = tries[i];
-  };
-  el.onerror = next;
-  el.onload  = () => { el.style.display=''; if (onDone) onDone(true, tries[i]); };
+/* A REPLACED PICTURE HAS TO REPLACE THE OLD ONE ON THE PHONE TOO.
+ *
+ * The web server serves artwork with `max-age=2592000` — thirty days. That is
+ * right for a file that never changes and wrong for these: copy a new winchar
+ * onto the server and a phone that has already seen the old one keeps showing
+ * it, because as far as the browser is concerned its copy is still fresh and
+ * there is no reason to ask. The laptop that had never loaded the picture got
+ * the new one, which is exactly the split that was reported.
+ *
+ * So the artwork is fetched rather than assigned, with `cache:'no-cache'` —
+ * which does NOT mean "download it again". It means "ask before using what you
+ * have": the browser sends its ETag, and an unchanged file comes back as a
+ * 304 with no body. A changed file arrives immediately, on every device,
+ * without waiting out a thirty-day header and without anyone clearing a cache.
+ *
+ * If fetch is not usable at all (a file:// build, an offline start), the old
+ * <img src> chain runs instead, so nothing is worse off than before. */
+function pzArtLegacy(el, tries, onDone){
+  let i=-1;
+  const next=()=>{ i++;
+    if(i>=tries.length){ if(onDone) onDone(false); return; }
+    el.src=tries[i]; };
+  el.onerror=next;
+  el.onload =()=>{ el.style.display=''; if(onDone) onDone(true,tries[i]); };
   next();
 }
+const _pzArtUrls={};
+function pzTryArt(el, base, onDone){
+  if(!el) return;
+  const tries=[base+'.webp', base+'.png', base+'.jpg'];
+  if(typeof fetch!=='function'||typeof URL==='undefined'||!URL.createObjectURL){
+    return pzArtLegacy(el,tries,onDone);
+  }
+  (async()=>{
+    for(let i=0;i<tries.length;i++){
+      let r;
+      try{ r=await fetch(tries[i],{cache:'no-cache'}); }
+      catch(e){ return pzArtLegacy(el,tries,onDone); }   /* fetch unusable → old path */
+      if(!r||!r.ok) continue;                            /* not uploaded in this format */
+      let b; try{ b=await r.blob(); }catch(e){ continue; }
+      if(!b||!b.size) continue;
+      /* ONE object URL per picture, not per <img>. The home screen rebuilds its
+         mode cards on every visit and each card asks for its artwork again; a
+         fresh URL each time would pile up blobs for the life of the page. The
+         old one is released a few seconds later rather than at once, in case
+         another element is still decoding from it. */
+      const old=_pzArtUrls[base];
+      _pzArtUrls[base]=URL.createObjectURL(b);
+      if(old) setTimeout(()=>{ try{ URL.revokeObjectURL(old); }catch(e){} },5000);
+      el.onerror=null; el.onload=null;
+      el.src=_pzArtUrls[base]; el.style.display='';
+      if(onDone) onDone(true,tries[i]);
+      return;
+    }
+    if(onDone) onDone(false);          /* none of the three is on the server */
+  })();
+}
+/* FULLSCREEN — the phone's own header and its home/back bar out of the way.
+ *
+ * On a home-screen install the manifest's "display":"fullscreen" does it and
+ * nothing here runs. In an ordinary browser tab only the Fullscreen API can,
+ * and it may only be asked for from a real user gesture — so the first touch
+ * anywhere asks for it, once.
+ *
+ * If the player leaves fullscreen (the back gesture, Esc on a desktop), the
+ * next touch asks again: the game is meant to run fullscreen, and asking again
+ * is what the request was. It is asked SILENTLY — a refusal is normal (iOS
+ * Safari has no fullscreen for a page at all, which is why "Add to Home
+ * Screen" is the answer there) and must never put a message on the screen.
+ *
+ * A desktop browser window is left alone: nothing there is covering anything. */
+function pzFsSupported(){
+  const e=document.documentElement;
+  return !!(e.requestFullscreen||e.webkitRequestFullscreen||e.msRequestFullscreen);
+}
+function pzFsOn(){
+  return !!(document.fullscreenElement||document.webkitFullscreenElement||document.msFullscreenElement);
+}
+function pzGoFullscreen(){
+  try{
+    if(pzFsOn()||!pzFsSupported()) return;
+    const e=document.documentElement;
+    const p=(e.requestFullscreen&&e.requestFullscreen({navigationUI:'hide'}))||
+            (e.webkitRequestFullscreen&&e.webkitRequestFullscreen())||
+            (e.msRequestFullscreen&&e.msRequestFullscreen());
+    if(p&&p.catch) p.catch(()=>{});
+  }catch(e){}
+}
+function pzFullscreenBoot(){
+  try{
+    /* Already fullscreen because it was launched from the home screen — the
+       manifest did the work and there is nothing to ask for. */
+    const standalone=(window.matchMedia&&window.matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches)
+                     ||window.navigator.standalone===true;
+    if(standalone) return;
+    /* Touch is the signal that this is a phone. A mouse-driven window has no
+       system bars in the way and should not be hijacked. */
+    const touch=(navigator.maxTouchPoints||0)>0||'ontouchstart' in window;
+    if(!touch||!pzFsSupported()) return;
+    const ask=()=>pzGoFullscreen();
+    document.addEventListener('pointerdown',ask,{passive:true});
+    document.addEventListener('touchend',ask,{passive:true});
+  }catch(e){}
+}
+try{ if(document.readyState!=='loading') pzFullscreenBoot(); else document.addEventListener('DOMContentLoaded',pzFullscreenBoot); }catch(e){}
+
 /* Every picture on the page that names itself with data-pzsrc. Hidden when
    none of its formats are there, so a missing upload changes nothing. */
 function pzArtBoot(){
@@ -11138,6 +11246,7 @@ async function pzLLBuy(it,qty){
   try{ pzSyncWallet(); }catch(e){}
   renderPowerups(); renderShop(_shopCurTab);
   toast(it.n+' به کمک‌هایت اضافه شد ✅');
+  try{ pzShopReturnAfterBuy(); }catch(e){}
 }
 
 /* Buying goes to the server. This used to add to a JavaScript variable and
@@ -11252,7 +11361,38 @@ function renderHeaderTickets(){
   /* Solid dark base UNDER the colour tint so the chip reads on any wallpaper. */
   el.innerHTML=TICKET_DEFS.map(t=>'<span class="pzh-pill p-tk" style="border-color:'+t.color+';background:linear-gradient(180deg,'+t.color+'3d,'+t.color+'1f),linear-gradient(180deg,#262730,#171820)" onclick="goShopTickets()" title="'+t.name+'">'+pzTicketArt(t.key,'🎫')+'<b style="color:'+t.color+'">'+fa(mTickets[t.key]||0)+'</b></span>').join('');
 }
-function goShopTickets(){ go('shop'); setTimeout(()=>{ const tab=document.getElementById('shopTabTickets'); if(tab)shopTab(tab,'tickets'); },50); }
+/* SENT TO THE SHOP FROM A DOOR THAT WAS LOCKED.
+   A player who taps «ورود با بلیط» without a ticket is not shopping — they are
+   trying to get into a match, and the shop is a detour. So the screen that sent
+   them is remembered, and the FIRST successful purchase takes them straight
+   back to it, with the ticket they just bought already counted. Reaching the
+   shop any other way (the header's ticket pills, the bottom bar) remembers
+   nothing and changes nothing. */
+let _pzShopReturn=null;
+function goShopTickets(returnTo){
+  _pzShopReturn=returnTo||null;
+  go('shop'); setTimeout(()=>{ const tab=document.getElementById('shopTabTickets'); if(tab)shopTab(tab,'tickets'); },50);
+}
+/* Called after any purchase that actually went through. Returns whether it
+   sent the player anywhere, so a caller can leave its own toast alone. */
+function pzShopReturnAfterBuy(){
+  const to=_pzShopReturn; if(!to) return false;
+  const on=document.querySelector('.screen.active');
+  if(!on||on.id!=='shop') return false;        /* already left by another route */
+  _pzShopReturn=null;
+  /* A beat, so the receipt is read before the screen changes under it. */
+  setTimeout(()=>{
+    try{
+      go(to);
+      /* Repaint the entry screen: it prints how many tickets you hold, and the
+         whole point is that the number is different now. */
+      if(to==='lsEntry'&&typeof lsRenderEntry==='function') lsRenderEntry();
+      if(to==='mode-entry'&&typeof renderTicketSelect==='function') renderTicketSelect();
+      if(typeof updateWalletUI==='function') updateWalletUI();
+    }catch(e){}
+  },1100);
+  return true;
+}
 function renderTicketShop(){
   const c=document.getElementById('shopContent');
   c.innerHTML='<div class="tk-promo-host" id="promoShop"></div><div class="shop-grid" id="ticketGrid"></div>';
@@ -11308,7 +11448,7 @@ async function buyTicket(t,el){
 function ticketEnterDuel(){
   const t=tDef(selectedTicket);
   if((mTickets[selectedTicket]||0)<=0){
-    showAaaModal({icon:'🎫',title:'بلیط نداری',sub:'برای ورود به رقابت اصلی به '+t.name+' نیاز داری.',primaryText:'خرید بلیط',secondaryText:'بی‌خیال',onPrimary:()=>{closeAaaModal(true);goShopTickets();}});
+    showAaaModal({icon:'🎫',title:'بلیط نداری',sub:'برای ورود به رقابت اصلی به '+t.name+' نیاز داری.',primaryText:'خرید بلیط',secondaryText:'بی‌خیال',onPrimary:()=>{closeAaaModal(true);goShopTickets('mode-entry');}});
     return false;
   }
   /* Do NOT decrement locally. The ticket is consumed ATOMICALLY on the SERVER
@@ -17444,6 +17584,9 @@ async function pzPayOrder(order,method,name){
     await pzSyncWallet();
     try{ pzReceipt(r.data.granted,name); }catch(e){ toast(name+' خریداری شد ✅'); }
     try{ pzHydrateAll(); }catch(e){}
+    /* Bought what they were sent for — back to the door they were turned away
+       from, rather than left standing in the shop. */
+    try{ pzShopReturnAfterBuy(); }catch(e){}
     return true;
   }
 
@@ -17462,6 +17605,7 @@ async function pzPayOrder(order,method,name){
   try{ pzHydrateAll(); }catch(e){}
   try{ pzSyncWallet(); }catch(e){}
   toast(name+' خریداری شد ✅');
+  try{ pzShopReturnAfterBuy(); }catch(e){}
   return true;
 }
 
