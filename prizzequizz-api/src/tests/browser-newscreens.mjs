@@ -532,16 +532,27 @@ console.log('the league cut lines on the cup rail:');
   await page.waitForTimeout(700);
   ok('home asks the server where the cut lines are', cutlineCalls >= 1, String(cutlineCalls));
 
-  const labels = await page.evaluate(() => ({
-    gold: document.querySelector('#wpGold small')?.textContent || '',
-    silver: document.querySelector('#wpSilver small')?.textContent || '',
-    bronze: document.querySelector('#wpBronze small')?.textContent || ''
-  }));
-  ok('the gold badge shows the cup of rank 15, not a fixed number',
-    /۱٬۲۴۰|۱۲۴۰/.test(labels.gold) && !/۱۶۸۰/.test(labels.gold), labels.gold);
-  ok('silver shows rank 30’s', /۸۶۰/.test(labels.silver) && !/۹۴۰/.test(labels.silver), labels.silver);
-  ok('and each says which rank it is', /۱۵/.test(labels.gold) && /۳۰/.test(labels.silver), labels.gold + ' | ' + labels.silver);
-  ok('a cut line the board has not reached is marked as approximate', /~/.test(labels.bronze), labels.bronze);
+  /* The badges stand ON the bar now, so their old two-line captions are gone
+     and the cut line travels with the sentence written inside the tube — for
+     the line actually being chased, which is the only one a player can act on.
+     What must NOT be lost is that the number is a rank read off the live board,
+     not a fixed threshold. */
+  const say = (score) => page.evaluate((v) => {
+    (0, eval)('weeklyScore=' + v); (0, eval)('renderWeeklyProgress()');
+    return document.getElementById('wpInside').textContent;
+  }, score);
+
+  const toSilver = await say(600);        // past bronze, chasing silver (rank 30 @ 860)
+  ok('the sentence quotes the cup of the rank being chased, not a fixed number',
+    /۲۶۰/.test(toSilver) && !/۹۴۰/.test(toSilver), toSilver);
+  ok('and says which rank that is', /۳۰/.test(toSilver), toSilver);
+
+  const toGold = await say(900);          // past silver, chasing gold (rank 15 @ 1,240)
+  ok('the next line up is rank 15’s', /۳۴۰/.test(toGold) && !/۱۶۸۰/.test(toGold), toGold);
+  ok('named as such', /۱۵/.test(toGold), toGold);
+
+  const toBronze = await say(0);
+  ok('a cut line the board has not reached is marked as approximate', /~/.test(toBronze), toBronze);
 
   /* The badge lights when the player is past the line — using the REAL line. */
   const lit = await page.evaluate(() => {

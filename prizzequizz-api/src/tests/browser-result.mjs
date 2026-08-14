@@ -153,6 +153,7 @@ for (const [w, h] of [[360, 640], [390, 844], [320, 568]]) {
       hasAddChip: !!document.getElementById('rbAddFriend'),
       titleCls: (document.getElementById('resultTitle')||{}).className || '',
       subShown: !!(document.getElementById('resultSub')||{}).offsetParent,
+      subText: (document.getElementById('resultSub')||{}).textContent||'',
       actionsAtBottom: (function(){ const a=sec.querySelector('.res-actions'), m=sec.querySelector('.res-mid');
         if(!a||!m) return false; return a.getBoundingClientRect().top >= m.getBoundingClientRect().bottom - 1; })(),
       scoreCount: (sec.innerText.match(/۵\s*-\s*۳|۳\s*-\s*۵/g) || []).length
@@ -171,7 +172,13 @@ for (const [w, h] of [[360, 640], [390, 844], [320, 568]]) {
      screen — the stats and the buttons have to keep their own height. */
   ok('without taking over the screen', content.charFrac < 0.34, content.charFrac.toFixed(2));
   ok('the headline is coloured by the outcome', /win|lose/.test(content.titleCls), content.titleCls);
-  ok('and the line under it is gone', !content.subShown, String(content.subShown));
+  /* The line under the headline came BACK, with a different job. It used to
+     repeat what the scoreboard already showed («دوئل رو بردی») and was removed
+     for it; what it carries now is the thing a scoreboard cannot — a reason to
+     play again. So it has to be there, and it has to not be an explanation. */
+  ok('there is a line under the headline', content.subShown && (content.subText || '').length > 6, content.subText);
+  ok('and it is not a re-reading of the score',
+     !/دوئل رو بردی|این مرحله رو برد|پاسخ اشتباه بود/.test(content.subText || ''), content.subText);
   /* One card now carries all four: right answers, real average time, XP, cup.
      «رتبه» is gone — in a duel it is only ever ۱ or ۲. */
   ok('the card carries XP and cup', content.statLabels.some((s) => /XP/.test(s)) && content.statLabels.some((s) => /کاپ/.test(s)), JSON.stringify(content.statLabels));
