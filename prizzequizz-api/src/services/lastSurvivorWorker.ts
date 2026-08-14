@@ -80,8 +80,11 @@ async function maybeStart(room: RoomRow, now: number): Promise<void> {
 
   const players = await listPlayers(room.id);
   const count = players.length;
-  // Reap a room nobody joined well past its deadline.
-  if (count === 0) { if (now > room.startsAt + 120_000) { room.status = 'finished'; room.phase = 'finished'; room.endedAt = now; await saveRoom(room); } return; }
+  /* An empty waiting room is closed AT ONCE, not two minutes later. While it
+   * lived, findOrCreateRoom would hand it to the next player to pick this
+   * topic — with the countdown it was created with, which by then had already
+   * expired. A player who walks in has to start a clock, not inherit one. */
+  if (count === 0) { room.status = 'finished'; room.phase = 'finished'; room.endedAt = now; await saveRoom(room); logger.info('ls_room_closed_empty', { roomId: room.id, via: 'tick' }); return; }
 
   const cfg = room.config;
   const votes = await import('./lastSurvivorService.js').then((m) => m.countVotes(room.id));
@@ -114,6 +117,29 @@ export function difficultyForRound(round: number, totalRounds: number): 'easy' |
   const per = Math.max(1, Math.ceil(Math.max(1, totalRounds) / tiers.length));
   const idx = Math.min(tiers.length - 1, Math.floor((Math.max(1, round) - 1) / per));
   return tiers[idx]!;
+}
+
+/* THE ORDER PLAYERS GO OUT IN.
+ *
+ * Eliminations are graded all at once, but they are SHOWN one at a time — and
+ * when everybody goes out together, the last one out is the only one who gets
+ * paid. That makes the order money, not decoration, so it cannot be decided by
+ * the animation: it is decided here, sent with the elimination event, and
+ * recomputed identically when the room settles.
+ *
+ * It is derived from the room, the round and the user id rather than stored, so
+ * the two computations cannot drift and no column has to be added. Same inputs,
+ * same order, every time — and unguessable before the round is graded, because
+ * the room id is a uuid.
+ */
+export function eliminationOrder(roomId: string, round: number, userIds: string[]): string[] {
+  const key = (u: string) => {
+    let h = 0x811c9dc5;
+    const src = `${roomId}:${round}:${u}`;
+    for (let i = 0; i < src.length; i++) { h ^= src.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+    return h;
+  };
+  return userIds.slice().sort((a, b) => (key(a) - key(b)) || (a < b ? -1 : a > b ? 1 : 0));
 }
 
 /* Exported as a test seam. Which questions a topic is allowed to draw is the
@@ -260,11 +286,22 @@ async function advancePhase(room: RoomRow, now: number): Promise<void> {
       }
     }
     room.phase = 'elimination';
-    room.phaseEndsAt = now + Math.max(3, Number(room.config.timings.eliminationSeconds) || 3) * 1000;
+    /* THE PHASE HAS TO OUTLAST THE ANIMATION IT ASKS FOR.
+       Players are stamped out one at a time, a second apart, so a fixed three
+       seconds would cut the sequence off after the third name — and with it the
+       moment a player is shown their own elimination. The phase is the base
+       length plus a second per player going out, capped so a mass wipe-out in a
+       big room cannot stall the match; past the cap the client tightens its own
+       spacing to fit whatever time this leaves. */
+    const elimBase = Math.max(3, Number(room.config.timings.eliminationSeconds) || 3) * 1000;
+    room.phaseEndsAt = now + Math.min(20_000, elimBase + eliminated.length * 1000);
     await saveRoom(room);
     // Public: who was eliminated (for the Squid-Game animation). The correct
     // answer is delivered privately in each eliminated player's own snapshot.
-    publish(room.id, 'ls:elimination', { round: room.round, eliminated, shielded, correctIndex: room.correctIndex, questionId: room.questionId });
+    /* The order the client plays them out in — and, when the round wipes the
+       room, the order that decides who the last one out is. */
+    const order = eliminationOrder(room.id, room.round, eliminated);
+    publish(room.id, 'ls:elimination', { round: room.round, eliminated: order, shielded, correctIndex: room.correctIndex, questionId: room.questionId });
     await broadcastState(room.id);
     return;
   }
@@ -346,7 +383,49 @@ async function finishRoom(room: RoomRow, now: number): Promise<void> {
       metadata: { topic: room.topic, grossPool: pool.gross, netPool: pool.net, players: players.length }
     }).catch((e) => { logger.error('ls_rake_book_failed', { roomId: room.id, detail: (e as Error).message }); return false; });
   }
-  const forfeited = survivors.length === 0 ? remaining : 0;
+  /* NOBODY SURVIVED — WHO GETS THE MONEY.
+   *
+   * The whole room went out on the same question, so there is no winner to pay
+   * and, until now, the entire remaining pot simply stayed with the house. The
+   * rule the operator wants is kinder and still simple: the pot is divided
+   * among the players who were still standing at the start of that last round
+   * — the ones who have just been wiped out — but only ONE of those shares is
+   * actually paid: the share of the LAST player to go out. The rest stays with
+   * the house, booked as forfeited exactly as before.
+   *
+   * "Last to go out" is not the animation's opinion: it is the last id in
+   * eliminationOrder for that round, the same order the client was told to play
+   * and the same one recomputed here. */
+  let wipeout: { lastUserId: string; share: number; splitAmong: number } | null = null;
+  let paidFromWipeout = 0;
+  if (survivors.length === 0 && remaining > 0) {
+    const lastRound = players.filter((p) => p.status === 'eliminated' && p.eliminatedRound === room.round);
+    if (lastRound.length > 0) {
+      const order = eliminationOrder(room.id, room.round, lastRound.map((p) => p.userId));
+      const lastId = order[order.length - 1]!;
+      /* Split by units among everyone who was still in, exactly as a normal
+       * final split would have done — so the figure the player receives is the
+       * share they would have had, not an invented consolation. */
+      const asAlive = lastRound.map((p) => ({ userId: p.userId, color: p.color, units: p.units, status: 'alive' as const, payoutCash: p.payoutCash }));
+      const split = finalSplit(asAlive, remaining);
+      const share = Math.max(0, split[lastId] ?? 0);
+      const winner = lastRound.find((p) => p.userId === lastId);
+      if (winner && share > 0) {
+        try {
+          await payout(winner.userId, share, room.id, room.round, 'final');
+          winner.payoutCash += share; winner.lastSeenAt = now;
+          await savePlayer(winner);
+          paidFromWipeout = share;
+          wipeout = { lastUserId: lastId, share, splitAmong: lastRound.length };
+          logger.info('ls_wipeout_last_paid', { roomId: room.id, round: room.round, userId: lastId, share, splitAmong: lastRound.length });
+        } catch (e) {
+          logger.error('ls_wipeout_payout_failed', { roomId: room.id, userId: lastId, message: (e as Error).message });
+        }
+      }
+    }
+  }
+
+  const forfeited = survivors.length === 0 ? Math.max(0, remaining - paidFromWipeout) : 0;
   if (forfeited > 0) {
     await bookHouseRevenue({
       key: 'ls_forfeit:' + room.id, source: 'ls_forfeited_pot', amount: forfeited,
@@ -393,7 +472,7 @@ async function finishRoom(room: RoomRow, now: number): Promise<void> {
   /* `forfeited` tells the client why the end screen has no winner, so it can say
    * so plainly instead of showing an empty podium. */
   publish(room.id, 'ls:ended', {
-    round: room.round, forfeited,
+    round: room.round, forfeited, wipeout,
     winners: survivors.map((p) => ({ userId: p.userId, amount: (split[p.userId] ?? 0) }))
   });
   await broadcastState(room.id);

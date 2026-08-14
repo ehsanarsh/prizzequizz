@@ -304,6 +304,25 @@ export async function listMyAnswers(roomId: string, userId: string): Promise<Map
 // ---------------- join / matchmaking ----------------
 export class LastSurvivorError extends Error { constructor(public code: string, message: string) { super(message); } }
 
+/* A waiting room with nobody in it is CLOSED, not kept.
+ *
+ * It used to be kept for two minutes past its deadline, and findOrCreateRoom
+ * would hand it to the next player who came along — with the countdown it was
+ * created with. So: join a room, leave it, come back, and you were dropped into
+ * the same empty room with a timer that had already run out. The room a player
+ * walks into has to be a room that starts counting when they walk in, and the
+ * only way to guarantee that is for an emptied room to stop existing. */
+export async function closeIfEmpty(roomId: string): Promise<boolean> {
+  const room = await getRoom(roomId);
+  if (!room || room.status !== 'waiting') return false;
+  const players = await listPlayers(roomId);
+  if (players.length > 0) return false;
+  room.status = 'finished'; room.phase = 'finished'; room.endedAt = Date.now();
+  await saveRoom(room);
+  logger.info('ls_room_closed_empty', { roomId });
+  return true;
+}
+
 export async function findOrCreateRoom(topic: string, cfg: LastSurvivorConfig): Promise<RoomRow> {
   // Reuse an open waiting room for this topic that still has space and hasn't
   // passed its start deadline; otherwise open a fresh one.
@@ -311,6 +330,12 @@ export async function findOrCreateRoom(topic: string, cfg: LastSurvivorConfig): 
   for (const r of active) {
     if (r.topic === topic && r.status === 'waiting') {
       const count = (await listPlayers(r.id)).length;
+      /* An EMPTY waiting room is never reused, whatever the reason it emptied.
+       * Its countdown belongs to whoever created it and has been running ever
+       * since; handing it on gives the next player somebody else's clock. It is
+       * closed here too, so a room that emptied by a route that did not notice
+       * cannot linger and keep being offered. */
+      if (count === 0) { await closeIfEmpty(r.id); continue; }
       if (count < r.capacity) return r;
     }
   }
@@ -405,7 +430,12 @@ export async function leaveRoom(roomId: string, userId: string): Promise<{ left:
   room.grossPool = Math.max(0, room.grossPool - ticketValue(room.config, player.color));
   await saveRoom(room);
 
-  logger.info('ls_leave', { roomId, userId, color: player.color, pool: room.grossPool, refunded });
+  /* Last one out closes the room. The next player to pick this topic then gets
+   * a brand-new room with a brand-new countdown, instead of inheriting a
+   * deadline that expired while nobody was here. */
+  const closed = await closeIfEmpty(roomId).catch(() => false);
+
+  logger.info('ls_leave', { roomId, userId, color: player.color, pool: room.grossPool, refunded, closedRoom: closed });
   return { left: true, refunded };
 }
 
@@ -493,7 +523,21 @@ export async function snapshot(roomId: string, forUserId?: string): Promise<any>
        * snapshot as well as the ls:ended push so a client that reconnected, or
        * that is polling rather than on the socket, can still explain the ending
        * instead of showing an empty podium. */
-      forfeited: room.status === 'finished' && stats.alive === 0 ? netRemaining : 0
+      forfeited: room.status === 'finished' && stats.alive === 0 ? netRemaining : 0,
+      /* WIPED OUT. When the whole room goes out on one question there is no
+       * winner, and the pot is split among the players who were still standing
+       * at the start of that round — but only the LAST one out is paid. A
+       * client that reconnected, or that polls rather than listening, has to be
+       * able to say so, which is why it is on the snapshot and not only on the
+       * ls:ended push. `null` on any room that did not end that way. */
+      wipeout: (function () {
+        if (room.status !== 'finished' || stats.alive !== 0 || room.round <= 0) return null;
+        const lastRound = players.filter((p) => p.status === 'eliminated' && p.eliminatedRound === room.round);
+        if (lastRound.length === 0) return null;
+        const paid = lastRound.filter((p) => (p.payoutCash || 0) > 0);
+        if (paid.length !== 1) return null;      // nothing was paid out this way
+        return { lastUserId: paid[0]!.userId, share: paid[0]!.payoutCash, splitAmong: lastRound.length };
+      })()
     },
     stats: { ...stats, remainingPot: netRemaining },
     players: players.map((p) => ({ userId: p.userId, username: p.username, avatar: p.avatar, color: p.color, status: p.status, shields: p.shields ?? 0, payoutCash: p.payoutCash, eliminatedRound: p.eliminatedRound, cashedOutRound: p.cashedOutRound })),

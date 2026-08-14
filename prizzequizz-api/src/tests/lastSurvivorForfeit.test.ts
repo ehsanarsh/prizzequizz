@@ -19,7 +19,7 @@ import { grantTickets } from '../services/ticketService.js';
 import { getAccount } from '../services/walletLedgerService.js';
 import { updateConfig } from '../services/lastSurvivorConfig.js';
 import { joinTopic, getRoom, saveRoom, listPlayers } from '../services/lastSurvivorService.js';
-import { advanceRoom, submitAnswer } from '../services/lastSurvivorWorker.js';
+import { advanceRoom, submitAnswer, eliminationOrder } from '../services/lastSurvivorWorker.js';
 import { houseRevenueSummary, _resetHouseRevenue } from '../services/houseRevenueService.js';
 import { buildPool } from '../services/lastSurvivorPrize.js';
 import { gameConfig } from '../core/config.js';
@@ -107,7 +107,19 @@ async function run(): Promise<void> {
     } as any);
   }
 
-  await check('all three miss on round one → no payout, and the pot is booked to the house', async () => {
+  /* THE RULE CHANGED, ON PURPOSE.
+   *
+   * This used to assert that nobody at all was paid when the room was wiped
+   * out and that the WHOLE pot went to the house. The operator's rule now is
+   * kinder by exactly one share: the pot is divided among the players who were
+   * still standing when that last round began, and the LAST one out — the last
+   * name in the server's own elimination order — is paid their share. The rest
+   * is still booked to the house, and still to the rial.
+   *
+   * The old expectation is not "broken", it is superseded; what has to stay
+   * true is that ONE player is paid, that it is the right one, and that nothing
+   * goes missing. */
+  await check('all three miss on round one → the last one out is paid, the rest is booked to the house', async () => {
     const { roomId, ids } = await openRoom(3);
     const room = (await getRoom(roomId))!;
     const pool = buildPool(room.config, ids.map(() => 'green'));
@@ -122,15 +134,30 @@ async function run(): Promise<void> {
     const players = await listPlayers(roomId);
     assert.equal(players.filter((p) => p.status === 'alive').length, 0, 'nobody survived');
 
+    const order = eliminationOrder(roomId, after.round, ids);
+    const lastOut = order[order.length - 1]!;
     for (const u of ids) {
-      assert.equal((await getAccount(u)).available, 0, u + ' must not be paid');
-      assert.equal(players.find((p) => p.userId === u)!.payoutCash, 0);
+      const row = players.find((p) => p.userId === u)!;
+      const acct = await getAccount(u);
+      if (u === lastOut) {
+        assert.ok(row.payoutCash > 0, 'the last player out must be paid their share');
+        assert.equal(acct.available, row.payoutCash, 'and their wallet must hold it');
+        /* One share of three, since all three hold the same ticket. */
+        assert.ok(Math.abs(row.payoutCash - Math.floor(pool.net / 3)) <= 3,
+          'the share is ' + row.payoutCash + ', not a third of ' + pool.net);
+      } else {
+        assert.equal(acct.available, 0, u + ' must not be paid');
+        assert.equal(row.payoutCash, 0);
+      }
     }
 
+    const paid = players.reduce((sum, p) => sum + p.payoutCash, 0);
     const house = await houseRevenueSummary();
     const booked = house.recent.find((h) => h.refId === roomId && h.source === 'ls_forfeited_pot');
     assert.ok(booked, 'the forfeited pot must be recorded, not merely lost track of');
-    assert.equal(booked!.amount, pool.net, 'the WHOLE remaining pot goes to the house');
+    assert.equal(booked!.amount, pool.net - paid, 'the house keeps everything except that one share');
+    /* Conservation, which is the point of the whole file. */
+    assert.equal(paid + booked!.amount, pool.net, 'the pot did not add up');
     assert.equal((booked!.metadata as any).players, 3);
     assert.equal((booked!.metadata as any).topic, TOPIC);
   });
@@ -179,13 +206,24 @@ async function run(): Promise<void> {
     await playRound(roomId, { [b]: 1, [c]: 1, [d]: 1 });
     assert.equal((await getRoom(roomId))!.status, 'finished');
 
+    const players = await listPlayers(roomId);
+    const paid = players.reduce((sum, p) => sum + p.payoutCash, 0);
+    /* The cash-out plus the last player's share — the wipe-out rule applies here
+       too, on whatever was left after `a` took their money out. */
+    const endRound = (await getRoom(roomId))!.round;
+    const lastRound = players.filter((p) => p.status === 'eliminated' && p.eliminatedRound === endRound);
+    const order = eliminationOrder(roomId, endRound, lastRound.map((p) => p.userId));
+    const lastOut = order[order.length - 1]!;
+    assert.ok(players.find((p) => p.userId === lastOut)!.payoutCash > 0, 'the last one out was not paid');
+
     const house = await houseRevenueSummary();
     const booked = house.recent.find((h) => h.refId === roomId && h.source === 'ls_forfeited_pot');
     assert.ok(booked, 'the rest of the pot must still be booked');
-    assert.equal(booked!.amount, pool.net - cashed,
-      'only what was left after the cash-out is forfeited');
+    assert.equal(booked!.amount, pool.net - paid,
+      'only what was left after the cash-out AND the last share is forfeited');
     /* Conservation: paid out + kept by the house === the whole net pot. */
-    assert.equal(cashed + booked!.amount, pool.net);
+    assert.equal(paid + booked!.amount, pool.net);
+    assert.ok(paid > cashed, 'the wipe-out share was not paid on top of the cash-out');
     await updateConfig({ room: { capacity: 3, minUsers: 2, waitSeconds: 0, manualStartEnabled: true, startPct: 70 } });
   });
 

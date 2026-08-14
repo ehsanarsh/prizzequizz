@@ -4938,6 +4938,12 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
       .ls-dash-mini .c b{display:block;color:var(--paper);font-size:16px;font-weight:900}
       .ls-dash-mini .c span{color:var(--muted);font-size:9px}
       .ls-dash-mini .c.gold b{color:var(--bolt)}
+      /* «سهم تو» — the same figure the cash-out button pays, marked out in
+         green so it reads as money coming to you rather than money on the
+         table. */
+      .ls-dash-mini .c.mine b{color:#4BE38C}
+      .ls-stat.mine{grid-column:span 3;background:linear-gradient(135deg,#0f2a1a,var(--ink-2));border-color:#33D97C}
+      .ls-stat.mine b{color:#4BE38C;font-size:22px}
       .ls-stat{background:var(--ink-2);border:var(--stroke);border-radius:16px;padding:12px 8px;text-align:center;box-shadow:var(--hard-sm)}
       .ls-stat b{display:block;color:var(--paper);font-size:19px;font-weight:900}
       .ls-stat span{color:#c9c2b3;font-size:10px}
@@ -4974,6 +4980,12 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
       .ls-verdict{margin:8px 14px;padding:15px 16px;border-radius:16px;font-weight:900;font-size:17px;line-height:1.85;text-align:center;border:var(--stroke);box-shadow:var(--hard-sm);animation:lsPop .35s}
       .ls-verdict b{font-size:1.06em}
       .ls-verdict.ok{background:var(--ok-soft);color:var(--ok);border-color:var(--ok)}
+      /* THE RIGHT-ANSWER CARD. Solid green, dark text, the same weight the
+         elimination card has — good news should not be fainter than bad. */
+      .ls-verdict.ls-right{background:linear-gradient(180deg,#4BE38C,#1FA85C);color:#05230f;
+        border-color:#0b3d20;box-shadow:0 5px 0 #0b3d20,0 0 26px rgba(51,217,124,.34)}
+      .ls-verdict.ls-right .lsv-head{font-size:21px;font-weight:900;color:#05230f;margin-bottom:2px}
+      .ls-verdict.ls-right .lsv-line{font-size:15px;font-weight:800;color:#0a3d1c;opacity:.9}
       .ls-verdict.bad{background:var(--bad-soft);color:var(--bad);border-color:var(--bad)}
       .ls-verdict .lsv-head{font-size:20px;line-height:1.5;margin-bottom:4px}
       .ls-verdict .lsv-line{font-size:16px}
@@ -5017,6 +5029,38 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
         .lsb-new{animation:lsbNewStill .3s .3s forwards}
         @keyframes lsbFade{to{opacity:0}}
         @keyframes lsbNewStill{to{opacity:1}}
+      }
+      /* YOUR OWN ELIMINATION, full screen. The card starts at the grid cell
+         (--fx/--fy) and flies to the middle, growing as it goes. */
+      .ls-meout{position:absolute;inset:0;z-index:170;pointer-events:none;display:grid;place-items:center}
+      .ls-meout .lsmo-bg{position:absolute;inset:0;background:radial-gradient(circle at 50% 45%,rgba(180,20,20,.42),rgba(0,0,0,.82));
+        opacity:0;transition:opacity .35s ease}
+      .ls-meout.go .lsmo-bg{opacity:1}
+      .ls-meout .lsmo-card{position:relative;width:clamp(140px,46vw,210px);height:clamp(140px,46vw,210px);
+        border-radius:26px;border:3px solid #000;overflow:visible;background:var(--ink-2);
+        box-shadow:0 10px 0 #000,0 0 44px rgba(255,60,60,.5);
+        transform:translate(calc(var(--fx) - 50vw), calc(var(--fy) - 50vh)) scale(.28);opacity:0;
+        transition:transform .55s cubic-bezier(.2,1.15,.35,1),opacity .3s ease}
+      .ls-meout.go .lsmo-card{transform:translate(0,0) scale(1);opacity:1}
+      .ls-meout .lsmo-av{width:100%;height:100%;border-radius:23px;overflow:hidden;display:grid;place-items:center;
+        font-size:clamp(56px,18vw,84px);background:var(--ink-3);filter:grayscale(1) brightness(.72)}
+      .ls-meout .lsmo-av img{width:100%;height:100%;object-fit:cover;display:block}
+      .ls-meout .lsmo-av>*{width:100%;height:100%}
+      /* THE CROSS, drawn over the whole picture — not a badge in a corner. */
+      .ls-meout .lsmo-x{position:absolute;inset:0;display:grid;place-items:center;
+        font-size:clamp(120px,38vw,180px);line-height:1;font-weight:900;color:#ff3b30;
+        text-shadow:0 4px 0 #000,0 0 30px rgba(255,59,48,.8);
+        transform:scale(2.4) rotate(-14deg);opacity:0;
+        transition:transform .32s cubic-bezier(.2,1.7,.4,1) .5s,opacity .2s ease .5s}
+      .ls-meout.go .lsmo-x{transform:scale(1) rotate(-8deg);opacity:1}
+      .ls-meout .lsmo-txt{position:absolute;left:0;right:0;top:calc(50% + clamp(88px,26vw,128px));
+        text-align:center;font-size:26px;font-weight:900;color:#ff5b52;
+        text-shadow:0 3px 0 #000;opacity:0;transform:translateY(14px);
+        transition:opacity .3s ease .72s,transform .3s ease .72s}
+      .ls-meout.go .lsmo-txt{opacity:1;transform:translateY(0)}
+      .ls-meout.out{opacity:0;transition:opacity .4s ease}
+      @media (prefers-reduced-motion:reduce){
+        .ls-meout .lsmo-card,.ls-meout .lsmo-x,.ls-meout .lsmo-txt{transition-duration:.01s}
       }
       .ls-elim-hd{text-align:center;padding:16px 14px 4px}
       .ls-elim-hd h2{color:#ff4d4d;font-size:20px;font-weight:900;margin:0;letter-spacing:1px}
@@ -7358,7 +7402,14 @@ function lsOnWs(type,payload){
   /* The room ended. `forfeited` is the pot that nobody won because the last
      players all answered wrongly — remembered here so the result screen can
      say what happened to the money instead of showing a blank podium. */
-  if(type==='ls:ended'){ lsForfeited=Number((payload&&payload.forfeited)||0); }
+  if(type==='ls:ended'){ lsForfeited=Number((payload&&payload.forfeited)||0); lsWipeout=(payload&&payload.wipeout)||null; }
+  /* THE ORDER PLAYERS GO OUT IN IS THE SERVER'S, NOT THE GRID'S.
+     When a round wipes the room, the last one out is the only one who is paid —
+     so the order is money, and the animation has to play the order the server
+     settled on rather than whatever order the player list happens to be in. */
+  if(type==='ls:elimination'&&payload&&Array.isArray(payload.eliminated)){
+    lsElimOrder={ round:Number(payload.round)||0, ids:payload.eliminated.slice() };
+  }
 }
 
 function lsTimer(snap){
@@ -7476,7 +7527,12 @@ function lsBuild(snap){
   const timedOut=!!(rv&&(rv.timedOut||rv.yourIndex==null));
   let verdict='';
   if(r.phase==='elimination'&&myVerdict==='right'){
-    verdict='<div class="ls-verdict ok">✅ جواب شما درست بود — تبریک! می‌تونی به مرحلهٔ بعد بری</div>';
+    /* A CARD, not a line of green text. Surviving a round is the good news of
+       the whole screen and it was the quietest thing on it — a thin tint behind
+       one sentence, next to a red card twice its weight. */
+    verdict='<div class="ls-verdict ok ls-right">'+
+      '<div class="lsv-head">✅ آفرین! جوابت درست بود</div>'+
+      '<div class="lsv-line">به مرحلهٔ بعد می‌ری 🎉</div></div>';
   } else if(r.phase==='elimination'&&myVerdict==='shield'){
     /* The answer was WRONG — the card says so in red, because that is what
        happened. The shield is the consolation, not the headline: it breaks on
@@ -7523,6 +7579,7 @@ function lsLive(snap){
   set('lsCount',lsFa(snap.players.length)); set('lsCap',lsFa(r.capacity));
   set('lsPrize',lsFa(r.grossPool)+' تومان'); set('lsRemain',lsFa(s.remainingPot));
   set('lsAlive',lsFa(s.alive)); set('lsElim',lsFa(s.eliminated)); set('lsCash',lsFa(s.cashedOut));
+  { const mine=lsMyShare(snap); if(mine!=null) set('lsMyShare',lsFa(mine)); }
   const vf=document.getElementById('lsVoteFill'), vt=document.getElementById('lsVoteTxt');
   if(vf&&r.status==='waiting'){ const pct=snap.players.length?Math.round(snap.votes*100/snap.players.length):0; vf.style.width=pct+'%'; if(vt)vt.textContent='شروع با همین تعداد — '+lsFa(pct)+'٪ ('+lsFa(snap.votes)+'/'+lsFa(snap.players.length)+')'; }
   // refresh waiting grid + dashboard grids in place
@@ -7606,22 +7663,75 @@ function lsPlayersCells(snap,markElim){
   }).join('');
 }
 function lsGridHtml(snap,markElim){ return `<div class="ls-grid" id="lsElimGrid" style="grid-template-columns:repeat(4,1fr)">${lsPlayersCells(snap,markElim)}</div>`; }
-/* Eliminations land ONE BY ONE with a scan + stamp + sound, not all at once. */
+/* ONE PLAYER A SECOND, IN THE SERVER'S ORDER.
+ *
+ * They used to all be stamped in the order the grid happened to list them, four
+ * hundred milliseconds apart — too fast to follow and, worse, in an order that
+ * meant nothing. It means something now: when a round wipes the room, the LAST
+ * player out is the only one who is paid, and the server decides that order and
+ * sends it with the round. So this plays exactly that list, a second per name,
+ * and the player's own turn is not a stamp on a thumbnail in the corner — their
+ * picture comes forward, fills the screen and takes the cross.
+ */
+let _lsElimTimers=[];
+function lsClearElimTimers(){ _lsElimTimers.forEach(t=>clearTimeout(t)); _lsElimTimers=[]; }
 function lsAnimateElimination(snap){
   const grid=document.getElementById('lsElimGrid'); if(!grid)return;
   const cells=[...grid.querySelectorAll('.ls-pl')];
-  const outs=[];
-  (snap.players||[]).forEach((p,i)=>{ if(p.status==='eliminated'&&p.eliminatedRound===snap.room.round&&cells[i]) outs.push(cells[i]); });
+  const round=snap.room.round;
+  const list=(snap.players||[]);
+  /* The server's order when it is for THIS round; otherwise the list order,
+     which is all a reconnecting client has. */
+  const ordered=(lsElimOrder&&lsElimOrder.round===round&&lsElimOrder.ids.length)
+    ? lsElimOrder.ids.filter(id=>list.some(p=>p.userId===id&&p.status==='eliminated'&&p.eliminatedRound===round))
+    : list.filter(p=>p.status==='eliminated'&&p.eliminatedRound===round).map(p=>p.userId);
+  const outs=ordered.map(id=>{
+    const i=list.findIndex(p=>p.userId===id);
+    return (i>=0&&cells[i])?{cell:cells[i],player:list[i]}:null;
+  }).filter(Boolean);
   if(!outs.length) return;
-  // hide the marks, then reveal them one at a time
-  outs.forEach(c=>{ c.classList.add('pending-out'); });
-  outs.forEach((c,idx)=>{
-    setTimeout(()=>{
-      c.classList.remove('pending-out'); c.classList.add('ls-elim-now');
+  lsClearElimTimers();
+  outs.forEach(o=>{ o.cell.classList.add('pending-out'); });
+  /* A second each — unless the server left less room than that (a mass wipe-out
+     caps the phase), in which case the spacing tightens so the whole sequence
+     still finishes inside the phase instead of being cut off half way. */
+  const nowMs=Date.now(), off=(snap.room.serverNow||nowMs)-nowMs;
+  const left=Math.max(1500,(Number(snap.room.phaseEndsAt)||0)-(nowMs+off));
+  const STEP=Math.max(140, Math.min(1000, Math.floor((left-900)/Math.max(1,outs.length))));
+  outs.forEach((o,idx)=>{
+    _lsElimTimers.push(setTimeout(()=>{
+      o.cell.classList.remove('pending-out'); o.cell.classList.add('ls-elim-now');
       try{ sfx('wrong'); vib([50,30]); }catch(e){}
-      setTimeout(()=>c.classList.remove('ls-elim-now'),600);
-    }, 350+idx*420);
+      /* YOUR turn. The little card in the grid is not enough — it is the moment
+         you left the game. */
+      if(lsMyId&&o.player&&o.player.userId===lsMyId) lsMyEliminationMoment(o.cell,o.player);
+      _lsElimTimers.push(setTimeout(()=>o.cell.classList.remove('ls-elim-now'),700));
+    }, 500+idx*STEP));
   });
+}
+/* The player's own picture, lifted out of the grid, blown up in the middle of
+   the screen and crossed out. It starts exactly where their card is and flies
+   from there, so it reads as THEIR card rather than a new thing appearing. */
+function lsMyEliminationMoment(cell,player){
+  try{
+    const host=document.querySelector('.phone')||document.body;
+    document.getElementById('lsMeOut')&&document.getElementById('lsMeOut').remove();
+    const src=cell.querySelector('.av');
+    const from=(src||cell).getBoundingClientRect();
+    const hostBox=host.getBoundingClientRect();
+    const box=document.createElement('div');
+    box.id='lsMeOut'; box.className='ls-meout';
+    box.style.setProperty('--fx',(from.left-hostBox.left+from.width/2)+'px');
+    box.style.setProperty('--fy',(from.top-hostBox.top+from.height/2)+'px');
+    box.innerHTML='<div class="lsmo-bg"></div>'+
+      '<div class="lsmo-card"><div class="lsmo-av">'+lsAvatarHTML(player)+'</div>'+
+      '<span class="lsmo-x">✕</span></div>'+
+      '<div class="lsmo-txt">حذف شدی</div>';
+    host.appendChild(box);
+    requestAnimationFrame(()=>requestAnimationFrame(()=>box.classList.add('go')));
+    try{ sfx('wrong'); vib([90,60,140]); }catch(e){}
+    _lsElimTimers.push(setTimeout(()=>{ box.classList.add('out'); setTimeout(()=>{ try{box.remove();}catch(e){} },420); },2100));
+  }catch(e){}
 }
 
 function lsDashStrip(snap){ const s=snap.stats; const r=snap.room;
@@ -7630,8 +7740,22 @@ function lsDashStrip(snap){ const s=snap.stats; const r=snap.room;
      so it steps forward exactly once per question. */
   const bar=`<div class="pzsb-host ls">${pzStepBarHTML({steps:r.totalRounds||12,current:r.round||0})}</div>`;
   return bar+`<div style="display:flex;justify-content:space-between;padding:10px 16px;background:rgba(0,0,0,.25)"><span style="color:#6be08a;font-size:12px;font-weight:800">زنده <b id="lsAlive">${lsFa(s.alive)}</b></span><span style="color:#ff8a8a;font-size:12px;font-weight:800">حذف <b id="lsElim">${lsFa(s.eliminated)}</b></span><span style="color:#FFE24A;font-size:12px;font-weight:800">جایزه <b id="lsRemain">${lsFa(s.remainingPot)}</b></span></div>`; }
-function lsDashCells(snap){ const s=snap.stats;
-  return `<div class="ls-stat big"><b id="lsRemain">${lsFa(s.remainingPot)}</b><span>مبلغ باقی‌ماندهٔ جایزه (ت)</span></div>
+/* THE PLAYER'S OWN SHARE.
+   The board showed the whole pot and nothing else, so a player in a room of
+   forty had to do the division in their head to know what the round was worth
+   to THEM — and it changes every time somebody goes out, which is the point of
+   the game. The server already works it out for the cash-out button; it is the
+   same number, so it is simply shown. Anyone not still in the running has no
+   share, and is not offered a figure. */
+function lsMyShare(snap){
+  const me=snap&&snap.me;
+  if(!me||me.status!=='alive') return null;
+  const v=Number(me.currentShare||0);
+  return v>0?v:0;
+}
+function lsDashCells(snap){ const s=snap.stats; const mine=lsMyShare(snap);
+  return `<div class="ls-stat big"><b id="lsRemain">${lsFa(s.remainingPot)}</b><span>مبلغ باقی‌ماندهٔ جایزه (ت)</span></div>`+
+  (mine==null?'':`<div class="ls-stat mine"><b id="lsMyShare">${lsFa(mine)}</b><span>سهم تو (ت)</span></div>`)+`
   <div class="ls-stat"><b id="lsAlive">${lsFa(s.alive)}</b><span>باقی‌مانده</span></div>
   <div class="ls-stat"><b id="lsElim">${lsFa(s.eliminated)}</b><span>حذف‌شده</span></div>
   <div class="ls-stat"><b id="lsCash">${lsFa(s.cashedOut)}</b><span>برداشت‌کرده</span></div>
@@ -7643,10 +7767,13 @@ function lsDashHtml(snap,compact){
   const s=snap.stats,r=snap.room;
   if(compact){
     /* Elimination view: the board shrinks to the essentials and moves up. */
+    const mine=lsMyShare(snap);
     return `<div class="ls-dash-mini"><div class="c"><b id="lsAlive">${lsFa(s.alive)}</b><span>باقی‌مانده</span></div>`+
       `<div class="c"><b id="lsElim">${lsFa(s.eliminated)}</b><span>حذف‌شده</span></div>`+
-      `<div class="c"><b id="lsCash">${lsFa(s.cashedOut)}</b><span>برداشت</span></div>`+
-      `<div class="c gold"><b id="lsRemain">${lsFa(s.remainingPot)}</b><span>جایزه (ت)</span></div></div>`;
+      `<div class="c gold"><b id="lsRemain">${lsFa(s.remainingPot)}</b><span>کل جایزه (ت)</span></div>`+
+      (mine==null?`<div class="c"><b id="lsCash">${lsFa(s.cashedOut)}</b><span>برداشت</span></div>`
+                : `<div class="c mine"><b id="lsMyShare">${lsFa(mine)}</b><span>سهم تو (ت)</span></div>`)+
+      `</div>`;
   }
   return `<div class="ls-top" style="padding-bottom:0"><div class="ls-ttl" style="text-align:center;width:100%"><h1>داشبورد مسابقه</h1><p>مرحله ${lsFa(r.round)} از ${lsFa(r.totalRounds)} · <span id="lsTimer">${lsTimer(snap)}</span></p></div></div><div class="ls-dash" id="lsDashGrid">${lsDashCells(snap)}</div>`;
 }
@@ -7894,6 +8021,9 @@ async function lsDecide(d){ if(!lsRoomId||!lsSnap)return; await pzApi('POST','/l
    is what showed a winner the losing screen and made "بازی مجدد" start a bot
    duel with the old theme. Money is already in the wallet by this point. */
 let lsEndShown=false;
+/* The order the server eliminated this round's players in, and the wipeout
+   settlement if the room ended with nobody left. */
+let lsElimOrder=null, lsWipeout=null;
 /* Set from the ls:ended push when the room finished with no survivor at all.
    Zero on every normal ending. */
 let lsForfeited=0;
@@ -7908,6 +8038,13 @@ function lsFinish(snap){
   const me=snap.me||{}; const mine=Number(me.payoutCash||0);
   const won=mine>0;                       // cashed out OR survived with a payout
   const cashedOut=me.status==='cashed_out';
+  /* WIPED OUT — everybody went out on the same question. There is no winner, so
+     the pot is divided among the players who were still standing when that
+     round began, and only the LAST one out is paid. The server decides who that
+     is (it settles the money) and says so both on the ls:ended push and on the
+     snapshot, so a client that reconnected can still explain it. */
+  const wipe=(snap.room&&snap.room.wipeout)||lsWipeout||null;
+  const iAmLastOut=!!(wipe&&wipe.lastUserId&&wipe.lastUserId===me.userId);
   /* Grabbed BEFORE the reset below wipes it: the review needs the room this
      match was played in, and by the end of this function there is no other
      record of which one that was. */
@@ -7925,13 +8062,16 @@ function lsFinish(snap){
   /* ONE word for a win, however it was won. «جایزه‌ت رو برداشتی» and «برنده
      شدی» were two headlines for the same outcome, and the second one is the
      one players read as winning. */
-  if(title) title.textContent = won ? 'برنده شدی! 🏆'
-                                    : (noWinner?'کسی زنده نموند 💀':'باختی!');
+  if(title) title.textContent = iAmLastOut ? 'آخرین نفر تو بودی 🎖️'
+                                  : (won ? 'برنده شدی! 🏆'
+                                  : (noWinner?'کسی زنده نموند 💀':'باختی!'));
   if(sub){
-    sub.textContent = won
-      ? (cashedOut?'سهمت پرداخت و به کیف پولت واریز شد':pzWinLine())
-      : (noWinner?'همهٔ بازیکنان باقی‌مانده جواب را غلط دادند، پس این دور برنده‌ای نداشت و جایزه به کسی تعلق نگرفت.'
-                :pzLoseLine());
+    sub.textContent = iAmLastOut
+      ? ('چون همه اشتباه جواب دادند، جایزه بین '+lsFa(wipe.splitAmong)+' نفرِ باقی‌ماندهٔ مرحلهٔ قبل تقسیم شد و سهم تو پرداخت شد.')
+      : (won
+        ? (cashedOut?'سهمت پرداخت و به کیف پولت واریز شد':pzWinLine())
+        : (noWinner?'همهٔ بازیکنان باقی‌مانده جواب را غلط دادند، پس این دور برنده‌ای نداشت و جایزه به کسی تعلق نگرفت.'
+                  :pzLoseLine()));
     sub.style.display='';
   }
   /* A WINNER SEES A PRIZE; A LOSER SEES NO FIGURE AT ALL. «۰» in the prize slot
@@ -7939,10 +8079,11 @@ function lsFinish(snap){
      entry was a ticket. */
   if(amt){
     const box=amt.parentElement;
-    if(won){ amt.textContent='+'+lsFa(mine); if(box){ box.style.display=''; box.style.color='var(--ok)'; } }
+    /* The last player out IS paid, so their figure is shown like any other. */
+    if(won||iAmLastOut){ countStop(amt); amt.textContent='+'+lsFa(mine); if(box){ box.style.display=''; box.style.color='var(--ok)'; } }
     else   { countStop(amt); amt.textContent=''; if(box){ box.style.display='none'; box.style.color=''; } }
   }
-  try{ renderResultBoard(won); }catch(e){}
+  try{ renderResultBoard(won||iAmLastOut); }catch(e){}
   /* LS has no bot rematch, but it DOES have a match worth looking back at — so
      the review button keeps its place, in the same spot the duel puts it, and
      only the rematch beside it goes away. */
