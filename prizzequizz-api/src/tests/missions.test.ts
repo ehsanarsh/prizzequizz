@@ -12,6 +12,7 @@ import {
   boxFor, openBox, getBoxConfig, setBoxConfig, activeDailyPeriod, buildDailyLadder,
   DAILY_LADDER_LEVELS, DAILY_PER_LEVEL
 } from '../services/missionService.js';
+import { saveCharacter, buildRoster } from '../services/characterSelectionService.js';
 import { repositories } from '../repositories/index.js';
 import { id } from '../utils/id.js';
 
@@ -299,10 +300,21 @@ async function run() {
   await check('the ladder bands every level from 1 to 100', async () => {
     const rungs = buildDailyLadder();
     assert.equal(rungs.length, DAILY_LADDER_LEVELS * DAILY_PER_LEVEL);
-    for (const lv of [1, 2, 50, 99, 100]) {
+    for (const lv of [1, 2, 50, 99]) {
       const band = rungs.filter((d) => d.minLevel === lv && d.maxLevel === lv);
       assert.equal(band.length, DAILY_PER_LEVEL, 'level ' + lv + ' has ' + band.length);
     }
+    /* The last rung is open-ended, so the ladder does not simply stop. */
+    const top = rungs.filter((d) => d.minLevel === DAILY_LADDER_LEVELS);
+    assert.equal(top.length, DAILY_PER_LEVEL);
+    assert.ok(top.every((d) => d.maxLevel === 0), 'the top rung must have no ceiling');
+  });
+
+  await check('a player past level 100 is still dealt three', async () => {
+    const uid = await makeUser(140);
+    const b = await boardFor(uid);
+    assert.equal(b.daily.length, 3, 'dealt ' + b.daily.length + ' — the ladder ran out');
+    for (const m of b.daily) assert.ok(m.minLevel <= 140, m.id + ' is banded above them');
   });
 
   await check('and every rung is harder than the one below it', async () => {
@@ -496,6 +508,31 @@ async function run() {
     assert.equal(b.dailyRotates, false, 'an unfinished set does not rotate at midnight');
     for (const m of b.daily) await record(uid, m.metric, m.target * 4);
     assert.equal((await boardFor(uid)).dailyRotates, true, 'a finished one does');
+  });
+
+  /* «کاراکترها ... از طریق جوایز بازی یا چرخونه یا استریک یا ماموریت‌ها به دست
+   * بیاد» — so a mission, and the box at the end of the day, can hand one over
+   * exactly as they hand over coins. */
+  await check('a mission can pay a character, and it really lands', async () => {
+    const c = await saveCharacter({ name: 'کاراکتر مأموریتی', viaPurchase: false, viaLevel: false, enabled: true });
+    const uid = await makeUser();
+    await saveDef({ id: 'ms_char', kind: 'achievement', metric: 'adWatched', target: 1,
+      title: 'کاراکتر جایزه', rewards: [{ type: 'character', amount: 1, target: c.id }] });
+    await record(uid, 'adWatched', 1);
+    await claim(uid, 'ms_char');
+    const roster = await buildRoster(uid);
+    assert.equal(roster.characters.find((x) => x.id === c.id)!.unlocked, true, 'the character was not granted');
+    await deleteDef('ms_char');
+  });
+
+  await check('and so can the box', async () => {
+    const c = await saveCharacter({ name: 'کاراکتر جعبه', viaPurchase: false, viaLevel: false, enabled: true });
+    await setBoxConfig({ enabled: true, rewards: [{ type: 'character', amount: 1, target: c.id }] });
+    const uid = await makeUser();
+    for (const m of (await boardFor(uid)).daily) await record(uid, m.metric, m.target * 4);
+    await openBox(uid);
+    const roster = await buildRoster(uid);
+    assert.equal(roster.characters.find((x) => x.id === c.id)!.unlocked, true);
   });
 
   console.log(`[missions] ${passed} passed, ${failed} failed`);

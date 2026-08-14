@@ -106,7 +106,29 @@ async function pickQuestion(room: WtaRoom): Promise<Question | null> {
  */
 export async function openForLeagueRoom(room: LeagueRoom): Promise<WtaRoom> {
   const existing = rooms.get(room.id);
-  if (existing) return existing;
+  if (existing) {
+    /* SEATS TAKEN AFTER THE ROOM OPENED STILL COUNT.
+     *
+     * The draw seats everybody before anyone arrives, so returning the room
+     * untouched was right when this was written. «شروع مسابقه لیگ» fills a
+     * room one player at a time, and the first arrival is what opens it — so
+     * every later arrival was seated in the league's books and missing from
+     * the room itself, and their join was refused with «تو در این اتاق نیستی».
+     * While the room is still in the lobby, its player list is caught up with
+     * the seats. Once it has started, the door is shut and nothing is added. */
+    if (existing.phase === 'lobby') {
+      for (const s of await listSeats(room.id)) {
+        if (existing.players.some((p) => p.userId === s.userId)) continue;
+        const u = await repositories.users.findById(s.userId).catch(() => null);
+        existing.players.push({ userId: s.userId, username: u?.username ?? 'بازیکن', lives: WTA_LIVES, out: false, absent: true, correct: 0 });
+      }
+      /* A room that filled early had its kickoff brought forward; the open
+       * room has to hear about it or it would sit in the lobby until the
+       * original time. */
+      existing.endsAt = room.startsAt;
+    }
+    return existing;
+  }
   const seats = await listSeats(room.id);
   const players: WtaPlayer[] = [];
   for (const s of seats) {

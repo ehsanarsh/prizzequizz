@@ -36,6 +36,10 @@ export function registerLeagueRoutes(router: Router, base: string): void {
     try {
       const r = await enterLeague(ctx.userId);
       await openForLeagueRoom(r.room);
+      /* Pressing the button IS taking the seat, so they are marked present
+       * here rather than being left «absent» until a second request lands —
+       * a player who is absent at kickoff is out before the first question. */
+      try { wtaJoin(r.room.id, ctx.userId); } catch { /* already started */ }
       json(ctx.res, 200, {
         roomId: r.room.id, tier: r.room.tier, roomNo: r.room.roomNo, round: r.room.round,
         startsAt: r.room.startsAt, seats: r.seats, roomSize: r.roomSize, joined: r.joined, full: r.full,

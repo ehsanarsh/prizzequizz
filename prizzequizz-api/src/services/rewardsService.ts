@@ -17,12 +17,16 @@ import { repositories } from '../repositories/index.js';
 import { postEntry } from './walletLedgerService.js';
 import { grantTickets } from './ticketService.js';
 import { grantLifeline } from './lifelineService.js';
+import { grantCharacter } from './characterSelectionService.js';
 import { id } from '../utils/id.js';
 import { logger } from './logger.js';
 
 /** Everything a prize can be. Kept small on purpose: each one has to be
  *  grantable for real, and a type nothing can pay out is worse than no type. */
-export type RewardType = 'coins' | 'xp' | 'ticket' | 'heart' | 'cash' | 'lifeline' | 'nothing';
+/* `character` hands over one character from the roster — `target` is its id.
+ * It is a reward like any other so the wheel, the streak and the missions can
+ * all give one without three separate code paths. */
+export type RewardType = 'coins' | 'xp' | 'ticket' | 'heart' | 'cash' | 'lifeline' | 'character' | 'nothing';
 
 export interface WheelSegment {
   id: string;
@@ -273,6 +277,10 @@ export async function grantReward(userId: string, p: { type: RewardType; amount:
       await grantTickets(userId, p.target || 'green', amount);
     } else if (p.type === 'lifeline') {
       await grantLifeline(userId, p.target || 'p5050', amount);
+    } else if (p.type === 'character') {
+      /* Owning it twice is not a thing, so a repeat simply lands as owned —
+       * the grant itself is idempotent and says whether it was new. */
+      if (p.target) await grantCharacter(userId, p.target, 'reward').catch(() => false);
     } else {
       const u = await repositories.users.findById(userId);
       if (u) {

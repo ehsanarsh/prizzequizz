@@ -20,6 +20,7 @@ import {
   enterLeague, LEAGUE_FULL_START_MS
 } from '../services/leagueService.js';
 import { closeTick, leagueTick } from '../services/leagueWorker.js';
+import { openForLeagueRoom, join as wtaJoin, snapshot as wtaSnapshot } from '../services/wtaService.js';
 import { getTickets, grantTickets } from '../services/ticketService.js';
 import { repositories } from '../repositories/index.js';
 import { isoWeekId } from '../services/scoringConfig.js';
@@ -554,6 +555,37 @@ async function run(): Promise<void> {
     const fourth = await enterLeague(golds[3]!, kick);
     assert.equal(fourth.full, false);
     assert.ok(fourth.room.startsAt > kick + LEAGUE_FULL_START_MS, 'room two waits for company');
+  });
+
+  /* THE WHOLE POINT IS THAT THEY END UP IN THE ROOM.
+   * The room is opened by the FIRST player through the door, and everyone after
+   * them takes a seat in a room that is already open — so the room itself has
+   * to keep up with the seats, or the second player is told «تو در این اتاق
+   * نیستی» and the feature only ever works for one person. */
+  await check('everyone who walks in is really in the room', async () => {
+    await fresh();
+    await setLeagueConfig({ roomSize: 4 });
+    await board(15);
+    await closeSeason(isoWeekId());
+    const kick = kickoffFor(await getLeagueConfig());
+    const golds = (await listQualifiers(isoWeekId(), 'gold')).map((q) => q.userId);
+
+    let room = null as any;
+    for (const uid of golds.slice(0, 3)) {
+      const r = await enterLeague(uid, kick);
+      room = r.room;
+      await openForLeagueRoom(r.room);
+      /* The seat is only real if the room accepts them. */
+      wtaJoin(r.room.id, uid);
+    }
+    const snap = await wtaSnapshot(room.id, golds[2]!);
+    assert.ok(snap, 'the room has no snapshot');
+    assert.equal(snap!.players.length, 3, 'the room holds ' + snap!.players.length + ' of the 3 who walked in');
+    for (const uid of golds.slice(0, 3)) {
+      const p = snap!.players.find((x: any) => x.userId === uid);
+      assert.ok(p, uid + ' took a seat but is not in the room');
+      assert.equal(p!.absent, false, uid + ' is in the room but marked absent — they would be out at kickoff');
+    }
   });
 
   await check('the screen is told whether the button may be pressed, and why not', async () => {

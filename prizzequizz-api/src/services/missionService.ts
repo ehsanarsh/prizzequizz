@@ -19,6 +19,7 @@ import { grantLifeline } from './lifelineService.js';
 import { addHearts } from './heartService.js';
 import { recordCategories } from './recordModeService.js';
 import { awardScoring } from './matchEngine.js';
+import { grantCharacter } from './characterSelectionService.js';
 import { logger } from './logger.js';
 
 /* Every countable thing the game can report. A mission targets one of these;
@@ -62,7 +63,7 @@ export const RARITY_FA: Record<Rarity, string> = {
   legendary: '🟠 افسانه‌ای', mythic: '👑 اسطوره‌ای'
 };
 
-export type RewardType = 'coins' | 'xp' | 'cup' | 'heart' | 'ticket' | 'cash' | 'lifeline' | 'spin' | 'cosmetic';
+export type RewardType = 'coins' | 'xp' | 'cup' | 'heart' | 'ticket' | 'cash' | 'lifeline' | 'character' | 'spin' | 'cosmetic';
 export interface MissionReward { type: RewardType; amount: number; target?: string; label?: string }
 
 export interface MissionDef {
@@ -600,8 +601,10 @@ export function buildDailyLadder(): MissionDef[] {
         ],
         enabled: true,
         /* One level, one band. The set a player is dealt is the set for the
-         * level they are on — which is what «لول‌بندی» means. */
-        minLevel: lv, maxLevel: lv,
+         * level they are on — which is what «لول‌بندی» means. The TOP rung has
+         * no ceiling: a player who passes level 100 must not fall off the end
+         * of the ladder and be dealt nothing at all. */
+        minLevel: lv, maxLevel: lv === DAILY_LADDER_LEVELS ? 0 : lv,
         weight: 10, chainId: '', chainStep: 0, startsAt: '', endsAt: '', sortOrder: k
       });
     }
@@ -1066,6 +1069,11 @@ async function grantReward(userId: string, r: MissionReward, idem: string): Prom
     await grantLifeline(userId, r.target || 'p5050', amount).catch(() => undefined);
   } else if (r.type === 'heart') {
     await addHearts(userId, amount).catch(() => undefined);
+  } else if (r.type === 'character') {
+    /* A character as a mission prize — `target` is its id. Same grant the shop
+     * and the wheel use, tagged as a mission so the statistics say where the
+     * roster's characters actually came from. */
+    if (r.target) await grantCharacter(userId, r.target, 'mission').catch(() => false);
   } else if (r.type === 'cup') {
     /* The cup is the weekly board's currency and it resets with the week, so it
      * goes through the SAME atomic award a finished match uses — writing
@@ -1131,7 +1139,7 @@ function cleanReward(r: any): MissionReward | null {
   const type = String(r?.type || '') as RewardType;
   const amount = Math.max(0, Math.floor(Number(r?.amount) || 0));
   if (!amount) return null;
-  if (!['coins', 'xp', 'cup', 'heart', 'ticket', 'cash', 'lifeline', 'spin', 'cosmetic'].includes(type)) return null;
+  if (!['coins', 'xp', 'cup', 'heart', 'ticket', 'cash', 'lifeline', 'character', 'spin', 'cosmetic'].includes(type)) return null;
   const out: MissionReward = { type, amount };
   if (r.target) out.target = String(r.target).slice(0, 40);
   if (r.label) out.label = String(r.label).slice(0, 60);

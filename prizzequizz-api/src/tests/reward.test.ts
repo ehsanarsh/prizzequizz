@@ -54,6 +54,35 @@ async function main(): Promise<void> {
   (gameConfig as any).rewards.hold = { enabled: false, riskThreshold: 90 };
   console.log('✔ hold is opt-in: only risky users parked when enabled; clean users always paid');
 
+  /* «کاراکترها ... از طریق چرخونه یا استریک به دست بیاد» — the wheel and the
+   * streak calendar pay through one granter, so a character segment has to
+   * come out of that same door as coins and tickets do. */
+  const { grantReward } = await import('../services/rewardsService.js');
+  const { saveCharacter, buildRoster, _resetMemory } = await import('../services/characterSelectionService.js');
+  _resetMemory();
+  const hero = await saveCharacter({ name: 'قهرمان گردونه', viaPurchase: false, viaLevel: false, enabled: true });
+  /* A second one on the roster, so «granted nothing» and «granted whichever
+   * came first» are two different outcomes rather than the same one. */
+  const other = await saveCharacter({ name: 'کاراکتر دیگر', viaPurchase: false, viaLevel: false, enabled: true });
+  const u4 = await mkUser('4');
+  await grantReward(u4, { type: 'character', amount: 1, target: hero.id, label: 'کاراکتر', icon: '🦸' }, 'rw-wheel-4');
+  const roster = await buildRoster(u4);
+  assert.equal(roster.characters.find((c) => c.id === hero.id)!.unlocked, true,
+    'a character segment on the wheel granted nothing');
+  /* Spinning onto it twice is not two characters, and must not throw. */
+  await grantReward(u4, { type: 'character', amount: 1, target: hero.id, label: 'کاراکتر', icon: '🦸' }, 'rw-wheel-4b');
+  assert.equal((await buildRoster(u4)).characters.filter((c) => c.unlocked && c.id === hero.id).length, 1);
+  /* A segment with no character named must not quietly grant a random one. */
+  /* A segment with no character named must grant NOTHING. Asked of somebody
+   * who owns none, so «granted nothing» and «granted whichever was first» are
+   * not the same answer. */
+  const u5 = await mkUser('5');
+  await grantReward(u5, { type: 'character', amount: 1, target: '', label: 'کاراکتر', icon: '🦸' }, 'rw-wheel-5');
+  const afterEmpty = (await buildRoster(u5)).characters.filter((c) => c.unlocked).map((c) => c.id);
+  assert.deepEqual(afterEmpty, [], 'an empty target handed over a character nobody named: ' + JSON.stringify(afterEmpty));
+  void other;
+  console.log('✔ the wheel and the streak can hand over a character, once');
+
   console.log('\nALL REWARD PAYOUT TESTS PASSED');
 }
 

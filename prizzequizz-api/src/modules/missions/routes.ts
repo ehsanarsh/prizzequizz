@@ -66,13 +66,16 @@ export function registerMissionRoutes(router: Router, base: string): void {
   });
 
   /* What is inside it, for the operator. */
+  /* Guarded exactly as the sibling /admin/missions routes are: there is no
+   * «missions» permission in the panel's tab list, so asking for one here
+   * would lock out the very admins who can already edit the missions. */
   router.add('GET', `${base}/admin/missions/box`, async (ctx) => {
-    if (!requireAdmin(ctx, { tab: 'missions' })) return;
+    if (!requireAdmin(ctx)) return;
     json(ctx.res, 200, await getBoxConfig());
   });
 
   router.add('PUT', `${base}/admin/missions/box`, async (ctx) => {
-    if (!requireAdmin(ctx, { tab: 'missions' })) return;
+    if (!requireAdmin(ctx)) return;
     const next = await setBoxConfig((ctx.body ?? {}) as any);
     await recordAdmin({ action: 'mission_box_config', meta: next as any });
     json(ctx.res, 200, next);

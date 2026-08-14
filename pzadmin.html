@@ -3287,7 +3287,7 @@ let LL_ROWS=[];
    real odds and the expected cost per spin are computed and shown alongside —
    an operator setting a jackpot should see what it costs before players do. */
 let RW_CFG=null;
-const RW_TYPES=[['coins','🪙 سکه'],['xp','⚡ XP'],['cash','💰 تومان (صندوق جایزه)'],['ticket','🎫 بلیت'],['heart','❤️ قلب'],['lifeline','🧩 کمک'],['nothing','— پوچ']];
+const RW_TYPES=[['coins','🪙 سکه'],['xp','⚡ XP'],['cash','💰 تومان (صندوق جایزه)'],['ticket','🎫 بلیت'],['heart','❤️ قلب'],['lifeline','🧩 کمک'],['character','🦸 کاراکتر'],['nothing','— پوچ']];
 function rwTypeSel(idp,i,v){
   return '<select id="'+idp+'_type_'+i+'" onchange="rwHint(\''+idp+'\','+i+')">'+
     RW_TYPES.map((t)=>'<option value="'+t[0]+'"'+(v===t[0]?' selected':'')+'>'+t[1]+'</option>').join('')+'</select>';
@@ -3295,8 +3295,15 @@ function rwTypeSel(idp,i,v){
 function rwHint(idp,i){
   const t=($('#'+idp+'_type_'+i)||{}).value, el=$('#'+idp+'_target_'+i);
   if(!el) return;
-  el.placeholder = t==='ticket' ? 'green / blue / red' : t==='lifeline' ? 'p5050 / ptime / psecond' : '—';
-  el.disabled = !(t==='ticket'||t==='lifeline');
+  /* A character prize is one character, named by its id — the list is offered
+     so it is picked rather than typed, because a mistyped id is a segment that
+     spins, celebrates and gives nothing. */
+  el.placeholder = t==='ticket' ? 'green / blue / red'
+    : t==='lifeline' ? 'p5050 / ptime / psecond'
+    : t==='character' ? 'شناسهٔ کاراکتر' : '—';
+  el.disabled = !(t==='ticket'||t==='lifeline'||t==='character');
+  el.setAttribute('list', t==='character' ? 'rw_charlist' : '');
+  if(t==='character'){ const a2=$('#'+idp+'_amount_'+i); if(a2&&Number(a2.value||0)<1) a2.value=1; }
 }
 let RW_ODDS={rows:[],perSpin:{}};
 let RW_HOLD={enabled:false,riskThreshold:90};
@@ -3475,7 +3482,19 @@ const MS_KINDS=[['daily','روزانه'],['weekly','هفتگی'],['achievement',
 const MS_RARITY=[['common','🟢 معمولی'],['rare','🔵 کمیاب'],['epic','🟣 حماسی'],
   ['legendary','🟠 افسانه‌ای'],['mythic','👑 اسطوره‌ای']];
 const MS_REWARD_TYPES=[['coins','🪙 سکه'],['xp','⚡ XP'],['cup','🏆 کاپ'],['heart','❤️ قلب'],['ticket','🎫 بلیت'],
-  ['cash','💰 تومان'],['lifeline','🧩 کمک'],['spin','🎡 چرخش'],['cosmetic','✨ ظاهری']];
+  ['cash','💰 تومان'],['lifeline','🧩 کمک'],['character','🦸 کاراکتر'],['spin','🎡 چرخش'],['cosmetic','✨ ظاهری']];
+/* The roster, for any reward whose «target» is a character id. Loaded once and
+   offered as a datalist so an id is picked rather than typed — a mistyped id is
+   a mission that quietly pays nothing. */
+let MS_CHARS=[];
+async function msLoadChars(){
+  if(MS_CHARS.length) return MS_CHARS;
+  try{ const d=await api('GET','/admin/characters'); MS_CHARS=(d.characters||[]).map(c=>[c.id,c.name]); }catch(e){ MS_CHARS=[]; }
+  return MS_CHARS;
+}
+function msCharList(id){
+  return '<datalist id="'+id+'">'+MS_CHARS.map(c=>'<option value="'+esc(c[0])+'">'+esc(c[1])+'</option>').join('')+'</datalist>';
+}
 
 async function renderMissions2(){
   const tabs=MS_KINDS.map((k)=>'<button class="btn sm '+(MS_KIND===k[0]?'pri':'')+
@@ -3486,6 +3505,7 @@ async function renderMissions2(){
     const d=await api('GET','/admin/missions');
     MS_ROWS=d.rows||[]; MS_METRICS=d.metrics||[];
     try{ MS_BOX=await api('GET','/admin/missions/box'); }catch(e){ MS_BOX=null; }
+    await msLoadChars();
     msPaint();
   }catch(e){ $('#msBody').innerHTML='<div class="card empty">'+esc(e.message||'خطا')+'</div>'; }
 }
@@ -3510,7 +3530,8 @@ function msBoxCard(){
     '<div class="grid g4">'+rw.map((r,i)=>
       '<div class="field"><label>جایزهٔ '+fa(i+1)+'</label>'+sel('msb_t_'+i,MS_REWARD_TYPES,r.type)+
       '<input id="msb_a_'+i+'" type="number" min="0" value="'+(r.amount||0)+'" placeholder="مقدار">'+
-      '<input id="msb_g_'+i+'" value="'+esc(r.target||'')+'" placeholder="نوع بلیت/کمک (اختیاری)"></div>').join('')+'</div>'+
+      '<input id="msb_g_'+i+'" value="'+esc(r.target||'')+'" placeholder="بلیت/کمک/شناسهٔ کاراکتر (اختیاری)" list="msb_charlist"></div>').join('')+
+      msCharList('msb_charlist')+'</div>'+
     '<div class="note">مقدار صفر یعنی این ردیف داخل جعبه نیست.</div>'+
     '<button class="btn pri" onclick="msBoxSave()">💾 ذخیرهٔ جعبه</button>'+
   '</div>';
@@ -3529,7 +3550,7 @@ async function msBoxSave(){
 }
 function msRewardText(rs){
   if(!rs||!rs.length) return '—';
-  const nm={coins:'سکه',xp:'XP',cup:'کاپ',heart:'قلب',ticket:'بلیت',cash:'تومان',lifeline:'کمک',spin:'چرخش',cosmetic:'ظاهری'};
+  const nm={coins:'سکه',xp:'XP',cup:'کاپ',heart:'قلب',ticket:'بلیت',cash:'تومان',lifeline:'کمک',character:'کاراکتر',spin:'چرخش',cosmetic:'ظاهری'};
   return rs.map((r)=>fa(r.amount)+' '+(nm[r.type]||r.type)+(r.target?(' '+esc(r.target)):'')).join(' + ');
 }
 function msPaint(){
@@ -3590,7 +3611,8 @@ function msEdit(id){
       '<div class="field"><label>جایزهٔ '+fa(i+1)+'</label>'+
         sel('ms_rt_'+i,MS_REWARD_TYPES,rw.type)+
         '<input id="ms_ra_'+i+'" type="number" min="0" value="'+(rw.amount||0)+'" placeholder="مقدار" style="margin-top:5px">'+
-        '<input id="ms_rg_'+i+'" value="'+esc(rw.target||'')+'" placeholder="هدف (green/p5050)" style="margin-top:5px"></div>').join('')+
+        '<input id="ms_rg_'+i+'" value="'+esc(rw.target||'')+'" placeholder="هدف (green / p5050 / شناسهٔ کاراکتر)" list="ms_charlist" style="margin-top:5px"></div>').join('')+
+      msCharList('ms_charlist')+
     '</div>'+
     '<div style="margin-top:12px"><button class="btn pri" onclick="msSave()">ذخیره</button> '+
       '<button class="btn" onclick="this.closest(\'.modal-bg\').remove()">انصراف</button></div>');
@@ -3622,7 +3644,8 @@ async function msDel(id){
 }
 
 async function renderRewards(){
-  $('#main').innerHTML=head('گردونه و جایزهٔ روزانه','بخش‌های گردونه، جایزهٔ هر بخش، شانس هر کدام و تقویم استریک — همه از همین‌جا')+
+  await msLoadChars();
+  $('#main').innerHTML=msCharList('rw_charlist')+head('گردونه و جایزهٔ روزانه','بخش‌های گردونه، جایزهٔ هر بخش، شانس هر کدام و تقویم استریک — همه از همین‌جا')+
     '<div id="rwBody"><div class="skel"></div></div>';
   try{
     RW_CFG=await api('GET','/admin/rewards');

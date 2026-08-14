@@ -2374,6 +2374,28 @@ input,textarea,select,[contenteditable="true"],.pz-selectable,.pz-selectable *{
 /* ===== MISSIONS CENTER v14 ===== */
 .hero-mission{cursor:pointer;transition:transform .12s,box-shadow .12s}.hero-mission:active{transform:translateY(2px)}
 .mission-hero{display:flex;align-items:center;gap:12px;margin-bottom:12px;padding:16px;border:var(--stroke);border-radius:22px;background:linear-gradient(135deg,#342b12,#141414);box-shadow:var(--hard-sm);position:relative;overflow:hidden}.mission-hero::after{content:"🎯";position:absolute;left:-8px;top:-18px;font-size:90px;opacity:.08}.mission-hero .mi{width:56px;height:56px;border-radius:18px;border:2.5px solid #000;background:linear-gradient(180deg,#FFE24A,var(--bolt-2));display:grid;place-items:center;font-size:30px;box-shadow:0 4px 0 #000;color:#141414}.mission-hero b{font-size:17px;font-weight:900}.mission-hero p{font-size:12px;color:var(--muted);font-weight:700;line-height:1.65;margin-top:2px}.mission-stats{display:flex;gap:7px;flex-wrap:wrap;margin-top:8px}.mission-stat{font-size:10.5px;font-weight:900;padding:4px 8px;border-radius:999px;border:2px solid #000;background:var(--ink-3);color:var(--paper)}.mission-tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:10px 0 12px}.mission-tab{border:2px solid #000;border-radius:14px;background:var(--ink-2);color:var(--muted);font-family:inherit;font-size:12px;font-weight:900;padding:10px 4px;box-shadow:var(--hard-sm);cursor:pointer}.mission-tab.active{background:linear-gradient(180deg,#FFE24A,var(--bolt-2));color:#141414}.mission-card{background:var(--ink-2);border:var(--stroke);border-radius:19px;padding:14px;margin-bottom:11px;box-shadow:var(--hard-sm);position:relative;overflow:hidden}.mission-card.done{background:linear-gradient(180deg,#1d2a20,#121815);box-shadow:var(--hard-sm),0 0 0 2px rgba(51,217,124,.18)}.mission-card.claimed{opacity:.74;filter:saturate(.7)}.mission-top{display:flex;align-items:center;gap:11px}.mission-ico{width:48px;height:48px;border-radius:15px;border:2px solid #000;background:var(--ink-3);display:grid;place-items:center;font-size:24px;flex-shrink:0}.mission-info{flex:1;min-width:0}.mission-info b{display:block;font-size:14.5px;font-weight:900;line-height:1.45}.mission-info span{font-size:11.5px;color:var(--muted);font-weight:700;line-height:1.65}.mission-reward{font-size:11px;font-weight:900;color:var(--bolt);white-space:nowrap}.mission-track{height:13px;border-radius:8px;background:#000;border:2px solid #000;overflow:hidden;margin:12px 0 7px}.mission-track i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--ok),#7dffb4);border-radius:5px;transition:width .65s cubic-bezier(.2,.9,.3,1)}.mission-foot{display:flex;align-items:center;gap:10px}.mission-foot small{flex:1;color:var(--muted);font-size:11px;font-weight:900}.mission-foot .btn{width:auto;min-width:96px;padding:9px 11px;font-size:12px;border-radius:13px;box-shadow:var(--hard-sm)}.mission-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0 14px}.mission-actions .btn{padding:12px 10px;font-size:13px;border-radius:15px;box-shadow:var(--hard-sm)}.streak-card{display:flex;align-items:center;gap:12px;border:var(--stroke);border-radius:18px;background:var(--ink-2);box-shadow:var(--hard-sm);padding:13px;margin-bottom:12px}.streak-days{display:flex;gap:5px;flex:1}.streak-days i{flex:1;height:28px;border-radius:9px;border:2px solid #000;background:#25252b;display:grid;place-items:center;font-style:normal;font-size:10px;font-weight:900;color:var(--muted)}.streak-days i.on{background:linear-gradient(180deg,#FFE24A,var(--bolt-2));color:#141414}.mission-empty{padding:22px 14px;text-align:center;border:var(--stroke);border-radius:20px;background:var(--ink-2);box-shadow:var(--hard-sm);color:var(--muted);font-size:13px;font-weight:800;line-height:1.8}.mission-empty .big{font-size:42px;display:block;margin-bottom:6px}
+/* THE DAILY BOX. Three states in one card — waiting with a count, ready and
+   asking to be tapped, and opened with what was inside. */
+.ms-box{display:flex;align-items:center;gap:12px;padding:13px 14px;margin-bottom:11px;
+  border:var(--stroke);border-radius:19px;background:var(--ink-2);box-shadow:var(--hard-sm)}
+.ms-box.ready{cursor:pointer;background:linear-gradient(135deg,#3a2f10,#171410);border-color:var(--bolt);
+  box-shadow:var(--hard-sm),0 0 0 2px rgba(255,226,74,.22)}
+.ms-box.ready:active{transform:translateY(2px)}
+.ms-box.opened{background:linear-gradient(180deg,#1d2a20,#121815);border-color:rgba(51,217,124,.5)}
+.ms-box-ico{width:52px;height:52px;flex:0 0 auto;border-radius:16px;border:2px solid #000;
+  background:var(--ink-3);display:grid;place-items:center;font-size:28px}
+.ms-box-ico.dim{opacity:.55;filter:grayscale(.6)}
+.ms-box-ico.shake{background:linear-gradient(180deg,#FFE24A,var(--bolt-2));animation:msBoxShake 1.5s ease-in-out infinite}
+@keyframes msBoxShake{0%,58%,100%{transform:rotate(0)}64%{transform:rotate(-9deg)}72%{transform:rotate(8deg)}80%{transform:rotate(-5deg)}88%{transform:rotate(3deg)}}
+.ms-box-txt{flex:1;min-width:0}
+.ms-box-txt b{display:block;font-size:14px;font-weight:900;line-height:1.5}
+.ms-box-txt span{display:block;font-size:11.5px;color:var(--muted);font-weight:700;line-height:1.7}
+.ms-box-bar{display:block;height:8px;margin-top:7px;border-radius:6px;background:#000;border:1.5px solid #000;overflow:hidden}
+.ms-box-bar b{display:block;height:100%;background:linear-gradient(90deg,var(--bolt),#fff27a);border-radius:4px;transition:width .5s}
+.ms-box-tag{flex:0 0 auto;font-size:11px;font-weight:900;padding:6px 10px;border-radius:11px;
+  border:2px solid #000;background:var(--ink-3);color:var(--muted)}
+.ms-box-tag.go{background:linear-gradient(180deg,#FFE24A,var(--bolt-2));color:#141414}
+.ms-box-note{font-size:11px;color:var(--muted);font-weight:700;line-height:1.85;margin:-4px 4px 12px}
 @media(max-width:370px){.mission-tabs{gap:6px}.mission-tab{font-size:11px}.mission-actions{grid-template-columns:1fr}.mission-card{padding:12px}.mission-foot{align-items:stretch;flex-direction:column}.mission-foot .btn{width:100%}.mission-hero{padding:13px}.mission-hero .mi{width:50px;height:50px}}
 
 
@@ -4856,10 +4878,13 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
       </div>
 
       <div class="cs-filters">
+        <!-- The ring is the player's OWN wardrobe: «در قسمت انتخاب کاراکتر
+             فقط کاراکترهای فعال نمایش داده بشه». The locked ones are not a
+             filter tab here any more — they are stock, and stock lives in the
+             shop, which this chip goes to. -->
         <div class="cs-tabs">
-          <button class="cs-tab on" data-tab="all"      onclick="csTab('all',this)">همه</button>
-          <button class="cs-tab"    data-tab="unlocked" onclick="csTab('unlocked',this)">آزادشده</button>
-          <button class="cs-tab"    data-tab="locked"   onclick="csTab('locked',this)">قفل</button>
+          <button class="cs-tab on" data-tab="unlocked" onclick="csTab('unlocked',this)">کاراکترهای من</button>
+          <button class="cs-tab" id="csShopChip" onclick="csGoShop()" style="display:none"></button>
         </div>
         <div class="cs-kinds">
           <button class="cs-kind on"  data-kind="all"    onclick="csKind('all',this)">همه</button>
@@ -6531,6 +6556,21 @@ function csSetEmpty(msg){
 }
 
 /* ---- filters ------------------------------------------------------------ */
+/* The rest of the roster is for sale, so the way to it is the shop's own
+   character shelf rather than a locked slot on the ring. */
+function csGoShop(){
+  try{ go('shop'); }catch(e){ return; }
+  setTimeout(()=>{
+    const find=()=>[...document.querySelectorAll('#shopTabs .tab')].find(b=>/کاراکتر/.test(b.textContent));
+    let t=find();
+    /* The tab bar is rebuilt from the server's catalogue, so before that lands
+       the shop still shows the markup's own tabs — which have no character
+       shelf on them. Rebuilding it here is what makes this chip work on a cold
+       shop instead of landing the player on «آیتم‌های کاربردی». */
+    if(!t){ try{ pzRebuildShopTabs([]); }catch(e){} t=find(); }
+    if(t) shopTab(t,'characters'); else renderShop('characters');
+  },60);
+}
 function csTab(t,el){
   csTabF=t;
   document.querySelectorAll('#character .cs-tab').forEach(b=>b.classList.toggle('on',b===el));
@@ -6547,15 +6587,27 @@ function csApplyFilter(){
   const lvl=document.getElementById('csLvl');
   if(lvl)lvl.textContent='⭐ لول '+csFa(csData.level||1);
 
+  /* Only what the player actually has. A locked character on the ring is a
+     shop window standing in the middle of the wardrobe: it cannot be chosen,
+     and it pushed the ones that can be several turns apart. */
   csView=csData.characters.filter(c=>{
-    if(csTabF==='unlocked'&&!c.unlocked)return false;
-    if(csTabF==='locked'&&c.unlocked)return false;
+    if(!c.unlocked)return false;
     if(csKindF!=='all'&&c.kind!==csKindF)return false;
     return true;
   });
 
+  /* How many more there are to get, and the way to them. */
+  const locked=csData.characters.filter(c=>!c.unlocked).length;
+  const chip=document.getElementById('csShopChip');
+  if(chip){
+    if(locked>0){ chip.style.display=''; chip.textContent='🛍 '+csFa(locked)+' کاراکتر دیگر'; }
+    else chip.style.display='none';
+  }
+
   if(!csView.length){
-    csSetEmpty(csData.characters.length?'در این دسته کاراکتری نیست':'هنوز کاراکتری اضافه نشده است');
+    csSetEmpty(csData.characters.length
+      ? 'هنوز کاراکتری نداری — از فروشگاه یکی بگیر'
+      : 'هنوز کاراکتری اضافه نشده است');
     return;
   }
 
@@ -6639,7 +6691,11 @@ function csFloor(stage){
         const rx=Math.min(rw*CS_ART.topHalfW, w*0.46);
         const ry=rx*CS_ART.ellipse;
         const centreY=(imgTop + rh*CS_ART.floorY) - sr.top;
-        return { baseY: centreY + ry, rx, rise: ry*2 };
+        /* baseY is the NEAR edge — where a character at the front of the ring
+           stands. centreY is the middle of the ellipse, which is what the ring
+           is drawn around. Both are handed back so neither has to be guessed
+           back out of the other. */
+        return { baseY: centreY + ry, centreY, ry, rx };
       }
     }
   }
@@ -6652,50 +6708,49 @@ function csFloor(stage){
     const pr=svg.getBoundingClientRect(), sr=stage.getBoundingClientRect();
     if(pr.height)baseY=(pr.top-sr.top)+pr.height*(63/150);
   }
-  return { baseY, rx: Math.min(w*0.38,158), rise: Math.min(h*0.19,104) };
+  const frx=Math.min(w*0.38,158);
+  const fry=Math.max(16, frx*CS_ART.ellipse);
+  return { baseY: baseY+fry, centreY: baseY, ry: fry, rx: frx };
 }
 
-/* Spacing is a FIXED angle between neighbours, never 2*PI/n. Dividing the
-   circle by the roster size put two characters half a turn apart and two
-   hundred on top of each other; this way the gap is identical at any size.
-   Only the front arc stands on the podium — the rest of the ring is behind it
-   and rotates in as you spin. Showing the back half as well was what made nine
-   characters bunch together, because past ninety degrees they swing back toward
-   the middle and pass in front of the ones ahead of them. */
-/* The horizontal position is LINEAR in the distance from the front, not
-   sin(angle). A sine is the honest projection of a circle, but it flattens near
-   ninety degrees, so however the angles were chosen the outermost pair always
-   ended up almost on top of each other. Distance from the front still drives
-   DEPTH — scale, height, blur, z-order — so the row reads as a ring curving
-   away, while the gaps between neighbours stay exactly even.
+/* ---- THE RING, SEEN FROM THE FRONT ---------------------------------------
+   «چیدمان کاراکترها باید به صورت دایره‌ای و ۳ بعدی باشه، نه به شکل وی و به
+   امتداد بالا — باید به عمق بره نه بالا.»
 
-   Seven characters cannot be laid side by side across a phone without touching:
-   at 412px there is roughly 59px each, and a character is 146px wide. What buys
-   the room is the U — each step out is also a step UP, and since a slot scales
-   from its soles, the one behind ends up with its head clear above the top of
-   the one in front. The only overlap left is the lower inner corner, which is
-   feet and floor rather than face. */
-const CS_LAY = {
-  gapPx:  74,    // even horizontal gap between neighbours, at most
-  gapFrac:0.40,  // ...and never more than this much of the stage per arm,
-                 // so the character on the end of the arm is not cut by the edge
-  side:   3,     // how many stand either side of the front one — seven on stage
-  rise:   320,   // how high the arm of the U reaches, in px
-  risePow:0.80,  // <1 spends more of the climb on the first step, where the
-                 // front character is biggest and hides the most
-  lift:   46,    // raise everyone clear of the stone (about 1.2cm)
-  scale0: 1.04,  // the character at the front
-  scaleK: 0.79,  // and each step further back
-  fade:   0.5,   // slots of travel spent fading in at the end of the arm
-  dim:    0.58   // how solid the character at the end of the arm still looks
+   What was here was a U: each step out from the front was also a big step UP
+   the screen, which reads as a fan of characters climbing rather than a circle
+   turning away. This is the circle instead. Every character stands at an angle
+   θ on one horizontal ring, and the screen shows that ring in perspective:
+
+     x     = rx · sin θ              — round the ring
+     floor = baseY + ry · cos θ      — the podium is an ELLIPSE, so the far side
+                                       of it sits higher on screen than the near
+     scale = 1 / (1 + (1 − t)·depth) — things further away are smaller,
+                                       t = (cos θ + 1)/2, 1 at the front
+
+   The only vertical movement is the ellipse's own minor axis — a few dozen
+   pixels, the height of the stone — so a character walking round the back
+   RECEDES: smaller, dimmer, softer, behind the ones in front. It never climbs.
+   ry comes from the artwork's own ellipse ratio, so the ring is the stone. */
+const CS3D = {
+  /* The angle between neighbours is 2π/max(n, minStations): a roster of three
+     still curves away instead of standing in a straight line, and a roster of
+     forty is a full ring rather than forty people in one spot. */
+  minStations: 8,
+  depth:   1.15,   // perspective strength — the far side is ~1/2.15 the size
+  scale0:  1.06,   // the character at the front
+  lift:    30,     // clear of the stone
+  blurMax: 2.0,    // how soft the far side goes
+  dimMin:  0.30,   // and how faint
+  hideCos:-0.86    // the sliver directly behind the podium is not drawn
 };
 
-/* The distance between two neighbours on screen. Narrower phones tighten it so
-   the character on the end of each arm still lands inside the stage. Drag uses
-   the same number, which is what makes the row follow the finger exactly. */
+/* Kept for the drag: how many pixels of finger movement is one character. The
+   ring's own spacing varies with position — that is what perspective IS — so
+   the finger uses one steady number instead. */
 function csGap(stage){
   const w=(stage&&stage.clientWidth)||360;
-  return Math.max(30,Math.min(CS_LAY.gapPx,w*CS_LAY.gapFrac/CS_LAY.side));
+  return Math.max(34,Math.min(78,w*0.20));
 }
 
 /* One character = one step round the ring; the ring's period is the whole
@@ -6709,15 +6764,11 @@ function csLayout(){
   const stage=document.getElementById('csStage');
   if(!ring||!stage||!csView.length)return;
   const n=csView.length;
-  const { baseY, rx, rise } = csFloor(stage);
+  const { baseY, centreY, ry, rx } = csFloor(stage);
   const ART=146;                                  // slot height, see .cs-slot
   const step=csStep();
-  // Narrower screens tighten the gap so the neighbours never fall off the edge.
-  const gap=csGap(stage);
   const half=n/2;
-  /* Half a slot wider than what is drawn, so a character fades in and out at
-     the edge of the arc instead of popping. */
-  const edge=CS_LAY.side+0.5;
+  const ang=(Math.PI*2)/Math.max(n, CS3D.minStations);
 
   const slots=ring.children;
   let front=0, best=Infinity;
@@ -6730,26 +6781,23 @@ function csLayout(){
     const ad=Math.abs(d);
     if(ad<best){ best=ad; front=i; }
 
-    if(ad>edge){ el.style.display='none'; continue; }   // not on the stage yet
+    const th=d*ang;
+    const c=Math.cos(th);
+    if(c<CS3D.hideCos){ el.style.display='none'; continue; }   // straight out the back
     el.style.display='';
 
-    /* The U. Horizontal spacing is even, and the arms of the curve carry the
-       outer characters UP as well as out. A slot scales from its soles, so a
-       step up is a step clear: the character behind keeps its head and body
-       above the top of the one in front, and only its feet are hidden. */
-    const u=ad/CS_LAY.side;                       // 0 at the front, 1 at a tip
-    const depth=1-u;
-    const scale=CS_LAY.scale0*Math.pow(CS_LAY.scaleK,ad);
-    const x=d*gap;
-    const y=(baseY - CS_LAY.rise*Math.pow(u,CS_LAY.risePow)) - ART - CS_LAY.lift;
-    const blur=(1-depth)*1.1;
-    /* Fading is for the character LEAVING the arm, not for the one standing at
-       the end of it — the last one on each side has to be plainly visible, or
-       the stage only really shows five. */
-    const fade=Math.min(1,Math.max(0,(edge-ad)/CS_LAY.fade));
+    const t=(c+1)/2;                               // 1 at the front, 0 behind
+    const scale=CS3D.scale0/(1+(1-t)*CS3D.depth);
+    const x=rx*Math.sin(th);
+    /* Feet on the ellipse, then the body drawn upward from there. The slot's
+       origin is its soles, so the scale does the rest. */
+    const floorY=centreY + ry*c;
+    const y=floorY - ART - CS3D.lift*scale;
+    const blur=(1-t)*CS3D.blurMax;
     el.style.transform='translate3d('+x.toFixed(1)+'px,'+y.toFixed(1)+'px,0) scale('+scale.toFixed(3)+')';
-    el.style.zIndex=String(Math.round(depth*100));
-    el.style.opacity=((CS_LAY.dim+depth*(1-CS_LAY.dim))*fade).toFixed(2);
+    /* Depth order is the ring's own: whoever is nearer the front is in front. */
+    el.style.zIndex=String(Math.round(t*1000));
+    el.style.opacity=(CS3D.dimMin+t*(1-CS3D.dimMin)).toFixed(2);
     el.style.filter=blur>0.06?('blur('+blur.toFixed(2)+'px)'):'';
     el.classList.remove('sel');
   }
@@ -10944,11 +10992,18 @@ async function lgEnterLeague(){
 }
 
 let _lgTimer=null;
+/* The last league payload the screen read. The header's league-ticket chip
+   needs the tier prizes and the kickoff, and re-fetching them for a tap that
+   may never come is a request nobody asked for — so whatever the league screen
+   already fetched is kept here, and the chip only asks the server when it has
+   nothing. */
+let _pzLeagueMe=null;
 function lgStopTimer(){ if(_lgTimer){ clearInterval(_lgTimer); _lgTimer=null; } }
 async function renderLeagueLive(){
   const box=document.getElementById('lgBody'); if(!box) return;
   const r=await pzApi('GET','/leagues/me');
   const d=(r&&r.data)||null;
+  if(d) _pzLeagueMe=d;
   if(!d){ box.innerHTML='<div class="lg-live"><div class="lg-live-row"><span>فهرست لیگ گرفته نشد</span><b>—</b></div></div>'; return; }
   if(!d.enabled){ box.innerHTML='<div class="lg-live"><div class="lg-live-row"><span>لیگ هفتگی فعلاً خاموش است</span><b>—</b></div></div>'; return; }
 
@@ -10957,6 +11012,20 @@ async function renderLeagueLive(){
   const nextLine=lines.slice().reverse().find(l=>Number(l.cup)>Number(d.cup||0));
   const doorsOpen=Date.now()>=Number(d.doorsOpenAt||0);
   const mine=myTier?tiers.find(t=>t.key===myTier.key):null;
+
+  /* WHETHER THE BUTTON MAY BE PRESSED.
+     The server decides — it is the only one that knows whether the ticket is
+     still there — but an API that has not been restarted yet sends no answer
+     at all, and «undefined» read as «no» would leave the button dead for ever.
+     So when the field is missing it is worked out from the same four facts the
+     server uses, and the screen keeps working either way. */
+  const canEnter=(d.canEnter!==undefined&&d.canEnter!==null)
+    ? !!d.canEnter
+    : !!(d.enabled!==false && doorsOpen &&
+         (d.room || (d.qualifiedTier && Number((d.tickets||{})[d.qualifiedTier]||0)>0)));
+  const blockedWhy=d.enterBlockedReason!=null?d.enterBlockedReason
+    :(!d.qualifiedTier?'این هفته در جدول لیگ نیستی.'
+      :(!doorsOpen?'هنوز زمان ورود نرسیده است.':''));
 
   /* What the player gets for showing up — the single most important sentence
      on this screen, and the one the old hub never said. */
@@ -10987,13 +11056,19 @@ async function renderLeagueLive(){
       /* THE ONE BUTTON. It is dead until the doors open and then it is the
          only thing on the screen worth pressing, with the wait counting down
          on its own face so nobody has to read a table to know when to come
-         back. Which room is behind it is the server's business. */
-      '<button class="btn '+(d.canEnter?'btn-primary':'btn-ghost')+' lg-start" id="lgStartBtn"'+
-        (d.canEnter?'':' disabled')+' onclick="lgEnterLeague()">'+
-        '<span id="lgStartLabel">'+(d.canEnter?'🏁 شروع مسابقه لیگ':'شروع مسابقه لیگ')+'</span>'+
-        (d.canEnter?'':'<i id="lgStartCount">'+pzEsc(lgStartFace(d))+'</i>')+
+         back. Which room is behind it is the server's business.
+
+         When a room has ALREADY been drawn for this player it walks straight
+         into that room instead of asking for a seat they have — two buttons
+         for one errand, one of them on a card further down the screen, was a
+         choice nobody should have to make. */
+      '<button class="btn '+(canEnter?'btn-primary':'btn-ghost')+' lg-start" id="lgStartBtn"'+
+        (canEnter?'':' disabled')+
+        ' onclick="'+(d.room&&doorsOpen?('wtaLeagueEnter(\''+pzEsc(d.room.id)+'\')'):'lgEnterLeague()')+'">'+
+        '<span id="lgStartLabel">'+(canEnter?(d.room&&doorsOpen?'🏁 ورود به استودیو':'🏁 شروع مسابقه لیگ'):'شروع مسابقه لیگ')+'</span>'+
+        (canEnter?'':'<i id="lgStartCount">'+pzEsc(lgStartFace(d))+'</i>')+
       '</button>'+
-      (d.canEnter?'':'<div class="lg-hint" id="lgStartWhy">'+pzEsc(d.enterBlockedReason||'')+'</div>')+
+      (canEnter?'':'<div class="lg-hint" id="lgStartWhy">'+pzEsc(blockedWhy)+'</div>')+
       '<div class="lg-hint">مسابقه‌ها سرِ ساعت شروع می‌شوند. هرکس آن لحظه در استودیو نباشد از همان اول حذف است و جایزهٔ حضور هم نمی‌گیرد — پس چند دقیقه زودتر بیا.</div>'+
     '</div>'+
 
@@ -11003,8 +11078,10 @@ async function renderLeagueLive(){
         '<div class="lg-live-row"><span>راند</span><b>'+fa(d.room.round)+'</b></div>'+
         '<div class="lg-live-row"><span>حریفان</span><b>'+fa(d.room.seats)+' نفر</b></div>'+
         '<div class="lg-live-row"><span>شروع این اتاق</span><b>'+pzEsc(lgWhen(d.room.startsAt))+'</b></div>'+
+        /* No second button here: the one at the top of the screen is the way
+           in, and this card says where that way leads. */
         (doorsOpen
-          ? '<button class="btn btn-primary" style="margin-top:10px" onclick="wtaLeagueEnter(\''+d.room.id+'\')">ورود به استودیو</button>'
+          ? '<div class="lg-hint">با دکمهٔ <b>ورود به استودیو</b> در بالای همین صفحه وارد این اتاق می‌شوی.</div>'
           : '<div class="lg-hint">دکمهٔ ورود '+fa(10)+' دقیقه قبل از شروع فعال می‌شود.</div>')+
       '</div>'
       : '<div class="lg-card"><div class="lg-card-h">🎯 اتاق تو</div>'+
@@ -11056,7 +11133,7 @@ async function renderLeagueLive(){
        something happens when it reaches zero. Asking the server again is what
        makes it live, because only the server knows if the ticket is still
        there. */
-    if(!d.canEnter && d.qualifiedTier && Date.now()>=Number(d.doorsOpenAt||0)){
+    if(!canEnter && d.qualifiedTier && Date.now()>=Number(d.doorsOpenAt||0)){
       lgStopTimer(); renderLeagueLive();
     }
   },1000);
@@ -11823,35 +11900,73 @@ async function renderCharacterShop(){
     c.innerHTML='<div class="wallet-empty" style="text-align:center;padding:30px;color:var(--muted)"><div style="font-size:40px">🦸</div><p style="margin-top:8px">فهرست کاراکترها در دسترس نیست.</p></div>';
     return;
   }
-  /* On sale = the operator marked it purchasable. Ones already owned are shown
-     too, marked as owned, so the shelf does not silently shrink as you buy. */
-  const list=roster.characters.filter(x=>x.viaPurchase);
+  /* THE WHOLE ROSTER IS THE SHELF, not only the part with a price on it.
+     «از طریق جوایز بازی یا چرخونه یا استریک یا ماموریت‌ها به دست بیاد ولی
+     لیستش در فروشگاه باشه» — a character that arrives from the wheel is still
+     something the player wants to see and want, and the card says how it is
+     come by. Ones already owned stay on the shelf marked as active, so it does
+     not silently shrink as they are collected. */
+  const list=roster.characters.slice();
   if(!list.length){
-    c.innerHTML='<div class="wallet-empty" style="text-align:center;padding:30px;color:var(--muted)"><div style="font-size:40px">🦸</div><p style="margin-top:8px">فعلاً کاراکتری برای فروش نیست.</p></div>';
+    c.innerHTML='<div class="wallet-empty" style="text-align:center;padding:30px;color:var(--muted)"><div style="font-size:40px">🦸</div><p style="margin-top:8px">فعلاً کاراکتری اضافه نشده است.</p></div>';
     return;
   }
+  const myLevel=Number(roster.level||1)||1;
+
+  /* Grouped exactly as the panel grouped them, in the order the panel sorted
+     them; anything ungrouped falls into one shelf at the end. */
+  const groups=[]; const byName={};
+  list.forEach(ch=>{
+    const key=(ch.group||'').trim();
+    if(!byName[key]){ byName[key]={name:key,items:[]}; groups.push(byName[key]); }
+    byName[key].items.push(ch);
+  });
+  groups.sort((a,b)=>(a.name?0:1)-(b.name?0:1));   // the ungrouped shelf last
+
   /* Styled inline on purpose: «note» is the ADMIN panel's class, not this
      file's, so it was an unstyled div running edge-to-edge while every card
      beside it sat inset. */
   c.innerHTML='<div style="margin:14px 18px 2px;padding:10px 12px;background:rgba(255,255,255,.06);'+
     'border:1px solid rgba(255,255,255,.10);border-radius:14px;color:var(--muted);'+
-    'font-size:12px;font-weight:700;line-height:1.9">کاراکترها با <b>سکه</b> خریداری می‌شوند. بعد از خرید، از بخش «کاراکتر من» می‌توانی فعالش کنی.</div>'+
-    '<div class="shop-grid"></div>';
-  const g=c.querySelector('.shop-grid');
-  list.forEach(ch=>{
-    const d=document.createElement('div'); d.className='item'; d.style.position='relative';
-    const owned=!!ch.unlocked;
-    const price=Math.max(0,Number(ch.price)||0);
-    d.innerHTML=(ch.isNew?'<span class="shop-badge" style="position:absolute;top:8px;left:8px;background:var(--bolt,#FFD21F);color:#111;font-size:9px;font-weight:900;padding:2px 7px;border-radius:8px">تازه</span>':'')+
-      '<div class="it-ico" style="height:64px;display:flex;align-items:center;justify-content:center">'+pzFaceHTML({avatar:'',character:ch})+'</div>'+
-      '<b>'+esc0(ch.name||'کاراکتر')+'</b>'+
-      '<p>'+esc0(ch.description||'')+'</p>'+
-      '<div class="price">'+(owned?'✓ داری':(price>0?fa(price)+' 🪙':'رایگان'))+'</div>';
-    if(!owned) d.onclick=()=>buyCharacter(ch,d);
-    else d.style.opacity='.72';
-    g.appendChild(d);
+    'font-size:12px;font-weight:700;line-height:1.9">کاراکترها با <b>سکه</b> خریداری می‌شوند و بعضی‌هایشان <b>لول</b> هم می‌خواهند. بعضی هم فقط از گردونه، استریک یا مأموریت‌ها به دست می‌آیند. هرکدام را که داشته باشی، در «انتخاب کاراکتر» قابل انتخاب است.</div>'+
+    groups.map((gr,i)=>
+      (gr.name?'<div class="section-title" style="margin:16px 18px 6px;font-size:13px;font-weight:900">'+esc0(gr.name)+'</div>':
+        (groups.length>1?'<div class="section-title" style="margin:16px 18px 6px;font-size:13px;font-weight:900">سایر کاراکترها</div>':''))+
+      '<div class="shop-grid" data-g="'+i+'"></div>').join('');
+
+  groups.forEach((gr,gi)=>{
+    const g=c.querySelector('.shop-grid[data-g="'+gi+'"]'); if(!g) return;
+    gr.items.forEach(ch=>{
+      const d=document.createElement('div'); d.className='item'; d.style.position='relative';
+      const owned=!!ch.unlocked;
+      const price=Math.max(0,Number(ch.price)||0);
+      const need=Math.max(0,Number(ch.unlockLevel)||0);
+      /* Money is not enough when a level is on it, and the card has to say so
+         BEFORE the tap — the server refuses either way, but being refused is
+         not how a player should learn the rule. */
+      const lvlShort=!owned&&need>0&&myLevel<need;
+      const buyable=!owned&&ch.viaPurchase&&!lvlShort;
+      const priceTxt=owned?'برای شما فعال است ✅'
+        :lvlShort?('🔒 لول '+fa(need))
+        :ch.viaPurchase?(price>0?fa(price)+' 🪙':'رایگان')
+        :'جایزه‌ای';
+      d.innerHTML=(owned
+          ?'<span class="shop-badge" style="position:absolute;top:8px;left:8px;background:var(--ok,#33D97C);color:#08130c;font-size:9px;font-weight:900;padding:2px 7px;border-radius:8px">فعال</span>'
+          :(ch.isNew?'<span class="shop-badge" style="position:absolute;top:8px;left:8px;background:var(--bolt,#FFD21F);color:#111;font-size:9px;font-weight:900;padding:2px 7px;border-radius:8px">تازه</span>':''))+
+        '<div class="it-ico" style="height:64px;display:flex;align-items:center;justify-content:center">'+pzFaceHTML({avatar:'',character:ch})+'</div>'+
+        '<b>'+esc0(ch.name||'کاراکتر')+'</b>'+
+        '<p>'+esc0(owned?(ch.description||''):(ch.lockReason||ch.description||''))+'</p>'+
+        '<div class="price"'+(owned?' style="color:var(--ok,#33D97C)"':'')+'>'+priceTxt+'</div>';
+      if(buyable) d.onclick=()=>buyCharacter(ch,d);
+      else if(owned){ d.style.opacity='.82'; d.onclick=()=>csGoPick(ch); }
+      else d.onclick=()=>toast(ch.lockReason||'این کاراکتر از راه دیگری به دست می‌آید',2600);
+      g.appendChild(d);
+    });
   });
 }
+/* Owning it is not wearing it — the shelf hands the player straight to the
+   picker so the character they just earned can be put on. */
+function csGoPick(){ try{ charBack='shop'; }catch(e){} go('character'); }
 async function buyCharacter(ch,el){
   if(el&&el._busy) return; if(el)el._busy=true;
   const r=await pzApi('POST','/characters/'+encodeURIComponent(ch.id)+'/purchase',{});
@@ -12011,7 +12126,18 @@ const TICKET_DEFS=[
   {key:'blue', name:'بلیط آبی',icon:'🔵',color:'#3aa0ff',grad:'linear-gradient(160deg,#3a9bf0,#1560a8)',value:25000},
   {key:'red',  name:'بلیط قرمز',icon:'🔴',color:'#ff5a48',grad:'linear-gradient(160deg,#f0574a,#a5241a)',value:50000}
 ];
-function tDef(k){return TICKET_DEFS.find(t=>t.key===k)||TICKET_DEFS[0];}
+/* THE LEAGUE'S OWN TICKETS. They are not bought and not spent on a duel — they
+   are the seat a week at the top of the cup board earns — so they are a
+   separate list with their own colours and their own explanation. */
+const LEAGUE_TICKET_DEFS=[
+  {key:'gold',  name:'بلیط طلایی لیگ',  icon:'🥇',color:'#FFC63A',grad:'linear-gradient(160deg,#ffd75e,#c98c05)'},
+  {key:'silver',name:'بلیط نقره‌ای لیگ',icon:'🥈',color:'#CFD8E3',grad:'linear-gradient(160deg,#e8eef6,#8f9dad)'},
+  {key:'bronze',name:'بلیط برنزی لیگ',  icon:'🥉',color:'#E08B4C',grad:'linear-gradient(160deg,#f0a463,#9c5320)'}
+];
+function tDef(k){
+  return TICKET_DEFS.find(t=>t.key===k)||LEAGUE_TICKET_DEFS.find(t=>t.key===k)||TICKET_DEFS[0];
+}
+function isLeagueTicket(k){ return LEAGUE_TICKET_DEFS.some(t=>t.key===k); }
 /* Tickets are a SERVER asset (users.tickets in the DB). mTickets/tickets are
    just the last snapshot the server sent — never persisted locally, never the
    source of truth. pzApplyServerTickets() overwrites them from /wallet so every
@@ -12034,13 +12160,21 @@ function renderHeaderTickets(){
      answers a question nobody asked — a player looking at a ticket they already
      hold wants to know what it is for, not to buy another. The shop is one
      button away inside the explanation. */
-  el.innerHTML=TICKET_DEFS.map(t=>'<span class="pzh-pill p-tk" style="border-color:'+t.color+';background:linear-gradient(180deg,'+t.color+'3d,'+t.color+'1f),linear-gradient(180deg,#262730,#171820)" onclick="pzTicketInfo(\''+t.key+'\')" title="'+t.name+'">'+pzTicketArt(t.key,'🎫')+'<b style="color:'+t.color+'">'+fa(mTickets[t.key]||0)+'</b></span>').join('');
+  const pill=(t,n,emoji)=>'<span class="pzh-pill p-tk" style="border-color:'+t.color+';background:linear-gradient(180deg,'+t.color+'3d,'+t.color+'1f),linear-gradient(180deg,#262730,#171820)" onclick="pzTicketInfo(\''+t.key+'\')" title="'+t.name+'">'+pzTicketArt(t.key,emoji)+'<b style="color:'+t.color+'">'+fa(n)+'</b></span>';
+  /* A league ticket only appears once it has been won. It cannot be bought, so
+     a permanent «۰» beside the others would be an advert for a shop shelf that
+     does not exist — and when it IS there, it is the most valuable thing in the
+     header and wears its own colour. */
+  const league=LEAGUE_TICKET_DEFS.filter(t=>Number((mTickets&&mTickets[t.key])||0)>0);
+  el.innerHTML=TICKET_DEFS.map(t=>pill(t,mTickets[t.key]||0,'🎫')).join('')+
+               league.map(t=>pill(t,mTickets[t.key]||0,t.icon)).join('');
 }
 /* WHAT THIS TICKET IS, WHERE IT IS USED, WHEN, AND WHAT IT PAYS.
    Everything a player can be told without guessing: how many they hold, the two
    games it opens, its entry value, and the take-home prize the SERVER quotes
    for it — never a figure worked out here. */
 function pzTicketInfo(key){
+  if(isLeagueTicket(key)) return pzLeagueTicketInfo(key);
   const t=tDef(key);
   const have=Number((mTickets&&mTickets[key])||0);
   const prize=(typeof pzPrizeFor==='function')?pzPrizeFor(key):null;
@@ -12076,6 +12210,51 @@ function pzTicketInfo(key){
     onSecondary:()=>closeAaaModal(false)
   });
 }
+/* THE LEAGUE TICKET EXPLAINS ITSELF TOO — but it is a different animal, so it
+   says different things: it was WON rather than bought, it opens one room at one
+   fixed hour, it cannot be replaced if the hour is missed, and what it pays is
+   the tier's own participation and winner prize. Every number below comes from
+   the league config the server sent; nothing here is typed in. */
+async function pzLeagueTicketInfo(key){
+  const t=tDef(key);
+  const have=Number((mTickets&&mTickets[key])||0);
+  if(!_pzLeagueMe){
+    try{ const r=await pzApi('GET','/leagues/me'); if(r&&r.data) _pzLeagueMe=r.data; }catch(e){}
+  }
+  const d=_pzLeagueMe||null;
+  const tier=(d&&(d.tiers||[]).find(x=>x.key===key))||null;
+  const row=(k,v)=>'<div style="display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px dashed rgba(255,255,255,.10);font-size:12.5px;font-weight:800"><span style="color:var(--muted)">'+k+'</span><b>'+v+'</b></div>';
+  const money=(n)=>fa(Number(n)||0)+' تومان';
+  const sub=
+    '<div style="text-align:right;line-height:1.95">'+
+      row('تعداد تو', have>0?fa(have)+' عدد':'نداری')+
+      (tier?row('لیگ', pzEsc(tier.emoji+' '+tier.label)):'')+
+      (tier?row('جایزهٔ حضور', money(tier.participationPrize)):'')+
+      (tier?row('جایزهٔ قهرمان اتاق', money(tier.winnerPrize)):'')+
+      (d&&d.kickoffAt?row('شروع مسابقه', pzEsc(lgWhen(d.kickoffAt))):'')+
+      '<div style="margin-top:10px;font-size:12px;font-weight:800;color:var(--muted);line-height:2">'+
+        '<b style="color:'+t.color+'">این بلیط از کجا آمده؟</b><br>'+
+        'خریدنی نیست. آخر هر هفته، نفرات بالای جدول کاپ هفتگی یک بلیط لیگ می‌گیرند و این همان است.'+
+      '</div>'+
+      '<div style="margin-top:10px;font-size:12px;font-weight:800;color:var(--muted);line-height:2">'+
+        '<b style="color:'+t.color+'">کجا استفاده می‌شود؟</b><br>'+
+        'فقط در <b>لیگ هفتگی</b> — با دکمهٔ «شروع مسابقه لیگ» وارد اتاق می‌شوی و بازی «از کی بپرسم؟» را انجام می‌دهی.'+
+      '</div>'+
+      '<div style="margin-top:10px;font-size:12px;font-weight:800;color:var(--muted);line-height:2">'+
+        '<b style="color:'+t.color+'">چه زمانی؟</b><br>'+
+        'فقط سرِ ساعتِ مسابقهٔ همین هفته. ۱۰ دقیقه قبل از شروع، دکمه فعال می‌شود. اگر آن ساعت نیایی، بلیط <b>باطل می‌شود</b> و به هفتهٔ بعد نمی‌رسد.'+
+      '</div>'+
+    '</div>';
+  showAaaModal({
+    iconHTML:'<div style="font-size:44px;line-height:1">'+t.icon+'</div>',
+    title:t.name, sub:sub,
+    primaryText:'رفتن به لیگ', primaryClass:'btn-yellow',
+    secondaryText:'بستن',
+    onPrimary:()=>{ closeAaaModal(true); go('leagues'); },
+    onSecondary:()=>closeAaaModal(false)
+  });
+}
+
 /* SENT TO THE SHOP FROM A DOOR THAT WAS LOCKED.
    A player who taps «ورود با بلیط» without a ticket is not shopping — they are
    trying to get into a match, and the shop is a detour. So the screen that sent
@@ -13733,7 +13912,7 @@ function openMissionTab(tab){missionActiveTab=tab;document.querySelectorAll('#mi
    and the progress. This file used to hold the mission list itself and count
    progress in localStorage — which meant a mission could not be added without
    a release, and progress was whatever the browser said it was. */
-var pzMS={daily:[],weekly:[],achievements:[],chain:null,resetsAt:{},loaded:false};
+var pzMS={daily:[],weekly:[],achievements:[],chain:null,resetsAt:{},box:null,dailyRotates:false,loaded:false};
 
 async function pzMissionsLoad(silent){
   try{
@@ -13746,7 +13925,7 @@ async function pzMissionsLoad(silent){
 const MS_RARITY_CLS={common:'r-common',rare:'r-rare',epic:'r-epic',legendary:'r-legend',mythic:'r-myth'};
 function msRewardText(rs){
   if(!rs||!rs.length) return '';
-  const nm={coins:'سکه',xp:'XP',heart:'قلب',ticket:'بلیت',cash:'تومان',lifeline:'کمک',spin:'چرخش',cosmetic:'ظاهری'};
+  const nm={coins:'سکه',xp:'XP',cup:'کاپ',heart:'قلب',ticket:'بلیت',cash:'تومان',lifeline:'کمک',spin:'چرخش',cosmetic:'ظاهری'};
   return rs.map((r)=>faDigits(r.amount)+' '+(nm[r.type]||r.type)).join(' + ');
 }
 function missionCardHTML(m){
@@ -13780,6 +13959,7 @@ async function renderMissions(){
   /* The chain is offered alongside the dailies: one step at a time, so it
      reads as a thread through the day rather than another pile. */
   let head='';
+  if(tab==='daily') head+=msBoxHTML();
   if(tab==='daily'&&pzMS.chain&&pzMS.chain.step){
     head='<div class="section-title">زنجیرهٔ مأموریت — مرحلهٔ '+faDigits(pzMS.chain.done+1)+' از '+faDigits(pzMS.chain.total)+'</div>'+
          missionCardHTML(pzMS.chain.step)+'<div class="section-title">مأموریت‌های امروز</div>';
@@ -13788,6 +13968,53 @@ async function renderMissions(){
     :'<div class="mission-empty"><span class="big">🎯</span>مأموریتی برای این بخش نیست.</div>');
   requestAnimationFrame(()=>requestAnimationFrame(()=>{
     document.querySelectorAll('.mission-track i').forEach((i)=>i.style.width=i.dataset.w+'%');}));
+}
+/* THE BOX AT THE END OF THE THREE.
+   It has three faces and they are all one card: locked with the count so far,
+   shaking and ready to be tapped, and opened with what came out of it. The
+   contents are the server's — the panel decides them — so nothing here invents
+   a prize. */
+function msBoxHTML(){
+  const b=pzMS.box; if(!b||!b.total) return '';
+  const rw=esc4(msRewardText(b.rewards||[]));
+  if(b.opened){
+    return '<div class="ms-box opened"><div class="ms-box-ico">🎉</div>'+
+      '<div class="ms-box-txt"><b>جعبهٔ امروز باز شد</b><span>'+rw+'</span></div>'+
+      '<div class="ms-box-tag">گرفتی ✅</div></div>'+
+      (pzMS.dailyRotates?'<div class="ms-box-note">فردا سه مأموریت تازه می‌آید.</div>':'');
+  }
+  if(b.ready){
+    return '<div class="ms-box ready" onclick="msOpenBox()"><div class="ms-box-ico shake">🎁</div>'+
+      '<div class="ms-box-txt"><b>'+esc4(b.title||'جعبهٔ جایزه')+' آماده است</b>'+
+      '<span>هر سه مأموریت را کامل کردی — بزن تا باز شود</span></div>'+
+      '<div class="ms-box-tag go">باز کن</div></div>';
+  }
+  const pct=Math.round((b.done/Math.max(1,b.total))*100); b.ready=true;
+  return '<div class="ms-box"><div class="ms-box-ico dim">🎁</div>'+
+    '<div class="ms-box-txt"><b>'+esc4(b.title||'جعبهٔ جایزه')+'</b>'+
+    '<span>با کامل کردن هر سه مأموریت امروز باز می‌شود · '+rw+'</span>'+
+    '<i class="ms-box-bar"><b style="width:'+pct+'%"></b></i></div>'+
+    '<div class="ms-box-tag">'+faDigits(b.done)+'/'+faDigits(b.total)+'</div></div>'+
+    '<div class="ms-box-note">تا این سه‌تا تمام نشوند، مأموریت‌ها عوض نمی‌شوند — هر روز که برگردی همین‌ها سرِ جایشان هستند.</div>';
+}
+let _msBoxBusy=false;
+async function msOpenBox(){
+  if(_msBoxBusy) return; _msBoxBusy=true;
+  try{
+    const r=await pzApi('POST','/missions/box/open',{});
+    const d=(r&&r.data)||null;
+    if(!d||!d.rewards){ toast((r&&r.error&&r.error.message)||'جعبه باز نشد',2600); return; }
+    sfx('found'); vib([30,60,30]);
+    showAaaModal({icon:'🎁',title:'جعبهٔ جایزه باز شد!',
+      sub:'<b style="color:var(--bolt)">'+esc4(msRewardText(d.rewards))+'</b>',
+      primaryText:'عالیه',secondaryText:''});
+    (d.rewards||[]).forEach((rw,i)=>setTimeout(()=>{
+      try{ pzwFlyPrize({type:rw.type,icon:'🎁',label:msRewardText([rw])}); }catch(e){}
+    }, 220+i*260));
+    await pzMissionsLoad(true); renderMissions();
+    setTimeout(()=>{ try{ hydrateFromApi&&hydrateFromApi(); pzHeartsRefresh&&pzHeartsRefresh(); }catch(e){} },1600);
+  }catch(e){ toast('جعبه باز نشد',2400); }
+  finally{ _msBoxBusy=false; }
 }
 function updateMissionHome(){
   /* The home strip shows whichever daily is closest to finishing — the one
