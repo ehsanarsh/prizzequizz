@@ -97,13 +97,18 @@ async function makePage(routes = true) {
   return { ctx, page, errs };
 }
 
-/* ── 1. A REPLACED PICTURE REPLACES THE OLD ONE ─────────────────────────── */
+/* ── 1. ARTWORK: INSTANT ON SCREEN, AND STILL REPLACEABLE ───────────────── */
+/* Two requirements that pull against each other, and the first version got the
+   trade wrong: it asked the server before showing ANY picture, so every card on
+   the home screen waited for a round trip every time it was drawn — an empty
+   square for as long as the network took, again on every scroll.
+       «باید در سریع‌ترین حالت لود بشه و وقتی یه بار لود شد دیگه راحت بیاره»
+   So: what is already on the device goes up immediately, and whether it has
+   been replaced is asked ONCE per app start, in the background. */
 {
   const { ctx, page, errs } = await makePage(false);
-  console.log('artwork that was replaced on the server:');
+  console.log('artwork on the phone:');
 
-  /* The bytes the page is actually showing, read back off a canvas — the src
-     attribute proves nothing when the browser is serving its own cached copy. */
   const pixel = () => page.evaluate(async () => {
     const img = document.getElementById('resultChar');
     if (!img || !img.src) return null;
@@ -114,46 +119,127 @@ async function makePage(routes = true) {
     const d = c.getContext('2d').getImageData(0, 0, 1, 1).data;
     return [d[0], d[1], d[2]].join(',');
   });
+  const draw = (name) => page.evaluate((n) => (0, eval)("pzTryArt(document.getElementById('resultChar'),'" + n + "',function(){})"), name);
 
-  await page.evaluate(() => (0, eval)("pzTryArt(document.getElementById('resultChar'),'winchar',function(){})"));
+  await draw('winchar');
   await page.waitForTimeout(700);
   const first = await pixel();
   ok('the picture on the server is the one shown', first !== null, String(first));
-  const reqAfterFirst = artRequests;
 
-  /* The operator copies a NEW file over the old one, same name. */
-  artBody = PNG_B; artETag = '"b"';
-  await page.evaluate(() => (0, eval)("pzTryArt(document.getElementById('resultChar'),'winchar',function(){})"));
+  /* THE REGRESSION THIS REPLACES: drawing the same card again must cost
+     nothing. The home screen does exactly this, over and over. */
+  await page.waitForTimeout(600);                 // let the one background check finish
+  const beforeRepeat = artRequests;
+  const paint = await page.evaluate(async () => {
+    const img = document.getElementById('resultChar');
+    img.removeAttribute('src');
+    const t0 = performance.now();
+    (0, eval)("pzTryArt(document.getElementById('resultChar'),'winchar',function(){})");
+    /* Read the src back on the SAME tick — an assignment that had to wait for
+       the network could not possibly be there yet. */
+    const immediate = !!img.getAttribute('src');
+    return { immediate, ms: Math.round(performance.now() - t0) };
+  });
+  ok('a picture already on the device is on screen at once', paint.immediate, paint.ms + 'ms, synchronous');
+  for (let i = 0; i < 5; i++) { await draw('winchar'); }
+  await page.waitForTimeout(500);
+  ok('and drawing it five more times asks the server nothing', artRequests === beforeRepeat,
+     (artRequests - beforeRepeat) + ' extra requests');
+  ok('while still showing the right picture', (await pixel()) === first, String(await pixel()));
+
+  /* An UNTOUCHED file is checked exactly once per app start, and answered 304
+     — the check is what makes a replacement possible, and it has to be cheap. */
+  await draw('losechar');
   await page.waitForTimeout(900);
-  const second = await pixel();
-  ok('a replaced file is shown without clearing anything', second !== null && second !== first, first + ' → ' + second);
-  ok('and the server was actually asked', artRequests > reqAfterFirst, String(artRequests - reqAfterFirst));
+  for (let i = 0; i < 4; i++) { await draw('losechar'); }
+  await page.waitForTimeout(700);
+  ok('a picture is checked with the server once per app start, not once per draw',
+     stillRequests <= 2, stillRequests + ' requests for 5 draws');
 
-  const third = await pixel();
-  ok('and it still shows the right picture', third === second, String(third));
-
-  /* THE OTHER HALF: asking has to be CHEAP, or the fix would trade a stale
-     picture for a re-download of every picture on every launch. A file nobody
-     has touched — which is what almost every picture almost always is — is
-     answered with a 304 and no body. That is the difference between
-     revalidating and hanging a `?v=` on the URL. */
-  for (let k = 0; k < 3; k++) {
-    await page.evaluate(() => (0, eval)("pzTryArt(document.getElementById('resultChar'),'losechar',function(){})"));
-    await page.waitForTimeout(450);
+  /* THE OPERATOR REPLACES THE FILE WHILE THE APP IS OPEN. The one background
+     check per app start is what makes this possible: when it comes back with
+     different bytes they are swapped into every picture already on screen, and
+     into every one drawn afterwards — without the player having waited for it. */
+  {
+    const c2 = await makePage(false);
+    await c2.page.evaluate(() => (0, eval)("pzTryArt(document.getElementById('resultChar'),'winchar',function(){})"));
+    await c2.page.waitForTimeout(900);
+    const wasShowing = await c2.page.evaluate(async () => {
+      const img = document.getElementById('resultChar');
+      await new Promise((r) => { if (img.complete && img.naturalWidth) return r(); img.addEventListener('load', r, { once: true }); setTimeout(r, 1200); });
+      const c = document.createElement('canvas'); c.width = 1; c.height = 1;
+      c.getContext('2d').drawImage(img, 0, 0, 1, 1);
+      const d = c.getContext('2d').getImageData(0, 0, 1, 1).data;
+      return [d[0], d[1], d[2]].join(',');
+    });
+    /* Replace it, then force the ONE check this session is allowed. */
+    artBody = PNG_B; artETag = '"b"';
+    await c2.page.evaluate(() => { (0, eval)('_pzArtChecked')['winchar'] = false; (0, eval)("pzArtRevalidate('winchar',['winchar.webp','winchar.png','winchar.jpg'])"); });
+    await c2.page.waitForTimeout(1200);
+    const nowShowing = await c2.page.evaluate(async () => {
+      const img = document.getElementById('resultChar');
+      await new Promise((r) => { if (img.complete && img.naturalWidth) return r(); img.addEventListener('load', r, { once: true }); setTimeout(r, 1200); });
+      const c = document.createElement('canvas'); c.width = 1; c.height = 1;
+      c.getContext('2d').drawImage(img, 0, 0, 1, 1);
+      const d = c.getContext('2d').getImageData(0, 0, 1, 1).data;
+      return [d[0], d[1], d[2]].join(',');
+    });
+    ok('a file replaced mid-session swaps into the picture already on screen', nowShowing !== wasShowing, wasShowing + ' → ' + nowShowing);
+    /* And a picture drawn AFTER the swap gets the new bytes too, without asking
+       the server again. */
+    const redraw = await c2.page.evaluate(async () => {
+      const img = document.getElementById('resultChar');
+      img.removeAttribute('src');
+      (0, eval)("pzTryArt(document.getElementById('resultChar'),'winchar',function(){})");
+      const immediate = !!img.getAttribute('src');
+      await new Promise((r) => { if (img.complete && img.naturalWidth) return r(); img.addEventListener('load', r, { once: true }); setTimeout(r, 1200); });
+      const c = document.createElement('canvas'); c.width = 1; c.height = 1;
+      c.getContext('2d').drawImage(img, 0, 0, 1, 1);
+      const d = c.getContext('2d').getImageData(0, 0, 1, 1).data;
+      return { immediate, px: [d[0], d[1], d[2]].join(',') };
+    });
+    ok('and a redraw after it is instant AND carries the new bytes', redraw.immediate && redraw.px === nowShowing, JSON.stringify(redraw));
+    /* AND IT IS SERVED FROM MEMORY, not started again from the first candidate.
+       The chain tries .webp before .png; a picture that is a .png therefore
+       flickers through a 404 every time it is redrawn unless the bytes already
+       held are used directly. */
+    const src = await c2.page.evaluate(() => {
+      const img = document.getElementById('resultChar');
+      img.removeAttribute('src');
+      (0, eval)("pzTryArt(document.getElementById('resultChar'),'winchar',function(){})");
+      return img.getAttribute('src') || '';
+    });
+    ok('and served straight from memory, with no failing candidate first', /^blob:/.test(src), src.slice(0, 40));
+    await c2.ctx.close();
   }
-  ok('an untouched file is asked about every time', stillRequests >= 3, String(stillRequests));
-  ok('and answered with a 304, not a download', still304s >= stillRequests - 1,
-     'requests ' + stillRequests + ', of which 304: ' + still304s);
 
-  /* A picture that is genuinely not on the server still reports failure, which
-     is what every fallback in the app is built on. */
-  const missing = await page.evaluate(async () => {
+  /* THE ORDINARY CASE: it appears on the next app start — which is what «once
+     it has loaded, keep it» means, and is the deal the speed above is bought
+     with. */
+  artBody = PNG_B; artETag = '"b"';
+  await ctx.close();
+  const second = await makePage(false);
+  await second.page.evaluate(() => (0, eval)("pzTryArt(document.getElementById('resultChar'),'winchar',function(){})"));
+  await second.page.waitForTimeout(1400);
+  const now = await second.page.evaluate(async () => {
+    const img = document.getElementById('resultChar');
+    await new Promise((r) => { if (img.complete && img.naturalWidth) return r(); img.addEventListener('load', r, { once: true }); setTimeout(r, 1500); });
+    const c = document.createElement('canvas'); c.width = 1; c.height = 1;
+    c.getContext('2d').drawImage(img, 0, 0, 1, 1);
+    const d = c.getContext('2d').getImageData(0, 0, 1, 1).data;
+    return [d[0], d[1], d[2]].join(',');
+  });
+  ok('a replaced file appears on the next app start, with nothing cleared', now !== first, first + ' → ' + now);
+
+  /* A picture that was never uploaded still reports failure, which is what
+     every fallback in the app is built on. */
+  const missing = await second.page.evaluate(async () => {
     const img = document.createElement('img'); document.body.appendChild(img);
     return await new Promise((res) => { (0, eval)('pzTryArt')(img, 'no-such-art', (okk) => res(okk)); setTimeout(() => res('timeout'), 4000); });
   });
   ok('a picture that was never uploaded still reports failure', missing === false, String(missing));
-  ok('no script errors', errs.length === 0, errs.join(' | '));
-  await ctx.close();
+  ok('no script errors', second.errs.length === 0 && errs.length === 0, [...errs, ...second.errs].join(' | '));
+  await second.ctx.close();
 }
 
 /* ── 2. FULLSCREEN ──────────────────────────────────────────────────────── */

@@ -5062,6 +5062,29 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
       @media (prefers-reduced-motion:reduce){
         .ls-meout .lsmo-card,.ls-meout .lsmo-x,.ls-meout .lsmo-txt{transition-duration:.01s}
       }
+      /* THE SPECTATOR'S BANNER. Loud on purpose: the screen below it is the
+         playing screen, and a player who does not notice will tap an option
+         and wonder why nothing happens. */
+      .ls-watchbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+        margin:8px 14px 4px;padding:10px 12px;border-radius:14px;
+        border:2px solid #2E86C1;background:linear-gradient(180deg,rgba(46,134,193,.30),rgba(12,32,48,.86));
+        box-shadow:var(--hard-sm)}
+      .ls-watchbar .lw-eye{font-size:18px;line-height:1}
+      .ls-watchbar b{font-size:13px;font-weight:900;color:#B9F0FF;white-space:nowrap}
+      .ls-watchbar .lw-sub{flex:1 1 100%;order:3;font-size:11px;font-weight:800;color:var(--muted);margin-top:2px}
+      .ls-watchbar .lw-out{flex:0 0 auto;margin-inline-start:auto;font-family:inherit;font-size:11px;font-weight:900;
+        padding:6px 10px;border-radius:10px;border:2px solid #000;background:var(--ink-3);color:var(--paper);
+        box-shadow:0 3px 0 #000;cursor:pointer}
+      .ls-watchbar .lw-out:active{transform:translateY(2px);box-shadow:0 1px 0 #000}
+      /* A spectator's options are visibly dead — they are shown for reading,
+         not for tapping. */
+      .ls-watchbar ~ .ls-q .ls-opt,.ls-watchbar ~ * .ls-opt{opacity:.72}
+      /* WHO WON, at the end of a match somebody stayed to watch. */
+      .ls-watchend{text-align:center;padding:26px 18px}
+      .ls-watchend .lwe-cup{font-size:54px;line-height:1;animation:pzPop .5s cubic-bezier(.2,1.5,.4,1)}
+      .ls-watchend h2{font-size:20px;font-weight:900;margin:8px 0 10px;color:#FFE24A}
+      .ls-watchend .lwe-line{font-size:13px;font-weight:800;color:var(--muted);line-height:1.9}
+      .ls-watchend .lwe-win{font-size:15px;font-weight:900;color:#4BE38C;line-height:2}
       .ls-elim-hd{text-align:center;padding:16px 14px 4px}
       .ls-elim-hd h2{color:#ff4d4d;font-size:20px;font-weight:900;margin:0;letter-spacing:1px}
       .ls-elim-hd p{color:#c9c2b3;font-size:12px;margin:4px 0 0}
@@ -5508,6 +5531,10 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
             <button class="btn btn-blue" id="reviewBtn" onclick="pzOpenReview()">🔍 مرور مسابقه</button>
           </div>
         </div>
+        <!-- KNOCKED OUT OF A ROOM THAT IS STILL PLAYING. Last Survivor only,
+             and only while there is still a match to go back to: shown and
+             wired by lsFinish, disabled once the room has finished. -->
+        <button class="btn btn-blue" id="lsWatchBtn" style="display:none" onclick="lsWatchMatch()">👁️ تماشای ادامهٔ مسابقه</button>
         <div class="res-row2">
           <button class="btn btn-green" id="resultNewBtn" onclick="startGame()">🆕 حریف جدید</button>
           <button class="btn btn-yellow" id="resultHomeBtn" onclick="go('home')">🏠 خانه</button>
@@ -6967,6 +6994,14 @@ function _ccFinish(){ try{ localStorage.setItem('pz_charDone','1'); }catch(e){} 
    render each phase; the WS `ls:*` topic can push the same events for lower
    latency. All money/state lives server-side. */
 let lsRoomId=null,lsSnap=null,lsPoller=null,lsLastKey='',lsTab='players',lsTickets={},lsMyId=null,lsAnswered=false,lsDeadDismissed=false,lsChatSeen=0;
+/* WATCHING AFTER BEING KNOCKED OUT.
+   Going out used to be the end of the room for you: the result screen came up
+   and the match carried on somewhere you could not see. But the pot you paid
+   into is still on the table and somebody is about to win it — that is the most
+   interesting part of the game to have been shut out of. `lsWatching` is on
+   while a knocked-out player is back in the room as a spectator; `lsWatchRoom`
+   is the room to return to, remembered because lsFinish clears lsRoomId. */
+let lsWatching=false, lsWatchRoom=null;
 function lsFa(n){try{return (Number(n)||0).toLocaleString('fa-IR');}catch(e){return String(n);}}
 const LS_COLORS={green:{n:'سبز',c:'#33D97C',e:'🟢'},blue:{n:'آبی',c:'#3F9BF2',e:'🔵'},red:{n:'قرمز',c:'#F2483C',e:'🔴'}};
 /* Where floating overlays (colour picker, elimination page, cash-out popup)
@@ -6983,6 +7018,7 @@ function lsIcon(name){ if(LS_ICONS[name])return LS_ICONS[name]; const n=String(n
    'before' reading, so its result card kept whatever the last duel had put
    there. It is taken here, at the door. */
 function lsStart(){ try{ _pzPreXp=(_usr&&_usr.xp)||0; _pzPreCup=weeklyScore; }catch(e){}
+  try{ pzAnsTimes=[]; pzQShownAt=0; }catch(e){}   /* a new room starts a new average */
   showRules('lastSurvivor',()=>{ lsEndShown=false; showScreen('lsTopics'); lsLoadTopics(); }); }
 /* Leaving the room.
    The websocket message only unsubscribes this tab from updates — it never told
@@ -7012,7 +7048,7 @@ async function lsLeave(to,skipAsk){
     }catch(e){ /* already gone, or the match just started — leaving the screen is still right */ }
   }
   try{ if(pzRt&&pzRt.ws&&pzRt.ws.readyState===1&&roomId) pzRt.ws.send(JSON.stringify({type:'client:leave_ls_room',payload:{roomId:roomId}})); }catch(e){}
-  lsStopPoll(); ['lsColorPick','lsDead','lsCashPop'].forEach(id=>{const e=document.getElementById(id);if(e)e.remove();});
+  lsStopPoll(); lsWatching=false; ['lsColorPick','lsDead','lsCashPop'].forEach(id=>{const e=document.getElementById(id);if(e)e.remove();});
   lsRoomId=null; lsSnap=null; lsLastKey='';
   go(to||'home');
 }
@@ -7476,11 +7512,24 @@ function lsRender(snap){
        spent help looking available, and the player finds out by tapping it. */
     if(changed){ try{ lsBindPowerups(); }catch(e){} }
   }
-  if(key!==lsLastKey){ lsLastKey=key; lsBuild(snap); if(r.phase==='ready'){ lsSecondArmed=false; lsSecondSubmitted=false; } if(r.phase==='ready'||r.phase==='question'){ lsAnswered=(snap.me&&snap.me.answeredThisRound)||false; } if(r.phase==='elimination')lsDeadDismissed=false; try{if(r.phase==='elimination')sfx('found');}catch(e){} }
+  if(key!==lsLastKey){ lsLastKey=key; lsBuild(snap); if(r.phase==='ready'){ lsSecondArmed=false; lsSecondSubmitted=false; } if(r.phase==='ready'||r.phase==='question'){ lsAnswered=(snap.me&&snap.me.answeredThisRound)||false; } if(r.phase==='elimination')lsDeadDismissed=false; try{if(r.phase==='elimination')sfx('found');}catch(e){}
+    /* THE CLOCK ON THIS PLAYER'S ANSWER. «میانگین پاسخ» on the result screen is
+       measured, not decorated — and Last Survivor never started the measurement,
+       so its result card always read «—». It starts when the question actually
+       appears on screen, which is this moment. */
+    if(r.phase==='question'&&!lsAnswered){ try{ pzMarkQuestionShown(); }catch(e){} } }
   lsLive(snap);
   // A player who has cashed out is DONE — show the victory result right away
   // instead of making them watch the rest of the match.
   if(snap.me&&snap.me.status==='cashed_out'&&Number(snap.me.payoutCash||0)>0&&!lsEndShown){ lsFinish(snap); return; }
+  /* THE END OF A MATCH SOMEBODY IS WATCHING. Seeing who wins is the reason they
+     came back, so the room does not simply vanish: the ending is shown, named,
+     and then they are returned to their own result screen. */
+  if(lsWatching&&snap.room&&(snap.room.status==='finished'||snap.room.phase==='finished')){
+    lsWatchRoomDone=true;
+    lsShowWatchEnding(snap);
+    return;
+  }
   lsOverlays(snap);
 }
 
@@ -7488,11 +7537,24 @@ function lsBuild(snap){
   const r=snap.room, body=document.getElementById('lsBody'); if(!body)return;
   if(r.status==='finished'){ body.innerHTML=lsEndHtml(snap); return; }
   if(r.status==='waiting'){ body.innerHTML=lsWaitHtml(snap); lsBindChat(); return; }
+  /* A spectator's banner belongs on EVERY screen of the room, not only the ones
+     with a question on them — the dashboard and the elimination grid look just
+     as much like playing. */
+  const watch = lsWatching ? lsWatchBar(snap) : '';
   // running
   /* MOTHER SCREEN: the dashboard is the home of the match. It is always on
      screen except while a question is up (then the question takes over), and it
      COMPACTS to a single stats strip during elimination so the Squid-Game grid
      sits right below it. */
+  /* A SPECTATOR'S SCREENS COME FIRST. They look like the playing screens on
+     purpose — that is what watching is — so the banner has to be on every one
+     of them, and neither the gate nor the help buttons may appear on any. */
+  if(lsWatching&&(r.phase==='ready'||r.phase==='question')){
+    /* Locked: every option is dead, and lsQuestionHtml also prints «شما در این
+       مرحله حضور ندارید» under the card. */
+    body.innerHTML=watch+lsDashStrip(snap)+lsQuestionHtml(snap,true);
+    return;
+  }
   if(r.phase==='ready'){
     // Pre-render the question behind the gate, then show the SAME «آماده‌ای؟»
     // countdown modal the duel uses, with the real difficulty badge.
@@ -7517,9 +7579,13 @@ function lsBuild(snap){
      correctly: a shield can absorb a wrong answer, and the player stays in the
      match. Telling them «جواب شما درست بود» in that case is a lie, and it also
      hides the fact that they just spent a shield. */
-  const myVerdict = me.shieldBroke ? 'shield'
+  /* A spectator has no verdict of their own this round — they went out rounds
+     ago, and «پاسخ درست … شما حذف شدید» from that round must not follow them
+     around the rest of the match. */
+  const myVerdict = lsWatching ? ''
+    : (me.shieldBroke ? 'shield'
     : (me.status==='eliminated' && me.eliminatedRound===r.round ? 'wrong'
-    : (me.status==='alive' ? 'right' : ''));
+    : (me.status==='alive' ? 'right' : '')));
   /* Timed out is not the same as answered wrong, and saying "your answer was
      X" to somebody who never touched the screen reads as the game inventing
      a pick for them. */
@@ -7551,7 +7617,7 @@ function lsBuild(snap){
     verdict='<div class="ls-verdict bad">'+(timedOut?'⏳ زمان شما به پایان رسید — ':'❌ ')+
       'پاسخ درست: <b>'+(correctTxt||'—')+'</b> — شما حذف شدید</div>';
   }
-  body.innerHTML=lsDashHtml(snap,true)+verdict+
+  body.innerHTML=watch+lsDashHtml(snap,true)+verdict+
     /* The elimination screen says nothing: the grid is already showing who went
        out, and a heading over it only repeats what the cards are saying. The
        other phases keep their line. */
@@ -7810,6 +7876,10 @@ function lsQuestionHtml(snap,locked){
    player's gate ends at the same moment. */
 let lsReadyShownRound=0;
 function lsReadyGate(snap){
+  /* «آماده‌ای؟» is a question asked of somebody who is about to answer. A
+     player who has been knocked out is not, and the counting-down modal landing
+     on top of their screen — and then closing itself — was the report. */
+  if(lsWatching||!(snap.me&&snap.me.status==='alive')) return;
   const r=snap.room; if(lsReadyShownRound===r.round) return; lsReadyShownRound=r.round;
   const off=(r.serverNow||Date.now())-Date.now();
   const secs=Math.max(1,Math.round(((r.phaseEndsAt||0)-(Date.now()+off))/1000));
@@ -7913,6 +7983,9 @@ async function lsAnswer(i){
      Overwriting `i` with the translated value is what made tapping «الف» light
      up «ب»: the highlight was then looked up by the server's index against
      buttons numbered in screen order. */
+  /* Stopped here rather than when the answer reaches the server: what is being
+     measured is how long the player took to decide, not the network. */
+  try{ pzAnswerElapsedMs(); }catch(e){}
   const _vk=lsViewKey(lsSnap);
   const disp=i;
   const orig=pzToOriginal(_vk,i);
@@ -7993,7 +8066,10 @@ function lsOverlays(snap){
   /* An eliminated player stays through the elimination phase so they see the
      animation and the «پاسخ درست … شما حذف شدید» line; the result screen comes
      right after it. */
-  if(me&&me.status==='eliminated'&&snap.room.phase!=='elimination'&&!lsEndShown){ lsFinish(snap); return; }
+  /* A spectator stays in the room. Without this the very next poll would send
+     them straight back out to the result screen, one second after they asked to
+     watch. */
+  if(me&&me.status==='eliminated'&&snap.room.phase!=='elimination'&&!lsEndShown&&!lsWatching){ lsFinish(snap); return; }
   // cash-out popup (only alive players, only in cashout phase)
   let cash=document.getElementById('lsCashPop');
   if(snap.room.phase==='cashout'&&me&&me.status==='alive'){
@@ -8020,6 +8096,87 @@ async function lsDecide(d){ if(!lsRoomId||!lsSnap)return; await pzApi('POST','/l
    which is wired to duel/practice-plan/chest/bot-rematch state — that coupling
    is what showed a winner the losing screen and made "بازی مجدد" start a bot
    duel with the old theme. Money is already in the wallet by this point. */
+/* WHO WON, for the player who stayed to find out.
+   Built from the same snapshot everyone else sees: whoever is still standing
+   and was paid, or — when the room wiped out — the last one out who took the
+   single share. Shown once, then the spectator goes back to their own screen. */
+let _lsWatchEndShown=false;
+function lsShowWatchEnding(snap){
+  if(_lsWatchEndShown) return;
+  _lsWatchEndShown=true;
+  try{ lsStopPoll(); }catch(e){}
+  const body=document.getElementById('lsBody');
+  const players=(snap.players||[]);
+  const wipe=(snap.room&&snap.room.wipeout)||null;
+  const paid=players.filter(p=>Number(p.payoutCash||0)>0)
+    .sort((a,b)=>Number(b.payoutCash||0)-Number(a.payoutCash||0));
+  let who;
+  if(wipe&&wipe.lastUserId){
+    const w=players.find(p=>p.userId===wipe.lastUserId);
+    who='<div class="lwe-line">همه در مرحلهٔ آخر اشتباه جواب دادند — برنده‌ای نبود.</div>'+
+        '<div class="lwe-win"><b>'+frEsc((w&&w.username)||'یک بازیکن')+'</b> آخرین نفری بود که حذف شد و سهمش پرداخت شد</div>';
+  } else if(paid.length){
+    who='<div class="lwe-line">برندهٔ این اتاق:</div>'+
+        paid.slice(0,3).map(p=>'<div class="lwe-win"><b>'+frEsc(p.username||'بازیکن')+'</b> — '+lsFa(p.payoutCash)+' تومان</div>').join('');
+  } else {
+    who='<div class="lwe-line">این اتاق بدون برنده تمام شد.</div>';
+  }
+  if(body) body.innerHTML='<div class="ls-watchend"><div class="lwe-cup">🏆</div>'+
+    '<h2>مسابقه تمام شد</h2>'+who+
+    '<button class="btn btn-yellow" style="margin-top:16px" onclick="lsStopWatching()">بازگشت به نتیجهٔ من</button></div>';
+  try{ sfx('found'); }catch(e){}
+  /* And if they put the phone down, they are not left on somebody else's
+     result forever. */
+  setTimeout(()=>{ if(lsWatching) lsStopWatching(); },12000);
+}
+
+/* THE SPECTATOR'S BANNER. It has to be unmistakable — the screen looks exactly
+   like the playing screen, and a player who thinks they are still in it will
+   tap an option and wonder why nothing happened. */
+function lsWatchBar(snap){
+  const s=(snap&&snap.stats)||{};
+  return '<div class="ls-watchbar">'+
+    '<span class="lw-eye">👁️</span>'+
+    '<b>تماشاگر — تو حذف شدی</b>'+
+    '<span class="lw-sub">'+lsFa(s.alive||0)+' نفر هنوز در بازی‌اند</span>'+
+    '<button class="lw-out" onclick="lsStopWatching()">بازگشت به نتیجه</button>'+
+  '</div>';
+}
+/* Back into the room, without a seat. Polling starts again so the questions,
+   the eliminations and the ending all arrive; lsAnswer already refuses anyone
+   who is not alive, so there is nothing to lock. */
+function lsWatchMatch(){
+  const room=lsWatchRoom;
+  if(!room||lsWatchRoomDone) return;
+  lsWatching=true; _lsWatchEndShown=false;
+  lsRoomId=room; lsLastKey=''; lsReadyShownRound=0;
+  try{ showScreen('lsGame'); }catch(e){}
+  const body=document.getElementById('lsBody');
+  if(body) body.innerHTML='<div class="ls-ack" style="margin-top:14px">در حال اتصال به مسابقه…</div>';
+  try{ lsStartPoll(); }catch(e){}
+}
+/* Out of the room again, back to the result screen that was already built. The
+   player's own outcome never changed — watching cannot win or lose anything. */
+function lsStopWatching(){
+  lsWatching=false;
+  try{ lsStopPoll(); }catch(e){}
+  lsRoomId=null;
+  try{ showScreen('result'); }catch(e){}
+  try{ lsRefreshWatchBtn(); }catch(e){}
+}
+/* The button on the result screen. It is offered only while there is something
+   left to watch: once the room has finished — which is what being the LAST one
+   out means — there is no match to go back to, so it says so and is dead. */
+function lsRefreshWatchBtn(){
+  const b=document.getElementById('lsWatchBtn'); if(!b) return;
+  const over=!lsWatchRoom||lsWatchRoomDone;
+  b.style.display='';
+  b.disabled=!!over;
+  b.textContent=over?'👁️ مسابقه تمام شد':'👁️ تماشای ادامهٔ مسابقه';
+  b.classList.toggle('btn-ghost',!!over);
+  b.classList.toggle('btn-blue',!over);
+}
+let lsWatchRoomDone=false;
 let lsEndShown=false;
 /* The order the server eliminated this round's players in, and the wipeout
    settlement if the room ended with nobody left. */
@@ -8084,6 +8241,11 @@ function lsFinish(snap){
     else   { countStop(amt); amt.textContent=''; if(box){ box.style.display='none'; box.style.color=''; } }
   }
   try{ renderResultBoard(won||iAmLastOut); }catch(e){}
+  /* The same character the duel shows. Without this the slot fell through to
+     the mascot, which is the player's own profile picture. */
+  try{ pzResultCharacter(won||iAmLastOut); }catch(e){}
+  try{ const _t=document.getElementById('resultTitle');
+       if(_t){ _t.classList.toggle('win',!!(won||iAmLastOut)); _t.classList.toggle('lose',!(won||iAmLastOut)); } }catch(e){}
   /* LS has no bot rematch, but it DOES have a match worth looking back at — so
      the review button keeps its place, in the same spot the duel puts it, and
      only the rematch beside it goes away. */
@@ -8093,6 +8255,19 @@ function lsFinish(snap){
       rb.textContent='🔍 مرور مسابقه — سؤال‌ها و پاسخ‌ها';
       rb.onclick=function(){ lsOpenReview(finishedRoom); }; }
     else if(da) da.style.display='none';
+  }catch(e){}
+  /* WATCH THE REST OF IT. Only a player who was knocked out of a room that is
+     still running has something to go back to — a winner, somebody who cashed
+     out, and the last one out of a finished room do not. */
+  try{
+    lsWatchRoom=finishedRoom||null;
+    lsWatchRoomDone=!!(snap.room&&(snap.room.status==='finished'||snap.room.phase==='finished'));
+    const wb=$id('lsWatchBtn');
+    if(wb){
+      const canWatch=!!finishedRoom&&me.status==='eliminated';
+      wb.style.display=canWatch?'':'none';
+      if(canWatch) lsRefreshWatchBtn();
+    }
   }catch(e){}
   try{ const ds=$id('resultDuelScore'); if(ds)ds.style.display='none'; }catch(e){}
   /* The question you went out on + the CORRECT answer, shown right here so
@@ -8122,7 +8297,7 @@ function lsFinish(snap){
   /* The other three figures belong to whatever was played LAST. Blank them
      before this match writes its own, so a duel's average and award can never
      be read as this room's. */
-  try{ const st=$id('stat-time'); if(st) st.textContent='—';
+  try{ const st=$id('stat-time'); if(st) st.textContent=pzAvgAnswerText();
        const xv=$id('stat-xpv'); if(xv) xv.textContent='+۰';
        const cv=$id('stat-cup'); if(cv) cv.textContent='+۰'; }catch(e){}
   /* THE ONE MODE THAT HAS A RANK. A winner is ۱; anyone else finished in the
@@ -8290,36 +8465,67 @@ function pzArtLegacy(el, tries, onDone){
   el.onload =()=>{ el.style.display=''; if(onDone) onDone(true,tries[i]); };
   next();
 }
-const _pzArtUrls={};
-function pzTryArt(el, base, onDone){
-  if(!el) return;
-  const tries=[base+'.webp', base+'.png', base+'.jpg'];
-  if(typeof fetch!=='function'||typeof URL==='undefined'||!URL.createObjectURL){
-    return pzArtLegacy(el,tries,onDone);
-  }
+/* WHAT THE PLAYER WAITS FOR, AND WHAT THEY DO NOT.
+ *
+ * The first version of this fetched every picture with `cache:'no-cache'` before
+ * showing it. That fixed a replaced winchar and broke everything else: EVERY
+ * picture now waited for a network round trip, on EVERY render — and the home
+ * screen rebuilds its cards each time it is opened or scrolled. On a phone that
+ * is an empty square for as long as the round trip takes, again and again.
+ *
+ * A picture has two questions and they have different answers:
+ *   «what do I show RIGHT NOW?»  → whatever is already on the device. Instant,
+ *      no network, straight out of the browser's own cache.
+ *   «has it been replaced?»      → asked ONCE per picture per app start, in the
+ *      background, while the old one is already on screen. An unchanged file
+ *      answers 304 with no body; a changed one swaps in when it arrives.
+ *
+ * So a player never waits for artwork, and an operator's new file still appears
+ * without anybody clearing anything. */
+const _pzArtUrls={};       /* base → object URL of the freshest bytes we hold */
+const _pzArtChecked={};    /* base → revalidated once this session */
+function pzArtRevalidate(base, tries){
+  if(_pzArtChecked[base]) return;
+  _pzArtChecked[base]=true;
+  if(typeof fetch!=='function'||typeof URL==='undefined'||!URL.createObjectURL) return;
   (async()=>{
     for(let i=0;i<tries.length;i++){
       let r;
-      try{ r=await fetch(tries[i],{cache:'no-cache'}); }
-      catch(e){ return pzArtLegacy(el,tries,onDone); }   /* fetch unusable → old path */
-      if(!r||!r.ok) continue;                            /* not uploaded in this format */
+      try{ r=await fetch(tries[i],{cache:'no-cache'}); }catch(e){ return; }
+      if(!r||!r.ok) continue;
       let b; try{ b=await r.blob(); }catch(e){ continue; }
       if(!b||!b.size) continue;
-      /* ONE object URL per picture, not per <img>. The home screen rebuilds its
-         mode cards on every visit and each card asks for its artwork again; a
-         fresh URL each time would pile up blobs for the life of the page. The
-         old one is released a few seconds later rather than at once, in case
-         another element is still decoding from it. */
       const old=_pzArtUrls[base];
       _pzArtUrls[base]=URL.createObjectURL(b);
       if(old) setTimeout(()=>{ try{ URL.revokeObjectURL(old); }catch(e){} },5000);
-      el.onerror=null; el.onload=null;
-      el.src=_pzArtUrls[base]; el.style.display='';
-      if(onDone) onDone(true,tries[i]);
+      /* Swap it into every picture on the page that is showing this artwork —
+         including ones drawn before the check finished. */
+      try{
+        document.querySelectorAll('img[data-pzart="'+base+'"]').forEach(im=>{ im.src=_pzArtUrls[base]; im.style.display=''; });
+      }catch(e){}
       return;
     }
-    if(onDone) onDone(false);          /* none of the three is on the server */
   })();
+}
+function pzTryArt(el, base, onDone){
+  if(!el) return;
+  const tries=[base+'.webp', base+'.png', base+'.jpg'];
+  el.setAttribute('data-pzart', base);
+  /* Already fetched once this session → straight onto the screen, no network,
+     no flicker, however many times the card is rebuilt. */
+  if(_pzArtUrls[base]){
+    el.onerror=null; el.onload=null;
+    el.src=_pzArtUrls[base]; el.style.display='';
+    if(onDone) onDone(true, base);
+    pzArtRevalidate(base, tries);
+    return;
+  }
+  /* First sight of it: the ordinary <img> chain, which paints instantly from
+     the device's cache when the picture has been seen before. */
+  pzArtLegacy(el, tries, (ok, used)=>{
+    if(ok) pzArtRevalidate(base, tries);
+    if(onDone) onDone(ok, used);
+  });
 }
 /* FULLSCREEN — the phone's own header and its home/back bar out of the way.
  *
@@ -9621,6 +9827,30 @@ function pzVictoryAnim(){
   try{ vib([40,60,120,60,160]); }catch(e){}
   setTimeout(()=>{ ov.classList.add('out'); setTimeout(()=>{try{ov.remove();}catch(e){}},480); },2600);
 }
+/* THE WIN/LOSE CHARACTER ON THE RESULT SCREEN.
+ *
+ * It lived inside endGame(), which is the DUEL's ending — so Last Survivor,
+ * which has its own lsFinish(), never ran it. The slot behind it is a `.mascot`,
+ * and every `.mascot` in the app is filled with the player's OWN face: an LS
+ * player therefore finished a match and was shown their own profile picture
+ * where winchar should have been. One function, called by both endings.
+ *
+ * Falls back to the mascot, and to a plain emoji when neither file is on the
+ * server — an emoji always renders, so the slot is never blank. */
+function pzResultCharacter(won){
+  const rc=document.getElementById('resultChar'), ms=document.getElementById('mascotResult');
+  if(!rc) return;
+  const giveUp=()=>{ try{ if(ms)ms.style.display='none'; rc.style.display='none';
+    let e=document.getElementById('resultCharEmoji');
+    if(!e){ e=document.createElement('div'); e.id='resultCharEmoji'; e.style.cssText='font-size:clamp(48px,11vh,74px);line-height:1;text-align:center;animation:pzPop .5s cubic-bezier(.2,1.5,.4,1)'; rc.parentNode&&rc.parentNode.insertBefore(e,rc); }
+    e.style.display=''; e.textContent=won?'🏆':'😢'; }catch(_){ rc.style.display='none'; if(ms)ms.style.display=''; } };
+  pzTryArt(rc, won ? 'winchar' : 'losechar', ok=>{
+    if(!ok){ giveUp(); return; }
+    rc.style.display=''; if(ms)ms.style.display='none';
+    const e=document.getElementById('resultCharEmoji'); if(e)e.style.display='none';
+  });
+}
+
 /* THE LINE UNDER THE HEADLINE.
    A loss screen that only says «باختی» is a door closing. One warm sentence is
    what turns it back into an invitation, and a different one each time is what
@@ -9732,21 +9962,7 @@ function endGame(won,amount,isWithdraw,customSub){
      gone: green for a win, red for a loss, and heavier than anything else. */
   try{ const _t=document.getElementById('resultTitle');
        if(_t){ _t.classList.toggle('win',!!won); _t.classList.toggle('lose',!won); } }catch(e){}
-  /* The win/lose character, at a size the rest of the screen can afford. Falls
-     back to the SVG mascot, and to a plain emoji when neither file is on the
-     server — an emoji always renders, so the slot is never blank. */
-  (function(){ const rc=document.getElementById('resultChar'), ms=document.getElementById('mascotResult');
-    if(!rc) return;
-    const giveUp=()=>{ try{ if(ms)ms.style.display='none'; rc.style.display='none';
-      let e=document.getElementById('resultCharEmoji');
-      if(!e){ e=document.createElement('div'); e.id='resultCharEmoji'; e.style.cssText='font-size:clamp(48px,11vh,74px);line-height:1;text-align:center;animation:pzPop .5s cubic-bezier(.2,1.5,.4,1)'; rc.parentNode&&rc.parentNode.insertBefore(e,rc); }
-      e.style.display=''; e.textContent=won?'🏆':'😢'; }catch(_){ rc.style.display='none'; if(ms)ms.style.display=''; } };
-    pzTryArt(rc, won ? 'winchar' : 'losechar', ok=>{
-      if(!ok){ giveUp(); return; }
-      rc.style.display=''; if(ms)ms.style.display='none';
-      const e=document.getElementById('resultCharEmoji'); if(e)e.style.display='none';
-    });
-  })();
+  pzResultCharacter(won);
   const badge=document.getElementById('resultBadge'),emoji=document.getElementById('resultEmoji');
   const title=document.getElementById('resultTitle'),sub=document.getElementById('resultSub'),amt=document.getElementById('resultAmt');
   const isDuel=gameType==='duel';

@@ -33,7 +33,17 @@ await ctx.addInitScript(() => {
   localStorage.setItem('pz_tok', 't'); localStorage.setItem('pz_rtok', 'r');
   localStorage.setItem('pz_usr', JSON.stringify({ id: 'me', username: 'ehsan', displayName: 'احسان', level: 3, coins: 50, hearts: 5 }));
 });
-await ctx.route('**/v1/**', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, data: {} }) }));
+/* The room the poller reads. A spectator's whole existence is «keep polling
+   this room», so the test has to be able to hand it new snapshots. */
+let liveSnap = null;
+const answerAttempts = [];
+await ctx.route('**/v1/**', (route) => {
+  const p = new URL(route.request().url()).pathname.replace(/^.*\/v1/, '');
+  const send = (d) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, data: d }) });
+  if (/^\/last-survivor\/rooms\/[^/]+\/answer$/.test(p)) { answerAttempts.push(1); return send({ recorded: true }); }
+  if (/^\/last-survivor\/rooms\/[^/]+$/.test(p)) return send(liveSnap || {});
+  return send({});
+});
 const page = await ctx.newPage();
 const errs = []; page.on('pageerror', (e) => errs.push(String(e.message || e).slice(0, 180)));
 await page.goto('http://127.0.0.1:' + PORT + '/');
@@ -280,6 +290,311 @@ const render = (snap) => page.evaluate((s) => {
   }));
   ok('everyone else is simply out', !/آخرین نفر/.test(other.title), other.title);
   ok('and is shown no money', !other.amtShown, String(other.amtShown));
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+}
+
+/* ── 6. WATCHING AFTER BEING KNOCKED OUT ────────────────────────────────── */
+{
+  console.log('watching the rest of the match:');
+  errs.length = 0;
+
+  /* Knocked out on round 3 of an eight-round match — the room plays on. */
+  const out = room({ n: 8, round: 3, phase: 'dashboard', outIds: ['me', 'p5'], meStatus: 'eliminated' });
+  out.me.eliminatedRound = 3;
+  liveSnap = out;
+  await page.evaluate((s) => {
+    (0, eval)("lsRoomId='r1'; lsMyId='me'; lsEndShown=false; lsForfeited=0; lsWipeout=null; lsWatching=false; lsWatchRoomDone=false;");
+    (0, eval)('lsFinish')(s);
+  }, out);
+  await page.waitForTimeout(500);
+
+  const btn = await page.evaluate(() => {
+    const b = document.getElementById('lsWatchBtn');
+    return b ? { shown: !!b.offsetParent, text: b.textContent, disabled: b.disabled } : null;
+  });
+  ok('a knocked-out player is offered the match to watch', !!btn && btn.shown, JSON.stringify(btn));
+  ok('and it is not disabled while the room is still playing', !!btn && !btn.disabled, String(btn && btn.disabled));
+  ok('the button says what it does', /تماشا/.test((btn && btn.text) || ''), btn && btn.text);
+
+  /* Pressing it puts them back in the room. */
+  await page.evaluate(() => document.getElementById('lsWatchBtn').click());
+  await page.waitForTimeout(1400);
+  const watching = await page.evaluate(() => ({
+    screen: (document.querySelector('.screen.active') || {}).id,
+    on: (0, eval)('lsWatching'),
+    bar: !!document.querySelector('#lsBody .ls-watchbar'),
+    text: (document.getElementById('lsBody') || {}).innerText || ''
+  }));
+  ok('the room comes back', watching.screen === 'lsGame' && watching.on === true, JSON.stringify({ s: watching.screen, on: watching.on }));
+  ok('with an unmistakable spectator banner', watching.bar, String(watching.bar));
+  ok('that says they are out', /تماشاگر|حذف شدی/.test(watching.text), (watching.text.match(/.{0,26}تماشاگر.{0,26}/) || [''])[0]);
+
+  /* A QUESTION GOES UP. They see it — and cannot answer it. */
+  const q = room({ n: 8, round: 4, phase: 'question', outIds: ['me', 'p5'], meStatus: 'eliminated' });
+  q.me.eliminatedRound = 3; q.me.answeredThisRound = false;
+  q.question = { id: 'q4', round: 4, text: 'پایتخت ژاپن کجاست؟', options: ['توکیو', 'اوساکا', 'کیوتو', 'ناگویا'], difficulty: 'medium' };
+  liveSnap = q;
+  await page.evaluate((s) => { (0, eval)('lsRender')(s); }, q);
+  await page.waitForTimeout(400);
+  const seeing = await page.evaluate(() => {
+    const opts = [...document.querySelectorAll('#lsOpts .ans')];
+    return {
+      question: (document.querySelector('.ls-qtext') || {}).textContent || '',
+      options: opts.length,
+      allDead: opts.length > 0 && opts.every((b) => b.disabled),
+      anyOnclick: opts.some((b) => b.getAttribute('onclick')),
+      bar: !!document.querySelector('#lsBody .ls-watchbar')
+    };
+  });
+  ok('the spectator sees the question', /ژاپن/.test(seeing.question), seeing.question);
+  ok('and all four options', seeing.options === 4, String(seeing.options));
+  ok('but every one of them is dead', seeing.allDead, String(seeing.allDead));
+  ok('and none of them is even wired to answer', !seeing.anyOnclick, String(seeing.anyOnclick));
+  ok('the banner stays up over the question', seeing.bar, String(seeing.bar));
+
+  /* Even forcing the call must not send an answer. */
+  const before = answerAttempts.length;
+  await page.evaluate(() => { try { (0, eval)('lsAnswer')(0); } catch (e) {} });
+  await page.waitForTimeout(400);
+  ok('and calling the answer path directly sends nothing', answerAttempts.length === before, String(answerAttempts.length - before));
+
+  /* «حذف شدن هارو ببینه» — the eliminations play for them too. */
+  const elim = room({ n: 8, round: 4, phase: 'elimination', outIds: ['me', 'p5', 'p2'], meStatus: 'eliminated' });
+  elim.me.eliminatedRound = 3;
+  liveSnap = elim;
+  await page.evaluate((s) => { (0, eval)('lsRender')(s); }, elim);
+  await page.waitForTimeout(400);
+  const grid = await page.evaluate(() => ({
+    cells: document.querySelectorAll('#lsElimGrid .ls-pl').length,
+    marks: document.querySelectorAll('#lsElimGrid .ls-pl .xx').length
+  }));
+  ok('and watches the eliminations happen', grid.cells === 8 && grid.marks >= 2, JSON.stringify(grid));
+
+  /* «ببینه کی برنده میشه» — the ending, named. */
+  const done = room({ n: 8, round: 6, phase: 'finished', outIds: ['me', 'p5', 'p2', 'p3', 'p6', 'p7'], meStatus: 'eliminated' });
+  done.room.status = 'finished';
+  done.players.find((x) => x.userId === 'p1').payoutCash = 320000;
+  done.me.eliminatedRound = 3;
+  liveSnap = done;
+  await page.evaluate((s) => { (0, eval)('lsRender')(s); }, done);
+  await page.waitForTimeout(700);
+  const ending = await page.evaluate(() => ({
+    text: (document.getElementById('lsBody') || {}).innerText || '',
+    still: (0, eval)('lsWatching'),
+    doneFlag: (0, eval)('lsWatchRoomDone')
+  }));
+  ok('the winner is named', /بازیکن1/.test(ending.text), (ending.text.match(/.{0,30}بازیکن1.{0,20}/) || [''])[0]);
+  ok('with what they won', /۳۲۰٬۰۰۰/.test(ending.text), (ending.text.match(/.{0,16}۳۲۰٬۰۰۰.{0,10}/) || [''])[0]);
+  ok('and the room is marked finished', ending.doneFlag === true, String(ending.doneFlag));
+
+  /* Back to their own result screen, and the button is now dead — there is
+     nothing left to watch. «اگه آخرین نفر باشه این دکمه براش غیر فعال باشه» */
+  await page.evaluate(() => { try { (0, eval)('lsStopWatching()'); } catch (e) {} });
+  await page.waitForTimeout(500);
+  const after = await page.evaluate(() => {
+    const b = document.getElementById('lsWatchBtn');
+    return { screen: (document.querySelector('.screen.active') || {}).id, watching: (0, eval)('lsWatching'),
+             disabled: b && b.disabled, text: b && b.textContent };
+  });
+  ok('they are returned to their own result', after.screen === 'result' && after.watching === false, JSON.stringify(after));
+  ok('and the button is dead once the match is over', after.disabled === true, String(after.disabled));
+  ok('saying so', /تمام شد/.test(after.text || ''), after.text);
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+}
+
+/* ── 6b. WHAT A SPECTATOR MUST NEVER GET ────────────────────────────────── */
+{
+  console.log('what a spectator is spared:');
+  errs.length = 0;
+  /* A clean slate: an earlier block's modal still on screen would be read as
+     this one's gate, and the room screen has to be the visible one. */
+  await page.evaluate(() => {
+    try { (0, eval)('closeAaaModal')(false); } catch (e) {}
+    (0, eval)("showScreen('lsGame')");
+    /* lsSnap still holds §6's FINISHED room, and the client quite rightly
+       refuses to un-finish a room — every snapshot below would be dropped as
+       stale. A new scenario starts from no snapshot at all. */
+    (0, eval)("lsSnap=null; lsWatching=true; lsWatchRoom='r1'; lsWatchRoomDone=false; lsEndShown=true; lsReadyShownRound=0; lsRoomId='r1'; lsLastKey='';");
+  });
+  await page.waitForTimeout(300);
+
+  /* «مودال تایمر سوال همان روم برای کاربر حذف شده … میاره بالا و تایمر تموم
+     می‌شه و می‌ره» — the «آماده‌ای؟» countdown is a question asked of somebody
+     about to answer. A spectator is not, and it must not land on them. */
+  const ready = room({ n: 8, round: 9, phase: 'ready', outIds: ['me'], meStatus: 'eliminated' });
+  ready.me.eliminatedRound = 3;
+  ready.question = { id: 'q9', round: 9, text: 'سوال آماده', options: ['یک', 'دو', 'سه', 'چهار'], difficulty: 'hard' };
+  await page.evaluate((sn) => { (0, eval)('lsRender')(sn); }, ready);
+  await page.waitForTimeout(500);
+  const gate = await page.evaluate(() => {
+    const m = document.getElementById('aaaModal');
+    return { open: !!m && m.classList.contains('show') && getComputedStyle(m).display !== 'none',
+             text: m ? (m.innerText || '').slice(0, 40) : '' };
+  });
+  ok('no «آماده‌ای؟» countdown lands on a spectator', !gate.open, JSON.stringify(gate));
+
+  /* AND THE WAY IT ACTUALLY HAPPENED. A knocked-out player is sent to the
+     result screen, but the room's websocket pushes keep arriving — and one of
+     them opened the «آماده‌ای؟» countdown on top of their result screen, which
+     then ran out and closed itself. They are not in the round; nothing about it
+     may be put in front of them. */
+  const stray = await page.evaluate(async () => {
+    try { (0, eval)('closeAaaModal')(false); } catch (e) {}
+    (0, eval)("lsSnap=null; lsWatching=false; lsEndShown=true; lsReadyShownRound=0; lsLastKey='';");
+    (0, eval)("showScreen('result')");
+    await new Promise((r) => setTimeout(r, 200));
+    return true;
+  });
+  const late = room({ n: 8, round: 13, phase: 'ready', outIds: ['me'], meStatus: 'eliminated' });
+  late.me.eliminatedRound = 3;
+  late.question = { id: 'q13', round: 13, text: 'سوال بعدی', options: ['یک', 'دو', 'سه', 'چهار'], difficulty: 'hard' };
+  await page.evaluate((sn) => { (0, eval)('lsRender')(sn); }, late);
+  await page.waitForTimeout(600);
+  const strayGate = await page.evaluate(() => {
+    const m = document.getElementById('aaaModal');
+    return { open: !!m && m.classList.contains('show') && getComputedStyle(m).display !== 'none',
+             text: m ? (m.innerText || '').replace(/\s+/g, ' ').slice(0, 40) : '' };
+  });
+  ok('nor on a knocked-out player still sitting on their result screen',
+     !strayGate.open || !/آماده/.test(strayGate.text), JSON.stringify(strayGate));
+  /* Back into the spectator's chair for the rest of this block — the check
+     above deliberately took them out of it. */
+  await page.evaluate(async () => {
+    try { (0, eval)('closeAaaModal')(false); } catch (e) {}
+    (0, eval)("showScreen('lsGame')");
+    (0, eval)("lsSnap=null; lsWatching=true; lsWatchRoom='r1'; lsWatchRoomDone=false; lsEndShown=true; lsReadyShownRound=0; lsRoomId='r1'; lsLastKey='';");
+    await new Promise((r) => setTimeout(r, 150));
+  });
+
+  /* And the room does not throw them back out to the result screen. The signal
+     is lsEndShown: lsFinish sets it, so if it is still false the guard held and
+     the spectator was left where they are. */
+  const dash = room({ n: 8, round: 14, phase: 'dashboard', outIds: ['me'], meStatus: 'eliminated' });
+  dash.me.eliminatedRound = 3;
+  await page.evaluate((sn) => { (0, eval)("lsEndShown=false;"); (0, eval)('lsRender')(sn); }, dash);
+  await page.waitForTimeout(400);
+  const still = await page.evaluate(() => ({
+    finished: (0, eval)('lsEndShown'),
+    screen: (document.querySelector('.screen.active') || {}).id,
+    bar: !!document.querySelector('#lsBody .ls-watchbar')
+  }));
+  ok('a spectator is not ejected back to their result screen', still.finished === false && still.screen === 'lsGame', JSON.stringify(still));
+  ok('and keeps the banner', still.bar, String(still.bar));
+
+  /* Their own elimination verdict from three rounds ago must not follow them
+     around the rest of the match. */
+  const elim = room({ n: 8, round: 15, phase: 'elimination', outIds: ['me', 'p4'], meStatus: 'eliminated' });
+  elim.me.eliminatedRound = 3;
+  await page.evaluate((sn) => { (0, eval)('lsRender')(sn); }, elim);
+  await page.waitForTimeout(400);
+  const verdict = await page.evaluate(() => ({
+    has: !!document.querySelector('#lsBody .ls-verdict'),
+    text: (document.getElementById('lsBody') || {}).innerText || ''
+  }));
+  ok('no stale «شما حذف شدید» card follows them', !verdict.has, String(verdict.has));
+  await page.evaluate(() => { (0, eval)("lsWatching=false; lsEndShown=true;"); });
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+}
+
+/* ── 6c. THE ANSWER CLOCK IN LAST SURVIVOR ──────────────────────────────── */
+{
+  console.log('the average answer time in Last Survivor:');
+  errs.length = 0;
+  const t = await page.evaluate(async () => {
+    (0, eval)("lsSnap=null; lsWatching=false; lsEndShown=true; lsRoomId='r1'; lsMyId='me'; lsAnswered=false; pzAnsTimes=[]; pzQShownAt=0; lsLastKey='';");
+    return { before: (0, eval)('pzAvgAnswerText()') };
+  });
+  ok('with nothing answered it honestly says nothing', t.before === '—', t.before);
+
+  /* A question goes up, the player thinks for a moment, then answers. */
+  const q = room({ n: 6, round: 12, phase: 'question', outIds: [], meStatus: 'alive' });
+  q.me.answeredThisRound = false;
+  q.question = { id: 'q12', round: 12, text: 'دو بعلاوهٔ دو؟', options: ['۴', '۳', '۵', '۶'], difficulty: 'easy' };
+  await page.evaluate((sn) => { (0, eval)("lsLastKey=''; lsAnswered=false;"); (0, eval)('lsRender')(sn); }, q);
+  await page.waitForTimeout(1200);                      // thinking
+  const after = await page.evaluate(async () => {
+    const marked = (0, eval)('pzQShownAt') > 0;
+    (0, eval)("lsSnap.room.phase='question'; lsSnap.me.status='alive';");
+    await (0, eval)('lsAnswer')(0);
+    await new Promise((r) => setTimeout(r, 200));
+    return { marked, times: (0, eval)('pzAnsTimes.slice()'), text: (0, eval)('pzAvgAnswerText()') };
+  });
+  ok('the clock starts when the question appears', after.marked, String(after.marked));
+  ok('and stops when the player answers', after.times.length === 1, JSON.stringify(after.times));
+  ok('so the result card gets a real figure, not a dash', after.text !== '—' && /ث$/.test(after.text), after.text);
+  ok('and the figure is roughly how long they took', after.times[0] >= 900 && after.times[0] <= 4000, after.times[0] + 'ms');
+  /* And it has to reach the CARD — the whole complaint was «میانگین پاسخ - است»
+     on the result screen, not that a function somewhere knew better. */
+  const onCard = await page.evaluate((sn) => {
+    (0, eval)("lsEndShown=false; lsWatching=false; lsWipeout=null;");
+    (0, eval)('lsFinish')(sn);
+    return (document.getElementById('stat-time') || {}).textContent;
+  }, (() => { const f = room({ n: 6, round: 13, phase: 'finished', outIds: ['me'], meStatus: 'eliminated' }); f.room.status = 'finished'; f.me.eliminatedRound = 13; return f; })());
+  await page.waitForTimeout(400);
+  ok('and the result card prints it instead of a dash', onCard !== '—' && /ث/.test(onCard || ''), onCard);
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+}
+
+/* ── 7. THE LAST ONE OUT HAS NOTHING TO WATCH ───────────────────────────── */
+{
+  console.log('being the last one out:');
+  errs.length = 0;
+  const snap = room({ n: 5, round: 7, phase: 'finished', outIds: ['me', 'p1', 'p2', 'p3', 'p4'], meStatus: 'eliminated' });
+  snap.room.status = 'finished';
+  snap.room.wipeout = { lastUserId: 'me', share: 30000, splitAmong: 5 };
+  snap.me.payoutCash = 30000; snap.me.eliminatedRound = 7;
+  liveSnap = snap;
+  await page.evaluate((s) => {
+    (0, eval)("lsRoomId='r1'; lsMyId='me'; lsEndShown=false; lsWatching=false; lsWatchRoomDone=false; lsWipeout=null;");
+    (0, eval)('lsFinish')(s);
+  }, snap);
+  await page.waitForTimeout(500);
+  const b = await page.evaluate(() => {
+    const el = document.getElementById('lsWatchBtn');
+    return el ? { shown: !!el.offsetParent, disabled: el.disabled, text: el.textContent } : null;
+  });
+  ok('the button is there but dead', !!b && b.disabled === true, JSON.stringify(b));
+  ok('and says the match is over', /تمام شد/.test((b && b.text) || ''), b && b.text);
+  /* And pressing it anyway does nothing. */
+  const moved = await page.evaluate(async () => {
+    try { (0, eval)('lsWatchMatch()'); } catch (e) {}
+    await new Promise((r) => setTimeout(r, 400));
+    return { screen: (document.querySelector('.screen.active') || {}).id, watching: (0, eval)('lsWatching') };
+  });
+  ok('and forcing it changes nothing', moved.screen !== 'lsGame' && moved.watching === false, JSON.stringify(moved));
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+}
+
+/* ── 8. THE RESULT SCREEN'S OWN CHARACTER, IN LAST SURVIVOR ─────────────── */
+{
+  console.log('the character on the Last Survivor result screen:');
+  errs.length = 0;
+  const snap = room({ n: 6, round: 5, phase: 'finished', outIds: ['me'], meStatus: 'eliminated' });
+  snap.room.status = 'finished'; snap.me.eliminatedRound = 5;
+  await page.evaluate((s) => {
+    (0, eval)("lsRoomId='r1'; lsMyId='me'; lsEndShown=false; lsWatching=false; lsWipeout=null;");
+    (0, eval)('lsFinish')(s);
+  }, snap);
+  await page.waitForTimeout(900);
+  const face = await page.evaluate(() => {
+    const ms = document.getElementById('mascotResult');
+    const rc = document.getElementById('resultChar');
+    const emoji = document.getElementById('resultCharEmoji');
+    return {
+      mascotShown: !!(ms && ms.offsetParent),
+      charShown: !!(rc && rc.offsetParent),
+      emojiShown: !!(emoji && emoji.offsetParent),
+      emoji: emoji && emoji.textContent,
+      titleCls: document.getElementById('resultTitle').className
+    };
+  });
+  /* «به جای عکس winchar/losechar عکس پروفایل کاربر نشون داده میشه» — the mascot
+     slot is the player's own face, and it must not be what a result screen
+     shows. With no losechar on this test server the honest fallback is the
+     emoji; what must NOT happen is the profile picture. */
+  ok('the player’s own face is not used as the result character', !face.mascotShown, JSON.stringify(face));
+  ok('the win/lose slot is what fills it', face.charShown || face.emojiShown, JSON.stringify(face));
+  ok('and a loss is coloured as one', /lose/.test(face.titleCls), face.titleCls);
   ok('no script errors', errs.length === 0, errs.join(' | '));
 }
 
