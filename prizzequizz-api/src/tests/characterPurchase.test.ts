@@ -125,6 +125,60 @@ async function run(): Promise<void> {
       assert.ok(Array.isArray(r.body.roster?.characters), 'roster included');
       assert.equal(r.body.roster.characters.find((c: any) => c.id === forSale.id).unlocked, true);
     });
+    /* ── the level gate ─────────────────────────────────────────────── */
+
+    /* «سکه داشته باشم ولی لول نداشته باشم نتونم خرید کنم». */
+    await check('coins alone do not buy a character with a level on it', async () => {
+      const gated = await saveCharacter({ name: 'استاد', price: 100, viaPurchase: true, viaLevel: false, unlockLevel: 10, enabled: true });
+      const p = await player(9_000_000);                       // rich, and level 1
+      const r = await api('POST', `/characters/${gated.id}/purchase`, p.token);
+      assert.notEqual(r.status, 200, 'the purchase must be refused: ' + JSON.stringify(r.body));
+      assert.equal(r.code, 'LEVEL_TOO_LOW', r.code);
+      const u: any = await repositories.users.findById(p.id);
+      assert.equal(Number(u.coins), 9_000_000, 'and not a single coin was taken');
+      const roster = await buildRoster(p.id);
+      assert.equal(roster.characters.find((c) => c.id === gated.id)!.unlocked, false, 'nor was it granted');
+    });
+
+    await check('and the reason given is the level, not the money', async () => {
+      const gated = await saveCharacter({ name: 'استاد دوم', price: 100, viaPurchase: true, viaLevel: false, unlockLevel: 12, enabled: true });
+      const p = await player(0);                               // poor AND low level
+      const r = await api('POST', `/characters/${gated.id}/purchase`, p.token);
+      assert.equal(r.code, 'LEVEL_TOO_LOW', 'sending them to buy coins they may not spend is the wrong answer: ' + r.code);
+    });
+
+    await check('reaching the level lets the coins do their work', async () => {
+      const gated = await saveCharacter({ name: 'استاد سوم', price: 400, viaPurchase: true, viaLevel: false, unlockLevel: 5, enabled: true });
+      const p = await player(600);
+      const u: any = await repositories.users.findById(p.id);
+      u.xp = 100 * 5 * 5;                                      // levelForXp → 6
+      await repositories.users.save(u);
+      const r = await api('POST', `/characters/${gated.id}/purchase`, p.token);
+      assert.equal(r.status, 200, JSON.stringify(r.body));
+      assert.equal(r.body.charged, 400);
+    });
+
+    await check('the card says the level before the player presses buy', async () => {
+      const gated = await saveCharacter({ name: 'استاد چهارم', price: 250, viaPurchase: true, viaLevel: false, unlockLevel: 20, enabled: true });
+      const p = await player(9999);
+      const roster = await buildRoster(p.id);
+      const card = roster.characters.find((c) => c.id === gated.id)!;
+      assert.equal(card.unlocked, false);
+      assert.match(card.lockReason, /لول ۲۰/, card.lockReason);
+    });
+
+    /* ── the shelf it is sold on ─────────────────────────────────────── */
+
+    await check('a character carries the group the panel put it in', async () => {
+      const c = await saveCharacter({ name: 'پهلوان', price: 100, viaPurchase: true, viaLevel: false, group: 'قهرمانان', enabled: true });
+      assert.equal(c.group, 'قهرمانان');
+      const p = await player(500);
+      const roster = await buildRoster(p.id);
+      assert.equal(roster.characters.find((x) => x.id === c.id)!.group, 'قهرمانان', 'and the player sees it too');
+      /* An ungrouped character is not broken, just ungrouped. */
+      const plain = await saveCharacter({ name: 'ساده', price: 10, viaPurchase: true, viaLevel: false, enabled: true });
+      assert.equal(plain.group, '');
+    });
   } finally {
     server.close();
   }

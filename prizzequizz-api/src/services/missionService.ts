@@ -18,6 +18,7 @@ import { grantTickets } from './ticketService.js';
 import { grantLifeline } from './lifelineService.js';
 import { addHearts } from './heartService.js';
 import { recordCategories } from './recordModeService.js';
+import { awardScoring } from './matchEngine.js';
 import { logger } from './logger.js';
 
 /* Every countable thing the game can report. A mission targets one of these;
@@ -61,7 +62,7 @@ export const RARITY_FA: Record<Rarity, string> = {
   legendary: '🟠 افسانه‌ای', mythic: '👑 اسطوره‌ای'
 };
 
-export type RewardType = 'coins' | 'xp' | 'heart' | 'ticket' | 'cash' | 'lifeline' | 'spin' | 'cosmetic';
+export type RewardType = 'coins' | 'xp' | 'cup' | 'heart' | 'ticket' | 'cash' | 'lifeline' | 'spin' | 'cosmetic';
 export interface MissionReward { type: RewardType; amount: number; target?: string; label?: string }
 
 export interface MissionDef {
@@ -150,6 +151,17 @@ async function ensureSchema(pool: ReturnType<typeof getPgPool>): Promise<void> {
     period TEXT NOT NULL,
     mission_ids JSONB NOT NULL DEFAULT '[]',
     PRIMARY KEY (user_id, kind, period))`);
+  /* The box a finished daily set earns. One row per set, so it cannot be opened
+   * twice and cannot be lost by a reload — and the contents are STORED at the
+   * moment it is opened, not re-read from the config later, or a panel edit
+   * would silently rewrite a prize somebody has already been given. */
+  await pool.query(`CREATE TABLE IF NOT EXISTS mission_boxes (
+    user_id TEXT NOT NULL,
+    period TEXT NOT NULL,
+    opened_at TIMESTAMPTZ,
+    rewards JSONB NOT NULL DEFAULT '[]',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (user_id, period))`);
   /* Some metrics are not counters. "Five wins in a row" has to know whether the
    * run is still alive; "played ten different topics" has to know which topics
    * were already seen. record() cannot work that out from one event, so the
@@ -402,8 +414,15 @@ function buildSeed(): Partial<MissionDef>[] {
     ['یک رکورد تازه ثبت کن', 'recordSet', 1, '🏅', 'rare', [R('coins', 250), R('xp', 150)]],
     ['۱۰ جواب درست پشت سر هم', 'correctStreak', 10, '🔥', 'epic', [R('ticket', 1, 'green')]]
   ];
+  /* The flat list the game shipped with. It is kept — an operator may still
+   * want «سری به فروشگاه بزن» — but it is no longer DEALT: weight 0 keeps it
+   * out of the daily draw so the level ladder below is the only thing a player
+   * is handed. Switching one back on in the panel is a weight edit. */
   dailies.forEach(([title, metric, target, icon, rarity, rewards], i) =>
-    add({ id: 'd_' + metric + '_' + target, kind: 'daily', metric, target, title, icon, rarity, rewards, weight: 10, sortOrder: i }));
+    add({ id: 'd_' + metric + '_' + target, kind: 'daily', metric, target, title, icon, rarity, rewards, weight: 0, sortOrder: i }));
+
+  // ---- the daily LADDER: one band per level, 1 … 100 ----
+  out.push(...buildDailyLadder());
 
   // ---- weekly ----
   const weeklies: [string, Metric, number, string, Rarity, MissionReward[]][] = [
@@ -528,6 +547,68 @@ function buildSeed(): Partial<MissionDef>[] {
   return out;
 }
 
+/* THE DAILY LADDER.
+ *
+ * «ماموریت ۱ لول ۱، ماموریت ۱۰۰ لول ۱۰۰ و سخت‌تر» — a mission belongs to a
+ * level, and the higher the level the more it asks for. Writing a hundred of
+ * them by hand would be a hundred chances to typo a number, so the ladder is
+ * GENERATED from a handful of shapes and one growth curve each. What the panel
+ * gets is still ordinary rows it can edit or switch off one by one.
+ *
+ * Four missions per level, three dealt — so two players at the same level do
+ * not always see the same three, and a mission the player cannot stand is not
+ * the only thing between them and the box.
+ *
+ * Every rung pays cup AND xp, because the cup is what the weekly league is
+ * played for and missions are the steady way to earn it.
+ */
+interface Rung { metric: Metric; title: (n: number) => string; icon: string; at: (lv: number) => number }
+const DAILY_RUNGS: Rung[] = [
+  { metric: 'questionsAnswered', icon: '❓', at: (lv) => 10 + 2 * (lv - 1),            title: (n) => `به ${n} سؤال جواب بده` },
+  { metric: 'correctAnswers',    icon: '✅', at: (lv) => 5 + Math.round(1.5 * (lv - 1)), title: (n) => `${n} جواب درست بده` },
+  { metric: 'matchesPlayed',     icon: '🎮', at: (lv) => 2 + Math.floor((lv - 1) / 6),  title: (n) => `${n} مسابقه انجام بده` },
+  { metric: 'matchesWon',        icon: '🏆', at: (lv) => 1 + Math.floor((lv - 1) / 8),  title: (n) => `${n} مسابقه ببر` },
+  { metric: 'xpEarned',          icon: '⚡', at: (lv) => 150 + 40 * (lv - 1),           title: (n) => `${n} XP بگیر` },
+  { metric: 'correctStreak',     icon: '🔥', at: (lv) => 3 + Math.floor((lv - 1) / 10), title: (n) => `${n} جواب درست پشت سر هم` },
+  { metric: 'coinsSpent',        icon: '🪙', at: (lv) => 200 + 60 * (lv - 1),           title: (n) => `${n} سکه خرج کن` },
+  { metric: 'newCategory',       icon: '🧭', at: (lv) => 1 + Math.floor((lv - 1) / 25), title: (n) => n === 1 ? 'در یک موضوع تازه بازی کن' : `در ${n} موضوع تازه بازی کن` }
+];
+export const DAILY_LADDER_LEVELS = 100;
+export const DAILY_PER_LEVEL = 4;
+
+function rungRarity(lv: number): Rarity {
+  return lv >= 80 ? 'mythic' : lv >= 60 ? 'legendary' : lv >= 35 ? 'epic' : lv >= 15 ? 'rare' : 'common';
+}
+
+export function buildDailyLadder(): MissionDef[] {
+  const out: MissionDef[] = [];
+  for (let lv = 1; lv <= DAILY_LADDER_LEVELS; lv++) {
+    for (let k = 0; k < DAILY_PER_LEVEL; k++) {
+      /* Rotating the starting rung by level keeps neighbouring levels from
+       * being the same four missions with bigger numbers. */
+      const rung = DAILY_RUNGS[(lv * 3 + k) % DAILY_RUNGS.length]!;
+      const target = Math.max(1, rung.at(lv));
+      out.push({
+        id: `dl_${lv}_${k + 1}`,
+        kind: 'daily', metric: rung.metric, scope: '', target,
+        title: rung.title(target), description: '', icon: rung.icon,
+        rarity: rungRarity(lv),
+        rewards: [
+          { type: 'cup', amount: 5 + Math.floor(lv / 2) },
+          { type: 'xp', amount: 40 + 8 * lv },
+          { type: 'coins', amount: 60 + 12 * lv }
+        ],
+        enabled: true,
+        /* One level, one band. The set a player is dealt is the set for the
+         * level they are on — which is what «لول‌بندی» means. */
+        minLevel: lv, maxLevel: lv,
+        weight: 10, chainId: '', chainStep: 0, startsAt: '', endsAt: '', sortOrder: k
+      });
+    }
+  }
+  return out;
+}
+
 let _seeded = false;
 async function seedIfEmpty(): Promise<void> {
   if (_seeded) return;
@@ -536,11 +617,28 @@ async function seedIfEmpty(): Promise<void> {
   if (pool) {
     await ensureSchema(pool);
     const { rows } = await pool.query(`SELECT count(*)::int AS n FROM missions`);
-    if (rows[0]?.n > 0) return;
+    if (rows[0]?.n > 0) { await seedDailyLadder(pool); return; }
   } else if (_memDefs && _memDefs.length) return;
   else _memDefs = [];
   for (const d of buildSeed()) await saveDef(d);
   logger.info('missions_seeded', { count: (await listDefs()).length });
+}
+
+/* A LIVE GAME ALREADY HAS MISSIONS, so the seed above never runs again — which
+ * would leave every existing player on the old flat dailies for ever. The
+ * ladder therefore installs itself separately, once, and quiets the flat list
+ * as it goes. It touches nothing an operator has edited by hand: only the rows
+ * this file wrote in the first place. */
+async function seedDailyLadder(pool: NonNullable<ReturnType<typeof pg>>): Promise<void> {
+  try {
+    const { rows } = await pool.query(`SELECT count(*)::int AS n FROM missions WHERE id LIKE 'dl\\_%'`);
+    if (rows[0]?.n > 0) return;
+    for (const d of buildDailyLadder()) await saveDef(d);
+    await pool.query(`UPDATE missions SET weight=0 WHERE kind='daily' AND id LIKE 'd\\_%'`);
+    logger.info('mission_daily_ladder_installed', { rungs: DAILY_LADDER_LEVELS * DAILY_PER_LEVEL });
+  } catch (e) {
+    logger.warn('mission_daily_ladder_failed', { message: (e as Error).message });
+  }
 }
 
 
@@ -599,10 +697,78 @@ function levelOk(d: MissionDef, level: number): boolean {
 }
 
 export interface AssignCounts { daily: number; weekly: number }
-export const ASSIGN_DEFAULT: AssignCounts = { daily: 5, weekly: 3 };
+/* Three a day. Enough that finishing them is a session's work, few enough that
+ * the box at the end is reachable. */
+export const ASSIGN_DEFAULT: AssignCounts = { daily: 3, weekly: 3 };
+
+/**
+ * THE SET DOES NOT MOVE UNTIL IT IS DONE.
+ *
+ * «اگه کاربر ماموریت‌ها را انجام نده... ۱۰ روز هم بگذره عوض نمی‌شن» — a daily
+ * set that is re-dealt every midnight punishes the player who was busy: they
+ * see three new missions and the three they had half-finished are gone. So the
+ * period a daily set lives in is the day it was DEALT, not today, and it stays
+ * live until all three are completed. The day after that, a new set.
+ *
+ * Everything a daily touches — progress, claims, the box — is keyed by this
+ * period rather than by today, or a mission dealt on Monday would be recording
+ * Thursday's answers into a row nobody reads.
+ */
+async function latestDailyPeriod(userId: string): Promise<string | null> {
+  const pool = pg();
+  if (pool) {
+    await ensureSchema(pool);
+    const { rows } = await pool.query(
+      `SELECT period FROM mission_assignments WHERE user_id=$1 AND kind='daily' ORDER BY period DESC LIMIT 1`, [userId]);
+    return rows[0] ? String(rows[0].period) : null;
+  }
+  const mine = [...(_memAssign.keys() as any)]
+    .filter((k: string) => k.startsWith(userId + '|daily|'))
+    .map((k: string) => k.split('|')[2] as string)
+    .sort();
+  return mine.length ? mine[mine.length - 1]! : null;
+}
+
+/** True when every mission in `ids` is finished for that period. */
+async function setComplete(userId: string, ids: string[], period: string): Promise<boolean> {
+  if (!ids.length) return false;
+  for (const mid of ids) {
+    const p = await readProgress(userId, mid, period);
+    if (!p.completedAt) return false;
+  }
+  return true;
+}
+
+/** The period the player's live daily set belongs to. */
+export async function activeDailyPeriod(userId: string, now = Date.now()): Promise<string> {
+  const today = dayKey(now);
+  const last = await latestDailyPeriod(userId);
+  if (!last) return today;
+  if (last >= today) return last;                        // dealt today already
+  const ids = await readAssignment(userId, 'daily', last);
+  if (!(await setComplete(userId, ids, last))) return last;   // unfinished → frozen
+  return today;                                          // finished → a new set today
+}
+
+async function readAssignment(userId: string, kind: 'daily' | 'weekly', period: string): Promise<string[]> {
+  const pool = pg();
+  if (pool) {
+    await ensureSchema(pool);
+    const { rows } = await pool.query(
+      `SELECT mission_ids FROM mission_assignments WHERE user_id=$1 AND kind=$2 AND period=$3`, [userId, kind, period]);
+    return rows[0] ? ((rows[0].mission_ids as string[]) ?? []) : [];
+  }
+  return _memAssign.get(akey(userId, kind, period)) ?? [];
+}
+
+/** The period a mission's progress is written under, for this player. */
+export async function periodForUser(userId: string, kind: MissionKind, now = Date.now()): Promise<string> {
+  if (kind === 'daily') return activeDailyPeriod(userId, now);
+  return periodFor(kind, now);
+}
 
 async function assignmentFor(userId: string, kind: 'daily' | 'weekly', count: number): Promise<string[]> {
-  const period = periodFor(kind);
+  const period = kind === 'daily' ? await activeDailyPeriod(userId) : periodFor(kind);
   const pool = pg();
   if (pool) {
     await ensureSchema(pool);
@@ -640,10 +806,11 @@ async function assignmentFor(userId: string, kind: 'daily' | 'weekly', count: nu
 
 // ---------------------------------------------------------------- record ----
 
-/** Report something the player did. Advances every live mission on that metric. */
-export async function record(userId: string, metric: Metric, amount = 1, scope = ''): Promise<void> {
+/** Report something the player did. Advances every live mission on that metric.
+ *  `at` exists so a test can play a day forward; the game always passes now. */
+export async function record(userId: string, metric: Metric, amount = 1, scope = '', at = Date.now()): Promise<void> {
   if (!(METRICS as readonly string[]).includes(metric)) return;
-  const now = Date.now();
+  const now = at;
   const defs = (await listDefs()).filter((d) =>
     d.enabled && d.metric === metric && inWindow(d, now) &&
     /* A scoped mission only listens to its own scope. */
@@ -656,10 +823,11 @@ export async function record(userId: string, metric: Metric, amount = 1, scope =
   const dailyIds = await assignmentFor(userId, 'daily', ASSIGN_DEFAULT.daily);
   const weeklyIds = await assignmentFor(userId, 'weekly', ASSIGN_DEFAULT.weekly);
 
+  const dailyPeriod = await activeDailyPeriod(userId, now);
   for (const d of defs) {
     if (d.kind === 'daily' && dailyIds.indexOf(d.id) < 0) continue;
     if (d.kind === 'weekly' && weeklyIds.indexOf(d.id) < 0) continue;
-    const period = periodFor(d.kind);
+    const period = d.kind === 'daily' ? dailyPeriod : periodFor(d.kind);
     const cur = await readProgress(userId, d.id, period);
     if (cur.claimedAt) continue;
 
@@ -813,8 +981,8 @@ export interface MissionView extends MissionDef {
   rarityLabel: string;
 }
 
-async function viewOf(userId: string, d: MissionDef): Promise<MissionView> {
-  const p = await readProgress(userId, d.id, periodFor(d.kind));
+async function viewOf(userId: string, d: MissionDef, at = Date.now()): Promise<MissionView> {
+  const p = await readProgress(userId, d.id, await periodForUser(userId, d.kind, at));
   return { ...d, progress: p.progress, completed: !!p.completedAt, claimed: !!p.claimedAt,
            rarityLabel: RARITY_FA[d.rarity] ?? d.rarity };
 }
@@ -822,9 +990,9 @@ async function viewOf(userId: string, d: MissionDef): Promise<MissionView> {
 /** One mission's state for this player. The board only shows the forty most
  *  relevant of several hundred, so anything wanting a specific mission — a
  *  detail view, a test — asks for it directly. */
-export async function progressOf(userId: string, missionId: string): Promise<MissionView | null> {
+export async function progressOf(userId: string, missionId: string, at = Date.now()): Promise<MissionView | null> {
   const def = (await listDefs()).find((d) => d.id === missionId);
-  return def ? viewOf(userId, def) : null;
+  return def ? viewOf(userId, def, at) : null;
 }
 
 /** Everything the missions screen shows. */
@@ -832,6 +1000,10 @@ export async function boardFor(userId: string): Promise<{
   daily: MissionView[]; weekly: MissionView[]; achievements: MissionView[];
   chain: { chainId: string; step: MissionView | null; total: number; done: number } | null;
   resetsAt: { daily: number; weekly: number };
+  box: BoxView;
+  /** False while the set is unfinished — it is frozen until it is done, so the
+   *  midnight in `resetsAt.daily` is not when THIS player's set changes. */
+  dailyRotates: boolean;
 }> {
   const defs = await listDefs();
   const byId = new Map(defs.map((d) => [d.id, d]));
@@ -869,9 +1041,15 @@ export async function boardFor(userId: string): Promise<{
     chain = { chainId, step: stepViews.find((v) => !v.claimed) ?? null, total: steps.length, done };
   }
 
+  /* The daily set only turns over once it is finished, so «تا فردا» is the
+   * truth for a player who has done them and a lie for one who has not — the
+   * screen is given the real next-reset for THIS player. */
+  const box = await boxFor(userId);
   const nextMidnight = Date.parse(dayKey(now + 86_400_000) + 'T00:00:00Z') - TEHRAN_OFFSET_MS;
   const nextWeek = Date.parse(weekKey(now + 7 * 86_400_000).slice(1) + 'T00:00:00Z') - TEHRAN_OFFSET_MS;
-  return { daily, weekly, achievements, chain, resetsAt: { daily: nextMidnight, weekly: nextWeek } };
+  return { daily, weekly, achievements, chain, box,
+           dailyRotates: box.total > 0 && box.done >= box.total,
+           resetsAt: { daily: nextMidnight, weekly: nextWeek } };
 }
 
 // ----------------------------------------------------------------- claim ----
@@ -888,6 +1066,12 @@ async function grantReward(userId: string, r: MissionReward, idem: string): Prom
     await grantLifeline(userId, r.target || 'p5050', amount).catch(() => undefined);
   } else if (r.type === 'heart') {
     await addHearts(userId, amount).catch(() => undefined);
+  } else if (r.type === 'cup') {
+    /* The cup is the weekly board's currency and it resets with the week, so it
+     * goes through the SAME atomic award a finished match uses — writing
+     * weekly_score by hand here would miss the week rollover and hand a player
+     * last week's total back. */
+    await awardScoring(userId, 0, amount).catch(() => undefined);
   } else if (r.type === 'coins' || r.type === 'xp') {
     const u = await repositories.users.findById(userId);
     if (u) {
@@ -902,7 +1086,7 @@ async function grantReward(userId: string, r: MissionReward, idem: string): Prom
 export async function claim(userId: string, missionId: string): Promise<{ missionId: string; rewards: MissionReward[] }> {
   const def = (await listDefs()).find((d) => d.id === missionId);
   if (!def) throw new MissionError('MISSION_NOT_FOUND', 'این مأموریت وجود ندارد.');
-  const period = periodFor(def.kind);
+  const period = await periodForUser(userId, def.kind);
   const cur = await readProgress(userId, missionId, period);
   if (!cur.completedAt) throw new MissionError('NOT_COMPLETED', 'این مأموریت هنوز کامل نشده.');
   if (cur.claimedAt) throw new MissionError('ALREADY_CLAIMED', 'جایزهٔ این مأموریت را گرفته‌ای.');
@@ -917,9 +1101,165 @@ export async function claim(userId: string, missionId: string): Promise<{ missio
   return { missionId, rewards: def.rewards };
 }
 
+// ------------------------------------------------------------- the box ----
+
+/* WHAT FINISHING ALL THREE IS WORTH.
+ *
+ * «اگه هر سه این ماموریت‌ها انجام شد یه جعبه جایزه می‌گیره و جوایزی که در پنل
+ * تعیین شده به کاربر برسه. کاربر باید روی جعبه ضربه بزنه تا باز بشه.»
+ *
+ * So the box is a real object with two states — earned, and opened — rather
+ * than a payment that happens invisibly the moment the third mission ticks
+ * over. The contents come from the panel; they are copied into the row when it
+ * is opened so that a later panel edit cannot rewrite a prize already given.
+ */
+export interface BoxConfig { enabled: boolean; title: string; rewards: MissionReward[] }
+export const BOX_DEFAULT: BoxConfig = {
+  enabled: true,
+  title: 'جعبهٔ جایزهٔ روزانه',
+  rewards: [
+    { type: 'coins', amount: 300 },
+    { type: 'xp', amount: 200 },
+    { type: 'cup', amount: 15 }
+  ]
+};
+const BOX_CFG_KEY = 'mission_daily_box';
+let _memBoxCfg: BoxConfig | null = null;
+const _memBoxes = new Map<string, { openedAt: number | null; rewards: MissionReward[] }>();
+
+function cleanReward(r: any): MissionReward | null {
+  const type = String(r?.type || '') as RewardType;
+  const amount = Math.max(0, Math.floor(Number(r?.amount) || 0));
+  if (!amount) return null;
+  if (!['coins', 'xp', 'cup', 'heart', 'ticket', 'cash', 'lifeline', 'spin', 'cosmetic'].includes(type)) return null;
+  const out: MissionReward = { type, amount };
+  if (r.target) out.target = String(r.target).slice(0, 40);
+  if (r.label) out.label = String(r.label).slice(0, 60);
+  return out;
+}
+
+export async function getBoxConfig(): Promise<BoxConfig> {
+  let raw: Partial<BoxConfig> | null = _memBoxCfg;
+  const pool = pg();
+  if (pool) {
+    try {
+      await pool.query(`CREATE TABLE IF NOT EXISTS app_config (key VARCHAR(64) PRIMARY KEY, value JSONB NOT NULL, updated_at TIMESTAMP NOT NULL DEFAULT now(), updated_by VARCHAR(64))`);
+      const { rows } = await pool.query(`SELECT value FROM app_config WHERE key=$1`, [BOX_CFG_KEY]);
+      if (rows[0]?.value) raw = rows[0].value as Partial<BoxConfig>;
+    } catch (e) { logger.warn('mission_box_config_read_failed', { message: (e as Error).message }); }
+  }
+  if (!raw) return { ...BOX_DEFAULT, rewards: BOX_DEFAULT.rewards.map((r) => ({ ...r })) };
+  const rewards = (Array.isArray(raw.rewards) ? raw.rewards : BOX_DEFAULT.rewards)
+    .map(cleanReward).filter((r): r is MissionReward => !!r);
+  return {
+    enabled: raw.enabled !== false,
+    title: String(raw.title || BOX_DEFAULT.title).slice(0, 60),
+    rewards: rewards.length ? rewards : BOX_DEFAULT.rewards.map((r) => ({ ...r }))
+  };
+}
+
+export async function setBoxConfig(patch: Partial<BoxConfig>): Promise<BoxConfig> {
+  const cur = await getBoxConfig();
+  const next: BoxConfig = {
+    enabled: patch.enabled === undefined ? cur.enabled : !!patch.enabled,
+    title: String(patch.title ?? cur.title).slice(0, 60) || BOX_DEFAULT.title,
+    rewards: (Array.isArray(patch.rewards) ? patch.rewards : cur.rewards)
+      .map(cleanReward).filter((r): r is MissionReward => !!r)
+  };
+  if (!next.rewards.length) next.rewards = BOX_DEFAULT.rewards.map((r) => ({ ...r }));
+  _memBoxCfg = next;
+  const pool = pg();
+  if (pool) {
+    try {
+      await pool.query(`CREATE TABLE IF NOT EXISTS app_config (key VARCHAR(64) PRIMARY KEY, value JSONB NOT NULL, updated_at TIMESTAMP NOT NULL DEFAULT now(), updated_by VARCHAR(64))`);
+      await pool.query(`INSERT INTO app_config(key,value,updated_at) VALUES($1,$2,now())
+                        ON CONFLICT (key) DO UPDATE SET value=$2, updated_at=now()`, [BOX_CFG_KEY, JSON.stringify(next)]);
+    } catch (e) { logger.warn('mission_box_config_write_failed', { message: (e as Error).message }); }
+  }
+  return next;
+}
+
+async function readBox(userId: string, period: string): Promise<{ openedAt: number | null; rewards: MissionReward[] } | null> {
+  const pool = pg();
+  if (pool) {
+    await ensureSchema(pool);
+    const { rows } = await pool.query(`SELECT opened_at, rewards FROM mission_boxes WHERE user_id=$1 AND period=$2`, [userId, period]);
+    if (!rows[0]) return null;
+    return { openedAt: rows[0].opened_at ? new Date(rows[0].opened_at).getTime() : null,
+             rewards: Array.isArray(rows[0].rewards) ? rows[0].rewards : [] };
+  }
+  return _memBoxes.get(pkey(userId, 'box', period)) ?? null;
+}
+
+async function writeBox(userId: string, period: string, v: { openedAt: number | null; rewards: MissionReward[] }): Promise<void> {
+  const pool = pg();
+  if (pool) {
+    await ensureSchema(pool);
+    await pool.query(
+      `INSERT INTO mission_boxes(user_id,period,opened_at,rewards) VALUES($1,$2,$3,$4)
+       ON CONFLICT (user_id,period) DO UPDATE SET opened_at=$3, rewards=$4`,
+      [userId, period, v.openedAt ? new Date(v.openedAt) : null, JSON.stringify(v.rewards)]);
+  } else _memBoxes.set(pkey(userId, 'box', period), { openedAt: v.openedAt, rewards: v.rewards.map((r) => ({ ...r })) });
+}
+
+export interface BoxView {
+  /** The set this box belongs to — the day it was dealt. */
+  period: string;
+  /** How many of the three are done, and how many there are. */
+  done: number;
+  total: number;
+  /** Earned but not yet opened: the one state the screen animates. */
+  ready: boolean;
+  opened: boolean;
+  title: string;
+  /** What is inside. Before opening this is the panel's list; after, what was
+   *  actually given. */
+  rewards: MissionReward[];
+}
+
+export async function boxFor(userId: string): Promise<BoxView> {
+  const cfg = await getBoxConfig();
+  const period = await activeDailyPeriod(userId);
+  const ids = await assignmentFor(userId, 'daily', ASSIGN_DEFAULT.daily);
+  let done = 0;
+  for (const mid of ids) if ((await readProgress(userId, mid, period)).completedAt) done++;
+  const row = await readBox(userId, period);
+  const all = ids.length > 0 && done >= ids.length;
+  return {
+    period, done, total: ids.length,
+    ready: cfg.enabled && all && !row?.openedAt,
+    opened: !!row?.openedAt,
+    title: cfg.title,
+    rewards: row?.openedAt ? row.rewards : cfg.rewards
+  };
+}
+
+export async function openBox(userId: string): Promise<{ period: string; rewards: MissionReward[] }> {
+  const cfg = await getBoxConfig();
+  if (!cfg.enabled) throw new MissionError('BOX_OFF', 'جعبهٔ جایزه فعلاً غیرفعال است.');
+  const period = await activeDailyPeriod(userId);
+  const ids = await assignmentFor(userId, 'daily', ASSIGN_DEFAULT.daily);
+  if (!ids.length || !(await setComplete(userId, ids, period))) {
+    throw new MissionError('BOX_NOT_READY', 'هنوز هر سه مأموریت امروز را کامل نکرده‌ای.');
+  }
+  const existing = await readBox(userId, period);
+  if (existing?.openedAt) throw new MissionError('BOX_ALREADY_OPEN', 'جعبهٔ امروز را باز کرده‌ای.');
+
+  /* Written as opened BEFORE anything is paid, exactly as a mission claim is:
+   * a grant that throws must not leave a box a retry can open again. */
+  const rewards = cfg.rewards.map((r) => ({ ...r }));
+  await writeBox(userId, period, { openedAt: Date.now(), rewards });
+  for (let i = 0; i < rewards.length; i++) {
+    await grantReward(userId, rewards[i]!, `missionbox:${userId}:${period}:${i}`);
+  }
+  logger.info('mission_box_opened', { userId, period, rewards: rewards.length });
+  return { period, rewards };
+}
+
 /** Test seam. */
 export function _resetMissionMemory(): void {
   _memDefs = null; _memProgress.clear(); _memAssign.clear(); _memCounters.clear(); _seeded = false;
+  _memBoxes.clear(); _memBoxCfg = null;
 }
 
 export { buildSeed as _buildSeed };

@@ -1,7 +1,12 @@
 /* MISSIONS — the board a player sees, and claiming a finished one. */
 import type { Router } from '../../http/router.js';
 import { error, json } from '../../http/response.js';
-import { MissionError, boardFor, claim, record, recordLogin, METRICS, type Metric } from '../../services/missionService.js';
+import {
+  MissionError, boardFor, claim, record, recordLogin, METRICS, type Metric,
+  boxFor, openBox, getBoxConfig, setBoxConfig
+} from '../../services/missionService.js';
+import { requireAdmin } from '../../services/adminGuard.js';
+import { recordAdmin } from '../../services/adminAuditService.js';
 
 export function registerMissionRoutes(router: Router, base: string): void {
   router.add('GET', `${base}/missions`, async (ctx) => {
@@ -40,6 +45,37 @@ export function registerMissionRoutes(router: Router, base: string): void {
     if (metric === 'login') await recordLogin(ctx.userId ?? 'u1');
     else await record(ctx.userId ?? 'u1', metric, 1, String(b.scope ?? ''));
     json(ctx.res, 200, { ok: true });
+  });
+
+  /* THE BOX. Its own endpoints because it has its own life: earned by
+   * finishing the set, opened by a tap, and paid exactly once. */
+  router.add('GET', `${base}/missions/box`, async (ctx) => {
+    if (!ctx.userId) return error(ctx.res, 401, 'UNAUTHORIZED', 'ابتدا وارد شو.');
+    json(ctx.res, 200, await boxFor(ctx.userId));
+  });
+
+  router.add('POST', `${base}/missions/box/open`, async (ctx) => {
+    if (!ctx.userId) return error(ctx.res, 401, 'UNAUTHORIZED', 'ابتدا وارد شو.');
+    try { json(ctx.res, 200, await openBox(ctx.userId)); }
+    catch (e) {
+      if (e instanceof MissionError) {
+        return error(ctx.res, e.code === 'BOX_ALREADY_OPEN' ? 409 : 422, e.code, e.message);
+      }
+      throw e;
+    }
+  });
+
+  /* What is inside it, for the operator. */
+  router.add('GET', `${base}/admin/missions/box`, async (ctx) => {
+    if (!requireAdmin(ctx, { tab: 'missions' })) return;
+    json(ctx.res, 200, await getBoxConfig());
+  });
+
+  router.add('PUT', `${base}/admin/missions/box`, async (ctx) => {
+    if (!requireAdmin(ctx, { tab: 'missions' })) return;
+    const next = await setBoxConfig((ctx.body ?? {}) as any);
+    await recordAdmin({ action: 'mission_box_config', meta: next as any });
+    json(ctx.res, 200, next);
   });
 
   router.add('GET', `${base}/missions/metrics`, async (ctx) => {

@@ -49,6 +49,8 @@ export interface Character {
   viaEvent: boolean;
   viaRandom: boolean;
   price: number;
+  /** The shelf it is sold on. Free text from the panel; empty = ungrouped. */
+  group: string;
   sortOrder: number;
   /** While in the future, the card carries a "new" badge. Empty = never new. */
   newUntil: string;
@@ -107,6 +109,10 @@ const SCHEMA_SQL = [
     new_until TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now())`,
   `CREATE INDEX IF NOT EXISTS idx_characters_order ON characters(sort_order, created_at)`,
+  /* Added after the table shipped, so it arrives as an ALTER as well: an
+   * existing deployment has the table already and CREATE IF NOT EXISTS is a
+   * no-op that would leave the column missing. */
+  `ALTER TABLE characters ADD COLUMN IF NOT EXISTS grp TEXT NOT NULL DEFAULT ''`,
   /* One row per character a player actually owns. `source` is the audit trail
    * the popularity statistics are counted from. */
   `CREATE TABLE IF NOT EXISTS user_characters (
@@ -190,6 +196,7 @@ function normalize(input: any, existing?: Character): Character {
     viaEvent: input.viaEvent === undefined ? (existing?.viaEvent ?? false) : bool(input.viaEvent),
     viaRandom: input.viaRandom === undefined ? (existing?.viaRandom ?? false) : bool(input.viaRandom),
     price: input.price === undefined ? (existing?.price ?? 0) : Math.max(0, int(input.price)),
+    group: input.group === undefined ? (existing?.group ?? '') : str(input.group, 40),
     sortOrder: input.sortOrder === undefined ? (existing?.sortOrder ?? 0) : int(input.sortOrder),
     newUntil: input.newUntil === undefined ? (existing?.newUntil ?? '') : str(input.newUntil, 40),
     createdAt: existing?.createdAt ?? now
@@ -204,7 +211,7 @@ function fromRow(r: any): Character {
     unlockLevel: Number(r.unlock_level) || 0,
     viaLevel: !!r.via_level, viaReward: !!r.via_reward, viaPurchase: !!r.via_purchase,
     viaEvent: !!r.via_event, viaRandom: !!r.via_random,
-    price: Number(r.price) || 0, sortOrder: Number(r.sort_order) || 0,
+    price: Number(r.price) || 0, group: r.grp ?? '', sortOrder: Number(r.sort_order) || 0,
     newUntil: iso(r.new_until), createdAt: iso(r.created_at)
   };
 }
@@ -251,15 +258,15 @@ export async function saveCharacter(input: any): Promise<Character> {
     await pool.query(
       `INSERT INTO characters (id,name,description,image,kind,enabled,unlock_level,
                                via_level,via_reward,via_purchase,via_event,via_random,
-                               price,sort_order,new_until)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+                               price,sort_order,new_until,grp)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
        ON CONFLICT (id) DO UPDATE SET
          name=$2, description=$3, image=$4, kind=$5, enabled=$6, unlock_level=$7,
          via_level=$8, via_reward=$9, via_purchase=$10, via_event=$11, via_random=$12,
-         price=$13, sort_order=$14, new_until=$15`,
+         price=$13, sort_order=$14, new_until=$15, grp=$16`,
       [c.id, c.name, c.description, c.image, c.kind, c.enabled, c.unlockLevel,
        c.viaLevel, c.viaReward, c.viaPurchase, c.viaEvent, c.viaRandom,
-       c.price, c.sortOrder, c.newUntil || null]);
+       c.price, c.sortOrder, c.newUntil || null, c.group]);
   } else {
     memCharacters.set(c.id, c);
   }
@@ -352,6 +359,27 @@ export async function purchaseCharacter(userId: string, characterId: string): Pr
     return { characterId, charged: 0, coins: Number(user.coins) || 0, alreadyOwned: true };
   }
 
+  /* MONEY IS NOT ENOUGH.
+   *
+   * «من پول داشته باشم سکه داشته باشم ولی لول نداشته باشم نتونم خرید کنم» —
+   * a character with a level on it is a rank, and a rank that can be bought is
+   * not a rank. The level is checked BEFORE the coins so a player who cannot
+   * have it yet is told the real reason instead of being sent to buy coins
+   * they would not be allowed to spend.
+   *
+   * `unlockLevel` is the same field the panel already sets. When `viaLevel` is
+   * on it also grants the character by itself; when it is off — the paid
+   * characters — it is purely the gate. */
+  const need = Math.max(0, Math.floor(Number(c.unlockLevel) || 0));
+  if (need > 0) {
+    const level = levelForXp(Number(user.xp ?? 0) || 0);
+    if (level < need) {
+      throw new CharacterPurchaseError('LEVEL_TOO_LOW',
+        'این کاراکتر از لول ' + need.toLocaleString('fa-IR') + ' باز می‌شود — تو لول ' +
+        level.toLocaleString('fa-IR') + ' هستی.');
+    }
+  }
+
   const coins = Number(user.coins) || 0;
   if (coins < price) {
     throw new CharacterPurchaseError('INSUFFICIENT_COINS',
@@ -388,6 +416,12 @@ function lockReasonFor(c: Character, level: number): string {
   if (c.viaRandom) ways.push('قرعه‌کشی');
   if (c.viaPurchase) ways.push(c.price > 0 ? `خرید (${fa(c.price)} سکه)` : 'خرید از فروشگاه');
   if (!ways.length) return 'فعلاً در دسترس نیست';
+  /* A level on a character that is not granted BY the level is a gate on every
+   * other route to it, so the card has to say so — otherwise the only place a
+   * player learns about it is the refusal after they press buy. */
+  if (c.unlockLevel > 0 && level < c.unlockLevel) {
+    return `از لول ${fa(c.unlockLevel)} — سپس ${ways.join(' یا ')}`;
+  }
   return `آزادسازی با: ${ways.join(' یا ')}`;
 }
 

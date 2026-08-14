@@ -4,7 +4,7 @@ import { requireAdmin } from '../../services/adminGuard.js';
 import { recordAdmin } from '../../services/adminAuditService.js';
 import {
   getLeagueConfig, setLeagueConfig, cutLines, myLeague, closeSeason, drawRound,
-  listQualifiers, listRooms, listSeats, reportRoomResult, currentSeasonId,
+  listQualifiers, listRooms, listSeats, reportRoomResult, currentSeasonId, enterLeague,
   LeagueError
 } from '../../services/leagueService.js';
 import {
@@ -25,6 +25,28 @@ export function registerLeagueRoutes(router: Router, base: string): void {
   router.add('GET', `${base}/leagues/me`, async (ctx) => {
     if (!ctx.userId) return error(ctx.res, 401, 'UNAUTHORIZED', 'ابتدا وارد شو.');
     json(ctx.res, 200, await myLeague(ctx.userId));
+  });
+
+  /* ── «شروع مسابقه لیگ» ────────────────────────────────────────────
+   * One button, pressed at kickoff. The server decides which room has the
+   * next free seat, so rooms fill one at a time and the player is simply told
+   * where they are sitting. Pressing it twice is not two seats. */
+  router.add('POST', `${base}/leagues/enter`, async (ctx) => {
+    if (!ctx.userId) return error(ctx.res, 401, 'UNAUTHORIZED', 'ابتدا وارد شو.');
+    try {
+      const r = await enterLeague(ctx.userId);
+      await openForLeagueRoom(r.room);
+      json(ctx.res, 200, {
+        roomId: r.room.id, tier: r.room.tier, roomNo: r.room.roomNo, round: r.room.round,
+        startsAt: r.room.startsAt, seats: r.seats, roomSize: r.roomSize, joined: r.joined, full: r.full,
+        room: await wtaSnapshot(r.room.id, ctx.userId)
+      });
+    } catch (e) {
+      if (e instanceof LeagueError) {
+        return error(ctx.res, e.code === 'NOT_QUALIFIED' || e.code === 'NO_LEAGUE_TICKET' ? 403 : 409, e.code, e.message);
+      }
+      throw e;
+    }
   });
 
   /* ── «از کی بپرسم؟» — the match itself ───────────────────────────── */

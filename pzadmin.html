@@ -2591,6 +2591,9 @@ async function renderCharacters(){
   try{ d=await api('GET','/admin/characters'); }
   catch(e){ $('#main').innerHTML=head('کاراکترها')+'<div class="card empty">'+(e.message||'خطا')+'</div>'; return; }
   const rows=d.characters||[]; window._CH_ROWS={}; rows.forEach(c=>window._CH_ROWS[c.id]=c);
+  /* The groups already in use, so the next character is put in an existing
+     shelf by picking it rather than by retyping it slightly differently. */
+  window._CH_GROUPS=[...new Set(rows.map(c=>(c.group||'').trim()).filter(Boolean))].sort();
   window._CH_MAXKB=Math.round((d.imageMaxBytes||600*1024)/1024);
 
   /* «در فروشگاه» is exactly what the game's characters tab shows: enabled AND
@@ -2623,6 +2626,9 @@ async function renderCharacters(){
       if(c.viaEvent)ways.push('رویداد');
       if(c.viaRandom)ways.push('قرعه');
       if(c.viaPurchase)ways.push('خرید'+(c.price?' '+fa(c.price)+' سکه':' رایگان'));
+      /* A level on a paid character is a gate on the purchase, not a second
+         way in — so it is written next to the price, where it is read. */
+      if(!c.viaLevel&&c.unlockLevel>0)ways.push('از لول '+fa(c.unlockLevel));
       /* Purchasable but switched off never reaches the shop, so say that here
          rather than letting the «خرید» line imply it is on the shelf. */
       const shopPill=inShop(c)?'<span class="pill ok" style="margin-inline-start:6px">در فروشگاه</span>'
@@ -2687,6 +2693,9 @@ function chEdit(id){
       +'<div class="field"><label>قیمت (سکه)</label><input id="ch_price" type="number" min="0" value="'+(c.price||0)+'"></div>'
       +'<div class="field"><label>ترتیب نمایش</label><input id="ch_order" type="number" value="'+(c.sortOrder||0)+'"></div>'
     +'</div>'
+    +'<div class="field"><label>گروه در فروشگاه</label><input id="ch_group" value="'+esc(c.group||'')+'" placeholder="مثلاً قهرمانان، حیوانات، ویژه" list="ch_groups">'
+      +'<datalist id="ch_groups">'+(window._CH_GROUPS||[]).map(g=>'<option value="'+esc(g)+'">').join('')+'</datalist>'
+      +'<div class="note">کاراکترهای هم‌گروه در فروشگاه زیر یک عنوان کنار هم نشان داده می‌شوند. خالی = بدون گروه.</div></div>'
     +'<div class="grid g2">'
       +'<div class="field"><label>نشان «جدید» تا تاریخ</label><input id="ch_new" type="date" value="'+esc((c.newUntil||'').slice(0,10))+'"><div class="note">خالی = بدون نشان جدید</div></div>'
       +'<div class="field"><label>وضعیت</label><select id="ch_enabled"><option value="1"'+(c.enabled!==false?' selected':'')+'>فعال</option><option value="0"'+(c.enabled===false?' selected':'')+'>غیرفعال</option></select></div>'
@@ -2744,6 +2753,7 @@ async function chSave(id){
     kind:$('#ch_kind').value,
     unlockLevel:Number($('#ch_lvl').value||0),
     price:Number($('#ch_price').value||0),
+    group:($('#ch_group').value||'').trim(),
     sortOrder:Number($('#ch_order').value||0),
     enabled:$('#ch_enabled').value==='1',
     viaLevel:$('#ch_viaLevel').checked, viaReward:$('#ch_viaReward').checked,
@@ -3464,7 +3474,7 @@ const MS_KINDS=[['daily','روزانه'],['weekly','هفتگی'],['achievement',
   ['event','مناسبتی'],['chain','زنجیره‌ای']];
 const MS_RARITY=[['common','🟢 معمولی'],['rare','🔵 کمیاب'],['epic','🟣 حماسی'],
   ['legendary','🟠 افسانه‌ای'],['mythic','👑 اسطوره‌ای']];
-const MS_REWARD_TYPES=[['coins','🪙 سکه'],['xp','⚡ XP'],['heart','❤️ قلب'],['ticket','🎫 بلیت'],
+const MS_REWARD_TYPES=[['coins','🪙 سکه'],['xp','⚡ XP'],['cup','🏆 کاپ'],['heart','❤️ قلب'],['ticket','🎫 بلیت'],
   ['cash','💰 تومان'],['lifeline','🧩 کمک'],['spin','🎡 چرخش'],['cosmetic','✨ ظاهری']];
 
 async function renderMissions2(){
@@ -3475,18 +3485,58 @@ async function renderMissions2(){
   try{
     const d=await api('GET','/admin/missions');
     MS_ROWS=d.rows||[]; MS_METRICS=d.metrics||[];
+    try{ MS_BOX=await api('GET','/admin/missions/box'); }catch(e){ MS_BOX=null; }
     msPaint();
   }catch(e){ $('#msBody').innerHTML='<div class="card empty">'+esc(e.message||'خطا')+'</div>'; }
 }
+
+/* THE BOX AT THE END OF THE DAY.
+   Three daily missions finished earns one box, and what is inside it is set
+   here — not in the client, and not in the mission rows, because it is the
+   prize for the SET rather than for any one mission. */
+let MS_BOX=null;
+function msBoxCard(){
+  if(!MS_BOX) return '';
+  const rw=(MS_BOX.rewards&&MS_BOX.rewards.length?MS_BOX.rewards:[{type:'coins',amount:0}]).slice(0,4);
+  while(rw.length<4) rw.push({type:'coins',amount:0});
+  const sel=(id2,opts,val)=>'<select id="'+id2+'">'+opts.map((o)=>'<option value="'+o[0]+'"'+(val===o[0]?' selected':'')+'>'+o[1]+'</option>').join('')+'</select>';
+  return '<div class="card" style="margin-bottom:12px">'+
+    '<b style="font-size:14px">🎁 جعبهٔ جایزهٔ روزانه</b>'+
+    '<div class="note">وقتی بازیکن هر سه مأموریت روزانه‌اش را کامل کند، این جعبه برایش باز می‌شود و با یک ضربه محتوایش را می‌گیرد. تا کامل نشوند، مأموریت‌ها عوض نمی‌شوند.</div>'+
+    '<div class="grid g3" style="margin-top:8px">'+
+      '<div class="field"><label>وضعیت</label><select id="msb_en"><option value="1"'+(MS_BOX.enabled!==false?' selected':'')+'>فعال</option><option value="0"'+(MS_BOX.enabled===false?' selected':'')+'>غیرفعال</option></select></div>'+
+      '<div class="field" style="grid-column:span 2"><label>عنوان جعبه</label><input id="msb_title" value="'+esc(MS_BOX.title||'')+'"></div>'+
+    '</div>'+
+    '<div class="grid g4">'+rw.map((r,i)=>
+      '<div class="field"><label>جایزهٔ '+fa(i+1)+'</label>'+sel('msb_t_'+i,MS_REWARD_TYPES,r.type)+
+      '<input id="msb_a_'+i+'" type="number" min="0" value="'+(r.amount||0)+'" placeholder="مقدار">'+
+      '<input id="msb_g_'+i+'" value="'+esc(r.target||'')+'" placeholder="نوع بلیت/کمک (اختیاری)"></div>').join('')+'</div>'+
+    '<div class="note">مقدار صفر یعنی این ردیف داخل جعبه نیست.</div>'+
+    '<button class="btn pri" onclick="msBoxSave()">💾 ذخیرهٔ جعبه</button>'+
+  '</div>';
+}
+async function msBoxSave(){
+  const rewards=[];
+  for(let i=0;i<4;i++){
+    const amount=Number(($('#msb_a_'+i)||{}).value||0);
+    if(amount>0) rewards.push({type:$('#msb_t_'+i).value,amount,target:($('#msb_g_'+i).value||'').trim()});
+  }
+  if(!rewards.length) return toast('جعبه باید حداقل یک جایزه داشته باشد','bad');
+  try{
+    MS_BOX=await api('PUT','/admin/missions/box',{enabled:$('#msb_en').value==='1',title:($('#msb_title').value||'').trim(),rewards});
+    toast('جعبه ذخیره شد ✅','ok');
+  }catch(e){ toast(e.message,'bad'); }
+}
 function msRewardText(rs){
   if(!rs||!rs.length) return '—';
-  const nm={coins:'سکه',xp:'XP',heart:'قلب',ticket:'بلیت',cash:'تومان',lifeline:'کمک',spin:'چرخش',cosmetic:'ظاهری'};
+  const nm={coins:'سکه',xp:'XP',cup:'کاپ',heart:'قلب',ticket:'بلیت',cash:'تومان',lifeline:'کمک',spin:'چرخش',cosmetic:'ظاهری'};
   return rs.map((r)=>fa(r.amount)+' '+(nm[r.type]||r.type)+(r.target?(' '+esc(r.target)):'')).join(' + ');
 }
 function msPaint(){
   const rows=MS_ROWS.filter((r)=>r.kind===MS_KIND);
   const counts=MS_KINDS.map((k)=>k[1]+': '+fa(MS_ROWS.filter((r)=>r.kind===k[0]).length)).join(' · ');
   $('#msBody').innerHTML=
+    msBoxCard()+
     '<div class="note">مجموع '+fa(MS_ROWS.length)+' مأموریت — '+counts+'</div>'+
     '<div class="note">«شاخص» همان چیزی است که بازی می‌شمارد. مأموریتی با شاخصی که هیچ‌جا گزارش نمی‌شود، برای همیشه روی صفر می‌ماند — برای همین موقع ذخیره بررسی می‌شود. «شانس» فقط برای روزانه و هفتگی معنی دارد: صفر یعنی هرگز در قرعهٔ روزانه نمی‌آید.</div>'+
     tbl(['آیکن','عنوان','شاخص','دامنه','هدف','کمیابی','جایزه','سطح','شانس','فعال',''],

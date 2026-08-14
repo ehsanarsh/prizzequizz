@@ -16,7 +16,8 @@ import assert from 'node:assert/strict';
 import {
   getLeagueConfig, setLeagueConfig, closeSeason, drawRound, listQualifiers,
   listRooms, listSeats, reportRoomResult, splitRooms, kickoffFor, cutLines,
-  myLeague, isLeagueTicketTier, _resetLeague, LEAGUE_DEFAULTS, weekResetAt
+  myLeague, isLeagueTicketTier, _resetLeague, LEAGUE_DEFAULTS, weekResetAt,
+  enterLeague, LEAGUE_FULL_START_MS
 } from '../services/leagueService.js';
 import { closeTick, leagueTick } from '../services/leagueWorker.js';
 import { getTickets, grantTickets } from '../services/ticketService.js';
@@ -444,6 +445,128 @@ async function run(): Promise<void> {
     await closeSeason('2020-W03');
     await closeSeason(isoWeekId());
     assert.equal((await getTickets(ids[0]!)).red, 3, 'the bought tickets are untouched');
+  });
+
+  /* ── «شروع مسابقه لیگ» ────────────────────────────────────────────── */
+
+  /* The button is the whole entry now: no seat is drawn in advance, the player
+   * presses it at kickoff and the server decides where they sit. */
+  await check('the door is shut until kickoff is close', async () => {
+    await fresh();
+    const ids = await board(20);
+    await closeSeason(isoWeekId());
+    const cfg = await getLeagueConfig();
+    const kick = kickoffFor(cfg);
+    await assert.rejects(() => enterLeague(ids[0]!, kick - 60 * 60_000),
+      (e: any) => e?.code === 'DOORS_CLOSED', 'an hour early must be refused');
+    const r = await enterLeague(ids[0]!, kick);
+    assert.ok(r.joined, 'and at kickoff it opens');
+  });
+
+  await check('somebody outside the league cannot walk in', async () => {
+    await fresh();
+    const ids = await board(50);
+    await closeSeason(isoWeekId());
+    const cfg = await getLeagueConfig();
+    await assert.rejects(() => enterLeague(ids[49]!, kickoffFor(cfg)),
+      (e: any) => e?.code === 'NOT_QUALIFIED');
+  });
+
+  await check('and neither can a qualifier whose ticket is gone', async () => {
+    await fresh();
+    const ids = await board(20);
+    await closeSeason(isoWeekId());
+    const cfg = await getLeagueConfig();
+    await grantTickets(ids[0]!, 'gold', -1);
+    await assert.rejects(() => enterLeague(ids[0]!, kickoffFor(cfg)),
+      (e: any) => e?.code === 'NO_LEAGUE_TICKET');
+  });
+
+  await check('entering spends exactly one ticket, and a second tap spends none', async () => {
+    await fresh();
+    const ids = await board(20);
+    await closeSeason(isoWeekId());
+    const cfg = await getLeagueConfig();
+    const kick = kickoffFor(cfg);
+    assert.equal((await getTickets(ids[0]!)).gold, 1);
+    const first = await enterLeague(ids[0]!, kick);
+    assert.equal((await getTickets(ids[0]!)).gold, 0, 'the ticket was taken');
+    const again = await enterLeague(ids[0]!, kick + 1000);
+    assert.equal(again.joined, false, 'the second tap is not a second entry');
+    assert.equal(again.room.id, first.room.id, 'and it is the same room');
+    assert.equal((await getTickets(ids[0]!)).gold, 0, 'no second ticket taken');
+  });
+
+  /* «روم‌ها یکی یکی بعد ورود تکمیل بشه» — room two must not open while room one
+   * still has a free chair, or a tier of sixteen plays four rooms of four. */
+  await check('rooms fill one at a time, in order', async () => {
+    await fresh();
+    await setLeagueConfig({ roomSize: 3 });
+    const ids = await board(15);
+    await closeSeason(isoWeekId());
+    const cfg = await getLeagueConfig();
+    const kick = kickoffFor(cfg);
+    const golds = (await listQualifiers(isoWeekId(), 'gold')).map((q) => q.userId);
+    assert.ok(golds.length >= 7, 'enough gold qualifiers to fill two rooms');
+
+    const where: Array<{ no: number; seats: number }> = [];
+    for (const uid of golds.slice(0, 7)) {
+      const r = await enterLeague(uid, kick);
+      where.push({ no: r.room.roomNo, seats: r.seats });
+    }
+    assert.deepEqual(where.map((w) => w.no), [1, 1, 1, 2, 2, 2, 3], JSON.stringify(where));
+    assert.deepEqual(where.map((w) => w.seats), [1, 2, 3, 1, 2, 3, 1], JSON.stringify(where));
+    void ids;
+  });
+
+  /* When a free chair exists in more than one room — the operator widened the
+   * rooms mid-week — the next player takes the EARLIEST free one. Rooms stay
+   * full from the front, which is the whole point of filling them one by one. */
+  await check('and the earliest free chair is the one taken', async () => {
+    await fresh();
+    await setLeagueConfig({ roomSize: 3 });
+    await board(15);
+    await closeSeason(isoWeekId());
+    const kick = kickoffFor(await getLeagueConfig());
+    const golds = (await listQualifiers(isoWeekId(), 'gold')).map((q) => q.userId);
+    for (const uid of golds.slice(0, 4)) await enterLeague(uid, kick);   // room 1 full, room 2 has one
+
+    await setLeagueConfig({ roomSize: 4 });                              // both now have room
+    const next = await enterLeague(golds[4]!, kick);
+    assert.equal(next.room.roomNo, 1, 'the older room is filled first, not the newest');
+    assert.equal(next.seats, 4);
+  });
+
+  await check('a room that fills starts without waiting for the clock', async () => {
+    await fresh();
+    await setLeagueConfig({ roomSize: 3 });
+    await board(15);
+    await closeSeason(isoWeekId());
+    const cfg = await getLeagueConfig();
+    const kick = kickoffFor(cfg);
+    const golds = (await listQualifiers(isoWeekId(), 'gold')).map((q) => q.userId);
+    let last = null as any;
+    for (const uid of golds.slice(0, 3)) last = await enterLeague(uid, kick);
+    assert.equal(last.full, true, 'the third player filled it');
+    assert.ok(last.room.startsAt <= kick + LEAGUE_FULL_START_MS,
+      'and it starts within seconds, not in three minutes: ' + (last.room.startsAt - kick) + 'ms');
+    /* A part-full room still gets its fill window rather than starting alone. */
+    const fourth = await enterLeague(golds[3]!, kick);
+    assert.equal(fourth.full, false);
+    assert.ok(fourth.room.startsAt > kick + LEAGUE_FULL_START_MS, 'room two waits for company');
+  });
+
+  await check('the screen is told whether the button may be pressed, and why not', async () => {
+    await fresh();
+    const ids = await board(50);
+    await closeSeason(isoWeekId());
+    const out = await myLeague(ids[49]!);
+    assert.equal(out.canEnter, false);
+    assert.match(out.enterBlockedReason, /جدول لیگ نیستی/);
+    /* A qualifier is only stopped by the clock. */
+    const inside = await myLeague(ids[0]!);
+    assert.equal(inside.canEnter, false, 'kickoff is days away');
+    assert.match(inside.enterBlockedReason, /زمان ورود/);
   });
 
   console.log(`[league] ${passed} passed, ${failed} failed`);

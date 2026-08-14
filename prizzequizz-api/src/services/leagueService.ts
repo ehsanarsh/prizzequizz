@@ -532,6 +532,95 @@ export async function drawRound(seasonId: string, round = 1): Promise<LeagueRoom
   return made;
 }
 
+/* ── walking in off the street ─────────────────────────────────────────── */
+
+/**
+ * WHAT «شروع مسابقه لیگ» DOES.
+ *
+ * The draw seats everybody in advance, which only works if everybody turns up.
+ * In practice half a tier does not, and a room drawn for fifteen plays with
+ * six. So the door is the other way round: at kickoff a button lights up, and
+ * whoever presses it takes the next free seat. Rooms therefore fill ONE AT A
+ * TIME — nobody is ever alone in room three while room one has two players —
+ * and a room that fills starts straight away instead of waiting for a clock.
+ *
+ * The ticket is what is actually being spent, so it is taken here and only
+ * here, after the seat is safely stored.
+ */
+export const LEAGUE_FULL_START_MS = 8_000;      // a beat to see the room fill
+export const LEAGUE_FILL_WINDOW_MS = 3 * 60_000; // how long a part-full room waits
+
+export interface EnterResult {
+  room: LeagueRoom;
+  seats: number;
+  roomSize: number;
+  /** True when this call is what took the seat, false when they were in already. */
+  joined: boolean;
+  full: boolean;
+}
+
+export async function enterLeague(userId: string, now = Date.now()): Promise<EnterResult> {
+  const cfg = await getLeagueConfig();
+  if (!cfg.enabled) throw new LeagueError('LEAGUE_OFF', 'لیگ هفتگی خاموش است.');
+  const seasonId = currentSeasonId();
+
+  /* Already seated? Then this is a second tap, not a second entry. */
+  const rooms = await listRooms(seasonId);
+  for (const r of rooms) {
+    if (r.status === 'finished') continue;
+    const seats = await listSeats(r.id);
+    if (seats.some((s) => s.userId === userId)) {
+      return { room: r, seats: seats.length, roomSize: cfg.roomSize, joined: false, full: seats.length >= cfg.roomSize };
+    }
+  }
+
+  const mine = (await listQualifiers(seasonId)).find((q) => q.userId === userId);
+  if (!mine) throw new LeagueError('NOT_QUALIFIED', 'این هفته در جدول لیگ نیستی — با کاپ گرفتن رتبه‌ات را بالا بیاور.');
+
+  const held = (await getTickets(userId))[mine.tier] ?? 0;
+  if (held <= 0) throw new LeagueError('NO_LEAGUE_TICKET', 'بلیط این لیگ را نداری.');
+
+  const doorsAt = kickoffFor(cfg) - LEAGUE_DOORS_MINUTES * 60_000;
+  if (now < doorsAt) throw new LeagueError('DOORS_CLOSED', 'هنوز زمان ورود نرسیده است.');
+
+  /* The first room with a free seat — in room order, so they fill one by one.
+   * A room already playing is not a seat: joining it would be walking in
+   * halfway through the questions. */
+  const tierRooms = rooms.filter((r) => r.tier === mine.tier && r.round === 1 && r.status === 'scheduled');
+  let room: LeagueRoom | null = null;
+  let seatCount = 0;
+  for (const r of tierRooms.sort((a, b) => a.roomNo - b.roomNo)) {
+    const n = (await listSeats(r.id)).length;
+    if (n < cfg.roomSize) { room = r; seatCount = n; break; }
+  }
+  if (!room) {
+    const no = tierRooms.reduce((m, r) => Math.max(m, r.roomNo), 0) + 1;
+    room = {
+      id: roomId(seasonId, mine.tier, 1, no),
+      seasonId, tier: mine.tier, round: 1, roomNo: no,
+      status: 'scheduled', startsAt: now + LEAGUE_FILL_WINDOW_MS, winnerUserId: null
+    };
+    await saveRoom(room);
+  }
+
+  await saveSeat({ roomId: room.id, userId, status: 'invited', paid: false });
+  seatCount += 1;
+
+  /* The ticket goes AFTER the seat: a failure here leaves them seated with a
+   * ticket still in hand, which is the kinder way round. */
+  try { await grantTickets(userId, mine.tier, -1); }
+  catch (e) { logger.warn('league_ticket_consume_failed', { userId, message: (e as Error).message }); }
+
+  /* A full room does not wait for the clock. */
+  const full = seatCount >= cfg.roomSize;
+  if (full && room.startsAt > now + LEAGUE_FULL_START_MS) {
+    room = { ...room, startsAt: now + LEAGUE_FULL_START_MS };
+    await saveRoom(room);
+  }
+  logger.info('league_entered', { userId, roomId: room.id, tier: mine.tier, seats: seatCount, full });
+  return { room, seats: seatCount, roomSize: cfg.roomSize, joined: true, full };
+}
+
 async function saveRoom(room: LeagueRoom): Promise<void> {
   const pool = pg();
   if (pool && await ensureSchema(pool)) {
@@ -689,6 +778,9 @@ export interface MyLeague {
   cutLines: CutLine[];
   kickoffAt: number;
   room: { id: string; tier: string; round: number; roomNo: number; startsAt: number; seats: number } | null;
+  /** Whether «شروع مسابقه لیگ» may be pressed right now — and if not, why. */
+  canEnter: boolean;
+  enterBlockedReason: string;
 }
 
 export async function myLeague(userId: string): Promise<MyLeague> {
@@ -714,18 +806,32 @@ export async function myLeague(userId: string): Promise<MyLeague> {
   }
 
   const user = await repositories.users.findById(userId);
+  const tickets = (user?.tickets as any) ?? {};
+  const doorsOpenAt = kickoffFor(cfg) - LEAGUE_DOORS_MINUTES * 60_000;
+
+  /* The button's own state, decided where the entry rules live rather than
+   * re-derived in the browser from four separate numbers. */
+  let blocked = '';
+  if (!cfg.enabled) blocked = 'لیگ هفتگی فعلاً خاموش است.';
+  else if (room) blocked = '';                       // already seated: the button walks them back in
+  else if (!mine) blocked = 'این هفته در جدول لیگ نیستی.';
+  else if ((Number(tickets[mine.tier]) || 0) <= 0) blocked = 'بلیط این لیگ را نداری.';
+  else if (Date.now() < doorsOpenAt) blocked = 'هنوز زمان ورود نرسیده است.';
+
   return {
     enabled: cfg.enabled,
     seasonId,
     tiers: cfg.tiers,
     roomSize: cfg.roomSize,
-    doorsOpenAt: kickoffFor(cfg) - LEAGUE_DOORS_MINUTES * 60_000,
+    doorsOpenAt,
     rank, cup, tier,
     qualifiedTier: mine ? mine.tier : null,
-    tickets: (user?.tickets as any) ?? {},
+    tickets,
     cutLines: await cutLines(),
     kickoffAt: kickoffFor(cfg),
-    room
+    room,
+    canEnter: cfg.enabled && !blocked,
+    enterBlockedReason: blocked
   };
 }
 

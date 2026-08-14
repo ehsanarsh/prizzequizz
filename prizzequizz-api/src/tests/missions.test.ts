@@ -8,7 +8,9 @@
 import assert from 'node:assert/strict';
 import {
   MissionError, ASSIGN_DEFAULT, boardFor, claim, dayKey, listDefs, progressOf, record, saveDef,
-  deleteDef, periodFor, weekKey, _resetMissionMemory
+  deleteDef, periodFor, weekKey, _resetMissionMemory,
+  boxFor, openBox, getBoxConfig, setBoxConfig, activeDailyPeriod, buildDailyLadder,
+  DAILY_LADDER_LEVELS, DAILY_PER_LEVEL
 } from '../services/missionService.js';
 import { repositories } from '../repositories/index.js';
 import { id } from '../utils/id.js';
@@ -64,7 +66,7 @@ async function run() {
 
   // ---------------------------------------------------------- assignment ----
 
-  await check('a player is dealt five dailies and three weeklies', async () => {
+  await check('a player is dealt three dailies and three weeklies', async () => {
     const uid = await makeUser();
     const b = await boardFor(uid);
     assert.equal(b.daily.length, ASSIGN_DEFAULT.daily);
@@ -281,6 +283,219 @@ async function run() {
       title: 'تبلیغ ویرایش‌شده', rewards: [{ type: 'coins', amount: 99 }] });
     assert.equal((await listDefs()).length, before);
     assert.equal((await listDefs()).find((d) => d.id === 'panel_new')!.title, 'تبلیغ ویرایش‌شده');
+  });
+
+  // ------------------------------------------------- the daily rework ----
+
+  /* «روزانه سه ماموریت می‌دیم». */
+  await check('three a day, not five', async () => {
+    assert.equal(ASSIGN_DEFAULT.daily, 3);
+    const uid = await makeUser();
+    const b = await boardFor(uid);
+    assert.equal(b.daily.length, 3, 'dealt ' + b.daily.length);
+  });
+
+  /* «ماموریت ۱ لول ۱، ماموریت ۱۰۰ لول ۱۰۰ و سخت‌تر». */
+  await check('the ladder bands every level from 1 to 100', async () => {
+    const rungs = buildDailyLadder();
+    assert.equal(rungs.length, DAILY_LADDER_LEVELS * DAILY_PER_LEVEL);
+    for (const lv of [1, 2, 50, 99, 100]) {
+      const band = rungs.filter((d) => d.minLevel === lv && d.maxLevel === lv);
+      assert.equal(band.length, DAILY_PER_LEVEL, 'level ' + lv + ' has ' + band.length);
+    }
+  });
+
+  await check('and every rung is harder than the one below it', async () => {
+    const rungs = buildDailyLadder();
+    const byMetric = new Map<string, Array<{ lv: number; target: number }>>();
+    for (const d of rungs) {
+      if (!byMetric.has(d.metric)) byMetric.set(d.metric, []);
+      byMetric.get(d.metric)!.push({ lv: d.minLevel, target: d.target });
+    }
+    for (const [metric, rows] of byMetric) {
+      const lo = rows.filter((r) => r.lv <= 3).reduce((m, r) => Math.max(m, r.target), 0);
+      const hi = rows.filter((r) => r.lv >= 98).reduce((m, r) => Math.min(m, r.target), Infinity);
+      assert.ok(hi > lo, metric + ': level 100 asks ' + hi + ', level 1 asks ' + lo);
+    }
+  });
+
+  await check('a player is only dealt missions from their own level', async () => {
+    const uid = await makeUser(7);
+    const b = await boardFor(uid);
+    assert.equal(b.daily.length, 3);
+    for (const m of b.daily) {
+      assert.ok(m.minLevel <= 7 && (m.maxLevel === 0 || m.maxLevel >= 7),
+        m.id + ' is banded ' + m.minLevel + '..' + m.maxLevel + ' but the player is level 7');
+    }
+  });
+
+  await check('and two levels are not handed the same three missions', async () => {
+    const a2 = await boardFor(await makeUser(4));
+    const b2 = await boardFor(await makeUser(40));
+    assert.notDeepEqual(a2.daily.map((m) => m.id).sort(), b2.daily.map((m) => m.id).sort());
+  });
+
+  /* «هر ماموریت کاپ و ایکس پی داشته باشه». */
+  await check('every daily rung pays cup and xp', async () => {
+    for (const d of buildDailyLadder()) {
+      assert.ok(d.rewards.some((r) => r.type === 'cup' && r.amount > 0), d.id + ' pays no cup');
+      assert.ok(d.rewards.some((r) => r.type === 'xp' && r.amount > 0), d.id + ' pays no xp');
+    }
+  });
+
+  await check('and claiming one really moves the player’s cup', async () => {
+    const uid = await makeUser();
+    const b = await boardFor(uid);
+    const m = b.daily[0]!;
+    const cup = m.rewards.find((r) => r.type === 'cup')!.amount;
+    await record(uid, m.metric, m.target * 3);
+    await claim(uid, m.id);
+    const u: any = await repositories.users.findById(uid);
+    assert.equal(Number(u.weeklyScore), cup, 'the cup on the card is the cup in the account');
+    assert.ok(Number(u.xp) > 0, 'and the xp landed too');
+  });
+
+  /* «تا انجام نده عوض نمی‌شن، ۱۰ روز هم بگذره عوض نمی‌شن». */
+  await check('an unfinished set is still there ten days later', async () => {
+    const uid = await makeUser();
+    const first = (await boardFor(uid)).daily.map((m) => m.id);
+    const period = await activeDailyPeriod(uid);
+    /* Ten days pass. Nothing was finished. */
+    const later = Date.now() + 10 * 86_400_000;
+    assert.equal(await activeDailyPeriod(uid, later), period, 'the set moved on without being done');
+    const stillIds = (await boardFor(uid)).daily.map((m) => m.id);
+    assert.deepEqual(stillIds, first, 'and the same three are shown');
+  });
+
+  await check('half-finished progress is not thrown away by the next day either', async () => {
+    const uid = await makeUser();
+    const m = (await boardFor(uid)).daily[0]!;
+    await record(uid, m.metric, 1);
+    const before = (await progressOf(uid, m.id))!.progress;
+    assert.ok(before > 0, 'progress was recorded');
+    /* A day later the same mission is still the one being counted. */
+    const tomorrow = Date.now() + 86_400_000;
+    assert.equal(await activeDailyPeriod(uid, tomorrow), await activeDailyPeriod(uid));
+    assert.equal((await progressOf(uid, m.id))!.progress, before, 'the progress survived');
+    /* And it is still what the CARD shows when the app is opened tomorrow —
+       reading the day rather than the set would show a fresh, empty mission. */
+    assert.equal((await progressOf(uid, m.id, tomorrow))!.progress, before,
+      'tomorrow the card had forgotten it');
+  });
+
+  /* And tomorrow's PLAY has to land on the same mission. Progress filed under
+   * the day it happened rather than the day the set was dealt would vanish
+   * from the card the moment midnight passed — the set would sit there frozen
+   * at whatever it reached yesterday, and no amount of playing would move it. */
+  await check('and tomorrow’s play still counts towards yesterday’s set', async () => {
+    const uid = await makeUser();
+    const m = (await boardFor(uid)).daily[0]!;
+    await record(uid, m.metric, 1);
+    const before = (await progressOf(uid, m.id))!.progress;
+
+    /* Reported as a bigger number, not another 1: some daily metrics are
+       best-so-far rather than counters, and «۱ دوباره» is not an improvement
+       on «۱». */
+    const tomorrow = Date.now() + 86_400_000;
+    await record(uid, m.metric, before + 5, '', tomorrow);
+    assert.ok((await progressOf(uid, m.id))!.progress > before,
+      'a day later the mission stopped counting: still ' + before);
+
+    /* Right through to finishing it, days after it was dealt. */
+    await record(uid, m.metric, m.target * 4, '', Date.now() + 5 * 86_400_000);
+    assert.equal((await progressOf(uid, m.id))!.completed, true, 'and it can still be finished');
+  });
+
+  /* «ولی اگه انجام داد فردا دوباره ۳ ماموریت جدید بیاد». */
+  await check('finishing all three brings a new set the NEXT day, not the same day', async () => {
+    const uid = await makeUser();
+    const set = (await boardFor(uid)).daily;
+    const period = await activeDailyPeriod(uid);
+    for (const m of set) await record(uid, m.metric, m.target * 4);
+    assert.equal(await activeDailyPeriod(uid), period, 'the day it is finished, the set stays put');
+    const tomorrow = Date.now() + 86_400_000;
+    assert.notEqual(await activeDailyPeriod(uid, tomorrow), period, 'and tomorrow it turns over');
+  });
+
+  // ------------------------------------------------------------- the box ----
+
+  await check('the box is not ready until all three are done', async () => {
+    const uid = await makeUser();
+    const set = (await boardFor(uid)).daily;
+    let box = await boxFor(uid);
+    assert.equal(box.total, 3);
+    assert.equal(box.done, 0);
+    assert.equal(box.ready, false);
+
+    await record(uid, set[0]!.metric, set[0]!.target * 4);
+    box = await boxFor(uid);
+    assert.ok(box.done >= 1, 'one done: ' + box.done);
+    assert.equal(box.ready, false, 'one of three is not a box');
+
+    for (const m of set) await record(uid, m.metric, m.target * 4);
+    box = await boxFor(uid);
+    assert.equal(box.done, 3);
+    assert.equal(box.ready, true, 'all three done and still no box');
+    assert.equal(box.opened, false, 'and it is not opened by itself — the player taps it');
+  });
+
+  await check('opening it pays exactly what the panel put inside', async () => {
+    await setBoxConfig({ enabled: true, title: 'جعبهٔ آزمایشی', rewards: [
+      { type: 'coins', amount: 777 }, { type: 'cup', amount: 11 }
+    ] });
+    const uid = await makeUser();
+    for (const m of (await boardFor(uid)).daily) await record(uid, m.metric, m.target * 4);
+    const before = await coinsOf(uid);
+    const r = await openBox(uid);
+    assert.deepEqual(r.rewards.map((x) => x.type + ':' + x.amount), ['coins:777', 'cup:11']);
+    assert.equal(await coinsOf(uid), before + 777, 'the coins arrived');
+    const u: any = await repositories.users.findById(uid);
+    assert.equal(Number(u.weeklyScore), 11, 'and the cup did too');
+  });
+
+  await check('and it cannot be opened twice', async () => {
+    const uid = await makeUser();
+    for (const m of (await boardFor(uid)).daily) await record(uid, m.metric, m.target * 4);
+    await openBox(uid);
+    const before = await coinsOf(uid);
+    await assert.rejects(() => openBox(uid), (e: any) => e?.code === 'BOX_ALREADY_OPEN');
+    assert.equal(await coinsOf(uid), before, 'and nothing was paid the second time');
+  });
+
+  await check('an unfinished set cannot be talked into opening one', async () => {
+    const uid = await makeUser();
+    await assert.rejects(() => openBox(uid), (e: any) => e?.code === 'BOX_NOT_READY');
+  });
+
+  await check('a new day after a finished set brings a fresh, unopened box', async () => {
+    const uid = await makeUser();
+    for (const m of (await boardFor(uid)).daily) await record(uid, m.metric, m.target * 4);
+    await openBox(uid);
+    assert.equal((await boxFor(uid)).opened, true);
+    /* The next set is a different period, so its box is its own. */
+    const tomorrow = await activeDailyPeriod(uid, Date.now() + 86_400_000);
+    assert.notEqual(tomorrow, (await boxFor(uid)).period);
+  });
+
+  await check('a panel edit does not rewrite a box already opened', async () => {
+    await setBoxConfig({ enabled: true, rewards: [{ type: 'coins', amount: 100 }] });
+    const uid = await makeUser();
+    for (const m of (await boardFor(uid)).daily) await record(uid, m.metric, m.target * 4);
+    await openBox(uid);
+    await setBoxConfig({ enabled: true, rewards: [{ type: 'coins', amount: 5000 }] });
+    const box = await boxFor(uid);
+    assert.deepEqual(box.rewards.map((r) => r.amount), [100], 'what was given is what is shown');
+  });
+
+  await check('the board carries the box, so one request paints the screen', async () => {
+    await setBoxConfig({ ...(await getBoxConfig()), enabled: true });
+    const uid = await makeUser();
+    const b = await boardFor(uid);
+    assert.ok(b.box, 'no box on the board');
+    assert.equal(b.box.total, 3);
+    assert.equal(b.dailyRotates, false, 'an unfinished set does not rotate at midnight');
+    for (const m of b.daily) await record(uid, m.metric, m.target * 4);
+    assert.equal((await boardFor(uid)).dailyRotates, true, 'a finished one does');
   });
 
   console.log(`[missions] ${passed} passed, ${failed} failed`);
