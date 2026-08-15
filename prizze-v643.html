@@ -11363,7 +11363,7 @@ function renderSupportHome(c){
   const last=supportTickets[0];
   c.innerHTML='<div class="sup-card"><h3>چه کمکی لازم داری؟</h3><p>برای پاسخ سریع از چت زنده استفاده کن؛ برای پیگیری مالی، گزارش باگ یا پیشنهاد، تیکت ثبت کن.</p><div class="sup-actions"><button class="btn btn-primary" onclick="openSupportTab(\'chat\')">💬 شروع چت زنده</button><button class="btn btn-orange" onclick="openSupportTab(\'tickets\')">🎫 ایجاد تیکت</button><button class="btn btn-ghost" onclick="openSupportTab(\'faq\')">❓ سوالات پرتکرار</button></div></div>'+
     (last?'<div class="ticket-card"><div class="ticket-icon">🎫</div><div class="ticket-info"><b>آخرین تیکت: '+frEsc(last.title)+'</b><span>#'+frEsc(String(last.id).slice(0,6))+' · '+last.time+' · '+frEsc(last.cat)+'</span><br>'+(last.reply?'<em style="font-size:11px;color:var(--muted);font-style:normal">'+frEsc(last.reply)+'</em><br>':'')+'<span class="ticket-badge '+last.status+'">'+supportStatusText(last.status)+'</span></div><div class="fr-actions"><button class="btn btn-primary btn-sm" onclick="openTicketChat(\''+last.id+'\')">جزئیات</button></div></div>':'')+
-    '<div class="contact-grid"><div class="contact-card" onclick="openSupportTab(\'chat\')"><span class="ci">💬</span><b>چت زنده</b><span>پاسخ سریع داخل بازی</span></div><div class="contact-card" onclick="openSupportTab(\'status\')"><span class="ci">📡</span><b>وضعیت سرویس</b><span>پرداخت، لیگ و سرورها</span></div><div class="contact-card" onclick="copySupportInfo(\'email\')"><span class="ci">✉️</span><b>ایمیل</b><span>support@prizze.quiz</span></div><div class="contact-card" onclick="copySupportInfo(\'phone\')"><span class="ci">☎️</span><b>تماس ضروری</b><span>۰۲۱-۹۱۰۰-۰۰۰۰</span></div></div>';
+    '<div class="contact-grid"><div class="contact-card" onclick="openSupportTab(\'chat\')"><span class="ci">💬</span><b>چت زنده</b><span>پاسخ سریع داخل بازی</span></div><div class="contact-card" onclick="openSupportTab(\'status\')"><span class="ci">📡</span><b>وضعیت سرویس</b><span>پرداخت، لیگ و سرورها</span></div><div class="contact-card" onclick="copySupportInfo(\'email\')"><span class="ci">✉️</span><b>ایمیل</b><span>support@prizequiz.ir</span></div><div class="contact-card" onclick="copySupportInfo(\'phone\')"><span class="ci">☎️</span><b>تماس ضروری</b><span>۰۲۱-۹۱۰۰-۰۰۰۰</span></div></div>';
 }
 async function renderSupportChat(c){
   if(!_supOpenId){
@@ -11423,7 +11423,7 @@ function renderSupportStatus(c){
   const rows=[['ok','سرور مسابقات','فعال و پایدار'],['ok','پرداخت و کیف پول','فعال'],['ok','لیگ هفتگی','فعال'],['warn','برداشت بانکی','ممکن است تا ۲۴ ساعت زمان ببرد'],['ok','چت و پشتیبانی','آنلاین']];
   c.innerHTML='<div class="sup-card"><h3>وضعیت سرویس‌ها</h3><p>آخرین بروزرسانی: همین حالا. اگر اختلال دیدی، از همین صفحه گزارش بده.</p></div>'+rows.map(r=>'<div class="status-row"><span class="status-dot '+(r[0]==='warn'?'warn':'')+'"></span><div style="flex:1"><b>'+r[1]+'</b><br><span>'+r[2]+'</span></div></div>').join('')+'<div class="sup-actions"><button class="btn btn-orange" onclick="openSupportTab(\'tickets\')">گزارش اختلال</button><button class="btn btn-ghost" onclick="toast(\'وضعیت بروزرسانی شد ✅\')">بروزرسانی</button></div>';
 }
-function copySupportInfo(type){const val=type==='email'?'support@prizze.quiz':'021-9100-0000';try{navigator.clipboard&&navigator.clipboard.writeText(val);}catch(e){}toast('اطلاعات تماس کپی شد');}
+function copySupportInfo(type){const val=type==='email'?'support@prizequiz.ir':'021-9100-0000';try{navigator.clipboard&&navigator.clipboard.writeText(val);}catch(e){}toast('اطلاعات تماس کپی شد');}
 renderSupportStats();
 
 /* ============ FRIENDS HUB (chat / requests / add friend) ============ */
@@ -11626,7 +11626,19 @@ function inviteFriend(id){const f=FRIENDS_DATA.find(x=>x.id===id);if(!f)return;t
 async function sendFriendRequest(){const i=document.getElementById('friendAddInput');const v=(i?.value||'').trim();if(!v){toast('یوزرنیم دوستت رو وارد کن');return;}const r=await pzApi('POST','/friends/requests',{username:v.replace(/^@/,'')});if(r&&r.ok){const st=r.data&&r.data.status;toast(st==='accepted'?'حالا دوست شدید ✅':'درخواست دوستی ارسال شد 🤝');recordMissionEvent('social',1);if(i)i.value='';friendsLoad();}else{toast((r&&r.error&&r.error.message)||'خطا در ارسال درخواست');}}
 async function acceptFriendRequest(id){const r=await pzApi('POST','/friends/requests/'+id+'/accept',{});if(r&&r.ok){toast('دوست جدید اضافه شد ✅');recordMissionEvent('social',1);}else{toast((r&&r.error&&r.error.message)||'خطا');}friendsLoad();}
 async function declineFriendRequest(id){const r=await pzApi('POST','/friends/requests/'+id+'/reject',{});toast(r&&r.ok?'درخواست رد شد':'خطا');friendsLoad();}
-function copyInviteLink(){try{navigator.clipboard&&navigator.clipboard.writeText('https://prizze.quiz/invite/PQ-SHAHAB-9865');}catch(e){}recordMissionEvent('social',1);toast('لینک دعوت کپی شد 🎁');}
+/* THE LINK A PLAYER HANDS TO A FRIEND. It used to be a fixed string: a domain
+   that does not exist (prizze.quiz was placeholder text) and one invite code —
+   PQ-SHAHAB-9865 — that every player in the game copied as if it were theirs.
+   It is built from where the game is actually being played and from THIS
+   player's own name now. */
+function pzInviteLink(){
+  var who='';
+  try{ who=(_usr&&(_usr.username||_usr.displayName))||''; }catch(e){}
+  var origin='https://prizequiz.ir';
+  try{ if(/^https?:$/.test(location.protocol)&&location.hostname&&location.hostname!=='localhost') origin=location.origin; }catch(e){}
+  return origin+(who?('/?ref='+encodeURIComponent(who)):'/');
+}
+function copyInviteLink(){const link=pzInviteLink();try{navigator.clipboard&&navigator.clipboard.writeText(link);}catch(e){}recordMissionEvent('social',1);toast('لینک دعوت کپی شد 🎁');}
 function sortFriendsOnline(){FRIENDS_DATA.sort((a,b)=>(b.on-a.on));renderFriendsHub();}
 function showFavoritesOnly(){const i=document.getElementById('frSearch');if(i)i.value='⭐';const c=document.getElementById('friendsContent');const list=FRIENDS_DATA.filter(f=>f.fav);c.innerHTML=list.length?list.map(f=>friendCard(f,'friend')).join(''):'<div class="fr-empty"><span class="big">⭐</span>هنوز دوست محبوب نداری.</div>';}
 /* icon:f.a printed the avatar's URL into the modal — iconHTML is the slot that
