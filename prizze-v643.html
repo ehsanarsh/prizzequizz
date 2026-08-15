@@ -952,6 +952,18 @@ input,textarea,select,[contenteditable="true"],.pz-selectable,.pz-selectable *{
 .tk-prize-tag{display:inline-block;margin-top:7px;font-size:11px;font-weight:900;color:var(--paper);background:rgba(255,210,31,.16);border:2px solid #000;border-radius:999px;padding:4px 11px;box-shadow:0 2.5px 0 #000}
 /* The one line that explains how the Last Survivor prize is actually reached,
    sitting under the pot so the number is never read as a promise. */
+/* THE CARD IS BUILT BEFORE THE ROUND OPENS, BUT NOT READABLE.
+   Building it early is what stops the question being torn down and rebuilt the
+   instant the gate lifts. Until the round opens, the words on it are covered —
+   for the player behind the «آماده‌ای؟» modal and, more to the point, for
+   anybody the modal does not reach. The layout is kept so nothing jumps when
+   it clears. */
+.ls-qwrap[data-gate="1"] .ls-qtext,
+.ls-qwrap[data-gate="1"] #lsOpts .atxt,
+.ls-qwrap[data-gate="1"] #lsOpts .k,
+.ls-qwrap[data-gate="1"] #lsOpts .dash{visibility:hidden}
+.ls-qwrap[data-gate="1"] .ls-qtext::after{content:'…';visibility:visible;display:block;text-align:center;opacity:.55}
+
 /* THE POT WHILE IT IS CLIMBING. Green and a touch larger on the way up, then
    gold and settling back into place — and the «+N» that goes in floats up out
    of it, which is the eliminated players' share arriving. */
@@ -7478,7 +7490,7 @@ async function lsDoJoin(topic,color){
   const r=await pzApi('POST','/last-survivor/join',{topic,color});
   if(!r||r.ok===false){ toast((r&&r.error&&r.error.message)||'ورود ناموفق بود'); return; }
   const snap=r.data; if(!snap||!snap.room){ toast('خطا در ورود'); return; }
-  lsRoomId=snap.room.id; lsLastKey=''; lsDeadDismissed=false; lsChatSeen=0; lsEndShown=false; lsForfeited=0; lsReadyShownRound=0;
+  lsRoomId=snap.room.id; lsLastKey=''; lsDeadDismissed=false; lsChatSeen=0; lsEndShown=false; lsForfeited=0; lsReadyShownRound='';
   try{ if(typeof mTickets!=='undefined'&&mTickets[color]!=null){mTickets[color]=Math.max(0,mTickets[color]-1);renderHeaderTickets();} }catch(e){}
   showScreen('lsGame'); lsRender(snap); lsStartPoll();
 }
@@ -7744,6 +7756,7 @@ function lsUnlockInPlace(snap){
     b.setAttribute('onclick','lsAnswer('+i+')');
   });
   wrap.dataset.locked='0';
+  wrap.dataset.gate='0';          // the round is open: the card may be read now
   return true;
 }
 
@@ -7767,6 +7780,11 @@ function lsBuild(snap){
     /* Locked: every option is dead, and lsQuestionHtml also prints «شما در این
        مرحله حضور ندارید» under the card. */
     body.innerHTML=watch+lsDashStrip(snap)+lsQuestionHtml(snap,true);
+    /* AND GATED, like everybody else's. Without this the watcher's card was on
+       screen through the whole ready countdown while the players were still
+       looking at «آماده‌ای؟» — a second device open on the same room read the
+       question first. */
+    if(r.phase==='ready') lsReadyGate(snap);
     return;
   }
   if(r.phase==='ready'){
@@ -8158,7 +8176,13 @@ function lsQuestionHtml(snap,locked){
      same card, now answerable» from «a different question» — see
      lsUnlockInPlace, which is what stops the first question being torn down and
      rebuilt the instant the ready gate lifts. */
-  return `<div class="ls-qwrap" data-q="${q.id||''}" data-round="${snap.room.round}" data-locked="${locked?1:0}">
+  /* data-gate is «the round has not opened yet». The card is built during the
+     ready phase on purpose — that is what stops the question being torn down
+     and rebuilt a moment later — but until the round actually opens, nothing on
+     it may be READ. The countdown modal covers it for a player; this covers it
+     for everyone the modal does not reach, which is how a spectator was seeing
+     the question before the people answering it. */
+  return `<div class="ls-qwrap" data-q="${q.id||''}" data-round="${snap.room.round}" data-locked="${locked?1:0}" data-gate="${snap.room.phase==='ready'?1:0}">
   ${badge?`<div style="text-align:center;margin-bottom:8px">${badge}</div>`:''}
   <div class="ls-qcard"><div class="ls-qtext">${q.text||'…'}</div>
   ${pzTimerHTML('lsTimer')}
@@ -8169,18 +8193,33 @@ function lsQuestionHtml(snap,locked){
 /* The duel's own ready gate, reused verbatim: same modal, same countdown bar,
    same difficulty badge — only the seconds come from the server so every
    player's gate ends at the same moment. */
-let lsReadyShownRound=0;
+let lsReadyShownRound='';
 function lsReadyGate(snap){
-  /* «آماده‌ای؟» is a question asked of somebody who is about to answer. A
-     player who has been knocked out is not, and the counting-down modal landing
-     on top of their screen — and then closing itself — was the report. */
-  if(lsWatching||!(snap.me&&snap.me.status==='alive')) return;
-  const r=snap.room; if(lsReadyShownRound===r.round) return; lsReadyShownRound=r.round;
+  const r=snap.room;
+  /* KEYED ON THE QUESTION, NOT JUST THE ROUND. A ready snapshot can arrive
+     before the question does — the card is empty, the gate goes up, and then
+     the question lands and the card is rebuilt. Keyed on the round alone, the
+     gate refused to come back for that rebuild and the question sat there in
+     the open. */
+  const key=r.round+':'+((snap.question&&snap.question.id)||'-');
+  if(lsReadyShownRound===key) return; lsReadyShownRound=key;
   const secs=Math.max(1,Math.round(((r.phaseEndsAt||0)-lsNow())/1000));
   const diff=(snap.question&&snap.question.difficulty)||'';
+  /* EVERY PAIR OF EYES IN THE ROOM WAITS THE SAME WAIT.
+     «آماده‌ای؟» is a question asked of somebody who is about to answer, so a
+     spectator or a knocked-out player is not asked it — but they are not shown
+     the question early either. They used to be: the gate returned immediately
+     for them, the card behind it was already rendered, and a second device
+     watching the same room was a way to read the question before the people
+     answering it. Same countdown, same concealment, different words. */
+  const playing=!lsWatching&&!!(snap.me&&snap.me.status==='alive');
+  const title=playing?'آماده‌ای؟':'سوال بعدی';
+  const sub=playing
+    ? 'سوال '+lsFa(r.round)+' از '+lsFa(r.totalRounds)+' — جواب اشتباه یعنی حذف!'
+    : 'سوال '+lsFa(r.round)+' از '+lsFa(r.totalRounds)+' — همراه بقیه می‌بینی‌اش';
   try{
     if(typeof showCountdownModal==='function'){
-      showCountdownModal({icon:'🎯',title:'آماده‌ای؟',sub:'سوال '+lsFa(r.round)+' از '+lsFa(r.totalRounds)+' — جواب اشتباه یعنی حذف!',
+      showCountdownModal({icon:playing?'🎯':'👁️',title:title,sub:sub,
         seconds:secs,reward:(typeof pzDiffBadge==='function'?pzDiffBadge(diff):'')},function(){});
     }
   }catch(e){}
@@ -8439,7 +8478,7 @@ function lsWatchMatch(){
   const room=lsWatchRoom;
   if(!room||lsWatchRoomDone) return;
   lsWatching=true; _lsWatchEndShown=false;
-  lsRoomId=room; lsLastKey=''; lsReadyShownRound=0;
+  lsRoomId=room; lsLastKey=''; lsReadyShownRound='';
   try{ showScreen('lsGame'); }catch(e){}
   const body=document.getElementById('lsBody');
   if(body) body.innerHTML='<div class="ls-ack" style="margin-top:14px">در حال اتصال به مسابقه…</div>';

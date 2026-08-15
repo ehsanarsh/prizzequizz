@@ -227,7 +227,10 @@ const render = (snap) => page.evaluate((s) => {
      (a late poll must never drag the room backwards), and §3 above left it on
      round 3. Going backwards here would silently test the previous render. */
   await render(room({ n: 10, round: 4, phase: 'dashboard', outIds: ['p7'], meStatus: 'alive', myShare: 62500, pot: 500000 }));
-  await page.waitForTimeout(300);
+  /* The share COUNTS UP to its new figure now, so reading it at once catches it
+     part way through the climb. Waited out on purpose: the number under test is
+     where it lands, not where it was passing. */
+  await page.waitForTimeout(3400);
   const board = await page.evaluate(() => {
     const el = document.getElementById('lsMyShare');
     return { shown: !!el && !!el.offsetParent, value: el && el.textContent, all: document.getElementById('lsBody').innerText,
@@ -420,7 +423,12 @@ const render = (snap) => page.evaluate((s) => {
 
   /* «مودال تایمر سوال همان روم برای کاربر حذف شده … میاره بالا و تایمر تموم
      می‌شه و می‌ره» — the «آماده‌ای؟» countdown is a question asked of somebody
-     about to answer. A spectator is not, and it must not land on them. */
+     about to answer, and a spectator is not.
+     What that turned into: the spectator got NO countdown at all, and the
+     question card behind it was already rendered — so a second device watching
+     the same room could read the question before the people answering it. They
+     wait the same wait as everyone else now; what they must not get is the
+     wording that says they are about to answer. */
   const ready = room({ n: 8, round: 9, phase: 'ready', outIds: ['me'], meStatus: 'eliminated' });
   ready.me.eliminatedRound = 3;
   ready.question = { id: 'q9', round: 9, text: 'سوال آماده', options: ['یک', 'دو', 'سه', 'چهار'], difficulty: 'hard' };
@@ -431,7 +439,16 @@ const render = (snap) => page.evaluate((s) => {
     return { open: !!m && m.classList.contains('show') && getComputedStyle(m).display !== 'none',
              text: m ? (m.innerText || '').slice(0, 40) : '' };
   });
-  ok('no «آماده‌ای؟» countdown lands on a spectator', !gate.open, JSON.stringify(gate));
+  ok('a spectator waits out the countdown like everyone else', gate.open, JSON.stringify(gate));
+  ok('but is never asked «آماده‌ای؟»', !/آماده/.test(gate.text), gate.text);
+  /* The point of making them wait: the question stays unreadable until the
+     round opens for everybody. */
+  const hidden = await page.evaluate(() => {
+    const q = document.querySelector('#lsBody .ls-qtext');
+    return { has: !!q, vis: q ? getComputedStyle(q).visibility : '',
+             gate: (document.querySelector('#lsBody .ls-qwrap') || { dataset: {} }).dataset.gate };
+  });
+  ok('and the question is covered while they wait', hidden.vis === 'hidden' && hidden.gate === '1', JSON.stringify(hidden));
 
   /* AND THE WAY IT ACTUALLY HAPPENED. A knocked-out player is sent to the
      result screen, but the room's websocket pushes keep arriving — and one of
