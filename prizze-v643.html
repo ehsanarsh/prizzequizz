@@ -6915,6 +6915,19 @@ async function csEquip(){
       // Every avatar slot in the app is showing my card; refresh its other face.
       try{ pzApplyMyCharacter({id:c.id,name:c.name,image:c.image,kind:c.kind}); }catch(e){}
       try{ localStorage.setItem('pz_charId',c.id); }catch(e){}
+      /* CHOOSING IS FINISHING. The player pressed the one button this screen
+         exists for, and was then left standing on it — the only way out was a
+         small «‹» in the corner, which after registration is the first thing a
+         new player ever has to find. So the screen shows the pick landing and
+         then leaves by itself: home after registration, and back where they
+         came from when they opened the picker from the shop or the profile. */
+      setTimeout(()=>{
+        try{
+          const dest=charBack||'home';
+          charBack='profile';
+          go(dest);
+        }catch(e){}
+      },900);
     }else{
       toast((r&&r.error&&r.error.message)||'ذخیره نشد');
       csPaintInfo();
@@ -16348,7 +16361,10 @@ function pzRegisterCharStep(){
   btn.className='btn btn-yellow';
   btn.textContent='🎭 انتخاب کاراکتر';
   btn.disabled=false;
-  btn.onclick=function(){ go('character'); };
+  /* Registration ends at the home screen, not back at the profile the picker
+     otherwise returns to — this is the last step of signing up, so finishing it
+     means being in the game. */
+  btn.onclick=function(){ charBack='home'; go('character'); };
   try{ btn.scrollIntoView({block:'end',behavior:'smooth'}); }catch(e){}
 }
 

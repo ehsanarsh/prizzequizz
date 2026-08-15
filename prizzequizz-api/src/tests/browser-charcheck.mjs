@@ -39,6 +39,8 @@ const ch = (o) => Object.assign({
 
 let roster = { characters: [], equippedId: '', level: 3, xp: 0, hasDatabase: false };
 const purchases = [];
+/* Flipped by the test to make the server refuse an equip. */
+let equipFails = false;
 
 async function makePage() {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
@@ -51,6 +53,10 @@ async function makePage() {
     const send = (d) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, data: d }) });
     if (p === '/characters') return send(roster);
     if (/^\/characters\/.+\/purchase$/.test(p)) { purchases.push(p); return send({ charged: 500, coins: 4500, roster }); }
+    if (/^\/characters\/.+\/equip$/.test(p) && equipFails) {
+      return route.fulfill({ status: 409, contentType: 'application/json',
+        body: JSON.stringify({ ok: false, error: { code: 'LOCKED', message: 'این کاراکتر برای تو باز نشده' } }) });
+    }
     return send({});
   });
   const page = await ctx.newPage();
@@ -236,6 +242,71 @@ const readRing = (page) => page.evaluate(() => {
     card.click(); await new Promise((r) => setTimeout(r, 700));
   });
   ok('a buyable one really goes to the server', purchases.length === 1, JSON.stringify(purchases));
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
+/* ── 5. CHOOSING IS FINISHING ───────────────────────────────────────────
+   «دکمه انتخاب کاراکتر رو که زد و کاراکتر انتخاب شد باید به صفحه اصلی و خانه
+   بره — الان باید دکمه بک رو بزنی چون کوچیکه و کاربر گیج میشه.» The player
+   pressed the one button the screen exists for and was left standing on it,
+   with a small «‹» in the corner as the only way out — and after registration
+   that is the first thing a brand-new player ever has to find. */
+{
+  const { ctx, page, errs } = await makePage();
+  console.log('after picking a character:');
+  roster = {
+    characters: [ch({ id: 'k1', name: 'اولی', unlocked: true, equipped: true }), ch({ id: 'k2', name: 'دومی', unlocked: true })],
+    equippedId: 'k1', level: 3, xp: 0, hasDatabase: false
+  };
+
+  /* Straight out of registration: the button that ends signing up. */
+  const fromRegister = await page.evaluate(async () => {
+    (0, eval)("userPlan='premium'; planExplicitlyChosen=true; go('register'); pzRegisterCharStep();");
+    await new Promise((r) => setTimeout(r, 300));
+    const btn = document.querySelector('#register .btn-yellow');
+    btn.click();
+    await new Promise((r) => setTimeout(r, 900));
+    return { screen: [...document.querySelectorAll('.screen')].find((x) => x.classList.contains('active')).id,
+             back: (0, eval)('charBack') };
+  });
+  ok('the registration button opens the picker', fromRegister.screen === 'character', JSON.stringify(fromRegister));
+  ok('and it knows registration ends at home', fromRegister.back === 'home', String(fromRegister.back));
+
+  const landed = await page.evaluate(async () => {
+    (0, eval)('csEquip')();
+    await new Promise((r) => setTimeout(r, 1600));
+    return { screen: [...document.querySelectorAll('.screen')].find((x) => x.classList.contains('active')).id };
+  });
+  ok('picking one takes the player into the game by itself', landed.screen === 'home', landed.screen);
+
+  /* Opened from the shop instead: leaving still happens, back where they were. */
+  const fromShop = await page.evaluate(async () => {
+    (0, eval)("csGoPick();");
+    await new Promise((r) => setTimeout(r, 500));
+    const opened = [...document.querySelectorAll('.screen')].find((x) => x.classList.contains('active')).id;
+    (0, eval)('csEquip')();
+    await new Promise((r) => setTimeout(r, 1600));
+    return { opened, screen: [...document.querySelectorAll('.screen')].find((x) => x.classList.contains('active')).id };
+  });
+  ok('coming from the shop opens it too', fromShop.opened === 'character', fromShop.opened);
+  ok('and choosing returns to where they came from', fromShop.screen === 'shop', fromShop.screen);
+
+  /* A REFUSED SAVE MUST NOT LOOK LIKE A DONE ONE. Leaving the screen is how the
+     player is told the pick landed; doing it when the server said no would send
+     them into the game believing they chose a character they do not have. */
+  equipFails = true;
+  const refused = await page.evaluate(async () => {
+    (0, eval)("csGoPick();");
+    await new Promise((r) => setTimeout(r, 500));
+    (0, eval)('csEquip')();
+    await new Promise((r) => setTimeout(r, 1800));
+    return { screen: [...document.querySelectorAll('.screen')].find((x) => x.classList.contains('active')).id,
+             toast: (document.getElementById('pzToast') || {}).textContent || '' };
+  });
+  equipFails = false;
+  ok('a refused pick keeps the player on the picker', refused.screen === 'character', JSON.stringify(refused));
+  ok('and says why', /باز نشده|ذخیره نشد/.test(refused.toast), refused.toast);
   ok('no script errors', errs.length === 0, errs.join(' | '));
   await ctx.close();
 }
