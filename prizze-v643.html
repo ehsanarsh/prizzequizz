@@ -84,8 +84,8 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
 #home .pzh-av{width:38px;height:38px;border-radius:12px}
 #home .pzh-av .mascot{width:32px!important;height:32px!important}
 #home .pzh-nameline b{font-size:12.5px}
-#home .pzh-xpbar{height:15px;margin-top:3px}
-#home .pzh-xptxt{font-size:10px}
+#home .pzh-xpbar{height:19px;margin-top:3px}
+#home .pzh-xptxt{font-size:10.5px}
 #home .pzh-pill{padding:3px 8px;font-size:11.5px}
 
 #home .pzh-wallets{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
@@ -3864,7 +3864,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
 .pzh-nameline b{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;letter-spacing:-.2px}
 .pzh-nameline b{font-size:14.5px;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .pzh-xptxt{position:absolute;inset:0;display:grid;place-items:center;font-size:11px;font-weight:900;color:#fff;white-space:nowrap;letter-spacing:.2px;text-shadow:0 1px 2px rgba(0,0,0,.95),0 0 4px rgba(0,0,0,.8);pointer-events:none;z-index:2}
-.pzh-xpbar{position:relative;height:19px;border-radius:999px;background:#080d13;border:2px solid #000;overflow:hidden;margin-top:5px;box-shadow:inset 0 2px 5px rgba(0,0,0,.6)}
+.pzh-xpbar{position:relative;height:23px;border-radius:999px;background:#080d13;border:2px solid #000;overflow:hidden;margin-top:5px;box-shadow:inset 0 2px 5px rgba(0,0,0,.6)}
 .pzh-xpbar>i{display:block;height:100%;width:0;border-radius:999px;background:linear-gradient(90deg,#4FB0EA,#7FE0FF);box-shadow:0 0 10px rgba(115,217,255,.7);transition:width .65s cubic-bezier(.2,.9,.3,1)}
 .pzh-spin{flex-shrink:0;width:44px;height:44px;border-radius:14px;border:2.5px solid #000;background:linear-gradient(180deg,#2b2b34,#17171d);font-size:21px;box-shadow:0 3px 0 #000;cursor:pointer}
 .pzh-spin:active{transform:translateY(3px);box-shadow:0 0 0 #000}
@@ -5330,26 +5330,23 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
     <!-- ============ MODE ENTRY ============ -->
     <!-- ============ MISSIONS ============ -->
     <section class="screen" id="missions">
-      <div class="topbar"><button class="iconbtn" onclick="go('home')">→</button><h1>ماموریت‌ها 🎯</h1><button class="iconbtn" onclick="claimAllMissions()">🎁</button></div>
+      <!-- ONE SCREEN, THREE MISSIONS, ONE BOX.
+           The tabs are gone: «روزانه / هفتگی / دستاوردها» offered three piles
+           when the game only deals one, and «دریافت همه جوایز» and «بروزرسانی»
+           were buttons for a screen that already pays on tap and already
+           reloads itself. What is left is the three missions of the day and
+           the box they earn. -->
+      <div class="topbar"><button class="iconbtn" onclick="go('home')">→</button><h1>ماموریت‌ها 🎯</h1></div>
       <div class="pad" style="padding-top:6px">
         <div class="mission-hero">
           <div class="mi">🎯</div>
           <div style="flex:1;min-width:0">
-            <b>مرکز ماموریت‌ها</b>
-            <p>ماموریت‌های روزانه و هفتگی انجام بده، XP و جایزه نقدی بگیر و استریک بساز.</p>
+            <b>سه ماموریت امروز</b>
+            <p>هر سه را که تمام کنی، جعبهٔ جایزه باز می‌شود. تا تمام نشوند عوض نمی‌شوند.</p>
             <div class="mission-stats" id="missionStats"></div>
           </div>
         </div>
         <div class="streak-card"><div style="font-size:28px">🔥</div><div style="flex:1"><b style="font-size:13px">استریک ورود و بازی</b><div class="streak-days" id="streakDays"></div></div></div>
-        <div class="mission-actions">
-          <button class="btn btn-primary" onclick="claimAllMissions()">🎁 دریافت همه جوایز</button>
-          <button class="btn btn-ghost" onclick="refreshMissions()">🔄 بروزرسانی</button>
-        </div>
-        <div class="mission-tabs" id="missionTabs">
-          <button class="mission-tab active" data-tab="daily" onclick="openMissionTab('daily')">روزانه</button>
-          <button class="mission-tab" data-tab="weekly" onclick="openMissionTab('weekly')">هفتگی</button>
-          <button class="mission-tab" data-tab="achievements" onclick="openMissionTab('achievements')">دستاوردها</button>
-        </div>
         <div id="missionsContent"></div>
       </div>
     </section>
@@ -11043,7 +11040,15 @@ async function renderLeagueLive(){
         : (nextLine
             ? '<div class="lg-live-row"><span>تا '+pzEsc(nextLine.label)+'</span><b>'+fa(Math.max(0,nextLine.cup-(d.cup||0)))+' 🏆 مانده</b></div>'
             : '<div class="lg-live-row"><span>لیگ تو</span><b>—</b></div>'))+
-      (d.qualifiedTier?'<div class="lg-live-row ok"><span>بلیط ورود</span><b>🎫 گرفتی</b></div>':'')+
+      /* THE TICKET IN HAND, not the fact of having qualified. «گرفتی» was
+         painted from qualifiedTier, which never changes for the week — so a
+         player who missed the match, or spent the ticket walking in, was still
+         told they had one. This reads the count. */
+      (d.qualifiedTier
+        ? (Number((d.tickets||{})[d.qualifiedTier]||0)>0
+            ? '<div class="lg-live-row ok"><span>بلیط ورود</span><b>🎫 داری</b></div>'
+            : '<div class="lg-live-row"><span>بلیط ورود</span><b>مصرف شد</b></div>')
+        : '')+
     '</div>'+
 
     prizeNote+
@@ -11086,7 +11091,9 @@ async function renderLeagueLive(){
       '</div>'
       : '<div class="lg-card"><div class="lg-card-h">🎯 اتاق تو</div>'+
         '<div class="lg-hint">'+(d.qualifiedTier
-          ? 'بلیطت ثبت شده. به‌محض قرعه‌کشی، اتاق و حریفانت همین‌جا نشان داده می‌شوند.'
+          ? (Number((d.tickets||{})[d.qualifiedTier]||0)>0
+              ? 'بلیطت آماده است. سرِ ساعت با دکمهٔ بالا وارد اتاق می‌شوی.'
+              : 'بلیط این هفته‌ات دیگر نیست — یا استفاده شد یا مسابقه‌اش تمام شد. هفتهٔ بعد با کاپ گرفتن دوباره بلیط بگیر.')
           : 'وقتی هفته بسته شود و رتبه‌ات داخل یکی از لیگ‌ها باشد، بلیط و اتاقت همین‌جا می‌آید.')+'</div></div>')+
 
     /* The ladder itself — real bands, real prizes, real cut lines. */
@@ -11528,7 +11535,7 @@ function renderAddFriend(c,q){
   const outHtml=out.length?('<div class="section-title" style="margin-top:4px">درخواست‌های ارسالی (در انتظار پاسخ)</div>'+out.map(s=>'<div class="friend-card"><div class="fav">'+pzFaceHTML({avatar:s.a,character:s.ch})+'</div><div class="info"><b>'+frEsc(s.n)+'</b><span>@'+frEsc(s.u)+' · لول '+fa(s.lvl)+'</span><div class="meta"><span class="mini-badge y">در انتظار پاسخ ⏳</span></div></div></div>').join('')):'';
   c.innerHTML='<div class="add-panel"><h3>افزودن دوست با یوزرنیم</h3><p>یوزرنیم دقیق دوستت رو وارد کن تا درخواست دوستی براش بره.</p><div style="display:flex;gap:8px"><input class="input" id="friendAddInput" placeholder="مثلاً Sara_1452" dir="ltr" onkeydown="if(event.key===\'Enter\')sendFriendRequest()"><button class="btn btn-primary btn-sm" style="height:48px" onclick="sendFriendRequest()">ارسال</button></div><div class="qr-card"><div class="qr-box"></div><div style="flex:1"><b style="font-size:13px">لینک دعوت تو</b><div style="font-size:12px;color:var(--bolt);font-weight:900;margin-top:4px" dir="ltr">'+frEsc(((typeof _usr!=='undefined'&&_usr&&_usr.username)||'PRIZZE'))+'</div></div><button class="btn btn-ghost btn-sm" onclick="copyInviteLink()">کپی</button></div></div>'+outHtml;
 }
-async function openFriendChat(id){frActiveChat=id;frActiveTab='chats';document.querySelectorAll('#frTabs .fr-tab').forEach(b=>b.classList.toggle('active',b.dataset.tab==='chats'));const f=FRIENDS_DATA.find(x=>x.id===id);if(f)f.unread=0;renderFriendsHub();await frLoadMessages(id);if(frActiveChat===id)renderChatView(id);frStartChatPoll(id);}
+async function openFriendChat(id){frActiveChat=id;frActiveTab='chats';document.querySelectorAll('#frTabs .fr-tab').forEach(b=>b.classList.toggle('active',b.dataset.tab==='chats'));const f=FRIENDS_DATA.find(x=>x.id===id);if(f)f.unread=0;renderFriendsHub();await frLoadMessages(id);if(frActiveChat===id)renderChatView(id);frStartChatPoll(id);try{pzAskPushForChat();}catch(e){}}
 function renderChatView(id){
   const c=document.getElementById('friendsContent'),f=FRIENDS_DATA.find(x=>x.id===id);if(!c||!f)return;
   /* The avatar used to be dropped in as f.a — but an avatar is a URL, so the
@@ -11928,7 +11935,7 @@ async function renderCharacterShop(){
      beside it sat inset. */
   c.innerHTML='<div style="margin:14px 18px 2px;padding:10px 12px;background:rgba(255,255,255,.06);'+
     'border:1px solid rgba(255,255,255,.10);border-radius:14px;color:var(--muted);'+
-    'font-size:12px;font-weight:700;line-height:1.9">کاراکترها با <b>سکه</b> خریداری می‌شوند و بعضی‌هایشان <b>لول</b> هم می‌خواهند. بعضی هم فقط از گردونه، استریک یا مأموریت‌ها به دست می‌آیند. هرکدام را که داشته باشی، در «انتخاب کاراکتر» قابل انتخاب است.</div>'+
+    'font-size:12px;font-weight:700;line-height:1.9">کاراکترها با <b>سکه</b> یا <b>تومان</b> خریداری می‌شوند و بعضی‌هایشان <b>لول</b> هم می‌خواهند. بعضی هم فقط از گردونه، استریک یا مأموریت‌ها به دست می‌آیند. هرکدام را که داشته باشی، در «انتخاب کاراکتر» قابل انتخاب است.</div>'+
     groups.map((gr,i)=>
       (gr.name?'<div class="section-title" style="margin:16px 18px 6px;font-size:13px;font-weight:900">'+esc0(gr.name)+'</div>':
         (groups.length>1?'<div class="section-title" style="margin:16px 18px 6px;font-size:13px;font-weight:900">سایر کاراکترها</div>':''))+
@@ -11946,9 +11953,10 @@ async function renderCharacterShop(){
          not how a player should learn the rule. */
       const lvlShort=!owned&&need>0&&myLevel<need;
       const buyable=!owned&&ch.viaPurchase&&!lvlShort;
+      const cash=ch.currency==='cash';
       const priceTxt=owned?'برای شما فعال است ✅'
         :lvlShort?('🔒 لول '+fa(need))
-        :ch.viaPurchase?(price>0?fa(price)+' 🪙':'رایگان')
+        :ch.viaPurchase?(price>0?(fa(price)+(cash?' ت':' 🪙')):'رایگان')
         :'جایزه‌ای';
       d.innerHTML=(owned
           ?'<span class="shop-badge" style="position:absolute;top:8px;left:8px;background:var(--ok,#33D97C);color:#08130c;font-size:9px;font-weight:900;padding:2px 7px;border-radius:8px">فعال</span>'
@@ -11969,10 +11977,20 @@ async function renderCharacterShop(){
 function csGoPick(){ try{ charBack='shop'; }catch(e){} go('character'); }
 async function buyCharacter(ch,el){
   if(el&&el._busy) return; if(el)el._busy=true;
-  const r=await pzApi('POST','/characters/'+encodeURIComponent(ch.id)+'/purchase',{});
+  /* A toman-priced character moves real money, so the key is minted once per
+     press and sent with it: a retry after a dropped connection must not be a
+     second charge. */
+  const key='char:'+ch.id+':'+Date.now()+':'+Math.random().toString(36).slice(2);
+  const r=await pzApi('POST','/characters/'+encodeURIComponent(ch.id)+'/purchase',{idempotencyKey:key});
   if(el)el._busy=false;
   if(!r||!r.ok){
     const err=(r&&r.error)||{};
+    if(err.code==='INSUFFICIENT_FUNDS'){
+      showAaaModal({icon:'💰',title:'موجودی کافی نیست',sub:esc4(err.message||''),
+        primaryText:'شارژ صندوق',secondaryText:'بعداً',
+        onPrimary:()=>{ closeAaaModal(true); go('wallet'); }});
+      return;
+    }
     if(err.code==='INSUFFICIENT_COINS'){
       showAaaModal({icon:'🪙',title:'سکهٔ کافی نداری',sub:esc4(err.message||''),
         primaryText:'خرید سکه',secondaryText:'بعداً',
@@ -11982,9 +12000,10 @@ async function buyCharacter(ch,el){
   }
   sfx('correct'); vib([30]);
   toast(esc0(ch.name||'کاراکتر')+' خریداری شد ✅');
-  /* The server charged real coins, so the header has to be re-read — the same
-     rule every other grant follows. */
+  /* The server charged real coins or real money, so the header has to be
+     re-read — the same rule every other grant follows. */
   pzRefreshHoldings();
+  try{ pzSyncWallet(); }catch(e){}
   renderCharacterShop();
 }
 
@@ -13878,7 +13897,6 @@ function sfx(type){
 }
 
 /* ============ MISSIONS CENTER ============ */
-let missionActiveTab='daily';
 /* The mission list used to live right here, ten hardcoded rows with progress
    in localStorage. Both are gone: definitions are rows in the database and
    progress is the server's, so a mission can be added or a seasonal event run
@@ -13887,17 +13905,25 @@ function missionRewardText(r){ return r&&r.label ? r.label : ''; }
 function renderMissionStats(){
   const box=document.getElementById('missionStats');
   if(box){
-    const all=[...(pzMS.daily||[]),...(pzMS.weekly||[]),...(pzMS.achievements||[])];
-    const done=all.filter((m)=>m.completed).length;
-    const ready=all.filter((m)=>m.completed&&!m.claimed).length;
+    /* The day's three, and nothing else. Counting the weekly pile and three
+       hundred achievements in here made «۴۱ تکمیل‌شده» — a number about a
+       screen the player is not looking at. */
+    const list=pzMS.daily||[];
+    const done=list.filter((m)=>m.completed).length;
+    const ready=list.filter((m)=>m.completed&&!m.claimed).length;
+    /* «تا ریست» was a midnight that means nothing now: the set does not move
+       until it is finished, and then it is 24 hours from THAT moment. So the
+       chip says whichever of those two is true. */
     let left='';
-    if(pzMS.resetsAt&&pzMS.resetsAt.daily){
-      const ms=Math.max(0,pzMS.resetsAt.daily-Date.now());
+    if(pzMS.nextSetAt>Date.now()){
+      const ms=pzMS.nextSetAt-Date.now();
       const h=Math.floor(ms/3600000), mn=Math.floor((ms%3600000)/60000);
-      left='<span class="mission-stat">⏳ تا ریست: '+(h?faDigits(h)+' ساعت ':'')+faDigits(mn)+' دقیقه</span>';
+      left='<span class="mission-stat">⏳ سه تای بعدی: '+(h?faDigits(h)+' ساعت ':'')+faDigits(mn)+' دقیقه دیگر</span>';
+    }else if(done<list.length){
+      left='<span class="mission-stat">تا تمام نشوند عوض نمی‌شوند</span>';
     }
-    box.innerHTML='<span class="mission-stat">'+faDigits(done)+' تکمیل‌شده</span>'+
-      '<span class="mission-stat">'+faDigits(ready)+' جایزه آماده</span>'+left;
+    box.innerHTML='<span class="mission-stat">'+faDigits(done)+' از '+faDigits(list.length||3)+' انجام شد</span>'+
+      (ready?'<span class="mission-stat">'+faDigits(ready)+' جایزه آماده</span>':'')+left;
   }
   const days=document.getElementById('streakDays');
   if(days&&dailyState&&dailyState.streakDays){
@@ -13906,13 +13932,13 @@ function renderMissionStats(){
       '<i class="'+(d<=cur?'on':'')+'">'+faDigits(d)+'</i>').join('');
   }
 }
-function openMissionTab(tab){missionActiveTab=tab;document.querySelectorAll('#missionTabs .mission-tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));renderMissions();}
+
 /* ── MISSIONS ─────────────────────────────────────────────────────────────
    The board comes from the server, which owns the definitions, the assignment
    and the progress. This file used to hold the mission list itself and count
    progress in localStorage — which meant a mission could not be added without
    a release, and progress was whatever the browser said it was. */
-var pzMS={daily:[],weekly:[],achievements:[],chain:null,resetsAt:{},box:null,dailyRotates:false,loaded:false};
+var pzMS={daily:[],weekly:[],achievements:[],chain:null,resetsAt:{},box:null,dailyRotates:false,nextSetAt:0,loaded:false};
 
 async function pzMissionsLoad(silent){
   try{
@@ -13950,22 +13976,13 @@ async function renderMissions(){
   try{ renderMissionStats(); }catch(e){}
   updateMissionHome();
   if(!c) return;
-  const tab=missionActiveTab;
-  /* The third tab is data-tab="achievements" in the markup; keying on
-     'special' here meant it silently fell through to the dailies. */
-  let list = tab==='weekly' ? pzMS.weekly
-           : tab==='achievements' ? pzMS.achievements
-           : pzMS.daily;
-  /* The chain is offered alongside the dailies: one step at a time, so it
-     reads as a thread through the day rather than another pile. */
-  let head='';
-  if(tab==='daily') head+=msBoxHTML();
-  if(tab==='daily'&&pzMS.chain&&pzMS.chain.step){
-    head='<div class="section-title">زنجیرهٔ مأموریت — مرحلهٔ '+faDigits(pzMS.chain.done+1)+' از '+faDigits(pzMS.chain.total)+'</div>'+
-         missionCardHTML(pzMS.chain.step)+'<div class="section-title">مأموریت‌های امروز</div>';
-  }
+  /* THE SCREEN IS THE DAY'S THREE. The weekly pile and the achievement pile
+     are not offered here any more — the game deals one set, and a screen with
+     three tabs made it look like there were three. */
+  const list = pzMS.daily || [];
+  const head = msBoxHTML();
   c.innerHTML=head+(list.length?list.map(missionCardHTML).join('')
-    :'<div class="mission-empty"><span class="big">🎯</span>مأموریتی برای این بخش نیست.</div>');
+    :'<div class="mission-empty"><span class="big">🎯</span>مأموریتی برای امروز نیست.</div>');
   requestAnimationFrame(()=>requestAnimationFrame(()=>{
     document.querySelectorAll('.mission-track i').forEach((i)=>i.style.width=i.dataset.w+'%');}));
 }
@@ -13981,7 +13998,9 @@ function msBoxHTML(){
     return '<div class="ms-box opened"><div class="ms-box-ico">🎉</div>'+
       '<div class="ms-box-txt"><b>جعبهٔ امروز باز شد</b><span>'+rw+'</span></div>'+
       '<div class="ms-box-tag">گرفتی ✅</div></div>'+
-      (pzMS.dailyRotates?'<div class="ms-box-note">فردا سه مأموریت تازه می‌آید.</div>':'');
+      (pzMS.nextSetAt>Date.now()
+        ?'<div class="ms-box-note">سه مأموریت تازه '+msCountdown(pzMS.nextSetAt)+' دیگر فعال می‌شود.</div>'
+        :'');
   }
   if(b.ready){
     return '<div class="ms-box ready" onclick="msOpenBox()"><div class="ms-box-ico shake">🎁</div>'+
@@ -14056,20 +14075,13 @@ async function claimMission(id){
     setTimeout(()=>{ try{ hydrateFromApi&&hydrateFromApi(); pzHeartsRefresh&&pzHeartsRefresh(); }catch(e){} },1600);
   }catch(e){ toast((e&&e.message)||'دریافت نشد'); }
 }
-async function claimAllMissions(){
-  const all=[...(pzMS.daily||[]),...(pzMS.weekly||[]),...(pzMS.achievements||[])];
-  const ready=all.filter((m)=>m.completed&&!m.claimed);
-  if(!ready.length){ toast('فعلاً جایزهٔ آماده‌ای نداری'); return; }
-  let ok=0;
-  for(const m of ready){
-    try{ await pzApi('POST','/missions/'+encodeURIComponent(m.id)+'/claim',{}); ok++; }catch(e){}
-  }
-  await pzMissionsLoad(true); renderMissions();
-  setTimeout(()=>{ try{ hydrateFromApi&&hydrateFromApi(); pzHeartsRefresh&&pzHeartsRefresh(); }catch(e){} },1200);
-  showAaaModal({icon:'🎁',title:'جایزه‌ها دریافت شد',
-    sub:faDigits(ok)+' مأموریت تسویه شد.',primaryText:'بزن بریم',secondaryText:''});
+/* «۵ ساعت و ۲۰ دقیقه» — how long until the next three. */
+function msCountdown(at){
+  const ms=Math.max(0,(Number(at)||0)-Date.now());
+  const h=Math.floor(ms/3600000), mn=Math.floor((ms%3600000)/60000);
+  if(h>0) return faDigits(h)+' ساعت و '+faDigits(mn)+' دقیقه';
+  return faDigits(Math.max(1,mn))+' دقیقه';
 }
-async function refreshMissions(){ await pzMissionsLoad(); renderMissions(); toast('مأموریت‌ها به‌روز شد 🔄'); }
 /* Only the handful of things the server cannot see for itself are reported
    from here. Anything with money or a score behind it is counted where it
    actually happens — a client that reports its own progress is a client that
@@ -19099,8 +19111,12 @@ async function pzInboxBadge(){
     const r=await pzApi('GET','/notifications?limit=50'); const list=(r&&r.data)||r;
     const n=(Array.isArray(list)?list:[]).filter(x=>!x.readAt).length;
     PZ_UNREAD=n;
+    /* The bell this badge belonged to was moved to the side rail, so showing
+       it here painted a bare «۱» in the corner of the header attached to
+       nothing. The element stays because the rail badge and the push code read
+       its number — it is simply never displayed. */
     const b=document.getElementById('pzBellBadge');
-    if(b){ b.textContent=fa(n); b.style.display=n>0?'flex':'none'; }
+    if(b){ b.textContent=fa(n); b.style.display='none'; }
     try{ if(typeof hmRails==='function'&&document.getElementById('hrailR')) hmRails(); }catch(e){}
   }catch(e){}
 }
@@ -19260,7 +19276,16 @@ function pzShouldAskPush(){
     if(!_tok) return false;                                   // not signed in yet
     if(typeof Notification==='undefined') return false;
     if(Notification.permission!=='default') return false;     // already answered
-    if(!pzIsInstalled()) return false;                        // only once installed
+    /* WHY THIS IS NOT «only once installed» ANY MORE.
+       That gate meant the game asked for permission on an installed PWA and
+       nowhere else — so every player using it in a normal browser was never
+       asked, never subscribed, and could not receive a single push. It looked
+       like «the badge works but nothing arrives on my phone», which is exactly
+       what it was. On Android and desktop, push works in an ordinary tab. On
+       iOS it genuinely needs installing first — and there Safari has no
+       PushManager at all, so that case is the support check below. */
+    if(!('serviceWorker' in navigator)||!('PushManager' in window)) return false;
+    if(pzIsIOS()&&!pzIsInstalled()) return false;
     if(pzPushAskCount()>=2) return false;                     // asked enough
     const a=document.querySelector('.screen.active');
     if(a&&['login','otp','register','splash','intro'].indexOf(a.id)>=0) return false;
@@ -19268,15 +19293,30 @@ function pzShouldAskPush(){
   }catch(e){ return false; }
 }
 function pzAskPushOnInstall(){
+  pzAskPush('خبرها را روی گوشی‌ات بگیر',
+    'می‌توانیم شروع مسابقه، نتیجه، جایزه‌ها و پیام دوستانت را روی همین گوشی خبرت کنیم — حتی وقتی بازی باز نیست.');
+}
+/* One prompt, one wording per place it is asked from. The tap on «فعال کن» is
+   the user gesture the browser needs; asking without one spends the single
+   chance on somebody who was not looking. */
+function pzAskPush(title,sub){
   if(!pzShouldAskPush()) return;
   pzPushMarkAsked();
   try{
-    showAaaModal({icon:'🔔',title:'خبرها را روی گوشی‌ات بگیر',
-      sub:'حالا که پرایز کوییز روی صفحهٔ اصلی‌ات هست، می‌توانیم شروع مسابقه، نتیجه و جایزه‌ها را همان‌جا خبرت کنیم — حتی وقتی بازی باز نیست.',
+    showAaaModal({icon:'🔔',title:title,sub:sub,
       primaryText:'فعال کن', secondaryText:'بعداً',
       onPrimary:()=>{ closeAaaModal(true); setTimeout(()=>{ pzEnablePush(true); },150); },
       onSecondary:()=>closeAaaModal(false)});
   }catch(e){}
+}
+/* OPENING A CHAT IS THE MOMENT. A player who is chatting is the one who wants
+   to hear that a reply arrived, and until they grant permission the reply can
+   only ever be a badge inside the game. Asked once, from the chat itself. */
+function pzAskPushForChat(){
+  setTimeout(()=>{
+    pzAskPush('وقتی جواب آمد خبرت کنیم؟',
+      'اگر اجازه بدهی، پیام دوستت روی گوشی‌ات می‌آید — حتی وقتی بازی بسته است. بدون این اجازه فقط وقتی بازی را باز کنی می‌فهمی.');
+  }, 900);
 }
 /* Freshly installed in this very session — ask as soon as the player lands. */
 try{ window.addEventListener('appinstalled',()=>{ setTimeout(pzAskPushOnInstall,1200); }); }catch(e){}

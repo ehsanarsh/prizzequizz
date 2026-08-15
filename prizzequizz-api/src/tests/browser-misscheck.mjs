@@ -44,9 +44,14 @@ function makeBoard(over = {}) {
   return Object.assign({
     daily: [mission(1), mission(2, { id: 'dl_3_2', title: '۳ مسابقه ببر', metric: 'matchesWon', target: 3 }),
             mission(3, { id: 'dl_3_3', title: '۴۰۰ XP بگیر', metric: 'xpEarned', target: 400 })],
-    weekly: [], achievements: [], chain: null,
+    /* A weekly and an achievement really are in the payload — the server still
+       keeps them — so «only the three dailies are shown» is a claim that can
+       actually fail. With empty lists it could not. */
+    weekly: [mission(9, { id: 'w_x', kind: 'weekly', title: '۳۰ مسابقه انجام بده', target: 30 })],
+    achievements: [mission(8, { id: 'a_x', kind: 'achievement', title: 'اولین برد', target: 1 })],
+    chain: null,
     resetsAt: { daily: Date.now() + 3600_000, weekly: Date.now() + 86_400_000 },
-    dailyRotates: false,
+    dailyRotates: false, nextSetAt: 0,
     box: { period: '2026-08-14', done: 0, total: 3, ready: false, opened: false,
            title: 'جعبهٔ جایزهٔ روزانه', rewards: [{ type: 'coins', amount: 300 }, { type: 'cup', amount: 15 }] }
   }, over);
@@ -109,6 +114,11 @@ const readScreen = (page) => page.evaluate(() => {
   await openMissions(page);
   const s = await readScreen(page);
   ok('three missions, not five', s.cards === 3, String(s.cards));
+  /* And they are the DAILY three — not the dailies plus whatever else the
+     server happened to send. */
+  const titles = await page.evaluate(() => [...document.querySelectorAll('#missionsContent .mission-card b')].map((b) => b.textContent.trim()));
+  ok('and the weekly pile is not among them', !titles.some((t) => /۳۰ مسابقه/.test(t)), JSON.stringify(titles));
+  ok('nor the achievements', !titles.some((t) => /اولین برد/.test(t)), JSON.stringify(titles));
   /* «هر ماموریت کاپ و ایکس پی داشته باشه» — on the card, in Persian. */
   ok('each one shows its cup and its XP', s.rewards.every((r) => /کاپ/.test(r) && /XP/.test(r)), JSON.stringify(s.rewards));
   ok('the box is on the screen', !!s.box, '');
@@ -119,6 +129,47 @@ const readScreen = (page) => page.evaluate(() => {
      because a player who comes back to the same three needs to know it is the
      rule and not a bug. */
   ok('and that the three do not change until they are done', /عوض نمی‌شوند/.test(s.note), s.note.slice(0, 60));
+
+  /* «اونهمه دکمه روزانه و ماهانه و هفتگی و دکمه‌هایی که به درد نمی‌خورن باید
+     حذف بشه» — the screen deals one set, so it shows one set. */
+  const chrome = await page.evaluate(() => {
+    const sec = document.getElementById('missions');
+    const btns = [...sec.querySelectorAll('button')].filter((b) => b.offsetParent).map((b) => b.textContent.trim());
+    return {
+      tabs: sec.querySelectorAll('.mission-tab').length,
+      tabBar: !!document.getElementById('missionTabs'),
+      buttons: btns,
+      stats: (document.getElementById('missionStats') || {}).innerText || ''
+    };
+  });
+  ok('there are no daily/weekly/achievement tabs left', chrome.tabs === 0 && !chrome.tabBar, JSON.stringify(chrome.tabs));
+  ok('and no «دریافت همه جوایز» or «بروزرسانی» buttons', !chrome.buttons.some((b) => /همه جوایز|بروزرسانی/.test(b)), JSON.stringify(chrome.buttons));
+  /* The stats chip counted three hundred achievements before; now it counts
+     the three on the screen. */
+  /* «۰ از ۳» — three, not «۰ از ۵» with the weekly and the achievement in it. */
+  ok('the chip counts the three, not the whole game', /۰ از ۳/.test(chrome.stats) && !/از ۵/.test(chrome.stats), chrome.stats.replace(/\n/g, ' '));
+  ok('and says the three are frozen until they are done', /عوض نمی‌شوند/.test(chrome.stats), chrome.stats.replace(/\n/g, ' '));
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
+/* ── 1b. THE 24-HOUR WAIT ───────────────────────────────────────────────── */
+{
+  const { ctx, page, errs } = await makePage();
+  console.log('the day after finishing all three:');
+  const b = makeBoard();
+  b.daily.forEach((m) => { m.progress = m.target; m.completed = true; m.claimed = true; });
+  b.box.done = 3; b.box.opened = true; b.dailyRotates = true;
+  /* «وقتی انجام داد ۲۴ ساعت بعد ۳ تا دیگه فعال بشه» — the server says when. */
+  b.nextSetAt = Date.now() + 5 * 3600_000 + 20 * 60_000;
+  board = b;
+  await openMissions(page);
+  const s = await readScreen(page);
+  /* Minutes tick while the page paints, so 5:20 may render as 5:19 — the shape
+     is the assertion, not the second it was read. */
+  ok('the wait is shown in hours and minutes', /۵ ساعت و [۰-۹]+ دقیقه/.test(s.note), s.note);
+  const stats = await page.evaluate(() => (document.getElementById('missionStats') || {}).innerText || '');
+  ok('and the chip counts it down too', /سه تای بعدی/.test(stats) && /۵ ساعت/.test(stats), stats.replace(/\n/g, ' '));
   ok('no script errors', errs.length === 0, errs.join(' | '));
   await ctx.close();
 }
@@ -189,7 +240,7 @@ const readScreen = (page) => page.evaluate(() => {
   await page.evaluate(async () => { document.querySelector('.ms-box').click(); await new Promise((r) => setTimeout(r, 500)); });
   ok('tapping it sends nothing', opens.length === 0, String(opens.length));
   /* Once the set is done, tomorrow is a new one — and only then. */
-  ok('and it says a new set comes tomorrow', /فردا سه مأموریت تازه/.test(s.note), s.note);
+  ok('and it says nothing about tomorrow when there is no time yet', !/فردا/.test(s.note), s.note);
   ok('no script errors', errs.length === 0, errs.join(' | '));
   await ctx.close();
 }

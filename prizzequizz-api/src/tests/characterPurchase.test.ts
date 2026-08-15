@@ -12,6 +12,7 @@ import { once } from 'node:events';
 import { createApiServer } from '../app.js';
 import { repositories } from '../repositories/index.js';
 import { saveCharacter, buildRoster, _resetMemory } from '../services/characterSelectionService.js';
+import { postEntry, getAccount } from '../services/walletLedgerService.js';
 import { signAccessToken } from '../services/tokenService.js';
 import { id } from '../utils/id.js';
 
@@ -22,8 +23,12 @@ async function check(name: string, fn: () => Promise<void>): Promise<void> {
 }
 
 let base = '';
-async function api(method: string, path: string, token?: string): Promise<{ status: number; body: any; code: string }> {
-  const res = await fetch(base + path, { method, headers: token ? { authorization: 'Bearer ' + token, 'content-type': 'application/json' } : {} });
+async function api(method: string, path: string, token?: string, body?: any): Promise<{ status: number; body: any; code: string }> {
+  const res = await fetch(base + path, {
+    method,
+    headers: token ? { authorization: 'Bearer ' + token, 'content-type': 'application/json' } : { 'content-type': 'application/json' },
+    body: body === undefined ? undefined : JSON.stringify(body)
+  });
   const text = await res.text();
   let j: any = null; try { j = text ? JSON.parse(text) : null; } catch { j = text; }
   return { status: res.status, body: j?.data ?? j, code: j?.error?.code ?? '' };
@@ -165,6 +170,57 @@ async function run(): Promise<void> {
       const card = roster.characters.find((c) => c.id === gated.id)!;
       assert.equal(card.unlocked, false);
       assert.match(card.lockReason, /لول ۲۰/, card.lockReason);
+    });
+
+    /* ── priced in toman ─────────────────────────────────────────────── */
+
+    /* «کاراکترها را فقط با سکه می‌توانم به فروش بگذارم نه تومان» — so a
+     * character can carry a toman price, and then it is the WALLET that pays,
+     * not the coin counter. */
+    await check('a toman-priced character is paid for from the wallet', async () => {
+      const paid = await saveCharacter({ name: 'گران‌قیمت', price: 30_000, currency: 'cash', viaPurchase: true, viaLevel: false, enabled: true });
+      const p = await player(0);                               // no coins at all
+      await postEntry({ userId: p.id, entryType: 'bonus', kind: 'credit', amount: 50_000, idempotencyKey: 'seed:' + p.id, description: 'شارژ آزمایشی' });
+      const before = (await getAccount(p.id)).available;
+
+      const r = await api('POST', `/characters/${paid.id}/purchase`, p.token, { idempotencyKey: 'buy:' + p.id });
+      assert.equal(r.status, 200, JSON.stringify(r.body));
+      assert.equal(r.body.charged, 30_000, JSON.stringify(r.body));
+      assert.equal(r.body.currency, 'cash');
+      assert.equal((await getAccount(p.id)).available, before - 30_000, 'the wallet was not debited');
+      const roster = await buildRoster(p.id);
+      assert.equal(roster.characters.find((c) => c.id === paid.id)!.unlocked, true, 'paid for and not granted');
+      /* And the coin counter is untouched — the two purses are separate. */
+      const u: any = await repositories.users.findById(p.id);
+      assert.equal(Number(u.coins), 0);
+    });
+
+    await check('and a retry with the same key does not charge twice', async () => {
+      const paid = await saveCharacter({ name: 'گران‌قیمت ۲', price: 20_000, currency: 'cash', viaPurchase: true, viaLevel: false, enabled: true });
+      const p = await player(0);
+      await postEntry({ userId: p.id, entryType: 'bonus', kind: 'credit', amount: 50_000, idempotencyKey: 'seed2:' + p.id, description: 'شارژ آزمایشی' });
+      const key = 'buy-once:' + p.id;
+      await api('POST', `/characters/${paid.id}/purchase`, p.token, { idempotencyKey: key });
+      const after = (await getAccount(p.id)).available;
+      const again = await api('POST', `/characters/${paid.id}/purchase`, p.token, { idempotencyKey: key });
+      assert.equal(again.status, 200, JSON.stringify(again.body));
+      assert.equal(again.body.charged, 0, 'the second press charged ' + again.body.charged);
+      assert.equal((await getAccount(p.id)).available, after, 'the wallet moved on the retry');
+    });
+
+    await check('an empty wallet buys nothing, and says so in toman', async () => {
+      const paid = await saveCharacter({ name: 'گران‌قیمت ۳', price: 90_000, currency: 'cash', viaPurchase: true, viaLevel: false, enabled: true });
+      const p = await player(9_000_000);                       // rich in COINS only
+      const r = await api('POST', `/characters/${paid.id}/purchase`, p.token, { idempotencyKey: 'poor:' + p.id });
+      assert.notEqual(r.status, 200, JSON.stringify(r.body));
+      /* The CODE matters, not just the failure: the game opens «شارژ صندوق» on
+         INSUFFICIENT_FUNDS and «خرید سکه» on INSUFFICIENT_COINS, so a raw
+         wallet error here would send the player to buy the wrong thing. */
+      assert.equal(r.code, 'INSUFFICIENT_FUNDS', 'got ' + r.code + ': ' + JSON.stringify(r.body));
+      assert.equal(r.status, 409, String(r.status));
+      assert.equal((await getAccount(p.id)).available, 0, 'the wallet moved anyway');
+      const roster = await buildRoster(p.id);
+      assert.equal(roster.characters.find((c) => c.id === paid.id)!.unlocked, false, 'it was granted for free');
     });
 
     /* ── the shelf it is sold on ─────────────────────────────────────── */

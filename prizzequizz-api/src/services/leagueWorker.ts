@@ -12,7 +12,7 @@
 import { logger } from './logger.js';
 import {
   currentSeasonId, listRooms, listQualifiers, closeSeason, getLeagueConfig,
-  weekResetAt, LEAGUE_CLOSE_LEAD_MS, LEAGUE_DOORS_MINUTES
+  weekResetAt, voidTicketsAfterKickoff, LEAGUE_CLOSE_LEAD_MS, LEAGUE_DOORS_MINUTES
 } from './leagueService.js';
 import { openForLeagueRoom, start as wtaStart, _room } from './wtaService.js';
 
@@ -49,6 +49,10 @@ export async function closeTick(now = Date.now()): Promise<boolean> {
 
 export async function leagueTick(now = Date.now()): Promise<void> {
   await closeTick(now);
+  /* The kickoff has been and gone: whoever did not turn up loses the seat they
+   * were holding, rather than carrying it around until the week rolls over. */
+  try { await voidTicketsAfterKickoff(now); }
+  catch (e) { logger.warn('league_ticket_expiry_failed', { message: (e as Error).message }); }
   let rooms;
   try { rooms = await listRooms(currentSeasonId()); }
   catch (e) { logger.warn('league_tick_list_failed', { message: (e as Error).message }); return; }

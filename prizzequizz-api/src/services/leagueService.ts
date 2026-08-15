@@ -150,6 +150,7 @@ export async function setLeagueConfig(patch: Partial<LeagueConfig>): Promise<Lea
 /** Test seam. */
 export function _resetLeague(): void {
   memCfg = null; memQual.length = 0; memRooms.length = 0; memSeats.length = 0; _ready = false;
+  _voidedSeason = null;
 }
 
 /* ── the cut lines ─────────────────────────────────────────────────────── */
@@ -347,6 +348,21 @@ export function weekResetAt(from = Date.now()): number {
 export const LEAGUE_CLOSE_LEAD_MS = 3 * 60_000;
 
 /**
+ * How long after kickoff a league ticket stops being worth anything.
+ *
+ * «سر مسابقه لیگ نرفتم و باز هم بلیطم موجوده» — the seat was held, the match
+ * was played, and the ticket is a seat at THAT match. Waiting for the next
+ * weekly close to void it left it sitting in the header for days looking
+ * spendable. Three hours is comfortably past the last round.
+ */
+export const LEAGUE_TICKET_GRACE_MS = 3 * 60 * 60_000;
+
+/** The most recent kickoff at or before `now`. */
+export function lastKickoffAt(cfg: LeagueConfig, now = Date.now()): number {
+  return kickoffFor(cfg, new Date(now - 7 * 86_400_000));
+}
+
+/**
  * Void the league tickets of a week that is over.
  *
  * A league ticket is a seat at ONE week's kickoff. A player who did not turn up
@@ -451,6 +467,71 @@ export async function listQualifiers(seasonId: string, tier?: string): Promise<Q
     } catch (e) { logger.warn('league_qualifiers_read_failed', { message: (e as Error).message }); }
   }
   return memQual.filter((q) => q.seasonId === seasonId && (!tier || q.tier === tier)).sort((a, b) => a.rank - b.rank);
+}
+
+/* Which season's tickets have already been voided after its kickoff. Held in
+ * memory first so the common tick costs nothing, and in app_config so a
+ * restart does not void the same week twice — or miss it entirely. */
+let _voidedSeason: string | null = null;
+
+async function readVoidMarker(): Promise<string> {
+  const pool = pg();
+  if (!pool) return _voidedSeason ?? '';
+  try {
+    await pool.query(`CREATE TABLE IF NOT EXISTS app_config (key VARCHAR(64) PRIMARY KEY, value JSONB NOT NULL, updated_at TIMESTAMP NOT NULL DEFAULT now(), updated_by VARCHAR(64))`);
+    const { rows } = await pool.query(`SELECT value FROM app_config WHERE key='league_ticket_void'`);
+    return rows[0]?.value?.season ? String(rows[0].value.season) : '';
+  } catch { return _voidedSeason ?? ''; }
+}
+async function writeVoidMarker(season: string): Promise<void> {
+  _voidedSeason = season;
+  const pool = pg();
+  if (!pool) return;
+  try {
+    await pool.query(`INSERT INTO app_config(key,value,updated_at) VALUES('league_ticket_void',$1,now())
+                      ON CONFLICT (key) DO UPDATE SET value=$1, updated_at=now()`, [JSON.stringify({ season })]);
+  } catch { /* the in-memory guard still holds for this process */ }
+}
+
+/**
+ * Void the tickets of a kickoff that has been and gone.
+ *
+ * Runs once per week: everybody who was given a ticket for this season and did
+ * not spend it at the match loses it. A player who DID play spent theirs on the
+ * way in, so there is nothing left to take.
+ */
+export async function voidTicketsAfterKickoff(now = Date.now()): Promise<number> {
+  const cfg = await getLeagueConfig();
+  if (!cfg.enabled) return 0;
+
+  /* WHOSE TICKETS THESE ARE.
+   *
+   * The week closes at the END of week W and hands out tickets; the match they
+   * are for is the kickoff inside week W+1. So the season being expired is the
+   * most recently CLOSED one, and only once a new week has begun — otherwise
+   * the close and the expiry land in the same tick and the tickets are taken
+   * back three minutes after they are given, because the previous week's
+   * kickoff is long past by then. */
+  const seasonId = (await listClosedSeasons(1))[0];
+  if (!seasonId) return 0;
+  if (seasonId >= currentSeasonId()) return 0;      // closed this week: its match has not happened yet
+  if (now < lastKickoffAt(cfg, now) + LEAGUE_TICKET_GRACE_MS) return 0;
+  if (_voidedSeason === seasonId) return 0;
+  if (await readVoidMarker() === seasonId) { _voidedSeason = seasonId; return 0; }
+
+  const tiers = cfg.tiers.map((t) => t.key);
+  let voided = 0;
+  for (const q of await listQualifiers(seasonId)) {
+    if (tiers.indexOf(q.tier) < 0) continue;
+    try {
+      if (((await getTickets(q.userId))[q.tier] ?? 0) <= 0) continue;
+      await grantTickets(q.userId, q.tier, -1);
+      voided++;
+    } catch (e) { logger.warn('league_ticket_void_failed', { userId: q.userId, message: (e as Error).message }); }
+  }
+  await writeVoidMarker(seasonId);
+  if (voided) logger.info('league_tickets_expired', { seasonId, voided });
+  return voided;
 }
 
 /** Every season that has ever been frozen, newest first. */

@@ -418,15 +418,52 @@ async function run() {
     assert.equal((await progressOf(uid, m.id))!.completed, true, 'and it can still be finished');
   });
 
-  /* «ولی اگه انجام داد فردا دوباره ۳ ماموریت جدید بیاد». */
-  await check('finishing all three brings a new set the NEXT day, not the same day', async () => {
+  /* «وقتی انجام داد ۲۴ ساعت بعد ۳ تا دیگه فعال بشه» — the clock is 24 hours
+   * from FINISHING, not the next midnight. */
+  await check('finishing all three starts a 24-hour wait, not a midnight one', async () => {
     const uid = await makeUser();
     const set = (await boardFor(uid)).daily;
     const period = await activeDailyPeriod(uid);
     for (const m of set) await record(uid, m.metric, m.target * 4);
-    assert.equal(await activeDailyPeriod(uid), period, 'the day it is finished, the set stays put');
-    const tomorrow = Date.now() + 86_400_000;
-    assert.notEqual(await activeDailyPeriod(uid, tomorrow), period, 'and tomorrow it turns over');
+    assert.equal(await activeDailyPeriod(uid), period, 'the moment it is finished, the set stays put');
+
+    /* Midnight is not the trigger: twenty-three hours later it is still theirs. */
+    const nearly = Date.now() + 23 * 3600_000;
+    assert.equal(await activeDailyPeriod(uid, nearly), period, 'the set turned over before the day was up');
+    const after = Date.now() + 24 * 3600_000 + 60_000;
+    assert.notEqual(await activeDailyPeriod(uid, after), period, 'and after 24 hours it turns over');
+  });
+
+  await check('and the screen is told exactly when the next three arrive', async () => {
+    const uid = await makeUser();
+    assert.equal((await boardFor(uid)).nextSetAt, 0, 'an unfinished set has no arrival time');
+    const t0 = Date.now();
+    for (const m of (await boardFor(uid)).daily) await record(uid, m.metric, m.target * 4);
+    const at = (await boardFor(uid)).nextSetAt;
+    assert.ok(Math.abs(at - (t0 + 24 * 3600_000)) < 60_000, 'expected ~24h out, got ' + (at - t0) + 'ms');
+  });
+
+  await check('the wait is measured from finishing, not from opening the app', async () => {
+    const uid = await makeUser();
+    const set = (await boardFor(uid)).daily;
+    const period = await activeDailyPeriod(uid);
+    for (const m of set) await record(uid, m.metric, m.target * 4);
+    /* Ten hours of not touching the game, then a look at the board. The clock
+     * must already be ten hours down, not restarted by the visit. */
+    const tenHours = Date.now() + 10 * 3600_000;
+    await boardFor(uid);
+    assert.equal(await activeDailyPeriod(uid, tenHours), period);
+    const at15 = Date.now() + 25 * 3600_000;
+    assert.notEqual(await activeDailyPeriod(uid, at15), period, 'the visit restarted the 24 hours');
+  });
+
+  await check('two sets never share a period, so progress is not inherited', async () => {
+    const uid = await makeUser();
+    const first = await activeDailyPeriod(uid);
+    for (const m of (await boardFor(uid)).daily) await record(uid, m.metric, m.target * 4);
+    const after = Date.now() + 25 * 3600_000;
+    const second = await activeDailyPeriod(uid, after);
+    assert.notEqual(second, first, first + ' → ' + second);
   });
 
   // ------------------------------------------------------------- the box ----

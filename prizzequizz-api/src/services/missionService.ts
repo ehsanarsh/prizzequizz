@@ -152,6 +152,11 @@ async function ensureSchema(pool: ReturnType<typeof getPgPool>): Promise<void> {
     period TEXT NOT NULL,
     mission_ids JSONB NOT NULL DEFAULT '[]',
     PRIMARY KEY (user_id, kind, period))`);
+  /* When the set was finished. The next three are dealt 24 HOURS after that
+   * moment, not at the next midnight — «وقتی انجام داد ۲۴ ساعت بعد ۳ تا دیگه
+   * فعال بشه» — so somebody who finishes at eleven at night does not get a
+   * fresh set an hour later. */
+  await pool.query(`ALTER TABLE mission_assignments ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ`);
   /* The box a finished daily set earns. One row per set, so it cannot be opened
    * twice and cannot be lost by a reload — and the contents are STORED at the
    * moment it is opened, not re-read from the config later, or a panel edit
@@ -742,15 +747,65 @@ async function setComplete(userId: string, ids: string[], period: string): Promi
   return true;
 }
 
+/** How long after finishing the three the next three arrive. */
+export const DAILY_COOLDOWN_MS = 24 * 60 * 60_000;
+
+const _memDone = new Map<string, number>();
+
+/** When this set was finished, or 0. */
+export async function setFinishedAt(userId: string, period: string): Promise<number> {
+  const pool = pg();
+  if (pool) {
+    await ensureSchema(pool);
+    const { rows } = await pool.query(
+      `SELECT completed_at FROM mission_assignments WHERE user_id=$1 AND kind='daily' AND period=$2`, [userId, period]);
+    return rows[0]?.completed_at ? new Date(rows[0].completed_at).getTime() : 0;
+  }
+  return _memDone.get(akey(userId, 'daily', period)) ?? 0;
+}
+
+/** Stamp the moment the third one landed. Written once and never moved. */
+export async function markSetFinished(userId: string, period: string, at: number): Promise<void> {
+  if (await setFinishedAt(userId, period)) return;
+  const pool = pg();
+  if (pool) {
+    await ensureSchema(pool);
+    await pool.query(
+      `UPDATE mission_assignments SET completed_at=$3 WHERE user_id=$1 AND kind='daily' AND period=$2 AND completed_at IS NULL`,
+      [userId, period, new Date(at)]);
+    return;
+  }
+  _memDone.set(akey(userId, 'daily', period), at);
+}
+
 /** The period the player's live daily set belongs to. */
 export async function activeDailyPeriod(userId: string, now = Date.now()): Promise<string> {
   const today = dayKey(now);
   const last = await latestDailyPeriod(userId);
   if (!last) return today;
-  if (last >= today) return last;                        // dealt today already
   const ids = await readAssignment(userId, 'daily', last);
   if (!(await setComplete(userId, ids, last))) return last;   // unfinished → frozen
-  return today;                                          // finished → a new set today
+
+  /* Finished. The clock starts at the moment it was finished — and if nothing
+   * stamped it (a set completed before this rule existed), it starts now, so
+   * the player waits a day rather than being handed a set instantly. */
+  let doneAt = await setFinishedAt(userId, last);
+  if (!doneAt) { await markSetFinished(userId, last, now); doneAt = now; }
+  if (now - doneAt < DAILY_COOLDOWN_MS) return last;
+  /* A new set. Its period is today's key unless that is the one just finished,
+   * in which case the next day's — two sets cannot share a period, or the
+   * second would inherit the first's finished progress. */
+  return today > last ? today : dayKey(now + 86_400_000);
+}
+
+/** When the next three arrive, or 0 while the current set is unfinished. */
+export async function nextDailySetAt(userId: string, now = Date.now()): Promise<number> {
+  const last = await latestDailyPeriod(userId);
+  if (!last) return 0;
+  const ids = await readAssignment(userId, 'daily', last);
+  if (!(await setComplete(userId, ids, last))) return 0;
+  const doneAt = await setFinishedAt(userId, last);
+  return doneAt ? doneAt + DAILY_COOLDOWN_MS : now + DAILY_COOLDOWN_MS;
 }
 
 async function readAssignment(userId: string, kind: 'daily' | 'weekly', period: string): Promise<string[]> {
@@ -827,6 +882,7 @@ export async function record(userId: string, metric: Metric, amount = 1, scope =
   const weeklyIds = await assignmentFor(userId, 'weekly', ASSIGN_DEFAULT.weekly);
 
   const dailyPeriod = await activeDailyPeriod(userId, now);
+  let touchedDaily = false;
   for (const d of defs) {
     if (d.kind === 'daily' && dailyIds.indexOf(d.id) < 0) continue;
     if (d.kind === 'weekly' && weeklyIds.indexOf(d.id) < 0) continue;
@@ -844,6 +900,15 @@ export async function record(userId: string, metric: Metric, amount = 1, scope =
     await writeProgress(userId, d.id, period, {
       progress: next, completedAt: done ? (cur.completedAt ?? now) : null, claimedAt: null
     });
+    if (d.kind === 'daily') touchedDaily = true;
+  }
+
+  /* The 24-hour clock starts HERE — the moment the third one lands — not the
+   * next time the board happens to be read. Stamped where completion actually
+   * happens, or a player who finishes at ten and opens the app at eight would
+   * be made to wait until eight the next evening. */
+  if (touchedDaily && await setComplete(userId, dailyIds, dailyPeriod)) {
+    await markSetFinished(userId, dailyPeriod, now);
   }
 }
 
@@ -1007,6 +1072,8 @@ export async function boardFor(userId: string): Promise<{
   /** False while the set is unfinished — it is frozen until it is done, so the
    *  midnight in `resetsAt.daily` is not when THIS player's set changes. */
   dailyRotates: boolean;
+  /** When the next three arrive; 0 while the current three are unfinished. */
+  nextSetAt: number;
 }> {
   const defs = await listDefs();
   const byId = new Map(defs.map((d) => [d.id, d]));
@@ -1052,6 +1119,7 @@ export async function boardFor(userId: string): Promise<{
   const nextWeek = Date.parse(weekKey(now + 7 * 86_400_000).slice(1) + 'T00:00:00Z') - TEHRAN_OFFSET_MS;
   return { daily, weekly, achievements, chain, box,
            dailyRotates: box.total > 0 && box.done >= box.total,
+           nextSetAt: await nextDailySetAt(userId, now),
            resetsAt: { daily: nextMidnight, weekly: nextWeek } };
 }
 

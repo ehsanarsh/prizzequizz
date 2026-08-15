@@ -2248,6 +2248,10 @@ async function ntSubmit(testToSelf){
   const action=link?{url:link}:undefined;
   const when=document.querySelector('input[name=nt_when]:checked').value;
   const payload={title,body,type,image:image||undefined,action};
+  /* The audience. This line was missing: `seg` was read two lines below and
+     had never been built, so every group send died with «seg is not defined»
+     and only the single-user test worked. */
+  const seg=ntCollectSegment();
   try{
     if(testToSelf){
       const tid=prompt('آی‌دی کاربرِ آزمایشی (فقط به همین یک نفر ارسال می‌شود):');
@@ -2625,7 +2629,7 @@ async function renderCharacters(){
       if(c.viaReward)ways.push('جایزه');
       if(c.viaEvent)ways.push('رویداد');
       if(c.viaRandom)ways.push('قرعه');
-      if(c.viaPurchase)ways.push('خرید'+(c.price?' '+fa(c.price)+' سکه':' رایگان'));
+      if(c.viaPurchase)ways.push('خرید'+(c.price?' '+fa(c.price)+(c.currency==='cash'?' تومان':' سکه'):' رایگان'));
       /* A level on a paid character is a gate on the purchase, not a second
          way in — so it is written next to the price, where it is read. */
       if(!c.viaLevel&&c.unlockLevel>0)ways.push('از لول '+fa(c.unlockLevel));
@@ -2690,7 +2694,10 @@ function chEdit(id){
     +'</div>'
     +'<div class="grid g3">'
       +'<div class="field"><label>لول آزادسازی</label><input id="ch_lvl" type="number" min="0" value="'+(c.unlockLevel!=null?c.unlockLevel:0)+'"></div>'
-      +'<div class="field"><label>قیمت (سکه)</label><input id="ch_price" type="number" min="0" value="'+(c.price||0)+'"></div>'
+      +'<div class="field"><label>قیمت</label><input id="ch_price" type="number" min="0" value="'+(c.price||0)+'"></div>'
+      +'<div class="field"><label>واحد قیمت</label><select id="ch_cur">'
+        +'<option value="coins"'+(c.currency!=='cash'?' selected':'')+'>🪙 سکه</option>'
+        +'<option value="cash"'+(c.currency==='cash'?' selected':'')+'>💰 تومان (صندوق جایزه)</option></select></div>'
       +'<div class="field"><label>ترتیب نمایش</label><input id="ch_order" type="number" value="'+(c.sortOrder||0)+'"></div>'
     +'</div>'
     +'<div class="field"><label>گروه در فروشگاه</label><input id="ch_group" value="'+esc(c.group||'')+'" placeholder="مثلاً قهرمانان، حیوانات، ویژه" list="ch_groups">'
@@ -2753,6 +2760,7 @@ async function chSave(id){
     kind:$('#ch_kind').value,
     unlockLevel:Number($('#ch_lvl').value||0),
     price:Number($('#ch_price').value||0),
+    currency:$('#ch_cur').value==='cash'?'cash':'coins',
     group:($('#ch_group').value||'').trim(),
     sortOrder:Number($('#ch_order').value||0),
     enabled:$('#ch_enabled').value==='1',

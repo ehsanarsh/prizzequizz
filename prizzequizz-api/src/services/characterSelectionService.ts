@@ -23,6 +23,7 @@
 import { getPgPool } from '../database/postgres.js';
 import { repositories } from '../repositories/index.js';
 import { levelForXp } from './scoringConfig.js';
+import { postEntry } from './walletLedgerService.js';
 import { id } from '../utils/id.js';
 
 export type CharacterKind = 'normal' | 'vip';
@@ -49,6 +50,8 @@ export interface Character {
   viaEvent: boolean;
   viaRandom: boolean;
   price: number;
+  /** What `price` is counted in. Coins by default; cash is the wallet. */
+  currency: 'coins' | 'cash';
   /** The shelf it is sold on. Free text from the panel; empty = ungrouped. */
   group: string;
   sortOrder: number;
@@ -113,6 +116,7 @@ const SCHEMA_SQL = [
    * existing deployment has the table already and CREATE IF NOT EXISTS is a
    * no-op that would leave the column missing. */
   `ALTER TABLE characters ADD COLUMN IF NOT EXISTS grp TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE characters ADD COLUMN IF NOT EXISTS currency VARCHAR(8) NOT NULL DEFAULT 'coins'`,
   /* One row per character a player actually owns. `source` is the audit trail
    * the popularity statistics are counted from. */
   `CREATE TABLE IF NOT EXISTS user_characters (
@@ -196,6 +200,7 @@ function normalize(input: any, existing?: Character): Character {
     viaEvent: input.viaEvent === undefined ? (existing?.viaEvent ?? false) : bool(input.viaEvent),
     viaRandom: input.viaRandom === undefined ? (existing?.viaRandom ?? false) : bool(input.viaRandom),
     price: input.price === undefined ? (existing?.price ?? 0) : Math.max(0, int(input.price)),
+    currency: input.currency === undefined ? (existing?.currency ?? 'coins') : (String(input.currency) === 'cash' ? 'cash' : 'coins'),
     group: input.group === undefined ? (existing?.group ?? '') : str(input.group, 40),
     sortOrder: input.sortOrder === undefined ? (existing?.sortOrder ?? 0) : int(input.sortOrder),
     newUntil: input.newUntil === undefined ? (existing?.newUntil ?? '') : str(input.newUntil, 40),
@@ -211,7 +216,8 @@ function fromRow(r: any): Character {
     unlockLevel: Number(r.unlock_level) || 0,
     viaLevel: !!r.via_level, viaReward: !!r.via_reward, viaPurchase: !!r.via_purchase,
     viaEvent: !!r.via_event, viaRandom: !!r.via_random,
-    price: Number(r.price) || 0, group: r.grp ?? '', sortOrder: Number(r.sort_order) || 0,
+    price: Number(r.price) || 0, currency: r.currency === 'cash' ? 'cash' : 'coins',
+    group: r.grp ?? '', sortOrder: Number(r.sort_order) || 0,
     newUntil: iso(r.new_until), createdAt: iso(r.created_at)
   };
 }
@@ -258,15 +264,15 @@ export async function saveCharacter(input: any): Promise<Character> {
     await pool.query(
       `INSERT INTO characters (id,name,description,image,kind,enabled,unlock_level,
                                via_level,via_reward,via_purchase,via_event,via_random,
-                               price,sort_order,new_until,grp)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+                               price,sort_order,new_until,grp,currency)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
        ON CONFLICT (id) DO UPDATE SET
          name=$2, description=$3, image=$4, kind=$5, enabled=$6, unlock_level=$7,
          via_level=$8, via_reward=$9, via_purchase=$10, via_event=$11, via_random=$12,
-         price=$13, sort_order=$14, new_until=$15, grp=$16`,
+         price=$13, sort_order=$14, new_until=$15, grp=$16, currency=$17`,
       [c.id, c.name, c.description, c.image, c.kind, c.enabled, c.unlockLevel,
        c.viaLevel, c.viaReward, c.viaPurchase, c.viaEvent, c.viaRandom,
-       c.price, c.sortOrder, c.newUntil || null, c.group]);
+       c.price, c.sortOrder, c.newUntil || null, c.group, c.currency]);
   } else {
     memCharacters.set(c.id, c);
   }
@@ -340,8 +346,9 @@ export class CharacterPurchaseError extends Error {
  * shop credit, so the charge happens there and the unlock is recorded with
  * source 'purchase'. Already owning it is not an error worth charging for: the
  * money is only taken when something is actually granted. */
-export async function purchaseCharacter(userId: string, characterId: string): Promise<{
-  characterId: string; charged: number; coins: number; alreadyOwned: boolean;
+export async function purchaseCharacter(userId: string, characterId: string, idempotencyKey = ''): Promise<{
+  characterId: string; charged: number; coins: number; currency: 'coins' | 'cash';
+  balance?: number; alreadyOwned: boolean;
 }> {
   await ensureSchema();
   const c = await getCharacter(characterId);
@@ -356,7 +363,7 @@ export async function purchaseCharacter(userId: string, characterId: string): Pr
    * charge nothing, so a double tap cannot buy the same character twice. */
   const owned = await ownedMap(userId);
   if (owned.has(characterId)) {
-    return { characterId, charged: 0, coins: Number(user.coins) || 0, alreadyOwned: true };
+    return { characterId, charged: 0, coins: Number(user.coins) || 0, currency: c.currency, alreadyOwned: true };
   }
 
   /* MONEY IS NOT ENOUGH.
@@ -381,6 +388,43 @@ export async function purchaseCharacter(userId: string, characterId: string): Pr
   }
 
   const coins = Number(user.coins) || 0;
+
+  /* PRICED IN TOMAN. The wallet is a ledger, not a number on the user row, so a
+   * cash character is bought the way a ticket is: debit first with an
+   * idempotency key, then grant, and refund if the grant fails. Doing it the
+   * other way round — grant then debit — is right for coins, where the worst
+   * case is a free character, and wrong here, where the worst case would be
+   * money taken twice by a retry. */
+  if (c.currency === 'cash') {
+    if (price > 0) {
+      const key = idempotencyKey || `char:${userId}:${characterId}`;
+      const posted = await postEntry({
+        userId, entryType: 'shop_purchase', kind: 'debit', amount: price,
+        idempotencyKey: key, refType: 'character', refId: characterId,
+        description: 'خرید کاراکتر ' + c.name
+      }).catch((e: any) => {
+        if (e?.code === 'INSUFFICIENT_FUNDS' || /موجودی/.test(String(e?.message || ''))) {
+          throw new CharacterPurchaseError('INSUFFICIENT_FUNDS',
+            'موجودی صندوق جایزه کافی نیست — ' + price.toLocaleString('fa-IR') + ' تومان لازم است.');
+        }
+        throw e;
+      });
+      if (posted.duplicate) {
+        return { characterId, charged: 0, coins, currency: 'cash', balance: posted.account.available, alreadyOwned: owned.has(characterId) };
+      }
+      const gotIt = await grantCharacter(userId, characterId, 'purchase');
+      if (!gotIt) {
+        await postEntry({ userId, entryType: 'refund', kind: 'credit', amount: price,
+          idempotencyKey: `char_refund:${posted.entry.id}`, refType: 'character', refId: characterId,
+          description: 'برگشت وجه: کاراکتر صادر نشد' }).catch(() => undefined);
+        return { characterId, charged: 0, coins, currency: 'cash', balance: posted.account.available, alreadyOwned: true };
+      }
+      return { characterId, charged: price, coins, currency: 'cash', balance: posted.account.available, alreadyOwned: false };
+    }
+    const free = await grantCharacter(userId, characterId, 'purchase');
+    return { characterId, charged: 0, coins, currency: 'cash', alreadyOwned: !free };
+  }
+
   if (coins < price) {
     throw new CharacterPurchaseError('INSUFFICIENT_COINS',
       'سکهٔ کافی نداری — ' + price.toLocaleString('fa-IR') + ' سکه لازم است.');
@@ -390,11 +434,11 @@ export async function purchaseCharacter(userId: string, characterId: string): Pr
    * charge fails the player keeps a character they did not pay for, which is
    * the kinder way for it to break. */
   const granted = await grantCharacter(userId, characterId, 'purchase');
-  if (!granted) return { characterId, charged: 0, coins, alreadyOwned: true };
+  if (!granted) return { characterId, charged: 0, coins, currency: 'coins', alreadyOwned: true };
 
   user.coins = coins - price;
   await repositories.users.save(user);
-  return { characterId, charged: price, coins: user.coins, alreadyOwned: false };
+  return { characterId, charged: price, coins: user.coins, currency: 'coins', alreadyOwned: false };
 }
 
 // ---------------------------------------------------------------------------

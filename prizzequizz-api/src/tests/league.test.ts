@@ -17,7 +17,8 @@ import {
   getLeagueConfig, setLeagueConfig, closeSeason, drawRound, listQualifiers,
   listRooms, listSeats, reportRoomResult, splitRooms, kickoffFor, cutLines,
   myLeague, isLeagueTicketTier, _resetLeague, LEAGUE_DEFAULTS, weekResetAt,
-  enterLeague, LEAGUE_FULL_START_MS
+  enterLeague, LEAGUE_FULL_START_MS,
+  voidTicketsAfterKickoff, lastKickoffAt, LEAGUE_TICKET_GRACE_MS
 } from '../services/leagueService.js';
 import { closeTick, leagueTick } from '../services/leagueWorker.js';
 import { openForLeagueRoom, join as wtaJoin, snapshot as wtaSnapshot } from '../services/wtaService.js';
@@ -446,6 +447,49 @@ async function run(): Promise<void> {
     await closeSeason('2020-W03');
     await closeSeason(isoWeekId());
     assert.equal((await getTickets(ids[0]!)).red, 3, 'the bought tickets are untouched');
+  });
+
+  /* ── the ticket expires with the match ────────────────────────────── */
+
+  /* «سر مسابقه لیگ نرفتم و باز هم بلیطم موجوده» — the ticket is a seat at ONE
+   * kickoff, so it goes a few hours after that kickoff, not at the far end of
+   * the following week. */
+  await check('a ticket left unused dies a few hours after the kickoff', async () => {
+    await fresh();
+    const ids = await board(20);
+    await closeSeason('2019-W40');                    // closed in an earlier week
+    assert.equal((await getTickets(ids[0]!)).gold, 1);
+
+    const cfg = await getLeagueConfig();
+    const justAfter = lastKickoffAt(cfg) + 60_000;    // the match has just ended
+    assert.equal(await voidTicketsAfterKickoff(justAfter), 0, 'not while the room might still be running');
+
+    const later = lastKickoffAt(cfg) + LEAGUE_TICKET_GRACE_MS + 60_000;
+    const gone = await voidTicketsAfterKickoff(later);
+    assert.ok(gone >= 1, 'nothing was voided: ' + gone);
+    assert.equal((await getTickets(ids[0]!)).gold, 0, 'the absentee still holds a ticket');
+  });
+
+  await check('and it is not taken twice, nor from somebody who bought one', async () => {
+    await fresh();
+    const ids = await board(20);
+    await grantTickets(ids[0]!, 'red', 2);
+    await closeSeason('2019-W41');
+    const cfg = await getLeagueConfig();
+    const later = lastKickoffAt(cfg) + LEAGUE_TICKET_GRACE_MS + 60_000;
+    await voidTicketsAfterKickoff(later);
+    assert.equal(await voidTicketsAfterKickoff(later + 60_000), 0, 'it ran a second time');
+    assert.equal((await getTickets(ids[0]!)).red, 2, 'a bought ticket was taken');
+  });
+
+  /* The close and the expiry both run on the same tick. The tickets handed out
+   * at the close are for NEXT week's kickoff — taking them back because LAST
+   * week's kickoff is over would leave the league permanently empty. */
+  await check('the tickets just handed out are not voided by the same tick', async () => {
+    await fresh();
+    const ids = await board(20);
+    await leagueTick(weekResetAt() - 60_000);
+    assert.equal((await getTickets(ids[0]!)).gold, 1, 'the fresh ticket was voided on the spot');
   });
 
   /* ── «شروع مسابقه لیگ» ────────────────────────────────────────────── */

@@ -56,14 +56,17 @@ export function registerCharacterRoutes(router: Router, base: string): void {
   router.add('POST', `${base}/characters/:id/purchase`, async (ctx) => {
     if (!ctx.userId) return error(ctx.res, 401, 'UNAUTHORIZED', 'ابتدا وارد شو.');
     try {
-      const out = await purchaseCharacter(ctx.userId, ctx.params.id!);
+      /* A cash purchase moves real money, so the client's key is passed
+       * through: a retry after a dropped connection must not charge twice. */
+      const key = String((ctx.body as any)?.idempotencyKey || '').slice(0, 120);
+      const out = await purchaseCharacter(ctx.userId, ctx.params.id!, key);
       /* The whole roster comes back so the client repaints from the server
        * rather than guessing what changed. */
       json(ctx.res, 200, { ...out, roster: await buildRoster(ctx.userId) });
     } catch (e) {
       if (e instanceof CharacterPurchaseError) {
         const status = e.code === 'CHARACTER_NOT_FOUND' || e.code === 'USER_NOT_FOUND' ? 404
-          : e.code === 'INSUFFICIENT_COINS' ? 409 : 422;
+          : (e.code === 'INSUFFICIENT_COINS' || e.code === 'INSUFFICIENT_FUNDS') ? 409 : 422;
         return error(ctx.res, status, e.code, e.message);
       }
       throw e;

@@ -31,6 +31,7 @@ const characters = [
   { id: 'ch-b', name: 'روباه', description: '', image: '', kind: 'normal', enabled: true, unlockLevel: 0, viaLevel: false, viaReward: false, viaPurchase: true, viaEvent: false, viaRandom: false, price: 300, group: 'حیوانات', sortOrder: 1, newUntil: '', createdAt: '' }
 ];
 const saved = { box: null, character: null };
+const broadcasts = [];
 
 const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
 await ctx.route('**/*', (route) => {
@@ -44,6 +45,13 @@ await ctx.route('**/*', (route) => {
     if (m === 'PUT') { try { saved.box = JSON.parse(route.request().postData() || '{}'); } catch (e) {} box = saved.box; return send(box); }
     return send(box);
   }
+  if (p === '/admin/notifications/broadcast') {
+    let b = {}; try { b = JSON.parse(route.request().postData() || '{}'); } catch (e) {}
+    broadcasts.push(b);
+    return send({ audienceCount: 42, created: 42, sent: 40 });
+  }
+  if (p === '/admin/notifications/campaigns' || /^\/admin\/notifications/.test(p)) return send({ rows: [], types: [], policy: { types: {} }, labels: {} });
+  if (p === '/admin/users' || /^\/admin\/users/.test(p)) return send({ rows: [], total: 0 });
   if (p === '/admin/characters') {
     if (m === 'POST') { try { saved.character = JSON.parse(route.request().postData() || '{}'); } catch (e) {} return send({ id: 'ch-a' }); }
     return send({ characters, hasDatabase: true, stats: [] });
@@ -134,14 +142,54 @@ ok('showing the group it is already in', form.value === 'قهرمانان', form
 ok('and the groups already in use are offered', form.suggestions.includes('قهرمانان') && form.suggestions.includes('حیوانات'),
    JSON.stringify(form.suggestions));
 
+/* «کاراکترها را فقط با سکه می‌توانم به فروش بگذارم نه تومان» — so the price
+   has a unit beside it, and the unit has to travel with the save. */
+const cur = await page.evaluate(() => {
+  const sel = document.getElementById('ch_cur');
+  return { has: !!sel, options: sel ? [...sel.options].map((o) => o.value) : [], value: sel ? sel.value : '' };
+});
+ok('a character price has a unit', cur.has, JSON.stringify(cur));
+ok('and it can be coins or toman', cur.options.includes('coins') && cur.options.includes('cash'), JSON.stringify(cur.options));
+ok('defaulting to coins for one already priced in coins', cur.value === 'coins', cur.value);
+
 const savedChar = await page.evaluate(async () => {
   document.getElementById('ch_group').value = 'حیوانات';
+  document.getElementById('ch_cur').value = 'cash';
   (0, eval)("chSave('ch-a')");
   await new Promise((r) => setTimeout(r, 600));
   return true;
 });
 ok('and saving sends the group with it', saved.character && saved.character.group === 'حیوانات', JSON.stringify(saved.character && saved.character.group));
+ok('and the price unit too', saved.character && saved.character.currency === 'cash', JSON.stringify(saved.character && saved.character.currency));
 void savedChar;
+/* ── 3. SENDING TO A GROUP ──────────────────────────────────────────────── */
+console.log('the notifications page:');
+await page.evaluate(() => { (0, eval)("CUR='notifications'; NT_TAB='compose';"); });
+await page.evaluate(() => (0, eval)('renderNotifications()'));
+await page.waitForTimeout(900);
+
+{
+  const filled = await page.evaluate(async () => {
+    document.getElementById('nt_title').value = 'سلام';
+    document.getElementById('nt_body').value = 'متن پیام';
+    const st = document.getElementById('seg_status'); if (st) st.value = '';
+    (0, eval)('ntSubmit(false)');
+    await new Promise((r) => setTimeout(r, 800));
+    const t = document.querySelector('.toast, #toast');
+    return { toast: t ? t.textContent : '', err: window.__lastErr || '' };
+  });
+  /* «اعلان‌ها گروهی نمی‌ره، ارور seg is not defined می‌ده» — the audience was
+     read but never built. A broadcast that reaches the server at all is the
+     whole assertion here; who is in the segment is the server's business. */
+  ok('a group send reaches the server', broadcasts.length === 1, JSON.stringify(broadcasts[0] || null));
+  ok('carrying the message', broadcasts[0] && broadcasts[0].title === 'سلام' && broadcasts[0].body === 'متن پیام',
+     JSON.stringify(broadcasts[0] && { t: broadcasts[0].title, b: broadcasts[0].body }));
+  ok('and an audience, not «undefined»', broadcasts[0] && broadcasts[0].segment && typeof broadcasts[0].segment === 'object',
+     JSON.stringify(broadcasts[0] && broadcasts[0].segment));
+  ok('with no «seg is not defined» thrown', !errs.some((e) => /seg is not defined/.test(e)), errs.join(' | '));
+  void filled;
+}
+
 ok('no panel script errors', errs.length === 0, errs.join(' | '));
 
 console.log(`\n${pass} passed, ${fail} failed`);
