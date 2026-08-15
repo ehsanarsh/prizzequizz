@@ -189,16 +189,33 @@ async function makePage(w = 390, h = 844) {
   ok('two in a row is', reallyWeak.afterTwo === 'weak', reallyWeak.afterTwo);
   ok('and then it says so', /ناپایدار/.test(reallyWeak.txt || ''), reallyWeak.txt);
 
-  /* A REAL drop is still instant — a closed socket needs no streak. */
-  const dropped = await page.evaluate(() => {
+  /* A REAL drop is still instant — a closed socket needs no streak. What it is
+     CALLED depends on whether the phone still has internet, and those are two
+     different things: on the networks this game is played on the live socket is
+     dropped while ordinary requests keep working, and calling that «اینترنت
+     شما قطع است» is how a player who was online got thrown out of a duel. */
+  const droppedButOnline = await page.evaluate(() => {
     (0, eval)('pzConnStart()');
     (0, eval)('pzRt.ws.readyState=3');
     (0, eval)('pzConn.startAt=Date.now()-9000');
+    (0, eval)('pzConn.restOkAt=Date.now()');        // the server answered a moment ago
     (0, eval)('pzConnEvalMine()');
     return { state: (0, eval)('pzConn.mine'), txt: (document.getElementById('pzConnTxt') || {}).textContent };
   });
-  ok('a genuinely closed socket is reported at once', dropped.state === 'down', dropped.state);
-  ok('with the reconnecting message', /قطع شده/.test(dropped.txt || ''), dropped.txt);
+  ok('a genuinely closed socket is reported at once', droppedButOnline.state === 'wsonly', droppedButOnline.state);
+  ok('but a phone that is still online is not told it is offline', !/قطع شده است/.test(droppedButOnline.txt || ''), droppedButOnline.txt);
+  ok('it is told the match goes on', /پشتیبان/.test(droppedButOnline.txt || ''), droppedButOnline.txt);
+
+  const droppedAndOffline = await page.evaluate(() => {
+    (0, eval)('pzConnStart()');
+    (0, eval)('pzRt.ws.readyState=3');
+    (0, eval)('pzConn.startAt=Date.now()-9000');
+    (0, eval)('pzConn.restOkAt=Date.now()-60000');  // nothing has reached the server for a minute
+    (0, eval)('pzConnEvalMine()');
+    return { state: (0, eval)('pzConn.mine'), txt: (document.getElementById('pzConnTxt') || {}).textContent };
+  });
+  ok('a phone that really is cut off is called cut off', droppedAndOffline.state === 'down', droppedAndOffline.state);
+  ok('with the reconnecting message', /قطع شده/.test(droppedAndOffline.txt || ''), droppedAndOffline.txt);
 
   /* A HIDDEN PAGE IS A THROTTLED PAGE. Nothing may be judged while it is away,
      and coming back must not be read as a bad link. */

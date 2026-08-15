@@ -312,6 +312,24 @@ export function registerMatchRoutes(router: Router, base: string): void {
       answerTimeMs: Number(body.answerTimeMs ?? 0),
       idempotencyKey: String(body.idempotencyKey ?? `${ctx.params.id}:${ctx.userId ?? 'u1'}:${body.round ?? body.questionId}:${body.selectedIndex}`)
     });
+    // THE OPPONENT HAS TO BE TOLD, WHICHEVER DOOR THE ANSWER CAME IN BY.
+    // The websocket handler broadcasts the verdict, the new snapshot and the
+    // end of the match; this route recorded the answer and told nobody. On a
+    // network that carries plain requests but not a websocket — the common case
+    // for these players — that left the opponent staring at «در انتظار پاسخ
+    // حریف» until a poll happened to notice, and the answering player looking
+    // disconnected while they were in fact playing. Same three events, same
+    // order, so both paths are worth exactly the same to the other player.
+    const answererId = ctx.userId ?? 'u1';
+    const roundOf = body.round === undefined ? match.round : Number(body.round);
+    try {
+      realtimeRooms.broadcast(ctx.params.id!, { type: 'server:answer_result', matchId: ctx.params.id!, payload: { userId: answererId, round: roundOf, questionId: body.questionId, correct: validation.correct, selectedIndex: Number(body.selectedIndex), correctIndex: validation.correctIndex, duplicate } });
+      realtimeRooms.broadcast(ctx.params.id!, { type: 'server:match_snapshot', matchId: ctx.params.id!, payload: toSnapshot(match) });
+      if (match.phase === 'result') realtimeRooms.broadcast(ctx.params.id!, { type: 'server:match_finished', matchId: ctx.params.id!, payload: toSnapshot(match) });
+    } catch {
+      // A broadcast failure must never cost the player their answer — it is
+      // already recorded, and the reply below is what they are waiting for.
+    }
     json(ctx.res, 200, { correct: validation.correct, selectedIndex: body.selectedIndex, correctIndex: validation.correctIndex, score: match.players.find((p) => p.userId === (ctx.userId ?? 'u1'))?.score ?? 0, phase: match.phase, duplicate, events: [] });
   });
 }
