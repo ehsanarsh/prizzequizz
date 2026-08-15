@@ -941,6 +941,27 @@ input,textarea,select,[contenteditable="true"],.pz-selectable,.pz-selectable *{
 .tk-prize-tag{display:inline-block;margin-top:7px;font-size:11px;font-weight:900;color:var(--paper);background:rgba(255,210,31,.16);border:2px solid #000;border-radius:999px;padding:4px 11px;box-shadow:0 2.5px 0 #000}
 /* The one line that explains how the Last Survivor prize is actually reached,
    sitting under the pot so the number is never read as a promise. */
+/* THE POT WHILE IT IS CLIMBING. Green and a touch larger on the way up, then
+   gold and settling back into place — and the «+N» that goes in floats up out
+   of it, which is the eliminated players' share arriving. */
+.ls-pot-up{color:#48E58B!important;display:inline-block;
+  transform:scale(1.16);text-shadow:0 0 14px rgba(72,229,139,.55);
+  transition:color .25s,transform .25s,text-shadow .25s}
+.ls-pot-done{color:#FFD21F!important;display:inline-block;animation:lsPotSettle .85s cubic-bezier(.22,1.2,.36,1) both;
+  text-shadow:0 0 16px rgba(255,210,31,.6)}
+@keyframes lsPotSettle{0%{transform:scale(1.16)}55%{transform:scale(.97)}100%{transform:scale(1)}}
+.ls-pot-delta{position:absolute;left:50%;top:-2px;transform:translateX(-50%);
+  font-style:normal;font-size:12.5px;font-weight:900;color:#48E58B;white-space:nowrap;
+  text-shadow:0 2px 6px rgba(0,0,0,.7);pointer-events:none;
+  animation:lsPotDelta 2.3s cubic-bezier(.2,.9,.3,1) both}
+@keyframes lsPotDelta{0%{opacity:0;transform:translateX(-50%) translateY(10px) scale(.8)}
+  14%{opacity:1;transform:translateX(-50%) translateY(-2px) scale(1.06)}
+  70%{opacity:1;transform:translateX(-50%) translateY(-16px) scale(1)}
+  100%{opacity:0;transform:translateX(-50%) translateY(-30px) scale(.95)}}
+@media (prefers-reduced-motion:reduce){
+  .ls-pot-up,.ls-pot-done{transform:none!important;animation:none!important}
+  .ls-pot-delta{animation-duration:.01s}
+}
 .ls-share-note{margin-top:9px;font-size:11.5px;line-height:1.85;color:#BDB6CE;background:rgba(255,255,255,.05);border:1.5px solid rgba(255,255,255,.10);border-radius:12px;padding:9px 11px}
 .ls-share-note b{color:var(--bolt,#FFD21F)}
 .lb-row .lb-av{width:24px;height:24px;border-radius:8px;border:2px solid #000;background:var(--ink-3);display:grid;place-items:center;font-size:13px;overflow:hidden;flex-shrink:0}
@@ -7087,30 +7108,7 @@ function csRevealCharacter(character,opts){
   }
 }
 
-/* Opens a random box and plays the reveal. Exposed so a prize flow elsewhere
-   in the app can call it once boxes are surfaced to players. */
-async function csOpenBox(boxId){
-  if(csBusy)return; csBusy=true;
-  try{
-    const r=await pzApi('POST','/characters/boxes/'+encodeURIComponent(boxId)+'/open',{},true);
-    const d=(r&&r.data)||{};
-    if(!d.character){ toast((r&&r.error&&r.error.message)||'قرعه‌کشی انجام نشد'); return; }
-    if(d.duplicate){
-      const amt=d.compensation&&d.compensation.amount;
-      const kind=d.compensation&&d.compensation.type;
-      csRevealCharacter(d.character,{
-        kicker:'تکراری بود!',
-        note:amt?('به‌جایش '+csFa(amt)+(kind==='xp'?' XP':' سکه')+' گرفتی.'):'این کاراکتر را از قبل داشتی.'
-      });
-    }else{
-      csRevealCharacter(d.character);
-    }
-  }catch(e){ toast('خطای شبکه'); }
-  finally{ csBusy=false; }
-}
 
-/* Kept for the old entry points that navigate away after the character step. */
-function _ccFinish(){ try{ localStorage.setItem('pz_charDone','1'); }catch(e){} const b=charBack||'profile'; charBack='profile'; go(b); }
 
 
 /* ============ LAST SURVIVOR (آخرین بازمانده) — real-time elimination ============
@@ -7143,6 +7141,7 @@ function lsIcon(name){ if(LS_ICONS[name])return LS_ICONS[name]; const n=String(n
    there. It is taken here, at the door. */
 function lsStart(){ try{ _pzPreXp=(_usr&&_usr.xp)||0; _pzPreCup=weeklyScore; }catch(e){}
   try{ pzAnsTimes=[]; pzQShownAt=0; }catch(e){}   /* a new room starts a new average */
+  try{ lsPotReset(); }catch(e){}                  /* and a new pot to count up */
   showRules('lastSurvivor',()=>{ lsEndShown=false; showScreen('lsTopics'); lsLoadTopics(); }); }
 /* Leaving the room.
    The websocket message only unsubscribes this tab from updates — it never told
@@ -7174,6 +7173,7 @@ async function lsLeave(to,skipAsk){
   try{ if(pzRt&&pzRt.ws&&pzRt.ws.readyState===1&&roomId) pzRt.ws.send(JSON.stringify({type:'client:leave_ls_room',payload:{roomId:roomId}})); }catch(e){}
   lsStopPoll(); lsWatching=false; ['lsColorPick','lsDead','lsCashPop'].forEach(id=>{const e=document.getElementById(id);if(e)e.remove();});
   lsRoomId=null; lsSnap=null; lsLastKey='';
+  try{ lsPotReset(); }catch(e){}
   go(to||'home');
 }
 function lsStopPoll(){ if(lsPoller){clearInterval(lsPoller);lsPoller=null;} }
@@ -7245,18 +7245,6 @@ function pzStepBarHTML(opts){
     '<div class="pzsb-stops">'+stops+'</div>'+
   '</div>';
 }
-/* Repaint in place. Rebuilding the markup would restart the hop animation on
-   every poll, so the bar is only rebuilt when the step count changes. */
-function pzStepBarUpdate(id,steps,current){
-  const el=document.getElementById(id); if(!el) return;
-  const n=Math.max(1,Math.floor(Number(steps)||1));
-  const cur=Math.max(0,Math.min(n,Math.floor(Number(current)||0)));
-  if(el.dataset.n!==String(n)||el.dataset.cur!==String(cur)){
-    el.outerHTML=pzStepBarHTML({steps:n,current:cur,id:id});
-    const fresh=document.getElementById(id);
-    if(fresh){ fresh.dataset.n=String(n); fresh.dataset.cur=String(cur); }
-  }
-}
 
 /* ---- ARTWORK SLOTS ----
    ONE place that decides whether a ticket, a coin or the wallet is drawn as a
@@ -7292,10 +7280,6 @@ function pzTicketArt(color,fallback){
   return src?pzArtImg(src):(fallback||'🎫');
 }
 /** A named icon (coin, wallet, …), or its emoji. */
-function pzIcon(name,fallback){
-  const src=PZ_ICON_ART[name];
-  return src?pzArtImg(src):(fallback||'');
-}
 /* Static markup marks its icons with data-pzicon and keeps the emoji inside as
    the fallback. This swaps every one of them in a single pass, so the header,
    the menu and the shop cannot drift apart or be missed one by one. Safe to
@@ -7547,7 +7531,10 @@ function lsOnWs(type,payload){
     r.phase=(type==='ls:ready')?'ready':'question';
     r.status='running';
     if(payload.endsAt) r.phaseEndsAt=payload.endsAt;
-    if(payload.serverNow) r.serverNow=payload.serverNow;
+    /* A push carries a fresh server clock, so the offset is re-sampled here as
+       well as on a snapshot — the deadline in this very payload is measured
+       against it. */
+    if(payload.serverNow){ r.serverNow=payload.serverNow; lsClockOff=Number(payload.serverNow)-Date.now(); }
     if(payload.questionId){
       lsSnap.question=Object.assign({},lsSnap.question&&lsSnap.question.id===payload.questionId?lsSnap.question:{},
         {id:payload.questionId,round:newRound});
@@ -7572,11 +7559,28 @@ function lsOnWs(type,payload){
   }
 }
 
+/* THE SERVER'S CLOCK, SAMPLED ONCE.
+ *
+ * Every deadline in the room is a server timestamp, so the phone has to know
+ * how far its own clock is from the server's. That difference was being
+ * recomputed on every tick as `snapshot.serverNow - Date.now()` — and since
+ * `serverNow` is frozen in the snapshot, the two Date.now()s cancelled out and
+ * the remaining time came out as `deadline - serverNow`: the same number for
+ * ever. That is why the room's clock stopped dead on whatever it read the
+ * moment you walked in, for each player at their own number.
+ *
+ * The offset is measured ONCE, when a snapshot arrives, and after that the
+ * countdown runs on the phone's own clock. */
+let lsClockOff=0;
+function lsClockSync(room){
+  if(room&&room.serverNow) lsClockOff=Number(room.serverNow)-Date.now();
+}
+function lsNow(){ return Date.now()+lsClockOff; }
 function lsTimer(snap){
-  const r=snap.room; const off=(r.serverNow||Date.now())-Date.now();
+  const r=snap.room;
   const dl=r.status==='waiting'?r.startsAt:r.phaseEndsAt;
   if(!dl)return '';
-  const s=Math.max(0,Math.round((dl-(Date.now()+off))/1000));
+  const s=Math.max(0,Math.round((dl-lsNow())/1000));
   const m=Math.floor(s/60), ss=s%60;
   return lsFa(m)+':'+(ss<10?'۰':'')+lsFa(ss);
 }
@@ -7609,6 +7613,7 @@ function lsRender(snap){
     snap.question=lsSnap.question;
   }
   lsSnap=snap; if(snap.me) lsMyId=snap.me.userId;
+  lsClockSync(snap.room);
   /* Also carried on the snapshot, so the REST poll explains a no-winner ending
      even when the ls:ended push was missed. */
   if(snap.room&&Number(snap.room.forfeited||0)>0) lsForfeited=Number(snap.room.forfeited);
@@ -7657,6 +7662,44 @@ function lsRender(snap){
   lsOverlays(snap);
 }
 
+/* Turn the question card that is already on screen from locked into
+   answerable. Returns false when there is nothing to reuse — a different
+   question, a different round, or no card at all — and the caller builds. */
+function lsUnlockInPlace(snap){
+  /* No spectator check here on purpose: the only caller sits below the
+     «lsWatching && ready|question» branch, which has already returned by then,
+     so a watcher never reaches this function and a guard for it would be a line
+     that can never run. */
+  const q=snap.question||{}; if(!q.id) return false;
+  const wrap=document.querySelector('#lsBody .ls-qwrap');
+  if(!wrap) return false;
+  if(wrap.dataset.q!==String(q.id)||wrap.dataset.round!==String(snap.room.round)) return false;
+  const opts=wrap.querySelectorAll('#lsOpts .ans');
+  if(!opts.length) return false;
+
+  /* THIS PLAYER'S OWN PICK STAYS LIT. Once they have answered, the card is
+     theirs as they left it — highlight, greyed options, a spent 50:50 and all —
+     and a re-render must not wipe it just because the server has not caught up
+     with the answer yet. */
+  if(lsAnswered) return true;
+
+  /* Otherwise the card is only reusable while it is still LOCKED — drawn behind
+     the ready gate and untouched since. An unlocked card has been live in front
+     of the player: a 50:50 may have greyed two of its options, «درصد بقیه» may
+     have drawn bars on it. Re-arming that is not the same screen the player was
+     looking at, so it is rebuilt instead.
+     The display order is safe to keep, because the shuffle is keyed by exactly
+     the room+round+question this function has just matched (lsViewKey). */
+  if(wrap.dataset.locked!=='1') return false;
+  opts.forEach((b,i)=>{
+    b.disabled=false;
+    b.classList.remove('selected','correct','wrong','dim','gone');
+    b.setAttribute('onclick','lsAnswer('+i+')');
+  });
+  wrap.dataset.locked='0';
+  return true;
+}
+
 function lsBuild(snap){
   const r=snap.room, body=document.getElementById('lsBody'); if(!body)return;
   if(r.status==='finished'){ body.innerHTML=lsEndHtml(snap); return; }
@@ -7691,6 +7734,12 @@ function lsBuild(snap){
     // Already answered (or reconnected after answering) → the mother dashboard,
     // not the question card.
     if(snap.me&&snap.me.answeredThisRound){ body.innerHTML=lsDashHtml(snap)+'<div class="ls-ack" style="margin-top:4px">پاسخ شما ثبت شد ✅ — منتظر بقیه…</div>'; return; }
+    /* THE CARD IS ALREADY THERE. The ready gate renders this very question
+       behind it, locked; a moment later the phase turns to «question» and this
+       used to rebuild the identical card from scratch — which replays its entry
+       animation and blanks it for a frame. That is «سوال اول دوبار پخش می‌شود».
+       Unlocking the buttons in place is the whole of the difference. */
+    if(lsUnlockInPlace(snap)){ lsBindPowerups(); return; }
     body.innerHTML=lsDashStrip(snap)+lsQuestionHtml(snap);
     lsBindPowerups();
     return;
@@ -7758,23 +7807,95 @@ function lsLive(snap){
      the SERVER deadline so every player's clock agrees. */
   try{
     if(r.phase==='question'&&r.phaseEndsAt){
-      const off=(r.serverNow||Date.now())-Date.now();
-      if(lsQRound!==r.round||!lsQTotal){ lsQRound=r.round; lsQTotal=Math.max(1,Math.round((r.phaseEndsAt-(Date.now()+off))/1000)); }
-      const secs=Math.max(0,Math.ceil((r.phaseEndsAt-(Date.now()+off))/1000));
+      /* Same clock as the room's — and for the same reason: recomputing the
+         offset from the snapshot froze the answer timer between polls too. */
+      if(lsQRound!==r.round||!lsQTotal){ lsQRound=r.round; lsQTotal=Math.max(1,Math.round((r.phaseEndsAt-lsNow())/1000)); }
+      const secs=Math.max(0,Math.ceil((r.phaseEndsAt-lsNow())/1000));
       pzTimerSet('lsTimer',secs,lsQTotal);
     } else {
       pzTimerSet('lsTimer',0,1,{idle:true,text:lsTimer(snap)});
     }
   }catch(e){}
   set('lsCount',lsFa(snap.players.length)); set('lsCap',lsFa(r.capacity));
-  set('lsPrize',lsFa(r.grossPool)+' تومان'); set('lsRemain',lsFa(s.remainingPot));
+  set('lsPrize',lsFa(r.grossPool)+' تومان');
   set('lsAlive',lsFa(s.alive)); set('lsElim',lsFa(s.eliminated)); set('lsCash',lsFa(s.cashedOut));
-  { const mine=lsMyShare(snap); if(mine!=null) set('lsMyShare',lsFa(mine)); }
+  /* The pot and the player's own share are the two numbers that GROW when
+     somebody goes out, so they are not set — they are counted up. */
+  lsPotPaint('lsRemain',s.remainingPot);
+  { const mine=lsMyShare(snap); if(mine!=null) lsPotPaint('lsMyShare',mine); }
   const vf=document.getElementById('lsVoteFill'), vt=document.getElementById('lsVoteTxt');
   if(vf&&r.status==='waiting'){ const pct=snap.players.length?Math.round(snap.votes*100/snap.players.length):0; vf.style.width=pct+'%'; if(vt)vt.textContent='شروع با همین تعداد — '+lsFa(pct)+'٪ ('+lsFa(snap.votes)+'/'+lsFa(snap.players.length)+')'; }
   // refresh waiting grid + dashboard grids in place
   if(r.status==='waiting'&&lsTab==='players'){ const g=document.getElementById('lsGrid'); if(g)g.innerHTML=lsPlayersCells(snap,false); }
   if(r.status==='running'&&(r.phase==='dashboard'||r.phase==='cashout')){ const g=document.getElementById('lsDashGrid'); if(g)g.innerHTML=lsDashCells(snap); }
+}
+
+/* ── THE POT GROWING AS PLAYERS GO OUT ────────────────────────────────────
+   «بعد از مرحله حذف برای بازمانده‌ها عدد قبلی صندوق جایزه بیاد و با انیمیشن
+    این عدد بزرگ‌تر بشه و حق حذف‌شده‌ها واریز اون صندوق بشه، خیلی سریع نباشه و
+    آخرش هم آروم آروم اضافه بشه، رنگش سبز بشه، وقتی تموم شد طلایی بشه و بره
+    اون بالا سر جای خودش بشینه.»
+
+   So the number does not jump. It starts at what it WAS — remembered across the
+   rebuild that the phase change causes — climbs with an ease-out so the last
+   few thousand crawl in, wears green while it is moving, and then turns gold
+   and settles back to its own size. The figures themselves are the server's;
+   only the journey between them happens here. */
+const _lsPotShown={};
+let _lsPotRoom=null;
+function lsPotReset(){ for(const k in _lsPotShown) delete _lsPotShown[k]; _lsPotRoom=null; }
+function lsPotPaint(id,val){
+  const el=document.getElementById(id); if(!el) return;
+  const v=Math.max(0,Math.round(Number(val)||0));
+  /* A different room is a different pot; never animate across rooms. */
+  const room=lsSnap&&lsSnap.room&&lsSnap.room.id;
+  if(room!==_lsPotRoom){ _lsPotRoom=room; for(const k in _lsPotShown) delete _lsPotShown[k]; }
+
+  const prev=_lsPotShown[id];
+  if(prev===undefined||v<=prev||el._lsPotRun===v){
+    if(el._lsPotRun===undefined||el._lsPotRun===null){ el.textContent=lsFa(v); _lsPotShown[id]=v; }
+    else if(prev===undefined) _lsPotShown[id]=v;
+    return;
+  }
+  lsPotGrow(el,prev,v);
+  _lsPotShown[id]=v;
+}
+/* One climb. Cancels any climb already running on that element, so a second
+   elimination landing mid-animation continues from where the eye is rather
+   than starting again from an old number. */
+function lsPotGrow(el,from,to){
+  if(el._lsPotRaf){ cancelAnimationFrame(el._lsPotRaf); el._lsPotRaf=null; }
+  const start=(el._lsPotRun!=null)?el._lsPotRun:from;
+  el._lsPotRun=to;
+  const dur=2200, t0=performance.now();
+  el.classList.remove('ls-pot-done'); el.classList.add('ls-pot-up');
+  /* «حق حذف‌شده‌ها واریز اون صندوق بشه» — what was added, said out loud. */
+  lsPotDelta(el,to-start);
+  const step=(now)=>{
+    const p=Math.min(1,(now-t0)/dur);
+    /* Ease-out cubic: quick at first, and the last stretch crawls in. */
+    const e=1-Math.pow(1-p,3);
+    el.textContent=lsFa(Math.round(start+(to-start)*e));
+    if(p<1){ el._lsPotRaf=requestAnimationFrame(step); return; }
+    el._lsPotRaf=null; el._lsPotRun=null;
+    el.textContent=lsFa(to);
+    el.classList.remove('ls-pot-up'); el.classList.add('ls-pot-done');
+    setTimeout(()=>{ try{ el.classList.remove('ls-pot-done'); }catch(e){} },900);
+    try{ sfx('coin'); }catch(e){}
+  };
+  el._lsPotRaf=requestAnimationFrame(step);
+}
+/* The «+N» that floats up out of the number while it climbs. */
+function lsPotDelta(el,add){
+  if(!(add>0)) return;
+  try{
+    const host=el.parentNode; if(!host) return;
+    if(getComputedStyle(host).position==='static') host.style.position='relative';
+    const chip=document.createElement('i');
+    chip.className='ls-pot-delta'; chip.textContent='+'+lsFa(add);
+    host.appendChild(chip);
+    setTimeout(()=>{ try{ chip.remove(); }catch(e){} },2400);
+  }catch(e){}
 }
 
 function lsWaitHtml(snap){
@@ -7885,8 +8006,7 @@ function lsAnimateElimination(snap){
   /* A second each — unless the server left less room than that (a mass wipe-out
      caps the phase), in which case the spacing tightens so the whole sequence
      still finishes inside the phase instead of being cut off half way. */
-  const nowMs=Date.now(), off=(snap.room.serverNow||nowMs)-nowMs;
-  const left=Math.max(1500,(Number(snap.room.phaseEndsAt)||0)-(nowMs+off));
+  const left=Math.max(1500,(Number(snap.room.phaseEndsAt)||0)-lsNow());
   const STEP=Math.max(140, Math.min(1000, Math.floor((left-900)/Math.max(1,outs.length))));
   outs.forEach((o,idx)=>{
     _lsElimTimers.push(setTimeout(()=>{
@@ -7987,7 +8107,11 @@ function lsQuestionHtml(snap,locked){
      badge, dash and .atxt — white paper background, black text, hard shadow.
      And the duel's timer, in the duel's place: between the question and the
      options rather than off in a corner of its own. */
-  return `<div class="ls-qwrap">
+  /* Stamped with the question it is showing, so a later render can tell «the
+     same card, now answerable» from «a different question» — see
+     lsUnlockInPlace, which is what stops the first question being torn down and
+     rebuilt the instant the ready gate lifts. */
+  return `<div class="ls-qwrap" data-q="${q.id||''}" data-round="${snap.room.round}" data-locked="${locked?1:0}">
   ${badge?`<div style="text-align:center;margin-bottom:8px">${badge}</div>`:''}
   <div class="ls-qcard"><div class="ls-qtext">${q.text||'…'}</div>
   ${pzTimerHTML('lsTimer')}
@@ -8005,8 +8129,7 @@ function lsReadyGate(snap){
      on top of their screen — and then closing itself — was the report. */
   if(lsWatching||!(snap.me&&snap.me.status==='alive')) return;
   const r=snap.room; if(lsReadyShownRound===r.round) return; lsReadyShownRound=r.round;
-  const off=(r.serverNow||Date.now())-Date.now();
-  const secs=Math.max(1,Math.round(((r.phaseEndsAt||0)-(Date.now()+off))/1000));
+  const secs=Math.max(1,Math.round(((r.phaseEndsAt||0)-lsNow())/1000));
   const diff=(snap.question&&snap.question.difficulty)||'';
   try{
     if(typeof showCountdownModal==='function'){
@@ -8163,10 +8286,6 @@ async function lsAnswer(i){
   lsSecondSubmitted=false;
 }
 
-function lsRoomStrip(snap){
-  return (snap.players||[]).map(p=>{const dim=p.status==='eliminated'?'opacity:.4;filter:grayscale(1)':'';
-    return `<div class="cav"><div class="a" style="${dim}">${lsAvatarHTML(p)}</div><small>${(p.username||'').slice(0,6)}</small></div>`;}).join('');
-}
 function lsSetTab(t){ lsTab=t; const g=document.getElementById('lsGrid'),c=document.getElementById('lsChatWrap');
   if(g)g.style.display=t==='players'?'':'none'; if(c)c.style.display=t==='chat'?'':'none';
   document.querySelectorAll('#lsGame .ls-tab').forEach(el=>el.classList.toggle('on',el.getAttribute('data-tab')===t));
@@ -8784,7 +8903,6 @@ const RG_KEY='pz_rules_skip_';
 function rgIsSkipped(m){ try{ return localStorage.getItem(RG_KEY+m)==='1'; }catch(e){ return false; } }
 function rgSetSkipped(m,on){ try{ on?localStorage.setItem(RG_KEY+m,'1'):localStorage.removeItem(RG_KEY+m); }catch(e){} }
 /** Show every mode's rules again (settings → «داده‌ها و راهنماها»). */
-function rgResetAll(){ Object.keys(RULES||{}).forEach(m=>rgSetSkipped(m,false)); }
 let rgCb=null,rgMode=null,rgSkipChecked=false;
 const RULES={
   arena:{ico:'🏆',color:'#28C46A',sub:'۱۲ سوال · حذفی',items:[
@@ -9697,7 +9815,6 @@ function renderSlots(id,results){
     el.appendChild(s);
   }
 }
-function renderDots(id,filled,tot,color){renderSlots(id,id==='myDots'?myResults:oppResults);}
 function updateDuelScore(){
   const sc=document.getElementById('duelScore');
   if(sc){
@@ -10264,7 +10381,6 @@ let curBox='answers',curCorrect=0,qLocked=false,curSel=-1,statsShown=false;
    it drifted — and pushing that copy back is what made buying a help pointless. */
 let powerups={};
 let puUsed={};
-function savePowerups(){ /* the server owns the stock; nothing to push */ }
 /* Load the server-persisted inventory on login/refresh (falls back to whatever
    is already in powerups/localStorage if the server didn't send it). */
 /* One source of truth: the catalogue and the counts both come from the server. */
@@ -10471,29 +10587,6 @@ async function usePower(key){
     else toast('الان تایمری در جریان نیست');
   }
   renderPowerups();
-}
-/* کمکِ «آمار کل»: توزیع پاسخِ همه‌ی کسانی که تا امروز به این سوال جواب داده‌اند */
-function showHistoricalStats(){
-  const all=[...document.querySelectorAll('#'+curBox+' .ans')];
-  const total=1200+Math.floor(Math.random()*8000); // تعداد پاسخ‌دهنده‌های قبلی
-  // توزیع تاریخی: گزینه‌ی درست معمولاً اکثریت، ولی گاهی گزینه‌ی تله محبوب
-  let w={};all.forEach((b,i)=>{w[i]=b.classList.contains('dim')?0:6+Math.random()*14;});
-  w[curCorrect]=(w[curCorrect]||0)+30+Math.random()*28;
-  const sum=Object.values(w).reduce((a,b)=>a+b,0);
-  const rows=all.map((b,i)=>({i,p:Math.round((w[i]/sum)*100)}));
-  let diff=100-rows.reduce((s,r)=>s+r.p,0);rows[curCorrect]=rows[curCorrect];rows[0].p+=diff;
-  let sheet=document.getElementById('statSheet');
-  if(!sheet){
-    sheet=document.createElement('div');sheet.id='statSheet';sheet.className='stat-pop';
-    document.querySelector('.phone').appendChild(sheet);
-  }
-  sheet.innerHTML='<div class="sp-head">📈 آمار کل این سوال</div>'+
-    '<div class="sp-sub">از مجموع <b>'+fa(total)+'</b> پاسخ ثبت‌شده تا امروز</div>'+
-    rows.map(r=>'<div class="sp-row"><span class="sp-k">'+keysFA[r.i]+'</span><div class="sp-track"><i style="width:0" data-w="'+r.p+'"></i></div><span class="sp-p">'+fa(r.p)+'٪</span></div>').join('')+
-    '<button class="btn btn-ghost btn-sm" style="width:100%;margin-top:10px" onclick="closeStatSheet()">بستن</button>';
-  sheet.classList.add('show');
-  requestAnimationFrame(()=>requestAnimationFrame(()=>{sheet.querySelectorAll('.sp-track i').forEach(i=>i.style.width=i.dataset.w+'%');}));
-  sfx('blip');vib([20]);
 }
 function closeStatSheet(){const s=document.getElementById('statSheet');if(s)s.classList.remove('show');}
 
@@ -10857,15 +10950,6 @@ async function rankTab(el,tab){
   }
   c.innerHTML=_rankHeader(m)+(list.length>=3?podium(list):'')+rankRows(list,m.unit);
 }
-/* ============ TICKETS + LEAGUE LIVE ============ */
-function claimTicket(){
-  if(!ticketClaimable)return;
-  ticketClaimable=false;tickets.bronze++;
-  sfx('found');vib([30,50,30]);
-  const t=document.createElement('div');t.className='ticket-fly';t.textContent='🎫';
-  document.querySelector('.phone').appendChild(t);setTimeout(()=>t.remove(),1150);
-  setTimeout(()=>{toast('🎫 بلیت لیگ برنزی دریافت شد!');updateWalletUI();rankTab(null,'cup');},700);
-}
 function confettiBurst(colors){
   const ph=document.querySelector('.phone');
   for(let i=0;i<26;i++){
@@ -11148,24 +11232,6 @@ async function renderLeagueLive(){
 /* The hub IS the server view now — the three ticket counters and the fake
    reward card it used to paint are gone with the markup that held them. */
 function renderLeagueHub(){ try{ renderLeagueLive(); }catch(e){} }
-function leagueTicketBurst(){
-  const ph=document.querySelector('.phone');
-  for(let i=0;i<24;i++){
-    const s=document.createElement('div');s.className='league-ticket-spark';s.textContent=['🎫','✨','⚡','🏆'][i%4];
-    s.style.setProperty('--x',(Math.random()*250-125)+'px');
-    s.style.setProperty('--y',(-60-Math.random()*150)+'px');
-    s.style.setProperty('--r',(Math.random()*520-260)+'deg');
-    ph.appendChild(s);setTimeout(()=>s.remove(),950);
-  }
-}
-function flyLeagueTicketToHeader(){
-  const ph=document.querySelector('.phone'),target=document.getElementById('hdrTickets');
-  const pr=ph.getBoundingClientRect();let tx=pr.width/2,ty=28;
-  if(target){const r=target.getBoundingClientRect();tx=r.left-pr.left+r.width/2;ty=r.top-pr.top+r.height/2;}
-  const fly=document.createElement('div');fly.className='league-ticket-fly';fly.textContent='🎫';ph.appendChild(fly);
-  setTimeout(()=>{fly.style.left=tx+'px';fly.style.top=ty+'px';fly.style.transform='translate(-50%,-50%) scale(.34) rotate(720deg)';fly.style.opacity='0';},90);
-  setTimeout(()=>{fly.remove();if(target){target.style.transform='scale(1.28)';target.style.color='var(--bolt)';setTimeout(()=>{target.style.transform='';target.style.color='';},420);}},1050);
-}
 function showLeagueGuideIfNeeded(){
   if(window.appSettings&&appSettings.leagueGuide===false)return;
   showAaaModal({
@@ -11338,9 +11404,6 @@ async function submitTicket(){
 }
 function attachTicketFile(){toast('📎 (به‌زودی) پیوستِ فایل فعال می‌شود — فعلاً توضیحات را کامل بنویس');}
 function openTicketChat(id){ _supOpenId=id; openSupportTab('chat'); }
-function showTicketDetail(id){ openTicketChat(id); }
-function replyTicket(id){ openTicketChat(id); }
-function makeTicketFromChat(){ _supOpenId=null; openSupportTab('tickets'); }
 function renderSupportFAQ(c){
   c.innerHTML='<div class="sup-card"><h3>سوالات پرتکرار</h3><p>قبل از ثبت تیکت، شاید جواب سوالت همین‌جا باشد.</p></div>'+SUPPORT_FAQ.map((f,i)=>'<div class="faq-item" id="faq'+i+'"><button class="faq-q" onclick="toggleFAQ('+i+')"><span>❓</span><b>'+f[0]+'</b><span>⌄</span></button><div class="faq-a">'+f[1]+'</div></div>').join('')+'<button class="btn btn-primary" style="margin-top:4px" onclick="openSupportTab(\'tickets\')">جوابم رو پیدا نکردم؛ تیکت ثبت کن</button>';
 }
@@ -11550,7 +11613,6 @@ function renderChatView(id){
 async function sendChatMsg(){const i=document.getElementById('chatInput'),id=frActiveChat,f=FRIENDS_DATA.find(x=>x.id===id);if(!i||!f)return;const txt=i.value.trim();if(!txt)return;i.value='';f.m.push(['me',frMsgHTML(txt),'الان']);f.last=txt;renderChatMessages(id);i.focus();const r=await pzApi('POST','/friends/'+id+'/messages',{body:txt});if(!r||!r.ok){toast((r&&r.error&&r.error.message)||'پیام ارسال نشد');}await frLoadMessages(id);if(frActiveChat===id)renderChatMessages(id);}
 function inviteFriend(id){const f=FRIENDS_DATA.find(x=>x.id===id);if(!f)return;toast('دعوت بازی برای '+f.n+' ارسال شد 🎮');sfx('found');}
 async function sendFriendRequest(){const i=document.getElementById('friendAddInput');const v=(i?.value||'').trim();if(!v){toast('یوزرنیم دوستت رو وارد کن');return;}const r=await pzApi('POST','/friends/requests',{username:v.replace(/^@/,'')});if(r&&r.ok){const st=r.data&&r.data.status;toast(st==='accepted'?'حالا دوست شدید ✅':'درخواست دوستی ارسال شد 🤝');recordMissionEvent('social',1);if(i)i.value='';friendsLoad();}else{toast((r&&r.error&&r.error.message)||'خطا در ارسال درخواست');}}
-async function addSuggestedFriend(id){const s=(typeof FRIEND_SUGGESTIONS!=='undefined'?FRIEND_SUGGESTIONS.find(x=>x.id===id):null);if(!s)return;const r=await pzApi('POST','/friends/requests',{username:s.u});if(r&&r.ok){toast('درخواست دوستی ارسال شد 🤝');recordMissionEvent('social',1);friendsLoad();}else{toast((r&&r.error&&r.error.message)||'خطا');}}
 async function acceptFriendRequest(id){const r=await pzApi('POST','/friends/requests/'+id+'/accept',{});if(r&&r.ok){toast('دوست جدید اضافه شد ✅');recordMissionEvent('social',1);}else{toast((r&&r.error&&r.error.message)||'خطا');}friendsLoad();}
 async function declineFriendRequest(id){const r=await pzApi('POST','/friends/requests/'+id+'/reject',{});toast(r&&r.ok?'درخواست رد شد':'خطا');friendsLoad();}
 function copyInviteLink(){try{navigator.clipboard&&navigator.clipboard.writeText('https://prizze.quiz/invite/PQ-SHAHAB-9865');}catch(e){}recordMissionEvent('social',1);toast('لینک دعوت کپی شد 🎁');}
@@ -11591,8 +11653,6 @@ async function pzHeartsRefresh(){
     return d;
   }catch(e){ return null; }
 }
-/* Kept for callers; regeneration is the server's job now. */
-function syncHearts(){}
 function nextHeartText(){
   if(hearts>=HEART_MAX_RECHARGE) return 'کامل';
   const left=Math.max(0,heartNextInMs-(Date.now()-_heartFetchedAt));
@@ -11703,10 +11763,6 @@ function renderTxns(){
   tl.innerHTML=list.length?list.map(txnHTML).join(''):'<div class="wallet-empty"><span class="big">📭</span>تراکنشی پیدا نشد.</div>';
   renderWalletStats();
 }
-function renderCardsTab(c){
-  const empty='<div class="wallet-empty" style="text-align:center;padding:18px"><div style="font-size:40px">💳</div><b style="display:block;margin:8px 0 4px">هنوز کارتی ثبت نکرده‌ای</b><span style="color:var(--muted);font-size:13px">برای برداشت جایزه، اول کارت بانکی‌ات را اضافه کن.</span></div>';
-  c.innerHTML='<div class="wallet-card"><h3>کارت‌های بانکی من</h3><p>کارت‌هایی که اینجا اضافه می‌کنی، در برداشت با یک کلیک قابل انتخاب‌اند.</p><div class="sup-actions"><button class="btn btn-primary" onclick="openBankSheet()">＋ افزودن کارت</button></div></div>'+(BANK_CARDS.length?BANK_CARDS.map(bankCardHTML).join(''):empty);
-}
 function bankCardHTML(c){const mask=c.mask||pzMaskCard(c.num||'');return '<div class="bank-card"><div class="bank-top"><b>'+esc0(c.bank||'کارت بانکی')+'</b>'+(c.def?'<span class="ticket-badge answered">پیش‌فرض</span>':'')+'</div><div class="num" dir="ltr">'+esc0(mask)+'</div>'+(c.holder?'<div class="iban">'+esc0(c.holder)+'</div>':'')+(c.iban?'<div class="iban" dir="ltr">'+esc0(c.iban)+'</div>':'')+'<div class="bank-actions"><button class="btn '+(c.def?'btn-green':'btn-ghost')+' btn-sm" onclick="setDefaultCard(\''+c.id+'\')">'+(c.def?'پیش‌فرض ✓':'پیش‌فرض کن')+'</button><button class="btn btn-red btn-sm" onclick="removeBankCard(\''+c.id+'\')">حذف</button></div></div>';}
 function esc0(s){return String(s==null?'':s).replace(/[&<>"']/g,x=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[x]));}
 function renderWalletSecurity(c){
@@ -11763,7 +11819,6 @@ function submitBankCard(){
 function setDefaultCard(id){BANK_CARDS.forEach(c=>c.def=c.id===id);pzSaveCards();renderWallet();toast('کارت پیش‌فرض تغییر کرد');}
 function removeBankCard(id){BANK_CARDS=BANK_CARDS.filter(c=>c.id!==id);if(BANK_CARDS.length&&!BANK_CARDS.some(c=>c.def))BANK_CARDS[0].def=true;pzSaveCards();renderWallet();toast('کارت حذف شد');}
 function copyIban(id){const c=BANK_CARDS.find(x=>x.id===id);try{navigator.clipboard&&navigator.clipboard.writeText(c.iban);}catch(e){}toast('شبا کپی شد');}
-function copyDefaultIban(){const c=BANK_CARDS.find(x=>x.def)||BANK_CARDS[0];if(c)copyIban(c.id);}
 function showTxnDetail(id){const t=TXNS.find(x=>x.id===id);if(!t)return;showAaaModal({icon:t.i,title:t.n,sub:'مبلغ: '+(t.pos?'+':'−')+fa(t.amt)+' تومان<br>زمان: '+t.t+'<br>وضعیت: '+(t.st==='pend'?'در حال بررسی':t.st==='paid'?'واریز شد':'موفق')+'<br>کد پیگیری: '+t.ref,primaryText:'کپی کد پیگیری',secondaryText:'بستن',onPrimary:()=>{try{navigator.clipboard&&navigator.clipboard.writeText(t.ref);}catch(e){}closeAaaModal(false);toast('کد پیگیری کپی شد');},onSecondary:()=>closeAaaModal(false)});}
 function exportWalletStatement(){const data=JSON.stringify({wallet, walletReserved,walletCashback,bankCards:BANK_CARDS,transactions:TXNS},null,2);const blob=new Blob([data],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='wallet-statement.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);toast('خروجی کیف پول آماده شد 📄');}
 
@@ -11788,21 +11843,6 @@ const SHOP={
   ],
 };
 let _shopCurTab='util';
-/* A help won on the wheel. The wheel itself is decided in the browser, so this
-   is only as trustworthy as the wheel is — it grants locally and then asks the
-   server for the real count, which is what the buttons and the shop read. When
-   the wheel moves server-side this becomes a single refresh.
-   Only helps the admin marked awardable can be won. */
-function pzLLPrize(prize){
-  const def=(pzLL.catalog||[]).find(d=>d.key===prize.key);
-  if(!def||!def.awardable||!def.enabled){ toast('این جایزه فعلاً فعال نیست'); return; }
-  pzLL.inv[prize.key]=(Number(pzLL.inv[prize.key])||0)+Number(prize.amount||1);
-  powerups=pzLL.inv;
-  toast(prize.ico+' '+prize.title+' به کمک‌ها اضافه شد');
-  try{ sfx('correct'); }catch(e){}
-  renderPowerups();
-  setTimeout(()=>{ try{ pzLLRefresh(); }catch(e){} },400);
-}
 
 /* Shop cards for every sellable help the admin has switched on. */
 function pzLLShopItems(){
@@ -12162,7 +12202,6 @@ function isLeagueTicket(k){ return LEAGUE_TICKET_DEFS.some(t=>t.key===k); }
    source of truth. pzApplyServerTickets() overwrites them from /wallet so every
    device/browser always shows the same real counts. */
 let mTickets={green:0,blue:0,red:0}; let selectedTicket='green'; let duelTicket=null;
-function saveMTickets(){/* no-op: the server is the source of truth for tickets */}
 function pzApplyServerTickets(t){
   if(!t||typeof t!=='object') return;
   try{ ['green','blue','red'].forEach(k=>{ if(t[k]!=null) mTickets[k]=Number(t[k])||0; }); }catch(e){}
@@ -12373,13 +12412,6 @@ function ticketEnterDuel(){
      is paid by the SERVER when the match settles — no client-side crediting. */
   curStake=t.value; window.matchValue=t.value;
   return true;
-}
-/* Credit the combined prize to the wallet when a paid ticket duel is won. */
-function ticketAwardPrize(){
-  if(!duelTicket) return;
-  const t=tDef(duelTicket); const amount=t.value*2; duelTicket=null;
-  try{ earn(amount,'برد دوئل ('+t.name+')','🏆'); }catch(e){ wallet+=amount; try{updateWalletUI();}catch(_){} }
-  toast('🏆 بردی! '+fa(amount)+' تومان به کیف پولت اضافه شد');
 }
 /* PRIZE TABLE — the server is the only thing that knows the commission, and it
    sends back the take-home figure per tier already worked out. The client does
@@ -12646,12 +12678,6 @@ function renderTicketSelect(){
   if(prize==null) pzLoadPrizes().then(()=>{ const el=document.getElementById('tkPrizeVal'); const p=pzPrizeFor(selectedTicket); if(el&&p!=null) el.textContent=fa(p)+' تومان'; });
 
 }
-/* Weekly-league tickets (gold/silver/bronze) are NOT purchasable — awarded by
-   weekly ranking. Show their counts wherever leagues are displayed. */
-function renderLeagueTickets(){
-  const el=document.getElementById('profTickets');
-  if(el&&typeof tickets==='object') el.innerHTML='<span style="color:#FFD24A">🥇 '+fa(tickets.gold||0)+'</span> · <span style="color:#cfd6dd">🥈 '+fa(tickets.silver||0)+'</span> · <span style="color:#e6a86b">🥉 '+fa(tickets.bronze||0)+'</span>';
-}
 setTimeout(()=>{ try{renderHeaderTickets();}catch(e){} },300);
 
 /* ============ ANTI-CHEAT / FOCUS ============ */
@@ -12784,8 +12810,6 @@ async function qcBuy(key){
     try{ toast((r&&r.error&&r.error.message)||'خرید انجام نشد'); }catch(e){}
   }
 }
-/* The old entry point, kept so nothing that still calls it breaks. */
-function toggleQC(){ qcOpen(); }
 function sendTaunt(text){
   spawnTaunt(text,'me');
   if(Math.random()<0.7)setTimeout(()=>spawnTaunt(TAUNTS[Math.floor(Math.random()*TAUNTS.length)],'them'),700+Math.random()*700);
@@ -13675,7 +13699,6 @@ function pzwPaintButton(){
     if(note)note.textContent=t?('جایزهٔ این دوره را گرفته‌ای؛ '+t+' دیگر دوباره بیا 🎡'):'گردونه فعلاً غیرفعال است.';
   }
 }
-function closeSpin(){if(spinning){toast('تا پایان چرخش صبر کن 🎡');return;}document.getElementById('spinBg').classList.remove('show');document.getElementById('spinSheet').classList.remove('show');setTimeout(()=>document.getElementById('spinSheet').classList.remove('done'),250);}
 function forceCloseSpin(){spinning=false;closeAaaModal(false);document.getElementById('spinBg').classList.remove('show');document.getElementById('spinSheet').classList.remove('show');setTimeout(()=>document.getElementById('spinSheet').classList.remove('done'),250);}
 function spinConfetti(){
   const ph=document.querySelector('.phone');
@@ -13862,9 +13885,6 @@ function feedback(win,correctBtn){
     }
   }else{shakeFrame();flash('r');}
 }
-function forfeitHome(){
-  if(confirm('اگه الان بری خانه، جایزه‌ی این دور رو از دست می‌دی. مطمئنی؟'))go('home');
-}
 
 /* ============ RIPPLE on answers ============ */
 document.addEventListener('pointerdown',e=>{
@@ -13897,11 +13917,6 @@ function sfx(type){
 }
 
 /* ============ MISSIONS CENTER ============ */
-/* The mission list used to live right here, ten hardcoded rows with progress
-   in localStorage. Both are gone: definitions are rows in the database and
-   progress is the server's, so a mission can be added or a seasonal event run
-   without shipping a new build. */
-function missionRewardText(r){ return r&&r.label ? r.label : ''; }
 function renderMissionStats(){
   const box=document.getElementById('missionStats');
   if(box){
@@ -14092,7 +14107,6 @@ function recordMissionEvent(ev,n){
   if(!metric) return;                      /* server-side metrics are ignored here */
   try{ pzApi('POST','/missions/event',{metric:metric}); }catch(e){}
 }
-function openMissions(){ go('missions'); }
 setTimeout(()=>{ try{ pzMissionsLoad(true).then(()=>{ try{updateMissionHome();}catch(e){} }); }catch(e){} },900);
 
 /* ============ STATS CENTER ============ */
@@ -14642,33 +14656,6 @@ function hmRender(){
   }catch(e){}
   hmSwipeInit();
 }
-/* Prizes and entry cost come from the live economy config the rest of the game
-   reads — never from numbers typed into this screen. When a mode has nothing
-   configured yet, its chips are left off rather than filled with a guess. */
-function hmPrizes(m){
-  const C=(typeof CFG!=='undefined'&&CFG)||{};
-  const out=[];
-  try{
-    if(m.key==='duel'){
-      const w=(C.modes&&C.modes.duel)||{};
-      out.push(['🏆',fa(w.winCup||20)]);
-      if(w.winCoins) out.push(['🪙',fa(w.winCoins)]);
-      if(w.winXp) out.push(['⚡',fa(w.winXp)]);
-    } else if(m.key==='ls'){
-      const w=(C.modes&&C.modes.lastSurvivor)||{};
-      out.push(['🏆',fa(w.winCup||80)]);
-      out.push(['💰',w.pot?fa(w.pot):'جایزهٔ نقدی']);
-      if(w.winXp) out.push(['⚡',fa(w.winXp)]);
-    }
-  }catch(e){}
-  if(!out.length) out.push(['🏆','—']);
-  return out.slice(0,3);
-}
-function hmEntry(m){
-  if(m.key==='duel') return '<div class="mk-entry">حریف‌یابی <span class="cost">رایگان</span></div>';
-  if(m.key==='ls')   return '<div class="mk-entry">ورود با <span class="cost">🎫 بلیط</span></div>';
-  return '<div class="mk-entry">به‌زودی باز می‌شود</div>';
-}
 function hmStart(){ const m=hmModes()[hmIdx]; if(!m) return; if(m.soon){ toast('این حالت هنوز باز نشده 🚧'); return; } try{ m.go(); }catch(e){} }
 /* One card leaves, the next arrives from the opposite edge — the way a deck
    behaves. Without this the card blinked from one mode to another and there
@@ -15026,9 +15013,6 @@ function pzDailyFromStatus(d){
   dailyState.streakDays=Number(d.streakDays)||dailyState.days.length||7;
   dailyState.enabled=d.enabled!==false;
 }
-function dailyToday(){
-  return (dailyState.days||[]).find((x)=>Number(x.day)===dailyState.day)||null;
-}
 /* Kept under its old name because several screens call it; there is no card
    left to draw, so it keeps the header badge in step instead. */
 function renderDailyHero(){
@@ -15173,13 +15157,6 @@ function obFinish(animate){
   try{ showStarterToken(); }catch(e){}
 }
 
-/* Lets the player watch it again from settings, and lets the panel be checked
-   without clearing storage. */
-function obReplay(){
-  obDone=false;
-  try{ localStorage.removeItem('pq_onboarding_done'); }catch(e){}
-  showOnboardingIfNeeded();
-}
 
 function initAAAUX(){renderWeeklyProgress();renderDailyHero();renderBadges();try{if(localStorage.getItem('pq_onboarding_done')==='1')showStarterToken();}catch(e){}}
 setTimeout(initAAAUX,900);
@@ -15445,7 +15422,15 @@ function pzTimerSet(id,left,total,opts){
   const frac=(total>0)?t/total:0;
   if(L) L.style.transform='scaleX('+frac+')';
   if(R) R.style.transform='scaleX('+frac+')';
-  if(N) N.textContent=(opts.text!=null)?opts.text:fa(Math.ceil(t));
+  const txt=(opts.text!=null)?opts.text:fa(Math.ceil(t));
+  /* THE ELEMENT ITSELF, when it is not the full widget.
+     This used to write only into `<id>N` — the number inside the bars — so a
+     screen that carries a plain «<b id="lsTimer">» got nothing at all. That is
+     why the Last Survivor waiting room froze on whatever number it was painted
+     with: the countdown was recomputed every second and then thrown away for
+     want of an element to put it in. */
+  if(N) N.textContent=txt;
+  else if(!L&&!R) T.textContent=txt;
   T.classList.toggle('danger',!opts.idle&&t<=5&&t>0);
 }
 
@@ -16271,7 +16256,6 @@ function clearFieldErr(inputId){ const i=document.getElementById(inputId); if(i)
    and once it IS answered the profile shows it rather than offering it again. */
 const GENDER_LABEL={male:'آقا',female:'خانم'};
 function readGender(id){ const el=document.getElementById(id); return (el&&el.value)||''; }
-function showGender(id,g){ const el=document.getElementById(id); if(el) el.value=g||''; }
 /* The profile slot: a settled answer is a line of text, an unanswered one is
    the same dropdown, so accounts that predate the question can still fill it. */
 function renderProfileGender(){
@@ -16492,16 +16476,6 @@ function pzAvCell(av,character){
   },true);
 })();
 
-/* Legacy shims. Every old call site keeps working and simply renders the card
-   with whatever it knows; the ones that were given the full row show both faces. */
-function pzAvHTML(a,fallback,character){
-  if(a&&typeof a==='object')return pzFaceHTML(a);
-  return pzFaceHTML({avatar:a,character:character||null});
-}
-function pzSetAv(el,a,fallback,character){
-  if(!el)return;
-  el.innerHTML=(a&&typeof a==='object')?pzFaceHTML(a):pzFaceHTML({avatar:a,character:character||null});
-}
 function pzMyFace(){ return {avatar:window.PZ_MY_AVATAR||'',character:window.PZ_MY_CHARACTER||null}; }
 function pzMyAvHTML(fallback){ return pzFaceHTML(pzMyFace()); }
 /* Decode any file the OS hands us (JPEG/PNG/HEIC/WebP), honouring EXIF rotation. */
@@ -17074,8 +17048,6 @@ function pzHandleWs(m){
     return;
   }
 }
-/* Custom client-to-client sync ride on the room chat channel (no backend change). */
-function pzWsSay(obj){ try{ if(pzRt.ws&&pzRt.ws.readyState===1) pzRt.ws.send(JSON.stringify({type:'client:send_chat',payload:{matchId:pzRt.matchId,text:'PZ1:'+JSON.stringify(obj)}})); }catch(_){} }
 /* Real in-game chat/taunt to the opponent (prefix PZC: to separate from PZ1 sync). */
 function pzWsSayChat(text){ try{ if(pzRt.ws&&pzRt.ws.readyState===1) pzRt.ws.send(JSON.stringify({type:'client:send_chat',payload:{matchId:pzRt.matchId,text:'PZC:'+String(text)}})); }catch(_){} }
 function pzOnPeer(msg){
@@ -17174,8 +17146,6 @@ function pzForfeitWin(){ if(pzRt.finished)return;
     }).catch(()=>setTimeout(tryClaim,8000));
   };
   tryClaim(); }
-/* We reconnected to a match the opponent already won → record the loss, no resume. */
-function pzForfeitLoss(){ if(pzRt.finished)return; pzRt.finished=true; clearInterval(dTimer); toast('این مسابقه پایان یافته — حریف برنده شد',3000); duelRoundLose(); }
 
 /* Confirm the matched opponent is REALLY in the room before starting the game.
    The HTTP match package always lists two players, so it can't tell a real
@@ -18222,7 +18192,6 @@ rematch=function(){
     _pzPollRematchAsRequester();
   });
 };
-function _pzResetRematchBtn(){ _pzRematchBtnState('idle'); }
 function _pzPollRematchAsRequester(){
   clearInterval(_pzRematchPoll); const mid=_pzRematchMid; const t0=Date.now();
   _pzRematchPoll=setInterval(async()=>{
