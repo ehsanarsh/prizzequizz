@@ -3438,6 +3438,29 @@ body,button,input,select,textarea,.tab,#rankTabs .tab,#rankTabs .tab small,.rank
 /* ===== CROSS-DEVICE SAFE OVERFLOW PATCH v39 ===== */
 .phone,.viewport,.screen{max-width:100%;box-sizing:border-box}
 .screen{overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+
+/* THE INSTALL STRIP. Across the top, above every screen, and the screens move
+   down to make room rather than sitting underneath it — a bar that covers the
+   header is a bar that gets tapped by accident. It goes away when the game is
+   installed and not before. */
+#pzInstallBar{position:absolute;top:0;left:0;right:0;z-index:6;
+  display:flex;align-items:center;gap:9px;
+  padding:calc(8px + env(safe-area-inset-top,0px)) 11px 8px;
+  background:linear-gradient(180deg,var(--bolt),var(--bolt-2));color:#141414;
+  border-bottom:2px solid #000;box-shadow:0 3px 0 rgba(0,0,0,.45)}
+#pzInstallBar .pzib-ic{flex:0 0 auto;font-size:18px;line-height:1}
+#pzInstallBar .pzib-txt{flex:1 1 auto;min-width:0;font-size:11.5px;font-weight:800;line-height:1.45}
+#pzInstallBar .pzib-btn{flex:0 0 auto;background:#141414;color:var(--bolt);border:2px solid #000;
+  border-radius:12px;padding:7px 15px;font-family:inherit;font-size:13px;font-weight:900;
+  cursor:pointer;box-shadow:0 3px 0 #000;transition:transform .08s,box-shadow .08s}
+#pzInstallBar .pzib-btn:active{transform:translateY(2px);box-shadow:0 1px 0 #000}
+body.pz-has-install .screen{top:calc(54px + env(safe-area-inset-top,0px))}
+@media (max-height:700px){
+  #pzInstallBar{padding:calc(6px + env(safe-area-inset-top,0px)) 9px 6px}
+  #pzInstallBar .pzib-txt{font-size:10.5px}
+  #pzInstallBar .pzib-btn{padding:6px 12px;font-size:12px}
+  body.pz-has-install .screen{top:calc(48px + env(safe-area-inset-top,0px))}
+}
 img,svg,canvas{max-width:100%}
 button,input,textarea,select{font-family:'Vazirmatn',system-ui,sans-serif}
 @supports(height:100dvh){
@@ -19390,12 +19413,24 @@ function pzShouldAskPush(){
        PushManager at all, so that case is the support check below. */
     if(!('serviceWorker' in navigator)||!('PushManager' in window)) return false;
     if(pzIsIOS()&&!pzIsInstalled()) return false;
-    if(pzPushAskCount()>=2) return false;                     // asked enough
+    /* ASKED EVERY TIME THEY COME BACK, until they answer.
+       It used to stop after two asks for ever, which meant a player who
+       dismissed it twice in their first week could never receive a single
+       notification again — no invitation, no match starting, no message from a
+       friend — and nothing in the game would ever bring it up. Permission is
+       what makes the whole notification system exist, so it is asked once per
+       visit while the answer is still «default». The moment they say yes or no,
+       this stops: `Notification.permission!=='default'` above is the real gate,
+       and a refusal is respected by the browser itself. */
+    if(pzAskedThisVisit()) return false;
     const a=document.querySelector('.screen.active');
     if(a&&['login','otp','register','splash','intro'].indexOf(a.id)>=0) return false;
     return true;
   }catch(e){ return false; }
 }
+/* One ask per visit — not one per lifetime, and not one per screen change. */
+function pzAskedThisVisit(){ try{ return sessionStorage.getItem('pz_push_asked_visit')==='1'; }catch(e){ return false; } }
+function pzMarkAskedThisVisit(){ try{ sessionStorage.setItem('pz_push_asked_visit','1'); }catch(e){} }
 function pzAskPushOnInstall(){
   pzAskPush('خبرها را روی گوشی‌ات بگیر',
     'می‌توانیم شروع مسابقه، نتیجه، جایزه‌ها و پیام دوستانت را روی همین گوشی خبرت کنیم — حتی وقتی بازی باز نیست.');
@@ -19405,7 +19440,7 @@ function pzAskPushOnInstall(){
    chance on somebody who was not looking. */
 function pzAskPush(title,sub){
   if(!pzShouldAskPush()) return;
-  pzPushMarkAsked();
+  pzPushMarkAsked(); pzMarkAskedThisVisit();
   try{
     showAaaModal({icon:'🔔',title:title,sub:sub,
       primaryText:'فعال کن', secondaryText:'بعداً',
@@ -19423,7 +19458,84 @@ function pzAskPushForChat(){
   }, 900);
 }
 /* Freshly installed in this very session — ask as soon as the player lands. */
-try{ window.addEventListener('appinstalled',()=>{ setTimeout(pzAskPushOnInstall,1200); }); }catch(e){}
+try{ window.addEventListener('appinstalled',()=>{ pzInstallBarHide(); setTimeout(pzAskPushOnInstall,1200); }); }catch(e){}
+
+/* ── «نصب» AT THE TOP OF THE SCREEN ──────────────────────────────────────
+   The game could be added to the home screen all along and nothing ever said
+   so, so almost nobody did — and on iPhone that is not a nicety: Safari has no
+   push at all until the game is installed, which means those players could
+   never be sent anything. The browser offers the install prompt exactly once,
+   through an event, and if nothing catches that event the offer is gone. So it
+   is caught and kept, and a strip across the top spends it whenever the player
+   is ready. The strip is there until the game IS installed — it has no dismiss,
+   because the whole point is that it should not be missable. */
+let _pzInstallEvt=null;
+try{
+  window.addEventListener('beforeinstallprompt',(e)=>{
+    e.preventDefault();          // keep the offer instead of letting the browser spend it
+    _pzInstallEvt=e;
+    pzInstallBarShow();
+  });
+}catch(e){}
+function pzInstallBarHide(){
+  try{ const b=document.getElementById('pzInstallBar'); if(b) b.remove(); document.body.classList.remove('pz-has-install'); }catch(e){}
+}
+function pzInstallBarShow(){
+  try{
+    if(pzIsInstalled()) return pzInstallBarHide();
+    /* Nothing to install into on a desktop browser that cannot do it and is not
+       iOS — showing a button that can only ever apologise is worse than none. */
+    if(!_pzInstallEvt&&!pzIsIOS()) return;
+    if(document.getElementById('pzInstallBar')) return;
+    const host=document.getElementById('vp')||document.body;
+    const bar=document.createElement('div');
+    bar.id='pzInstallBar';
+    bar.innerHTML='<span class="pzib-ic">📲</span>'+
+      '<span class="pzib-txt">بازی را روی صفحهٔ گوشی‌ات نصب کن — سریع‌تر باز می‌شود و خبرها به دستت می‌رسد</span>'+
+      '<button class="pzib-btn" type="button">نصب</button>';
+    bar.querySelector('.pzib-btn').onclick=pzInstallNow;
+    host.insertBefore(bar,host.firstChild);
+    document.body.classList.add('pz-has-install');
+  }catch(e){}
+}
+/* iOS never fires the event — there is no programmatic install on iPhone, only
+   Share ▸ «Add to Home Screen» — so there the button teaches the two taps
+   instead of pretending it can do them. */
+async function pzInstallNow(){
+  try{
+    if(_pzInstallEvt){
+      const e=_pzInstallEvt; _pzInstallEvt=null;
+      e.prompt();
+      let outcome=''; try{ outcome=(await e.userChoice||{}).outcome||''; }catch(_){}
+      if(outcome==='accepted'){ pzInstallBarHide(); return; }
+      /* Said «not now»: the browser will not offer this event again in this
+         visit, so the strip stays and teaches the manual way. */
+      pzInstallHowTo(); return;
+    }
+    pzInstallHowTo();
+  }catch(e){ pzInstallHowTo(); }
+}
+function pzInstallHowTo(){
+  const ios=pzIsIOS();
+  const steps=ios
+    ? '۱) روی دکمهٔ <b>اشتراک‌گذاری</b> پایین صفحه بزن (مربع با فلش رو به بالا)<br>'+
+      '۲) کمی پایین برو و <b>«Add to Home Screen»</b> را بزن<br>'+
+      '۳) بازی را از همان آیکن باز کن'
+    : '۱) روی منوی <b>⋮</b> گوشهٔ مرورگر بزن<br>'+
+      '۲) <b>«Add to Home screen»</b> یا <b>«نصب برنامه»</b> را انتخاب کن<br>'+
+      '۳) بازی را از همان آیکن باز کن';
+  const why=ios
+    ? '<div style="margin-top:10px;font-size:12.5px;opacity:.85">روی آیفون تا وقتی بازی نصب نشود، اعلان روی گوشی‌ات نمی‌آید.</div>'
+    : '';
+  try{ showAaaModal({icon:'📲',title:'نصب روی صفحهٔ گوشی',sub:steps+why,primaryText:'باشه',onPrimary:()=>closeAaaModal(false)}); }
+  catch(e){}
+}
+/* Installed already, or installed since last time → the strip must not be
+   there. Checked on load and whenever the window comes back into view. */
+try{
+  setTimeout(()=>{ if(pzIsInstalled()) pzInstallBarHide(); else pzInstallBarShow(); },3200);
+  window.addEventListener('focus',()=>{ if(pzIsInstalled()) pzInstallBarHide(); });
+}catch(e){}
 
 /* On load: register SW; if the user already granted permission, re-subscribe
    silently so the server always has a fresh subscription for this device.

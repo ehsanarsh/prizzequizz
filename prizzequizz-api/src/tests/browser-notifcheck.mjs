@@ -138,16 +138,27 @@ console.log('being asked to turn phone notifications on:');
   ok('opening a chat asks for it', asked.open, asked.text.slice(0, 60));
   ok('in words about the chat', /پیام دوستت/.test(asked.text), asked.text.slice(0, 90));
 
-  /* Twice, and no more — a nag is how a site gets blocked for good. */
+  /* ONCE A VISIT, AND NOT AGAIN INSIDE IT. The rule used to be «twice, ever»,
+     which meant a player who waved it away in their first week could never be
+     sent anything for the life of the account — no match starting, no message
+     from a friend — and nothing in the game would ever raise it again. Now the
+     ask comes back on the next visit and stops the moment they actually answer
+     (granted or denied), which is the browser's own gate. */
   const nag = await page.evaluate(async () => {
     (0, eval)("try{closeAaaModal(true);}catch(e){}");
     (0, eval)('pzAskPushForChat()'); await new Promise((r) => setTimeout(r, 1200));
     (0, eval)("try{closeAaaModal(true);}catch(e){}");
     (0, eval)('pzAskPushForChat()'); await new Promise((r) => setTimeout(r, 1200));
     const m = document.getElementById('aaaModal');
-    return { asked: Number(localStorage.getItem('pz_push_asked') || 0), open: !!m && m.classList.contains('show') };
+    return { open: !!m && m.classList.contains('show'), should: (0, eval)('pzShouldAskPush')() };
   });
-  ok('and stops after twice', nag.asked === 2 && nag.open === false, JSON.stringify(nag));
+  ok('and does not ask twice in one visit', nag.open === false && nag.should === false, JSON.stringify(nag));
+
+  const backTomorrow = await page.evaluate(() => {
+    try { sessionStorage.removeItem('pz_push_asked_visit'); } catch (e) {}
+    return (0, eval)('pzShouldAskPush')();
+  });
+  ok('but the next visit asks again, because it still matters', backTomorrow === true, String(backTomorrow));
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
