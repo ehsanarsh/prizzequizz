@@ -16785,7 +16785,7 @@ function pzCount(map){ let n=0; for(const k in map){ if(map[k]&&map[k].correct)n
    the "حریف" wording. State (scores, answers, round) is never reset — the game
    resumes exactly where it was once the socket is back.
    ========================================================================== */
-let pzConn={ mine:'ok', opp:'ok', lastPingAt:0, lastPongAt:0, rtt:0, watchdog:null, restoreTimer:null, wasDown:false, restOkAt:0 };
+let pzConn={ mine:'ok', opp:'ok', lastPingAt:0, lastPongAt:0, rtt:0, watchdog:null, restoreTimer:null, wasDown:false, restOkAt:0, wsonlyTimer:null };
 /* THE PHONE'S INTERNET AND THE LIVE SOCKET ARE TWO DIFFERENT THINGS.
    On the networks this game is actually played on, ordinary requests get
    through while the WebSocket is cut — which is exactly why Last Survivor
@@ -16804,8 +16804,17 @@ function pzConnRender(){
   if(!pzRt.active||pzRt.finished){ el.classList.remove('show'); return; }
   if(pzConn.mine==='down')      pzConnPaint('down','⚠️','اتصال شما قطع شده است، در حال تلاش برای اتصال مجدد...');
   /* The socket is gone but the phone is online: the match keeps running on the
-     backup path, so the player is told that and nothing more alarming. */
-  else if(pzConn.mine==='wsonly')pzConnPaint('weak','🔄','اتصال زنده قطع شد — بازی از مسیر پشتیبان ادامه دارد');
+     backup path, so the player is told that and nothing more alarming — once,
+     briefly. It is news, not a fault they can do anything about, and on a
+     network that never carries a socket it would otherwise sit across the
+     screen for the whole match. */
+  else if(pzConn.mine==='wsonly'){
+    pzConnPaint('weak','🔄','اتصال زنده قطع شد — بازی از مسیر پشتیبان ادامه دارد');
+    clearTimeout(pzConn.wsonlyTimer);
+    pzConn.wsonlyTimer=setTimeout(()=>{
+      try{ if(pzConn.mine==='wsonly'){ const b=document.getElementById('pzConnBanner'); if(b) b.classList.remove('show'); } }catch(_){}
+    },4500);
+  }
   else if(pzConn.mine==='weak') pzConnPaint('weak','⚠️','اینترنت شما ناپایدار است');
   else if(pzConn.opp==='down')  pzConnPaint('oppdown','⏳','اتصال حریف قطع شد؛ منتظر بازگشت...');
   else if(pzConn.opp==='weak')  pzConnPaint('oppweak','📶','اتصال حریف ناپایدار است');
@@ -17221,17 +17230,47 @@ function pzForfeitWin(){ if(pzRt.finished)return;
    / dead network) — that's the "ghost opponent". We only proceed once we've seen
    a genuine live signal from them (presence>=2, or any answer/chat over the WS).
    Re-join every 700ms in case our join raced theirs. Resolves false on timeout. */
+/* IS THE OPPONENT REALLY IN THE ROOM?
+   This is the gate every duel has to pass before it starts, and it used to have
+   exactly one source of truth: `server:presence` on the WebSocket. On a network
+   that drops WebSockets that answer never came, so the gate timed out on every
+   single match — «حریف به بازی متصل نشد», entry refunded, back to the home
+   screen, no game — while Last Survivor, which never needs the socket, played
+   fine on the same phone. The socket is still the fast answer; the server now
+   also records who has been heard from inside the match over plain HTTP, and
+   that is asked for here as well. Either one is proof. */
 function pzWaitOpponentPresent(timeoutMs){
   return new Promise((resolve)=>{
     if(pzRt.oppPresent||pzRt.presence>=2) return resolve(true);
-    const t0=Date.now(); let done=false;
+    const t0=Date.now(); let done=false, asking=false;
+    const mid=pzRt.matchId;
+    const finish=(v)=>{ if(done) return; done=true; clearInterval(iv); resolve(v); };
+    /* Ask the server directly, in parallel with the socket. Reading the match
+       is itself an announcement, so this is also how WE become visible to an
+       opponent whose own socket is dead. */
+    const askServer=async()=>{
+      if(asking||done) return; asking=true;
+      try{
+        const r=await pzApi('GET','/matches/'+mid);
+        if(done||!pzRt.active||pzRt.matchId!==mid) return;
+        const here=(r&&r.data&&r.data.presentUserIds)||[];
+        const mine=String(pzRt.myId||(_usr&&_usr.id)||'');
+        /* Somebody who is not me has been seen inside this match. */
+        if(Array.isArray(here)&&here.some(u=>String(u)&&String(u)!==mine)){
+          pzRt.oppPresent=true; finish(true);
+        }
+      }catch(e){}
+      finally{ asking=false; }
+    };
     const iv=setInterval(()=>{
       if(done) return;
-      if(!pzRt.active){ done=true; clearInterval(iv); return resolve(false); }
-      if(pzRt.oppPresent||pzRt.presence>=2){ done=true; clearInterval(iv); return resolve(true); }
-      if(Date.now()-t0>=timeoutMs){ done=true; clearInterval(iv); return resolve(false); }
+      if(!pzRt.active){ return finish(false); }
+      if(pzRt.oppPresent||pzRt.presence>=2){ return finish(true); }
+      if(Date.now()-t0>=timeoutMs){ return finish(false); }
       pzWsJoin();   /* nudge: re-announce presence in case the first join raced */
+      askServer();
     },400);
+    askServer();
   });
 }
 

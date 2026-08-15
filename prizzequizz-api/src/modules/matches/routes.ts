@@ -5,6 +5,7 @@ import { realtimeRooms } from '../../realtime/roomRegistry.js';
 import { validateAnswer } from '../../services/questionEngine.js';
 import { repositories } from '../../repositories/index.js';
 import { activeMatchState } from '../../services/matchStateStore.js';
+import { touchMatchPresence, presentInMatch } from '../../services/matchPresence.js';
 import { selectQuestionForRound, pickDeterministic, DIFF_LEVELS, TOPIC_SELECT_CATEGORY } from '../../services/adaptiveDifficultyService.js';
 import type { GameModeId, Match, PlanType } from '../../types/domain.js';
 
@@ -177,6 +178,9 @@ export function registerMatchRoutes(router: Router, base: string): void {
   //    and because the order is derived purely from (matchId, topic), BOTH
   //    players get the identical set — a question shown to one is shown to both.
   router.add('GET', `${base}/matches/:id/question`, async (ctx) => {
+    /* Prefetching the questions is the earliest proof a player is in the room,
+       and on a slow link it is the only request they make for several seconds. */
+    if (ctx.userId) touchMatchPresence(ctx.params.id!, ctx.userId);
     const round = Math.max(0, Math.floor(Number(ctx.query.get('round') ?? 0)) || 0);
     let match: Match | null = null;
     try { match = await getMatch(ctx.params.id!); } catch { /* match not resolvable yet */ }
@@ -260,8 +264,22 @@ export function registerMatchRoutes(router: Router, base: string): void {
     json(ctx.res, 200, { matchId, modeId: match?.modeId ?? null, winnerUserId: match?.winnerUserId ?? null, players, rounds });
   });
 
-  router.add('GET', `${base}/matches/:id`, async (ctx) => json(ctx.res, 200, toSnapshot(await getMatch(ctx.params.id!))));
-  router.add('POST', `${base}/matches/:id/start`, async (ctx) => json(ctx.res, 200, toSnapshot(await startMatch(ctx.params.id!))));
+  /* READING THE MATCH IS ALSO ANNOUNCING YOURSELF IN IT — and answering the
+     one question the duel could not start without: is the other player really
+     here? That answer used to exist only on the websocket, so on a network
+     that drops websockets every duel timed out on «حریف به بازی متصل نشد» and
+     went home. It is in the snapshot now, so an ordinary GET is enough. */
+  router.add('GET', `${base}/matches/:id`, async (ctx) => {
+    const matchId = ctx.params.id!;
+    if (ctx.userId) touchMatchPresence(matchId, ctx.userId);
+    const snap = toSnapshot(await getMatch(matchId)) as any;
+    snap.presentUserIds = presentInMatch(matchId);
+    json(ctx.res, 200, snap);
+  });
+  router.add('POST', `${base}/matches/:id/start`, async (ctx) => {
+    if (ctx.userId) touchMatchPresence(ctx.params.id!, ctx.userId);
+    json(ctx.res, 200, toSnapshot(await startMatch(ctx.params.id!)));
+  });
   router.add('POST', `${base}/matches/:id/continue`, async (ctx) => json(ctx.res, 200, toSnapshot(await startMatch(ctx.params.id!))));
   // Leaving mid-duel (X button / app exit) = FORFEIT: the leaver loses, the
   // opponent wins — settled exactly once server-side and pushed to the room so
@@ -298,6 +316,7 @@ export function registerMatchRoutes(router: Router, base: string): void {
   });
 
   router.add('POST', `${base}/matches/:id/answer`, async (ctx) => {
+    if (ctx.userId) touchMatchPresence(ctx.params.id!, ctx.userId);
     const body = ctx.body as any;
     // Options are served in their original order (see the question endpoint note),
     // so the original correctIndex is the source of truth here.

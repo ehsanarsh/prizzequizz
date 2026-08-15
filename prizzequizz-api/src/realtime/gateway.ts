@@ -2,6 +2,7 @@ import type { IncomingMessage, Server } from 'node:http';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { verifyAccessToken } from '../services/tokenService.js';
 import { validateAnswer } from '../services/questionEngine.js';
+import { touchMatchPresence } from '../services/matchPresence.js';
 import { getMatch, submitAnswer } from '../services/matchEngine.js';
 import { logger } from '../services/logger.js';
 import { id } from '../utils/id.js';
@@ -66,6 +67,10 @@ async function handleMessage(socket: WebSocket, clientId: string, userId: string
     if (msg.type === 'client:join_match') {
       const matchId = String((msg.payload as any)?.matchId ?? '');
       const match = await getMatch(matchId);
+      /* Both roads write to the same place, so a player whose socket works is
+         visible to an opponent whose socket does not — which is the whole point
+         of the HTTP presence signal (see services/matchPresence.ts). */
+      touchMatchPresence(matchId, userId);
       realtimeRooms.join(clientId, matchId);
       void realtimeRooms.subscribeMatch(matchId);
       realtimeRooms.send(clientId, { type: 'server:match_snapshot', matchId, payload: snapshot(match), requestId: msg.requestId });

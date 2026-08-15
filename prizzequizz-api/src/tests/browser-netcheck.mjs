@@ -24,6 +24,9 @@ const ok = (n, c, extra = '') => { if (c) { pass++; console.log('  ok   ' + n + 
 /* Every request the page makes is answered here, and every request it makes to
    anywhere else is refused — this server IS the origin. */
 const posts = [];
+/* Who the server says is inside the match, flipped by the test. */
+let presentUserIds = [];
+const gets = [];
 const server = http.createServer((req, res) => {
   const u = new URL(req.url, 'http://x');
   if (req.method === 'POST') {
@@ -34,6 +37,12 @@ const server = http.createServer((req, res) => {
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ ok: true, data: {} }));
     });
+    return;
+  }
+  if (/\/v1\/matches\/[^/]+$/.test(u.pathname)) {
+    gets.push(u.pathname);
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ ok: true, data: { matchId: 'M9', phase: 'lobby', round: 0, players: [], presentUserIds } }));
     return;
   }
   if (u.pathname === '/' || u.pathname === '/index.html') {
@@ -166,6 +175,17 @@ const browser = await chromium.launch({
   ok('and the player is not told their internet is gone', said.state === 'wsonly' && !/قطع شده است/.test(said.text), JSON.stringify(said));
   ok('but is told the match carries on', /پشتیبان/.test(said.text), said.text);
 
+  /* AND THEN IT GOES AWAY. It is news, not a fault the player can act on, and
+     on a network that never carries a socket it would otherwise sit across the
+     screen for the whole match. */
+  await page.waitForTimeout(5200);
+  const gone = await page.evaluate(() => {
+    const b = document.getElementById('pzConnBanner');
+    return { shown: !!(b && b.classList.contains('show')), state: (0, eval)('pzConn').mine };
+  });
+  ok('and the notice does not camp on the screen', !gone.shown, JSON.stringify(gone));
+  ok('while the state itself is unchanged', gone.state === 'wsonly', gone.state);
+
   /* Truly offline — no socket, no requests getting through — must still say so. */
   const dead = await page.evaluate(() => {
     (0, eval)('pzConn').restOkAt = Date.now() - 60_000;
@@ -225,6 +245,81 @@ const browser = await chromium.launch({
   await page.waitForTimeout(1700);
   const acked = posts.filter((p) => /\/matches\/M3\/answer$/.test(p.path)).length;
   ok('a confirmed answer is not sent again', acked === 0, 'http posts: ' + acked);
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
+/* ── 4. THE DUEL GATE WITH NO SOCKET AT ALL ─────────────────────────────── */
+{
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+  await ctx.addInitScript(() => {
+    localStorage.setItem('pz_tok', 't'); localStorage.setItem('pz_rtok', 'r');
+    localStorage.setItem('pz_usr', JSON.stringify({ id: 'u0', username: 'p0', displayName: 'من', level: 3, coins: 50, hearts: 5 }));
+  });
+  const page = await ctx.newPage();
+  const errs = []; page.on('pageerror', (e) => errs.push(String(e.message || e).slice(0, 200)));
+  await page.goto(ORIGIN() + '/');
+  await page.waitForTimeout(5200);
+  console.log('an opponent found on a network with no websocket:');
+
+  /* The gate the duel cannot start without. No socket at all — not a closed
+     one, none — which is the state a player is in on these networks. */
+  presentUserIds = [];
+  const alone = await page.evaluate(async () => {
+    const rt = (0, eval)('pzRt');
+    rt.active = true; rt.finished = false; rt.matchId = 'M9'; rt.myId = 'u0';
+    rt.oppPresent = false; rt.presence = 1; rt.ws = null;
+    const t0 = Date.now();
+    const got = await (0, eval)('pzWaitOpponentPresent')(2500);
+    return { got, ms: Date.now() - t0 };
+  });
+  ok('an opponent who never turns up is still a no-show', alone.got === false, JSON.stringify(alone));
+  ok('and the game does not sit there for ever waiting', alone.ms < 4000, alone.ms + 'ms');
+
+  /* Now the server says the opponent is in the room. The socket is STILL dead;
+     this is the whole point — the duel used to be unable to learn this and sent
+     every player home with «حریف به بازی متصل نشد». */
+  presentUserIds = ['u7'];
+  gets.length = 0;
+  const together = await page.evaluate(async () => {
+    const rt = (0, eval)('pzRt');
+    rt.active = true; rt.finished = false; rt.matchId = 'M9'; rt.myId = 'u0';
+    rt.oppPresent = false; rt.presence = 1; rt.ws = null;
+    const t0 = Date.now();
+    const got = await (0, eval)('pzWaitOpponentPresent')(8000);
+    return { got, ms: Date.now() - t0, opp: rt.oppPresent };
+  });
+  ok('the opponent is found without a socket', together.got === true, JSON.stringify(together));
+  ok('by asking the server directly', gets.length > 0, gets.length + ' reads of the match');
+  ok('and quickly — this gate is in front of every duel', together.ms < 3000, together.ms + 'ms');
+
+  /* THE ORDINARY CASE: I get there first and the opponent arrives a moment
+     later. The gate has to keep asking — a single question at the start would
+     only ever catch an opponent who was already waiting. */
+  presentUserIds = [];
+  const walksIn = setTimeout(() => { presentUserIds = ['u7']; }, 1200);   // the opponent turns up
+  const arrives = await page.evaluate(async () => {
+    const rt = (0, eval)('pzRt');
+    rt.active = true; rt.finished = false; rt.matchId = 'M9'; rt.myId = 'u0';
+    rt.oppPresent = false; rt.presence = 1; rt.ws = null;
+    const t0 = Date.now();
+    const got = await (0, eval)('pzWaitOpponentPresent')(8000);
+    return { got, ms: Date.now() - t0 };
+  });
+  ok('an opponent who arrives a second late is still found', arrives.got === true, JSON.stringify(arrives));
+  ok('and not before they actually arrive', arrives.ms > 900, arrives.ms + 'ms');
+  clearTimeout(walksIn);
+
+  /* And my own presence is not confused with the opponent's: a room containing
+     only me is not an opponent. */
+  presentUserIds = ['u0'];
+  const onlyMe = await page.evaluate(async () => {
+    const rt = (0, eval)('pzRt');
+    rt.active = true; rt.finished = false; rt.matchId = 'M9'; rt.myId = 'u0';
+    rt.oppPresent = false; rt.presence = 1; rt.ws = null;
+    return await (0, eval)('pzWaitOpponentPresent')(2000);
+  });
+  ok('seeing only myself in the room is not an opponent', onlyMe === false, String(onlyMe));
   ok('no script errors', errs.length === 0, errs.join(' | '));
   await ctx.close();
 }

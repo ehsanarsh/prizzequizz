@@ -26,6 +26,7 @@ import { createMatchForPlayers, startMatch, getMatch } from '../services/matchEn
 import { createSession } from '../services/sessionService.js';
 import { repositories } from '../repositories/index.js';
 import { id } from '../utils/id.js';
+import { touchMatchPresence, presentInMatch, MATCH_PRESENCE_TTL_MS } from '../services/matchPresence.js';
 
 let passed = 0, failed = 0;
 async function check(name: string, fn: () => Promise<void> | void): Promise<void> {
@@ -140,6 +141,58 @@ async function main(): Promise<void> {
       const after = (await getMatch(match.id))!;
       const scoreAfter = after.players.find((p: any) => p.userId === a)?.score ?? 0;
       assert.equal(scoreAfter, scoreBefore, 'scored twice: ' + scoreBefore + ' → ' + scoreAfter);
+    });
+
+    /* THE GATE EVERY DUEL HAS TO PASS. Before a match starts each client waits
+       for proof that the opponent is really in the room, and that proof only
+       existed on the websocket — so on a network that drops websockets the gate
+       timed out every time and the player was sent home with their ticket back
+       and no game. The same proof is now readable with an ordinary GET. */
+    await check('a player who only ever used HTTP is visible in the match', async () => {
+      const r = await fetch(`${base}/matches/${match.id}`, { headers: { authorization: `Bearer ${sa.accessToken}` } });
+      const body = await r.json() as any;
+      assert.equal(body.ok, true);
+      assert.ok(Array.isArray(body.data.presentUserIds), 'presentUserIds missing: ' + JSON.stringify(body.data));
+      assert.ok(body.data.presentUserIds.includes(a), 'the HTTP player is not listed: ' + JSON.stringify(body.data.presentUserIds));
+    });
+
+    await check('and so is the one who came in on a socket', async () => {
+      const r = await fetch(`${base}/matches/${match.id}`, { headers: { authorization: `Bearer ${sa.accessToken}` } });
+      const body = await r.json() as any;
+      assert.ok(body.data.presentUserIds.includes(b), 'the socket player is not listed: ' + JSON.stringify(body.data.presentUserIds));
+    });
+
+    await check('a player who never turned up is not', async () => {
+      const ghost = await player('GHOST');
+      const r = await fetch(`${base}/matches/${match.id}`, { headers: { authorization: `Bearer ${sa.accessToken}` } });
+      const body = await r.json() as any;
+      assert.ok(!body.data.presentUserIds.includes(ghost), 'a ghost was counted present');
+    });
+
+    /* THE CASE THAT MAKES TWO SOCKET-LESS PLAYERS FIND EACH OTHER. Waiting at
+       the gate IS reading the match, so a player who has made no other request
+       — no answer, not even a question fetch — still announces themselves just
+       by waiting. Without that, two players on such a network would both wait,
+       neither would be visible, and both would go home. */
+    await check('a player whose only request is reading the match is announced by it', async () => {
+      const c = await player('C');
+      const d = await player('D');
+      const sc = createSession(c);
+      const sd = createSession(d);
+      const m2 = await createMatchForPlayers(c, d, 'duel', 'free', 0);
+      await fetch(`${base}/matches/${m2.id}`, { headers: { authorization: `Bearer ${sc.accessToken}` } });
+      const r = await fetch(`${base}/matches/${m2.id}`, { headers: { authorization: `Bearer ${sd.accessToken}` } });
+      const body = await r.json() as any;
+      assert.ok(body.data.presentUserIds.includes(c), 'the waiting player is invisible: ' + JSON.stringify(body.data.presentUserIds));
+      assert.ok(body.data.presentUserIds.includes(d), 'the reader is invisible: ' + JSON.stringify(body.data.presentUserIds));
+    });
+
+    await check('and a sighting goes stale rather than lasting for ever', () => {
+      const then = Date.now() - (MATCH_PRESENCE_TTL_MS + 1000);
+      touchMatchPresence('stale-room', 'someone', then);
+      assert.deepEqual(presentInMatch('stale-room'), [], 'an old sighting still counts');
+      touchMatchPresence('stale-room', 'someone');
+      assert.deepEqual(presentInMatch('stale-room'), ['someone'], 'a fresh sighting does not count');
     });
 
     ws.close();
