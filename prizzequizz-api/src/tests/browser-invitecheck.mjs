@@ -1,0 +1,321 @@
+/* INVITING SOMEBODY TO PLAY, FROM THE SCREENS IT IS SENT FROM.
+ *
+ *   • «در قسمت افراد آنلاین باید کاربر بتونه درخواست بازی بده و نوع بلیط رو
+ *     مشخص کنی» — and only to people who are actually free.
+ *   • «جلوی تیتر اتاق انتظار یه دکمه با رنگ زرد: افزودن افراد آنلاین به این
+ *     اتاق» — and the list it opens must refuse anyone mid-match.
+ *   • «مودال باید فقط با دو دکمه قبول و رد بسته بشه» — a finger landing beside
+ *     the sheet was answering for the player.
+ *   • «در افراد آنلاین باید عکس کاراکتر باشه» and the same face beside every
+ *     line of Last Survivor chat.
+ */
+import pw from '/tmp/node_modules/playwright-core/index.js';
+const { chromium } = pw;
+import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
+
+const ROOT = '/home/user/prizzequizz';
+let pass = 0, fail = 0;
+const ok = (n, c, extra = '') => { if (c) { pass++; console.log('  ok   ' + n + (extra ? '  [' + extra + ']' : '')); } else { fail++; console.log('  FAIL ' + n + (extra ? '  [' + extra + ']' : '')); } };
+
+const server = http.createServer((q, r) => {
+  const f = path.join(ROOT, q.url === '/' ? 'prizze-v643.html' : decodeURIComponent(q.url.split('?')[0]));
+  if (!f.startsWith(ROOT) || !fs.existsSync(f) || fs.statSync(f).isDirectory()) { r.writeHead(404); return r.end('no'); }
+  r.writeHead(200); fs.createReadStream(f).pipe(r);
+});
+await new Promise((r) => server.listen(0, '127.0.0.1', r));
+const PORT = server.address().port;
+const CHAR = 'data:image/svg+xml;base64,' + Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="80" height="120"><rect width="80" height="120" fill="#c33"/></svg>').toString('base64');
+const PHOTO = 'data:image/svg+xml;base64,' + Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80"><rect width="80" height="80" fill="#39c"/></svg>').toString('base64');
+
+const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
+
+/* The server's word on who is free — the client must not decide this itself. */
+let onlinePlayers = [];
+const posted = [];
+
+async function makePage() {
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+  await ctx.addInitScript(() => {
+    localStorage.setItem('pz_tok', 't'); localStorage.setItem('pz_rtok', 'r');
+    localStorage.setItem('pz_usr', JSON.stringify({ id: 'me', username: 'ehsan', displayName: 'احسان', level: 3, coins: 500, hearts: 5 }));
+  });
+  await ctx.route('**/v1/**', async (route) => {
+    const url = new URL(route.request().url());
+    const p = url.pathname.replace(/^.*\/v1/, '');
+    const send = (d) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, data: d }) });
+    if (route.request().method() === 'POST') {
+      let body = {}; try { body = JSON.parse(route.request().postData() || '{}'); } catch (e) {}
+      posted.push({ path: p, body });
+      if (/^\/invites$/.test(p)) return route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ ok: true, data: { id: 'inv1', status: 'pending' } }) });
+      return send({});
+    }
+    if (p === '/users/online') return send({ players: onlinePlayers, onlineTotal: onlinePlayers.length, nextCost: 0, freeLeft: 3, coins: 500 });
+    if (p === '/invites/incoming') return send({ invites: [] });
+    return send({});
+  });
+  const page = await ctx.newPage();
+  const errs = []; page.on('pageerror', (e) => errs.push(String(e.message || e).slice(0, 200)));
+  await page.goto('http://127.0.0.1:' + PORT + '/');
+  await page.waitForTimeout(5200);
+  return { ctx, page, errs };
+}
+
+const modal = (page) => page.evaluate(() => {
+  const ov = document.getElementById('aaaModal');
+  return {
+    open: !!(ov && ov.classList.contains('show')),
+    dismissible: ov ? ov.dataset.dismissible : '',
+    title: (document.getElementById('aaaTitle') || {}).textContent || '',
+    primary: (document.getElementById('aaaPrimary') || {}).textContent || '',
+    secondary: (document.getElementById('aaaSecondary') || {}).textContent || '',
+    primaryCls: (document.getElementById('aaaPrimary') || {}).className || '',
+    secondaryCls: (document.getElementById('aaaSecondary') || {}).className || ''
+  };
+});
+
+/* ── 1. THE ONLINE LIST ─────────────────────────────────────────────────── */
+{
+  const { ctx, page, errs } = await makePage();
+  console.log('the online list:');
+  onlinePlayers = [
+    { userId: 'u1', username: 'سارا', level: 5, avatar: PHOTO, character: { id: 'c1', name: 'پهلوان', image: CHAR, kind: 'normal' }, inMatch: false, invitePending: false, canInvite: true },
+    { userId: 'u2', username: 'رضا', level: 7, avatar: PHOTO, character: null, inMatch: true, invitePending: false, canInvite: false },
+    { userId: 'u3', username: 'مینا', level: 2, avatar: PHOTO, character: null, inMatch: false, invitePending: true, canInvite: false }
+  ];
+  await page.evaluate(() => (0, eval)("userPlan='premium'; planExplicitlyChosen=true; go('online'); onlineLoad(false);"));
+  await page.waitForTimeout(900);
+
+  const rows = await page.evaluate(() => [...document.querySelectorAll('#onList .online-card')].map((c) => ({
+    name: (c.querySelector('.nm') || {}).textContent || '',
+    lv: (c.querySelector('.lv') || {}).textContent || '',
+    img: (c.querySelector('.av img') || {}).getAttribute?.('src') || '',
+    invite: !!c.querySelector('button[onclick*="onlineInvite"]')
+  })));
+  ok('everyone online is listed', rows.length === 3, JSON.stringify(rows.map((r) => r.name)));
+  /* «باید عکس کاراکتر باشه نه عکس دیگه‌ای» */
+  ok('a player with a character is drawn with it, not their photo', rows[0].img.length > 40 && rows[0].img !== '', rows[0].img.slice(0, 30));
+  ok('and it really is the character image', await page.evaluate((c) => (document.querySelector('#onList .online-card .av img') || {}).src === c, CHAR), 'character');
+
+  ok('somebody free can be challenged', rows[0].invite === true, String(rows[0].invite));
+  /* «فقط به افرادی که داخل هیچ مسابقه‌ای نشده‌اند» */
+  ok('somebody mid-match cannot', rows[1].invite === false, String(rows[1].invite));
+  ok('and the row says why', /مسابقه/.test(rows[1].lv), rows[1].lv);
+  ok('nor can somebody who already has an invite waiting', rows[2].invite === false, String(rows[2].invite));
+  ok('which the row also says', /دعوت/.test(rows[2].lv), rows[2].lv);
+
+  /* «در هنگام ارسال درخواست بازی باید نوع بلیط رو مشخص کنی و ارسال کنی» */
+  posted.length = 0;
+  await page.evaluate(() => { document.querySelector('#onList .online-card button[onclick*="onlineInvite"]').click(); });
+  await page.waitForTimeout(500);
+  const pick = await modal(page);
+  ok('challenging opens the ticket picker first', /بلیط/.test(pick.title), pick.title);
+  const tiers = await page.evaluate(() => [...document.querySelectorAll('.pz-inv-tk')].map((b) => b.getAttribute('data-tk')));
+  ok('with every tier on it', tiers.join(',') === 'green,blue,red', tiers.join(','));
+  ok('and nothing is sent before one is chosen', posted.length === 0, JSON.stringify(posted));
+
+  await page.evaluate(() => { document.querySelector('.pz-inv-tk[data-tk="blue"]').click(); });
+  await page.waitForTimeout(600);
+  const sent = posted.find((x) => x.path === '/invites');
+  ok('picking a tier sends the invite', !!sent, JSON.stringify(posted));
+  ok('to that player', !!sent && sent.body.toUserId === 'u1', sent ? sent.body.toUserId : '');
+  ok('for a duel, at the tier chosen', !!sent && sent.body.mode === 'duel' && sent.body.ticketTier === 'blue', JSON.stringify(sent && sent.body));
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
+/* ── 2. THE WAITING ROOM'S YELLOW BUTTON ────────────────────────────────── */
+{
+  const { ctx, page, errs } = await makePage();
+  console.log('the Last Survivor waiting room:');
+  onlinePlayers = [
+    { userId: 'u1', username: 'سارا', level: 5, avatar: PHOTO, character: { id: 'c1', name: 'پهلوان', image: CHAR, kind: 'normal' }, inMatch: false, invitePending: false, canInvite: true },
+    { userId: 'u2', username: 'رضا', level: 7, avatar: PHOTO, character: null, inMatch: true, invitePending: false, canInvite: false }
+  ];
+  await page.evaluate(() => {
+    (0, eval)("userPlan='premium'; planExplicitlyChosen=true; lsRoomId='R9'; lsSnap=null; lsLastKey=''; lsWatching=false; go('lsGame');");
+    const now = Date.now();
+    (0, eval)('lsRender')({
+      room: { id: 'R9', topic: 'ورزشی', status: 'waiting', phase: 'waiting', round: 0, totalRounds: 12, capacity: 20,
+              startsAt: now + 90000, phaseEndsAt: 0, serverNow: now, grossPool: 250000, chatEnabled: true, forfeited: 0 },
+      players: [{ userId: 'me', username: 'احسان', avatar: '', character: null, color: 'green', status: 'alive', shields: 0, units: 1 }],
+      me: { userId: 'me', username: 'احسان', status: 'alive', shields: 0, units: 1, currentShare: 0, lifelinesUsed: [] },
+      stats: { alive: 1, eliminated: 0, cashedOut: 0, totalPlayers: 1, grossPot: 250000, remainingPot: 250000, paidOut: 0 },
+      question: null, votes: 0
+    });
+  });
+  await page.waitForTimeout(700);
+
+  const btn = await page.evaluate(() => {
+    const b = document.querySelector('#lsBody .ls-invite-btn');
+    if (!b) return null;
+    const cs = getComputedStyle(b);
+    const ttl = document.querySelector('#lsBody .ls-ttl h1');
+    return { text: b.textContent.trim(), bg: cs.backgroundImage + cs.backgroundColor,
+             nextToTitle: !!ttl && Math.abs(b.getBoundingClientRect().top - ttl.getBoundingClientRect().top) < 60 };
+  });
+  ok('the room has an add-people button', !!btn, JSON.stringify(btn));
+  ok('named for what it does', /افزودن افراد آنلاین/.test(btn.text), btn.text);
+  /* «با رنگ زرد» — the game's own yellow. */
+  ok('and it is yellow', /255,\s*210,\s*31|#FFD21F/i.test(btn.bg), btn.bg.slice(0, 60));
+  ok('sitting up by the title', btn.nextToTitle, String(btn.nextToTitle));
+
+  await page.evaluate(() => (0, eval)('lsInviteOpen')());
+  await page.waitForTimeout(900);
+  const rows = await page.evaluate(() => [...document.querySelectorAll('#lsInvList .pz-inv-row')].map((r) => ({
+    name: (r.querySelector('.n') || {}).textContent || '',
+    go: !!r.querySelector('button.go'),
+    img: (r.querySelector('.f img') || {}).getAttribute?.('src') || ''
+  })));
+  ok('it opens the list of who is online', rows.length === 2, JSON.stringify(rows.map((r) => r.name)));
+  ok('the free one can be added', rows[0].go === true, String(rows[0].go));
+  ok('and shows their character', rows[0].img === CHAR, rows[0].img.slice(0, 30));
+  /* «نه اونایی که داخل مسابقه هستند» */
+  ok('the one mid-match cannot be added', rows[1].go === false, String(rows[1].go));
+  ok('and the row says so', /مسابقه/.test(rows[1].name), rows[1].name.replace(/\s+/g, ' '));
+
+  posted.length = 0;
+  await page.evaluate(() => { document.querySelector('#lsInvList button.go').click(); });
+  await page.waitForTimeout(700);
+  const sent = posted.find((x) => x.path === '/invites');
+  ok('adding somebody invites them to THIS room', !!sent && sent.body.mode === 'ls' && sent.body.roomId === 'R9', JSON.stringify(sent && sent.body));
+  ok('and says which room it came from, so the room cannot pile on', !!sent && sent.body.fromRoomId === 'R9', JSON.stringify(sent && sent.body.fromRoomId));
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
+/* ── 3. THE INVITE THAT ARRIVES ─────────────────────────────────────────── */
+{
+  const { ctx, page, errs } = await makePage();
+  console.log('an invite arriving:');
+  await page.evaluate(() => (0, eval)("userPlan='premium'; planExplicitlyChosen=true; go('home');"));
+  await page.waitForTimeout(400);
+  await page.evaluate(() => (0, eval)('pzInviteAsk')({ id: 'inv9', fromName: 'سارا', mode: 'duel', ticketTier: 'blue' }));
+  await page.waitForTimeout(500);
+
+  const m = await modal(page);
+  ok('it asks with a modal', m.open, JSON.stringify(m));
+  ok('naming who sent it', /سارا/.test(m.title), m.title);
+  ok('with an accept button', /پذیرفتن/.test(m.primary), m.primary);
+  ok('and a refuse button', /رد/.test(m.secondary), m.secondary);
+  ok('the accept one green', /btn-green/.test(m.primaryCls), m.primaryCls);
+  ok('the refuse one red', /btn-red/.test(m.secondaryCls), m.secondaryCls);
+  /* «انگشتت به اطراف مودال که تاچ میشه، مودال بدون قبول یا رد میره» */
+  ok('and no way out except those two', m.dismissible === '0', m.dismissible);
+
+  const stuck = await page.evaluate(async () => {
+    const ov = document.getElementById('aaaModal');
+    ov.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 300));
+    return ov.classList.contains('show');
+  });
+  ok('tapping beside it does not answer for the player', stuck === true, String(stuck));
+
+  posted.length = 0;
+  await page.evaluate(async () => {
+    document.getElementById('aaaPrimary').click();
+    await new Promise((r) => setTimeout(r, 1200));
+  });
+  const answer = posted.find((x) => /\/invites\/inv9\/respond/.test(x.path));
+  ok('accepting answers the server', !!answer && answer.body.accept === true, JSON.stringify(answer));
+  const where = await page.evaluate(() => ({
+    screen: [...document.querySelectorAll('.screen')].find((s) => s.classList.contains('active')).id,
+    tier: (0, eval)('selectedTicket')
+  }));
+  /* «قبول که کاربر رو به داخل روم هدایت کنه، البته به صفحه ورود با بلیط» */
+  ok('and takes them to the ticket-entry screen', where.screen === 'mode-entry', JSON.stringify(where));
+  ok('with the tier the sender picked already chosen', where.tier === 'blue', String(where.tier));
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
+/* ── 4. REFUSING IT ─────────────────────────────────────────────────────── */
+{
+  const { ctx, page, errs } = await makePage();
+  console.log('refusing one:');
+  await page.evaluate(() => (0, eval)("userPlan='premium'; planExplicitlyChosen=true; go('home');"));
+  await page.waitForTimeout(400);
+  await page.evaluate(() => (0, eval)('pzInviteAsk')({ id: 'inv8', fromName: 'رضا', mode: 'ls', roomId: 'R3' }));
+  await page.waitForTimeout(500);
+  posted.length = 0;
+  await page.evaluate(async () => { document.getElementById('aaaSecondary').click(); await new Promise((r) => setTimeout(r, 500)); });
+  const answer = posted.find((x) => /\/invites\/inv8\/respond/.test(x.path));
+  ok('the server is told it was refused', !!answer && answer.body.accept === false, JSON.stringify(answer));
+  const stayed = await page.evaluate(() => [...document.querySelectorAll('.screen')].find((s) => s.classList.contains('active')).id);
+  ok('and the player is not dragged anywhere', stayed === 'home', stayed);
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
+/* ── 5. THE PERMISSION SHEET, WHICH HAD THE SAME FAULT ──────────────────── */
+{
+  const { ctx, page, errs } = await makePage();
+  console.log('the notification-permission sheet:');
+  await page.evaluate(() => {
+    Object.defineProperty(window, 'Notification', { configurable: true, value: Object.assign(function () {}, { permission: 'default', requestPermission: () => Promise.resolve('default') }) });
+  });
+  await page.evaluate(() => (0, eval)("userPlan='premium'; planExplicitlyChosen=true; go('home'); try{sessionStorage.removeItem('pz_push_asked_visit');}catch(e){}"));
+  await page.waitForTimeout(300);
+  await page.evaluate(() => (0, eval)('pzAskPushOnInstall')());
+  await page.waitForTimeout(500);
+  const m = await modal(page);
+  ok('it opens', m.open, JSON.stringify(m));
+  ok('and can no longer be dismissed by a stray tap', m.dismissible === '0', m.dismissible);
+  const stuck = await page.evaluate(async () => {
+    const ov = document.getElementById('aaaModal');
+    ov.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 300));
+    return ov.classList.contains('show');
+  });
+  ok('a finger beside it leaves it standing', stuck === true, String(stuck));
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
+/* ── 6. FACES IN THE ROOM'S CHAT ────────────────────────────────────────── */
+{
+  const { ctx, page, errs } = await makePage();
+  console.log('Last Survivor chat:');
+  await ctx.route('**/v1/last-survivor/rooms/*/chat', (route) => route.fulfill({
+    status: 200, contentType: 'application/json',
+    body: JSON.stringify({ ok: true, data: { messages: [
+      { userId: 'p1', username: 'سارا', body: 'سلام', createdAt: Date.now() },
+      { userId: 'me', username: 'احسان', body: 'سلام به تو', createdAt: Date.now() }
+    ] } })
+  }));
+  await page.evaluate((c) => { window.__CHAR = c; }, CHAR);
+  await page.evaluate(() => {
+    (0, eval)("userPlan='premium'; planExplicitlyChosen=true; lsRoomId='R9'; lsMyId='me'; lsSnap=null; lsLastKey=''; go('lsGame');");
+    const now = Date.now();
+    (0, eval)('lsRender')({
+      room: { id: 'R9', topic: 'ورزشی', status: 'waiting', phase: 'waiting', round: 0, totalRounds: 12, capacity: 20,
+              startsAt: now + 90000, phaseEndsAt: 0, serverNow: now, grossPool: 250000, chatEnabled: true, forfeited: 0 },
+      players: [
+        { userId: 'p1', username: 'سارا', avatar: '', character: { id: 'c1', name: 'پهلوان', image: window.__CHAR, kind: 'normal' }, color: 'green', status: 'alive', shields: 0, units: 1 },
+        { userId: 'me', username: 'احسان', avatar: '', character: null, color: 'blue', status: 'alive', shields: 0, units: 1 }
+      ],
+      me: { userId: 'me', username: 'احسان', status: 'alive', shields: 0, units: 1, currentShare: 0, lifelinesUsed: [] },
+      stats: { alive: 2, eliminated: 0, cashedOut: 0, totalPlayers: 2, grossPot: 250000, remainingPot: 250000, paidOut: 0 },
+      question: null, votes: 0
+    });
+  });
+  await page.waitForTimeout(500);
+  await page.evaluate(() => (0, eval)('lsLoadChat')());
+  await page.waitForTimeout(700);
+
+  const msgs = await page.evaluate(() => [...document.querySelectorAll('#lsChatList .ls-msg')].map((m) => ({
+    text: (m.textContent || '').replace(/\s+/g, ' ').trim(),
+    face: !!m.querySelector('.ls-msg-face'),
+    hasImg: !!m.querySelector('.ls-msg-face img, .ls-msg-face .mascot, .ls-msg-face svg')
+  })));
+  ok('the messages are there', msgs.length === 2, JSON.stringify(msgs.map((m) => m.text)));
+  /* «کنار اسم و متن، عکس کاربر هم باشه» */
+  ok('each one carries a face beside the name', msgs.every((m) => m.face), JSON.stringify(msgs));
+  ok('and the face is drawn, not an empty box', msgs[0].hasImg, JSON.stringify(msgs[0]));
+  ok('the name and body are still there', /سارا/.test(msgs[0].text) && /سلام/.test(msgs[0].text), msgs[0].text);
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
+console.log('\n' + pass + ' passed, ' + fail + ' failed');
+await browser.close(); server.close();
+process.exit(fail ? 1 : 0);

@@ -958,6 +958,30 @@ input,textarea,select,[contenteditable="true"],.pz-selectable,.pz-selectable *{
    for the player behind the «آماده‌ای؟» modal and, more to the point, for
    anybody the modal does not reach. The layout is kept so nothing jumps when
    it clears. */
+.ls-invite-btn{flex:0 0 auto;margin-inline-start:auto;background:linear-gradient(180deg,var(--bolt),var(--bolt-2));
+  color:#141414;border:2px solid #000;border-radius:13px;padding:7px 11px;
+  font-family:inherit;font-size:11.5px;font-weight:900;line-height:1.25;cursor:pointer;
+  box-shadow:0 3px 0 #000;max-width:47%;text-align:center}
+.ls-invite-btn:active{transform:translateY(2px);box-shadow:0 1px 0 #000}
+@media (max-height:700px){ .ls-invite-btn{font-size:10.5px;padding:6px 9px} }
+.ls-msg{display:flex;align-items:flex-start;gap:7px}
+.ls-msg-face{flex:0 0 auto;width:26px;height:26px;border-radius:9px;overflow:hidden;display:block;
+  background:rgba(255,255,255,.07)}
+.ls-msg-face img,.ls-msg-face .mascot,.ls-msg-face>*{width:100%;height:100%;object-fit:cover;display:block}
+.ls-msg-txt{flex:1 1 auto;min-width:0}
+.ls-msg.mine{flex-direction:row-reverse}
+
+.pz-inv-row{display:flex;align-items:center;gap:9px;padding:8px 6px;border-bottom:1px solid rgba(255,255,255,.07)}
+.pz-inv-row .f{width:38px;height:38px;flex:0 0 auto;border-radius:12px;overflow:hidden;background:rgba(255,255,255,.06);
+  display:flex;align-items:center;justify-content:center;font-size:19px}
+.pz-inv-row .f img{width:100%;height:100%;object-fit:cover;display:block}
+.pz-inv-row .n{flex:1 1 auto;min-width:0;text-align:start;font-size:12.5px;font-weight:800;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pz-inv-row .n small{display:block;font-size:10.5px;font-weight:700;opacity:.7}
+.pz-inv-row button{flex:0 0 auto;font-family:inherit;font-size:11.5px;font-weight:900;border-radius:11px;
+  padding:6px 11px;border:2px solid #000;cursor:pointer;box-shadow:0 2px 0 #000}
+.pz-inv-row button.go{background:var(--bolt);color:#141414}
+.pz-inv-row button.off{background:rgba(255,255,255,.08);color:var(--muted);box-shadow:none;cursor:default}
+
 .ls-qwrap[data-gate="1"] .ls-qtext,
 .ls-qwrap[data-gate="1"] #lsOpts .atxt,
 .ls-qwrap[data-gate="1"] #lsOpts .k,
@@ -7965,7 +7989,11 @@ function lsPotDelta(el,add){
 
 function lsWaitHtml(snap){
   const r=snap.room;
-  return `<div class="ls-top"><div class="ls-back" onclick="lsLeave('home')">‹</div><div class="ls-ttl"><h1>اتاق انتظار</h1><p>${r.topic}</p></div></div>
+  /* «جلوی تیتر اتاق انتظار یه دکمه با نام افزودن افراد آنلاین به این اتاق،
+     با رنگ زرد» — the room is only worth waiting in if it fills, so the way to
+     fill it belongs next to the sign that says you are waiting. */
+  return `<div class="ls-top"><div class="ls-back" onclick="lsLeave('home')">‹</div><div class="ls-ttl"><h1>اتاق انتظار</h1><p>${r.topic}</p></div>
+    <button class="ls-invite-btn" type="button" onclick="lsInviteOpen()">➕ افزودن افراد آنلاین به این اتاق</button></div>
   <div class="ls-hd"><div class="ls-hd-row">
     <div class="c"><b><span id="lsCount">${lsFa(snap.players.length)}</span>/<span id="lsCap">${lsFa(r.capacity)}</span></b><span>بازیکنان</span></div>
     <div class="c"><b id="lsTimer">${lsTimer(snap)}</b><span>تا شروع</span></div>
@@ -8380,7 +8408,17 @@ function lsSetTab(t){ lsTab=t; const g=document.getElementById('lsGrid'),c=docum
 }
 function lsBindChat(){ const inp=document.getElementById('lsChatInput'); if(inp)inp.addEventListener('keydown',e=>{if(e.key==='Enter')lsChatSend();}); }
 async function lsLoadChat(){ if(!lsRoomId)return; const r=await pzApi('GET','/last-survivor/rooms/'+lsRoomId+'/chat'); const list=document.getElementById('lsChatList'); if(!list)return; const msgs=(r&&r.data&&r.data.messages)||[];
-  list.innerHTML=msgs.map(m=>`<div class="ls-msg ${m.userId===lsMyId?'mine':''}"><b>${m.userId===lsMyId?'تو':(m.username||'بازیکن')}</b>${(m.body||'').replace(/</g,'&lt;')}</div>`).join(''); list.scrollTop=list.scrollHeight; }
+  /* «کنار اسم و متن، عکس کاربر هم باشه». The chat rows carry a name and a
+     body and nothing else, so the face is taken from the room snapshot — the
+     same card the grid above draws every player with, which means a character
+     when they have one and their photo when they do not. Somebody who has
+     since left the room simply has no face to draw. */
+  const faces={}; try{ ((lsSnap&&lsSnap.players)||[]).forEach(p=>{ faces[p.userId]=p; }); }catch(e){}
+  list.innerHTML=msgs.map(m=>{
+    const who=faces[m.userId];
+    const pic=who?('<span class="ls-msg-face">'+lsAvatarHTML(who)+'</span>'):'';
+    return `<div class="ls-msg ${m.userId===lsMyId?'mine':''}">${pic}<span class="ls-msg-txt"><b>${m.userId===lsMyId?'تو':(m.username||'بازیکن')}</b>${(m.body||'').replace(/</g,'&lt;')}</span></div>`;
+  }).join(''); list.scrollTop=list.scrollHeight; }
 async function lsChatSend(){ const inp=document.getElementById('lsChatInput'); if(!inp||!inp.value.trim())return; const body=inp.value.trim(); inp.value=''; await pzApi('POST','/last-survivor/rooms/'+lsRoomId+'/chat',{body}); lsLoadChat(); }
 
 async function lsVote(){ if(!lsRoomId)return; const r=await pzApi('POST','/last-survivor/rooms/'+lsRoomId+'/vote-start'); if(r&&r.ok===false){toast((r.error&&r.error.message)||'ثبت نشد');return;} try{vib(15);}catch(e){} }
@@ -8971,13 +9009,17 @@ const MODES={
 };
 let curMode='arena',curStake=20000,gameType='arena';
 
-function enterMode(m){
+function enterMode(m,direct){
   setTimeout(updateWalletUI,50);
   curMode=m;const cfg=MODES[m];
   document.getElementById('me-title').textContent=cfg.name;
   document.getElementById('me-ico').textContent=cfg.ico;
   document.getElementById('me-ico').style.background=cfg.color+'22';
   document.getElementById('me-desc').textContent=cfg.desc;
+  /* `direct` skips the rules card. Used when the player has already been asked
+     something and said yes — an accepted invitation, say — where a second sheet
+     between the tap and the screen reads as the tap not having worked. */
+  if(direct) return go('mode-entry');
   showRules(m,()=>go('mode-entry'));
 }
 /* ===== per-mode RULES GATE =====
@@ -14927,13 +14969,31 @@ async function onlineLoad(refresh){
   const ps=r.players||[];
   /* Kept so a tap can find the person again without re-parsing the card. */
   ONLINE_LAST=ps;
+  /* THE FACE IS THE CHARACTER. «در قسمت افراد آنلاین باید عکس کاراکتر باشه نه
+     عکس دیگه‌ای» — it is what the player picked to be seen as, and it is what
+     every other screen in the game draws them with. The photo stays as the
+     fallback for anyone who has not chosen one yet. */
+  const face=(p)=>(p.character&&p.character.image)
+    ? '<img src="'+pzEsc(p.character.image)+'" alt="">'
+    : (p.avatar?'<img src="'+pzEsc(p.avatar)+'" alt="">':(p.gender==='female'?'👩':p.gender==='male'?'👨':'👤'));
   list.innerHTML=ps.length?ps.map((p,i)=>
     '<div class="online-card" onclick="onlineOpen('+i+')"><span class="dot"></span>'+
-      '<div class="av">'+(p.avatar?'<img src="'+pzEsc(p.avatar)+'" alt="">':(p.gender==='female'?'👩':p.gender==='male'?'👨':'👤'))+'</div>'+
+      '<div class="av">'+face(p)+'</div>'+
       '<div class="nm">'+pzEsc(p.username||p.displayName||'بازیکن')+'</div>'+
-      '<div class="lv">سطح '+fa(p.level||1)+'</div>'+
+      '<div class="lv">سطح '+fa(p.level||1)+(p.inMatch?' · وسط مسابقه':(p.invitePending?' · دعوت دارد':''))+'</div>'+
+      /* Only somebody free is offered a challenge; the rest keep the row so the
+         list does not appear to lose people, but say why instead. */
+      (p.canInvite
+        ? '<button class="online-add" style="background:var(--bolt);color:#141414" onclick="event.stopPropagation();onlineInvite('+i+')">⚔️ دعوت به بازی</button>'
+        : '')+
       '<button class="online-add" onclick="event.stopPropagation();onlineAdd('+i+')">🤝 دوستی</button>'+
     '</div>').join(''):'<div class="online-empty">الان کسی آنلاین نیست.<br>کمی بعد دوباره سر بزن.</div>';
+}
+/* «در قسمت افراد آنلاین باید کاربر بتونه درخواست بازی بده، و در هنگام ارسال
+   باید نوع بلیط رو مشخص کنی» — the tier is chosen first, then sent. */
+function onlineInvite(i){
+  const p=(ONLINE_LAST||[])[i]; if(!p) return;
+  pzInvitePickTicket(p,(tier)=>{ pzInviteSend(p,'duel',{ticketTier:tier}); });
 }
 function hmQuizMaker(){ go('qsubmit'); qsLoadMine(); }
 
@@ -18651,9 +18711,13 @@ function comingSoon(key){
      interception is gone. The modes below are still genuinely unfinished and
      keep theirs. */
   const _origEnterMode=(typeof enterMode==='function')?enterMode:null;
+  /* EVERY ARGUMENT GOES THROUGH. This wrapper took one parameter and passed one
+     on, so anything the real enterMode learned to accept afterwards was
+     silently dropped at the door — the caller's flag simply never arrived and
+     the screen it asked for never opened, with nothing thrown to say why. */
   enterMode=function(m){
     if(m==='arena'||m==='consensus'){ return comingSoon(m); }
-    return _origEnterMode?_origEnterMode(m):undefined;
+    return _origEnterMode?_origEnterMode.apply(this,arguments):undefined;
   };
   /* The weekly league was parked here behind a «بزودی» modal, and that gate
      swallowed the navigation before the hub could ever open — which is why
@@ -19501,8 +19565,13 @@ function pzAskPush(title,sub){
   if(!pzShouldAskPush()) return;
   pzPushMarkAsked(); pzMarkAskedThisVisit();
   try{
-    showAaaModal({icon:'🔔',title:title,sub:sub,
+    /* TWO BUTTONS, AND NO WAY PAST THEM. A finger landing next to the sheet was
+       closing it as «no» without the player ever choosing — and because the ask
+       is marked as spent either way, a mis-tap cost them the whole visit's
+       chance to turn notifications on. An answer has to be an answer. */
+    showAaaModal({icon:'🔔',title:title,sub:sub,dismissible:false,
       primaryText:'فعال کن', secondaryText:'بعداً',
+      primaryClass:'btn-green', secondaryClass:'btn-ghost',
       onPrimary:()=>{ closeAaaModal(true); setTimeout(()=>{ pzEnablePush(true); },150); },
       onSecondary:()=>closeAaaModal(false)});
   }catch(e){}
@@ -19603,9 +19672,201 @@ try{ setTimeout(()=>{ pzRegisterSW().then(()=>{
   if(_tok && typeof Notification!=='undefined' && Notification.permission==='granted') pzEnablePush(false);
   else pzAskPushOnInstall();
 }); }, 3000); }catch(e){}
+/* An invite is live for sixty seconds, so it has to be looked for while it
+   still means something. */
+try{ setTimeout(()=>{ try{ if(_tok) pzInvitePollStart(); }catch(e){} }, 4000); }catch(e){}
 /* Keep the header bell badge fresh (new server messages arrive between opens). */
 try{ setInterval(()=>{ try{ if(_tok) pzInboxBadge(); }catch(e){} }, 45000); }catch(e){}
 
+
+/* ── ADDING PEOPLE TO THE ROOM YOU ARE WAITING IN ────────────────────────
+   «لیست افراد آنلاین میاد و فقط میتونی به افرادی که داخل هیچ مسابقه‌ای
+   نشده‌اند و در لابی بازی میچرخن بره نه اونایی که داخل مسابقه هستند» — so
+   who is free is decided by the SERVER (canInvite on each row), not guessed
+   at here, and somebody who is playing or already has an invite waiting is
+   shown greyed out with the reason rather than being hidden. Hiding them
+   would look like the list was broken. */
+async function lsInviteOpen(){
+  const roomId=(lsSnap&&lsSnap.room&&lsSnap.room.id)||lsRoomId;
+  if(!roomId){ toast('اول وارد یک اتاق شو'); return; }
+  try{
+    showAaaModal({icon:'👥',title:'افزودن به این اتاق',
+      sub:'<div id="lsInvList" style="max-height:46vh;overflow:auto;text-align:start">در حال گرفتن فهرست…</div>',
+      dismissible:true, primaryText:'', secondaryText:'بستن',
+      onSecondary:()=>closeAaaModal(false)});
+  }catch(e){ return; }
+  const box=()=>document.getElementById('lsInvList');
+  let list=[];
+  try{
+    const r=await pzApi('GET','/users/online');
+    list=(r&&r.data&&r.data.players)||[];
+  }catch(e){}
+  const el=box(); if(!el) return;
+  if(!list.length){ el.innerHTML='<div style="opacity:.75;padding:10px 4px">الان کسی در لابی نیست.</div>'; return; }
+  el.innerHTML=list.map((p,i)=>{
+    const why=p.inMatch?'وسط مسابقه':(p.invitePending?'دعوت دیگری دارد':'');
+    const face=(p.character&&p.character.image)
+      ? '<img src="'+frEsc(p.character.image)+'" alt="">'
+      : (p.avatar?'<img src="'+frEsc(p.avatar)+'" alt="">':'👤');
+    return '<div class="pz-inv-row"><div class="f">'+face+'</div>'+
+      '<div class="n">'+pzEsc(p.username||p.displayName||'بازیکن')+
+        '<small>سطح '+fa(p.level||1)+(why?(' · '+why):'')+'</small></div>'+
+      (p.canInvite
+        ? '<button class="go" data-i="'+i+'">دعوت</button>'
+        : '<button class="off" disabled>—</button>')+
+    '</div>';
+  }).join('');
+  el.querySelectorAll('button.go').forEach(b=>{
+    b.onclick=async()=>{
+      const p=list[Number(b.getAttribute('data-i'))]; if(!p) return;
+      b.disabled=true; b.textContent='…';
+      const okSent=await pzInviteSend(p,'ls',{roomId:roomId,fromRoomId:roomId});
+      b.className='off'; b.textContent=okSent?'فرستاده شد':'—';
+    };
+  });
+}
+
+/* ═══════════ INVITING SOMEBODY TO PLAY ═══════════════════════════════════
+   Three places send one — the online list, the friends list, and a Last
+   Survivor waiting room — and they all go through here. An accepted invite
+   does NOT drag anybody into a match: it opens the ordinary ticket-entry
+   screen, where they pay the ordinary entry, exactly as if they had chosen
+   the game themselves. That is what keeps a new feature away from the code
+   that handles money. */
+let PZ_INV_SEEN={}, PZ_INV_OPEN=null, PZ_INV_POLL=null;
+
+/* The modal that asks. TWO BUTTONS AND NO WAY PAST THEM — green to accept,
+   red to refuse — because a finger landing beside the sheet was closing it
+   without the player ever choosing. */
+function pzInviteAsk(inv){
+  if(!inv||!inv.id) return;
+  if(PZ_INV_OPEN===inv.id) return;                 // already on screen
+  PZ_INV_OPEN=inv.id;
+  const what={duel:'دوئل',ls:'آخرین بازمانده',wta:'همه یا هیچ'}[inv.mode]||'بازی';
+  const tk=(inv.mode==='duel'&&inv.ticketTier&&typeof tDef==='function')?tDef(inv.ticketTier):null;
+  const line=tk?('با '+tk.name+' — ورودی '+fa(tk.value||0)+' تومان'):'';
+  try{
+    showAaaModal({
+      icon:'🎮', title:pzEsc(inv.fromName||'یک بازیکن')+' دعوتت کرد',
+      sub:'<b>'+what+'</b>'+(line?'<br>'+pzEsc(line):'')+
+          '<div style="margin-top:8px;font-size:12px;opacity:.8">اگر بپذیری به صفحهٔ ورود می‌روی و ورودی را خودت می‌دهی.</div>',
+      dismissible:false,
+      primaryText:'✅ پذیرفتن', secondaryText:'❌ رد درخواست',
+      primaryClass:'btn-green', secondaryClass:'btn-red',
+      onPrimary:()=>{ closeAaaModal(true); PZ_INV_OPEN=null; pzInviteAnswer(inv,true); },
+      onSecondary:()=>{ closeAaaModal(false); PZ_INV_OPEN=null; pzInviteAnswer(inv,false); }
+    });
+  }catch(e){ PZ_INV_OPEN=null; }
+}
+
+async function pzInviteAnswer(inv,accept){
+  let r=null;
+  try{ r=await pzApi('POST','/invites/'+encodeURIComponent(inv.id)+'/respond',{accept:!!accept}); }catch(e){}
+  if(!accept) return;
+  if(!r||r.ok===false){ toast((r&&r.error&&r.error.message)||'این دعوت دیگر معتبر نیست',2600); return; }
+  pzInviteGo(inv);
+}
+
+/* Where «پذیرفتن» actually takes them: the ticket-entry screen of the game
+   they were invited to, with the tier the sender picked already chosen. */
+function pzInviteGo(inv){
+  /* AFTER the sheet has finished closing. Navigating while it is still on its
+     way out lands on a screen the closing animation then tidies away, and the
+     player is left where they started wondering whether their tap registered. */
+  setTimeout(()=>pzInviteGoNow(inv),260);
+}
+function pzInviteGoNow(inv){
+  try{
+    if(inv.mode==='duel'){
+      if(inv.ticketTier){ selectedTicket=inv.ticketTier; duelTicket=null; }
+      enterMode('survivor',true);
+      setTimeout(()=>{ try{ updateModeEntryPlan(); }catch(e){} try{ renderTicketSelect(); }catch(e){} },250);
+      return;
+    }
+    if(inv.mode==='ls'){
+      /* A room they were invited into: the entry screen for it, so the ticket
+         is chosen and paid the ordinary way. */
+      if(inv.roomId) lsInviteRoom=inv.roomId;
+      go('lsTopics');
+      toast('اتاقی که دعوت شدی را انتخاب کن 🎟️',3000);
+      return;
+    }
+    go('leagues');
+  }catch(e){
+    /* A swallowed failure here is the worst possible outcome: the player
+       accepted, the server was told, and nothing happened on their screen. Say
+       so, and leave them somewhere they can act. */
+    try{ console.warn('[PZ-INVITE]',e&&e.message); }catch(_){}
+    try{ toast('دعوت پذیرفته شد — از خانه وارد بازی شو',3000); }catch(_){}
+  }
+}
+let lsInviteRoom=null;
+
+/* Polling, because an invite is worth nothing if it is not seen while it is
+   still live — it lasts sixty seconds. Only while the player is somewhere it
+   makes sense to be pulled out of. */
+function pzInvitePollStart(){
+  if(PZ_INV_POLL) return;
+  PZ_INV_POLL=setInterval(pzInvitePoll,12000);
+  setTimeout(pzInvitePoll,1500);
+}
+function pzInviteBusy(){
+  /* Never in front of somebody mid-match: they cannot accept anyway, and a
+     sheet over a live question is how a round is lost. */
+  try{
+    if(pzRt&&pzRt.active&&!pzRt.finished) return true;
+    const a=document.querySelector('.screen.active');
+    return !!(a&&['duel','lsGame','wtaGame','login','otp','register','splash'].indexOf(a.id)>=0);
+  }catch(e){ return true; }
+}
+async function pzInvitePoll(){
+  try{
+    if(!_tok||pzInviteBusy()) return;
+    const r=await pzApi('GET','/invites/incoming');
+    const list=(r&&r.data&&r.data.invites)||[];
+    for(const inv of list){
+      if(PZ_INV_SEEN[inv.id]) continue;
+      PZ_INV_SEEN[inv.id]=1;
+      pzInviteAsk(inv);
+      break;                                        // one at a time
+    }
+  }catch(e){}
+}
+
+/* ── SENDING ONE ─────────────────────────────────────────────────────────
+   For a duel the tier has to be chosen first: «در هنگام ارسال درخواست بازی
+   باید نوع بلیط رو مشخص کنی و ارسال کنی». */
+function pzInvitePickTicket(user,onPick){
+  const rows=(typeof TICKET_DEFS!=='undefined'?TICKET_DEFS:[]).map(t=>
+    '<button class="btn btn-ghost pz-inv-tk" data-tk="'+frEsc(t.key)+'" style="width:100%;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">'+
+      '<span>'+frEsc(t.name)+'</span><span style="opacity:.8;font-size:12px">'+fa(t.value||0)+' تومان</span></button>').join('');
+  try{
+    showAaaModal({
+      icon:'🎟️', title:'با کدام بلیط؟',
+      sub:'<div style="margin-bottom:6px;font-size:12.5px">دعوت برای <b>'+pzEsc(user.username||user.displayName||'بازیکن')+'</b></div>'+rows,
+      dismissible:true, primaryText:'', secondaryText:'بی‌خیال',
+      onSecondary:()=>closeAaaModal(false)
+    });
+    setTimeout(()=>{
+      document.querySelectorAll('.pz-inv-tk').forEach(b=>{
+        b.onclick=()=>{ const k=b.getAttribute('data-tk'); closeAaaModal(true); setTimeout(()=>onPick(k),150); };
+      });
+    },60);
+  }catch(e){}
+}
+
+async function pzInviteSend(user,mode,extra){
+  extra=extra||{};
+  const body=Object.assign({toUserId:user.userId||user.id,mode:mode},extra);
+  const r=await pzApi('POST','/invites',body);
+  if(r&&r.ok!==false){
+    toast('دعوت فرستاده شد — منتظر جواب ⏳',2600);
+    return true;
+  }
+  const code=(r&&r.error&&r.error.code)||'';
+  toast((r&&r.error&&r.error.message)||(code==='PLAYER_BUSY'?'این بازیکن وسط مسابقه است':'دعوت فرستاده نشد'),3000);
+  return false;
+}
 
 /* ===== Photo wallpapers per screen + floating glow particles ===== */
 function pzApplyWall(id){
