@@ -35,6 +35,10 @@ export interface GameInvite {
   ticketTier: string;
   /** Last Survivor / all-or-nothing: the room being joined, when there is one. */
   roomId: string;
+  /** The room's topic, carried so the invitee lands on the ticket screen FOR
+   *  that room rather than being dropped on topic-selection to guess which one
+   *  they were invited to. */
+  roomTopic: string;
   /** Set for an invite sent from inside a room, so the room's OTHER members can
    *  be told the person is already spoken for. */
   fromRoomId: string;
@@ -67,6 +71,7 @@ async function ensureSchema(pool: ReturnType<typeof getPgPool>): Promise<void> {
     mode TEXT NOT NULL DEFAULT 'duel',
     ticket_tier TEXT NOT NULL DEFAULT '',
     room_id TEXT NOT NULL DEFAULT '',
+    room_topic TEXT NOT NULL DEFAULT '',
     from_room_id TEXT NOT NULL DEFAULT '',
     status TEXT NOT NULL DEFAULT 'pending',
     created_at BIGINT NOT NULL,
@@ -80,6 +85,7 @@ const rowToInvite = (r: any): GameInvite => ({
   id: String(r.id), fromUserId: String(r.from_user_id), fromName: String(r.from_name || ''),
   toUserId: String(r.to_user_id), mode: String(r.mode) as InviteMode,
   ticketTier: String(r.ticket_tier || ''), roomId: String(r.room_id || ''),
+  roomTopic: String(r.room_topic || ''),
   fromRoomId: String(r.from_room_id || ''), status: String(r.status) as InviteStatus,
   createdAt: Number(r.created_at), expiresAt: Number(r.expires_at)
 });
@@ -89,10 +95,10 @@ async function save(inv: GameInvite): Promise<GameInvite> {
   if (!pool) { mem.set(inv.id, { ...inv }); return inv; }
   await ensureSchema(pool);
   await pool.query(
-    `INSERT INTO game_invites (id, from_user_id, from_name, to_user_id, mode, ticket_tier, room_id, from_room_id, status, created_at, expires_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-     ON CONFLICT (id) DO UPDATE SET status=$9, expires_at=$11`,
-    [inv.id, inv.fromUserId, inv.fromName, inv.toUserId, inv.mode, inv.ticketTier, inv.roomId, inv.fromRoomId, inv.status, inv.createdAt, inv.expiresAt]
+    `INSERT INTO game_invites (id, from_user_id, from_name, to_user_id, mode, ticket_tier, room_id, room_topic, from_room_id, status, created_at, expires_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+     ON CONFLICT (id) DO UPDATE SET status=$10, expires_at=$12`,
+    [inv.id, inv.fromUserId, inv.fromName, inv.toUserId, inv.mode, inv.ticketTier, inv.roomId, inv.roomTopic, inv.fromRoomId, inv.status, inv.createdAt, inv.expiresAt]
   );
   return inv;
 }
@@ -150,6 +156,7 @@ export interface CreateInviteInput {
   mode: InviteMode;
   ticketTier?: string;
   roomId?: string;
+  roomTopic?: string;
   fromRoomId?: string;
 }
 
@@ -172,6 +179,7 @@ export async function createInvite(input: CreateInviteInput, now = Date.now()): 
     id: id(), fromUserId: input.fromUserId, fromName: String(input.fromName || 'بازیکن'),
     toUserId: input.toUserId, mode: input.mode,
     ticketTier: String(input.ticketTier || ''), roomId: String(input.roomId || ''),
+    roomTopic: String(input.roomTopic || ''),
     fromRoomId: String(input.fromRoomId || ''),
     status: 'pending', createdAt: now, expiresAt: now + INVITE_TTL_MS
   };

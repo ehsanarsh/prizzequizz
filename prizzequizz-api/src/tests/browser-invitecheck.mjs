@@ -377,6 +377,63 @@ const modal = (page) => page.evaluate(() => {
   await ctx.close();
 }
 
+/* ── FROM THE FRIENDS LIST ──────────────────────────────────────────────── */
+/* «در قسمت دوستان هم دعوت به بازی داشته باشیم» — the same real invite, from
+   the list where you already know the person. */
+{
+  const { ctx, page, errs } = await makePage();
+  console.log('inviting a friend from the friends list:');
+  const seed = (online) => page.evaluate((on) => {
+    const D = (0, eval)('FRIENDS_DATA');
+    D.length = 0;
+    D.push({ id: 'u-sara', a: '', ch: null, n: 'سارا', u: 'sara', lvl: 4, on: on, seen: null,
+             unread: 0, fav: false, s: 'دیروز', league: 'سطح ۴', last: '', m: [] });
+    (0, eval)("userPlan='premium'; planExplicitlyChosen=true; frActiveChat=null; frActiveTab='friends'; go('friends');");
+    (0, eval)('renderFriendsHub')();
+  }, online);
+
+  await seed(true);
+  await page.waitForTimeout(400);
+  const btn = await page.evaluate(() => {
+    const b = [...document.querySelectorAll('#friendsContent .friend-card .btn')].find((x) => /دعوت/.test(x.textContent));
+    if (!b) return null;
+    return { text: b.textContent.trim(), green: b.className.indexOf('btn-green') >= 0 };
+  });
+  ok('there is an invite button on a friend’s row', !!btn, JSON.stringify(btn));
+  ok('and it is green', btn.green, btn.className);
+
+  posted.length = 0;
+  await page.evaluate(() => (0, eval)('inviteFriend')('u-sara'));
+  await page.waitForTimeout(500);
+  const tiers = await page.evaluate(() => [...document.querySelectorAll('.pz-inv-tk')].map((b) => b.getAttribute('data-tk')));
+  /* «نوع بلیط رو مشخص کنی» — it must ask, not assume. */
+  ok('it asks which ticket first', tiers.length > 0, tiers.join(','));
+  ok('and nothing has been sent while it is still asking', posted.length === 0, JSON.stringify(posted));
+
+  await page.evaluate(() => { const b = document.querySelector('.pz-inv-tk[data-tk="green"]') || document.querySelector('.pz-inv-tk'); b.click(); });
+  await page.waitForTimeout(600);
+  const sent = posted.find((x) => x.path === '/invites');
+  ok('picking one sends a real invite to the server', !!sent, JSON.stringify(posted));
+  ok('addressed to that friend', !!sent && sent.body.toUserId === 'u-sara', JSON.stringify(sent && sent.body));
+  ok('for a duel, with the tier that was picked', !!sent && sent.body.mode === 'duel' && !!sent.body.ticketTier, JSON.stringify(sent && sent.body));
+
+  /* An invite lives sixty seconds; somebody who is not there cannot answer it. */
+  await page.evaluate(() => { try { (0, eval)('closeAaaModal')(false); } catch (e) {} });
+  await seed(false);
+  await page.waitForTimeout(300);
+  posted.length = 0;
+  await page.evaluate(() => (0, eval)('inviteFriend')('u-sara'));
+  await page.waitForTimeout(400);
+  const offline = await page.evaluate(() => ({
+    asked: document.querySelectorAll('.pz-inv-tk').length,
+    said: (document.getElementById('pzToast') || {}).textContent || ''
+  }));
+  ok('an offline friend is not invited into a minute they cannot answer', posted.length === 0 && offline.asked === 0, JSON.stringify(offline));
+  ok('and the player is told why', /آنلاین نیست/.test(offline.said), offline.said);
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 await browser.close(); server.close();
 process.exit(fail ? 1 : 0);

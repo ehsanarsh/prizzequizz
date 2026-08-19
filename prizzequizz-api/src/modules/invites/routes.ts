@@ -14,6 +14,7 @@ import {
   createInvite, incomingFor, respond, cancelInvite, getInvite, InviteError, type InviteMode
 } from '../../services/gameInviteService.js';
 import { notifications } from '../../services/notificationService.js';
+import { getRoom } from '../../services/lastSurvivorService.js';
 
 const MODES: InviteMode[] = ['duel', 'ls', 'wta'];
 
@@ -37,13 +38,21 @@ export function registerInviteRoutes(router: Router, base: string): void {
     const them = await repositories.users.findById(toUserId);
     if (!them) return error(ctx.res, 404, 'USER_NOT_FOUND', 'این بازیکن پیدا نشد');
 
+    /* The room's own topic travels with the invite, so accepting lands on the
+       ticket screen FOR that room instead of on topic-selection, where the
+       invitee has to guess which room they were asked into — and picking the
+       wrong topic puts them in a different room entirely. */
+    let roomTopic = '';
+    const roomId = String(body.roomId ?? '');
+    if (roomId) { try { roomTopic = (await getRoom(roomId))?.topic ?? ''; } catch { /* best effort */ } }
+
     try {
       const inv = await createInvite({
         fromUserId: ctx.userId,
         fromName: me?.displayName || me?.username || 'بازیکن',
         toUserId, mode,
         ticketTier: String(body.ticketTier ?? ''),
-        roomId: String(body.roomId ?? ''),
+        roomId, roomTopic,
         fromRoomId: String(body.fromRoomId ?? '')
       });
       /* Reaches them even with the game closed — an invite nobody sees is not
@@ -51,7 +60,7 @@ export function registerInviteRoutes(router: Router, base: string): void {
       await notifications.create({
         userId: toUserId, type: 'game_invite', title: 'دعوت به بازی',
         body: `${inv.fromName} تو را به بازی دعوت کرد`,
-        data: { inviteId: inv.id, mode: inv.mode, ticketTier: inv.ticketTier, roomId: inv.roomId, url: '/' },
+        data: { inviteId: inv.id, mode: inv.mode, ticketTier: inv.ticketTier, roomId: inv.roomId, roomTopic: inv.roomTopic, url: '/' },
         push: true
       }).catch(() => undefined);
       json(ctx.res, 201, publicInvite(inv));
@@ -114,7 +123,7 @@ export function registerInviteRoutes(router: Router, base: string): void {
 function publicInvite(inv: any) {
   return {
     id: inv.id, fromUserId: inv.fromUserId, fromName: inv.fromName,
-    mode: inv.mode, ticketTier: inv.ticketTier, roomId: inv.roomId,
+    mode: inv.mode, ticketTier: inv.ticketTier, roomId: inv.roomId, roomTopic: inv.roomTopic,
     status: inv.status, expiresAt: inv.expiresAt,
     secondsLeft: Math.max(0, Math.round((inv.expiresAt - Date.now()) / 1000))
   };

@@ -153,6 +153,22 @@ async function main(): Promise<void> {
        them in the SAME match. It used to put the accepter into the open queue,
        where the next stranger to press «حریف‌یابی» took the seat and the two
        who arranged the game never met. */
+    /* AND THE OTHER HALF OF «داخل مسابقه». Players were written into the
+       in-match table when a match started and never taken out, so everybody who
+       had ever played showed as «وسط مسابقه» for ever and could not be invited
+       again. Reported from the online list, where the whole lobby was greyed
+       out. */
+    await check('and can be invited again the moment their match is over', async () => {
+      const cur = await import('../services/matchEngine.js');
+      const m = cur.currentMatchOf(dan);
+      assert.ok(m, 'the fixture match is not registered at all');
+      await cur.forfeitMatch(m!, eve);                 // it ends
+      assert.equal(cur.currentMatchOf(dan), null, 'still marked as playing after the match ended');
+      assert.equal(cur.currentMatchOf(eve), null, 'the other player too');
+      const r = await call('POST', '/invites', sa.accessToken, { toUserId: dan, mode: 'duel', ticketTier: 'green' });
+      assert.equal(r.status, 201, 'still refused: ' + JSON.stringify(r));
+    });
+
     console.log('\nthe two who agreed actually meet:');
     const hana = await player('Hana');
     const omid = await player('Omid');

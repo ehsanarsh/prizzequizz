@@ -126,6 +126,8 @@ export async function voidMatchBeforeStart(matchId: string, reason: string): Pro
   match.phase = 'finished';
   match.winnerUserId = undefined;
   match.updatedAt = new Date().toISOString();
+  /* A match that was thrown away never happened, so nobody is in it. */
+  clearCurrentMatch(match);
   await refundHolds('match', match.id, reason);
   await repositories.matches.save(match);
   await activeMatchState.set(match, 60 * 60);
@@ -150,6 +152,17 @@ export async function getMatch(matchId: string): Promise<Match> {
 const _currentMatch = new Map<string, string>();
 export function currentMatchOf(userId: string): string | null {
   return _currentMatch.get(userId) ?? null;
+}
+/* AND THE OTHER HALF, WHICH WAS MISSING. Players were written into this map
+ * when a match started and never taken out of it, so `currentMatchOf` said
+ * "yes, in a match" for ever after somebody's first game. Nothing read it
+ * closely enough to notice until the online list started drawing «وسط مسابقه»
+ * on people sitting in the lobby and refusing every invitation sent to them.
+ * A finished match is not a current one. */
+function clearCurrentMatch(match: Match): void {
+  for (const p of match.players) {
+    if (_currentMatch.get(p.userId) === match.id) _currentMatch.delete(p.userId);
+  }
 }
 /** Test seam. */
 export function _resetCurrentMatches(): void { _currentMatch.clear(); }
@@ -329,6 +342,8 @@ async function settleDuel(match: Match, winnerUserId: string | undefined, reason
   match.winnerUserId = winnerUserId;
   match.phase = 'result';
   match.updatedAt = new Date().toISOString();
+  /* Over means over: they are back in the lobby and may be invited again. */
+  clearCurrentMatch(match);
 
   /* THE LADDER IS SETTLED, NOT THE RUNGS.
    * A paid duel entered with a ticket opens a run: winning promotes the player

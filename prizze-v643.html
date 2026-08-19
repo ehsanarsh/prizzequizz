@@ -5,7 +5,7 @@
 <!-- viewport-fit=cover lets the page draw UNDER the phone's status bar and
      gesture bar, which is what fullscreen needs; the layout already keeps its
      own content clear of them with env(safe-area-inset-*). -->
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
 <title>Prizze Quizz!</title>
 <!-- App icon on the phone home screen (Add to Home Screen). Place appicon.png
      (a square PNG, ideally 512x512) in the same web folder as this file. -->
@@ -75,7 +75,7 @@
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{height:100%}
 body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(--text);
-  display:flex;align-items:center;justify-content:center;min-height:100vh;padding:16px}
+  display:flex;align-items:center;justify-content:center;min-height:var(--pz-vh,100vh);padding:16px}
 @media(max-width:480px){body{padding:0}}
 
 
@@ -315,9 +315,9 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
 }
 
 /* ===== PHONE ===== */
-.phone{width:100%;max-width:400px;height:min(860px,100vh);border-radius:38px;overflow:hidden;position:relative;
+.phone{width:100%;max-width:400px;height:min(860px,var(--pz-vh,100vh));border-radius:38px;overflow:hidden;position:relative;
   box-shadow:0 40px 90px -25px rgba(0,0,0,.95),0 0 0 1px rgba(255,255,255,.06);display:flex;flex-direction:column;background:var(--studio-2)}
-@media(max-width:480px){.phone{border-radius:0;height:100vh;max-width:100%}}
+@media(max-width:480px){.phone{border-radius:0;height:var(--pz-vh,100vh);max-width:100%}}
 .viewport{flex:1;position:relative;overflow:hidden}
 
 /* ===== STUDIO SPOTLIGHT BACKDROP (brand) ===== */
@@ -964,6 +964,24 @@ input,textarea,select,[contenteditable="true"],.pz-selectable,.pz-selectable *{
   box-shadow:0 3px 0 #000;max-width:47%;text-align:center}
 .ls-invite-btn:active{transform:translateY(2px);box-shadow:0 1px 0 #000}
 @media (max-height:700px){ .ls-invite-btn{font-size:10.5px;padding:6px 9px} }
+/* The banner a message drops across the top while the game is open. Above the
+   screens, below nothing — it is meant to be seen and tapped. */
+#pzTopNote{position:absolute;top:0;left:8px;right:8px;z-index:9;display:flex;align-items:center;gap:9px;
+  padding:calc(9px + env(safe-area-inset-top,0px)) 12px 9px;
+  background:linear-gradient(180deg,#2b2b33,#1b1b21);color:#fff;border:2px solid #000;
+  border-radius:0 0 18px 18px;box-shadow:0 6px 0 rgba(0,0,0,.45);
+  transform:translateY(-120%);transition:transform .28s cubic-bezier(.2,.9,.3,1);cursor:pointer}
+#pzTopNote.show{transform:translateY(0)}
+#pzTopNote .pztn-ic{flex:0 0 auto;font-size:20px}
+#pzTopNote .pztn-txt{flex:1 1 auto;min-width:0;font-size:12.5px;font-weight:800;line-height:1.35}
+#pzTopNote .pztn-txt small{display:block;font-size:11.5px;font-weight:700;opacity:.8;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+.ls-tab .ls-chat-badge{position:absolute;top:6px;inset-inline-end:calc(50% - 30px);
+  min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:#ff4d4d;color:#fff;
+  border:2px solid #000;font-size:10.5px;font-weight:900;line-height:14px;text-align:center;
+  box-shadow:0 2px 0 #000}
+
 .ls-msg{display:flex;align-items:flex-start;gap:7px}
 .ls-msg-face{flex:0 0 auto;width:26px;height:26px;border-radius:9px;overflow:hidden;display:block;
   background:rgba(255,255,255,.07)}
@@ -2193,8 +2211,8 @@ input,textarea,select,[contenteditable="true"],.pz-selectable,.pz-selectable *{
 
 /* ===== FRIENDS HUB v9 ===== */
 .fr-hero{display:flex;align-items:center;gap:12px;margin:0 0 12px;padding:15px;border:var(--stroke);border-radius:20px;background:linear-gradient(135deg,#24242b,#151519);box-shadow:var(--hard-sm);position:relative;overflow:hidden}.fr-hero::after{content:"👥";position:absolute;left:-8px;top:-18px;font-size:82px;opacity:.07}.fr-hero .ico{width:52px;height:52px;border-radius:17px;border:2.5px solid #000;background:linear-gradient(180deg,#7fd0fb,#3f9fd8);display:grid;place-items:center;font-size:26px;box-shadow:0 4px 0 #000}.fr-hero b{font-size:16px;font-weight:900}.fr-hero p{font-size:12px;color:var(--muted);font-weight:700;line-height:1.6;margin-top:2px}.fr-stats{display:flex;gap:7px;margin-top:7px;flex-wrap:wrap}.fr-stat{font-size:10.5px;font-weight:900;padding:4px 8px;border-radius:999px;border:2px solid #000;background:var(--ink-3);color:var(--paper)}
-.fr-tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:10px 0 12px}.fr-tab{border:2px solid #000;border-radius:14px;background:var(--ink-2);color:var(--muted);font-family:inherit;font-size:11px;font-weight:900;padding:10px 4px;box-shadow:var(--hard-sm);cursor:pointer}.fr-tab.active{background:linear-gradient(180deg,#FFE24A,var(--bolt-2));color:#141414}.fr-search-row{display:flex;gap:8px;margin-bottom:12px}.fr-search-row .input{height:48px;padding:12px 14px}.fr-search-row .iconbtn{width:48px;height:48px;border-radius:15px}.friend-card{display:flex;align-items:center;gap:11px;padding:12px;background:var(--ink-2);border:var(--stroke);border-radius:18px;margin-bottom:10px;box-shadow:var(--hard-sm);position:relative;overflow:hidden}.friend-card.online{box-shadow:var(--hard-sm),0 0 0 2px rgba(51,217,124,.18)}.friend-card .fav{width:48px;height:48px;border-radius:15px;background:var(--ink-3);border:2px solid #000;display:grid;place-items:center;font-size:23px;position:relative;flex-shrink:0}.friend-card .fav .on{position:absolute;bottom:-4px;left:-4px;width:15px;height:15px;border-radius:50%;background:var(--ok);border:2px solid #000}.friend-card .fav .star{position:absolute;top:-8px;right:-7px;font-size:15px;filter:drop-shadow(0 2px 0 #000)}.friend-card .info{flex:1;min-width:0}.friend-card .info b{display:block;font-size:14.5px;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.friend-card .info span{display:block;font-size:11.5px;color:var(--muted);font-weight:700;line-height:1.55;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.friend-card .meta{display:flex;gap:5px;flex-wrap:wrap;margin-top:5px}.mini-badge{font-size:9.5px;font-weight:900;padding:2px 7px;border-radius:999px;border:1.7px solid #000;background:var(--ink-3);color:var(--muted)}.mini-badge.ok{background:var(--ok-soft);color:var(--ok)}.mini-badge.y{background:rgba(255,210,31,.14);color:var(--bolt)}.fr-actions{display:flex;gap:7px;flex-shrink:0}.fr-actions .btn{width:auto;padding:9px 10px;font-size:12px;border-radius:13px;box-shadow:var(--hard-sm)}.fr-empty{padding:22px 14px;text-align:center;border:var(--stroke);border-radius:20px;background:var(--ink-2);box-shadow:var(--hard-sm);color:var(--muted);font-size:13px;font-weight:800;line-height:1.8}.fr-empty .big{font-size:42px;display:block;margin-bottom:6px}.request-card{background:linear-gradient(180deg,#25251f,#151515)}.add-panel{background:var(--ink-2);border:var(--stroke);border-radius:20px;padding:15px;box-shadow:var(--hard-sm);margin-bottom:12px}.add-panel h3{font-size:16px;font-weight:900;margin-bottom:6px}.add-panel p{font-size:12px;color:var(--muted);line-height:1.7;margin-bottom:12px}.qr-card{display:flex;align-items:center;gap:12px;padding:12px;border:2px dashed var(--bolt);border-radius:16px;background:rgba(255,210,31,.08);margin-top:10px}.qr-box{width:64px;height:64px;border-radius:12px;border:2px solid #000;background:repeating-linear-gradient(45deg,#111 0 6px,#f7f4ec 6px 12px);box-shadow:0 3px 0 #000}.chat-list .friend-card{cursor:pointer}.chat-unread{min-width:22px;height:22px;border-radius:999px;background:var(--bad);border:2px solid #000;color:#fff;font-size:11px;font-weight:900;display:grid;place-items:center}.chat-view{display:flex;flex-direction:column;height:calc(100vh - 150px);max-height:650px;min-height:500px;background:var(--ink-2);border:var(--stroke);border-radius:20px;box-shadow:var(--hard-sm);overflow:hidden}.chat-head{display:flex;align-items:center;gap:10px;padding:12px;border-bottom:2px solid #000;background:linear-gradient(180deg,#24242b,#19191f)}.chat-head .fav{width:42px;height:42px;border-radius:13px;background:var(--ink-3);border:2px solid #000;display:grid;place-items:center;font-size:21px}.chat-head b{font-size:14px}.chat-head span{font-size:11px;color:var(--muted)}.chat-body{flex:1;overflow-y:auto;padding:14px 12px;display:flex;flex-direction:column;gap:9px}.msg{max-width:78%;padding:10px 12px;border:2px solid #000;border-radius:16px;font-size:12.5px;font-weight:800;line-height:1.7;box-shadow:0 3px 0 #000}.msg.me{align-self:flex-start;background:linear-gradient(180deg,#FFE24A,var(--bolt-2));color:#141414;border-bottom-left-radius:6px}.msg.them{align-self:flex-end;background:var(--paper);color:#141414;border-bottom-right-radius:6px}.msg small{display:block;font-size:9px;opacity:.62;margin-top:3px}.chat-send{display:flex;gap:8px;padding:10px;border-top:2px solid #000;background:#111116}.chat-send .input{height:46px;padding:11px 13px}.chat-send .btn{width:58px;border-radius:14px;padding:0}.fr-chipline{display:flex;gap:7px;flex-wrap:wrap;margin:8px 0 12px}.fr-chipline button{border:2px solid #000;background:var(--ink-2);color:var(--paper);border-radius:999px;padding:7px 10px;font-family:inherit;font-size:11px;font-weight:900;box-shadow:var(--hard-sm);cursor:pointer}
-@media(max-width:370px){.fr-tabs{gap:6px}.fr-tab{font-size:10px;padding:9px 2px}.friend-card{align-items:flex-start}.fr-actions{flex-direction:column}.fr-actions .btn{padding:8px 9px}.chat-view{height:calc(100vh - 132px);min-height:430px}.friend-card .fav{width:44px;height:44px}.fr-hero{padding:13px}}
+.fr-tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:10px 0 12px}.fr-tab{border:2px solid #000;border-radius:14px;background:var(--ink-2);color:var(--muted);font-family:inherit;font-size:11px;font-weight:900;padding:10px 4px;box-shadow:var(--hard-sm);cursor:pointer}.fr-tab.active{background:linear-gradient(180deg,#FFE24A,var(--bolt-2));color:#141414}.fr-search-row{display:flex;gap:8px;margin-bottom:12px}.fr-search-row .input{height:48px;padding:12px 14px}.fr-search-row .iconbtn{width:48px;height:48px;border-radius:15px}.friend-card{display:flex;align-items:center;gap:11px;padding:12px;background:var(--ink-2);border:var(--stroke);border-radius:18px;margin-bottom:10px;box-shadow:var(--hard-sm);position:relative;overflow:hidden}.friend-card.online{box-shadow:var(--hard-sm),0 0 0 2px rgba(51,217,124,.18)}.friend-card .fav{width:48px;height:48px;border-radius:15px;background:var(--ink-3);border:2px solid #000;display:grid;place-items:center;font-size:23px;position:relative;flex-shrink:0}.friend-card .fav .on{position:absolute;bottom:-4px;left:-4px;width:15px;height:15px;border-radius:50%;background:var(--ok);border:2px solid #000}.friend-card .fav .star{position:absolute;top:-8px;right:-7px;font-size:15px;filter:drop-shadow(0 2px 0 #000)}.friend-card .info{flex:1;min-width:0}.friend-card .info b{display:block;font-size:14.5px;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.friend-card .info span{display:block;font-size:11.5px;color:var(--muted);font-weight:700;line-height:1.55;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.friend-card .meta{display:flex;gap:5px;flex-wrap:wrap;margin-top:5px}.mini-badge{font-size:9.5px;font-weight:900;padding:2px 7px;border-radius:999px;border:1.7px solid #000;background:var(--ink-3);color:var(--muted)}.mini-badge.ok{background:var(--ok-soft);color:var(--ok)}.mini-badge.y{background:rgba(255,210,31,.14);color:var(--bolt)}.fr-actions{display:flex;gap:7px;flex-shrink:0}.fr-actions .btn{width:auto;padding:9px 10px;font-size:12px;border-radius:13px;box-shadow:var(--hard-sm)}.fr-empty{padding:22px 14px;text-align:center;border:var(--stroke);border-radius:20px;background:var(--ink-2);box-shadow:var(--hard-sm);color:var(--muted);font-size:13px;font-weight:800;line-height:1.8}.fr-empty .big{font-size:42px;display:block;margin-bottom:6px}.request-card{background:linear-gradient(180deg,#25251f,#151515)}.add-panel{background:var(--ink-2);border:var(--stroke);border-radius:20px;padding:15px;box-shadow:var(--hard-sm);margin-bottom:12px}.add-panel h3{font-size:16px;font-weight:900;margin-bottom:6px}.add-panel p{font-size:12px;color:var(--muted);line-height:1.7;margin-bottom:12px}.qr-card{display:flex;align-items:center;gap:12px;padding:12px;border:2px dashed var(--bolt);border-radius:16px;background:rgba(255,210,31,.08);margin-top:10px}.qr-box{width:64px;height:64px;border-radius:12px;border:2px solid #000;background:repeating-linear-gradient(45deg,#111 0 6px,#f7f4ec 6px 12px);box-shadow:0 3px 0 #000}.chat-list .friend-card{cursor:pointer}.chat-unread{min-width:22px;height:22px;border-radius:999px;background:var(--bad);border:2px solid #000;color:#fff;font-size:11px;font-weight:900;display:grid;place-items:center}.chat-view{display:flex;flex-direction:column;height:calc(var(--pz-vh,100vh) - 150px);max-height:650px;min-height:500px;background:var(--ink-2);border:var(--stroke);border-radius:20px;box-shadow:var(--hard-sm);overflow:hidden}.chat-head{display:flex;align-items:center;gap:10px;padding:12px;border-bottom:2px solid #000;background:linear-gradient(180deg,#24242b,#19191f)}.chat-head .fav{width:42px;height:42px;border-radius:13px;background:var(--ink-3);border:2px solid #000;display:grid;place-items:center;font-size:21px}.chat-head b{font-size:14px}.chat-head span{font-size:11px;color:var(--muted)}.chat-body{flex:1;overflow-y:auto;padding:14px 12px;display:flex;flex-direction:column;gap:9px}.msg{max-width:78%;padding:10px 12px;border:2px solid #000;border-radius:16px;font-size:12.5px;font-weight:800;line-height:1.7;box-shadow:0 3px 0 #000}.msg.me{align-self:flex-start;background:linear-gradient(180deg,#FFE24A,var(--bolt-2));color:#141414;border-bottom-left-radius:6px}.msg.them{align-self:flex-end;background:var(--paper);color:#141414;border-bottom-right-radius:6px}.msg small{display:block;font-size:9px;opacity:.62;margin-top:3px}.chat-send{display:flex;gap:8px;padding:10px;border-top:2px solid #000;background:#111116}.chat-send .input{height:46px;padding:11px 13px}.chat-send .btn{width:58px;border-radius:14px;padding:0}.fr-chipline{display:flex;gap:7px;flex-wrap:wrap;margin:8px 0 12px}.fr-chipline button{border:2px solid #000;background:var(--ink-2);color:var(--paper);border-radius:999px;padding:7px 10px;font-family:inherit;font-size:11px;font-weight:900;box-shadow:var(--hard-sm);cursor:pointer}
+@media(max-width:370px){.fr-tabs{gap:6px}.fr-tab{font-size:10px;padding:9px 2px}.friend-card{align-items:flex-start}.fr-actions{flex-direction:column}.fr-actions .btn{padding:8px 9px}.chat-view{height:calc(var(--pz-vh,100vh) - 132px);min-height:430px}.friend-card .fav{width:44px;height:44px}.fr-hero{padding:13px}}
 
 
 
@@ -2271,8 +2289,8 @@ input,textarea,select,[contenteditable="true"],.pz-selectable,.pz-selectable *{
 .msg.them .msg-link{color:#12459a}
 
 /* ===== SUPPORT CENTER v10 ===== */
-.sup-hero{display:flex;align-items:center;gap:12px;margin-bottom:12px;padding:15px;border:var(--stroke);border-radius:20px;background:linear-gradient(135deg,#233042,#14171d);box-shadow:var(--hard-sm);position:relative;overflow:hidden}.sup-hero::after{content:"🎧";position:absolute;left:-8px;top:-18px;font-size:86px;opacity:.07}.sup-hero .ico{width:54px;height:54px;border-radius:18px;border:2.5px solid #000;background:linear-gradient(180deg,#7fd0fb,#3f9fd8);display:grid;place-items:center;font-size:28px;box-shadow:0 4px 0 #000}.sup-hero b{font-size:16px;font-weight:900}.sup-hero p{font-size:12px;color:var(--muted);font-weight:700;line-height:1.65;margin-top:2px}.sup-statline{display:flex;gap:7px;flex-wrap:wrap;margin-top:8px}.sup-stat{font-size:10.5px;font-weight:900;padding:4px 8px;border-radius:999px;border:2px solid #000;background:var(--ink-3);color:var(--paper)}.sup-stat.ok{color:var(--ok);background:var(--ok-soft)}.sup-tabs{display:grid;grid-template-columns:repeat(5,1fr);gap:7px;margin:10px 0 12px}.sup-tab{border:2px solid #000;border-radius:13px;background:var(--ink-2);color:var(--muted);font-family:inherit;font-size:10.5px;font-weight:900;padding:9px 2px;box-shadow:var(--hard-sm);cursor:pointer}.sup-tab.active{background:linear-gradient(180deg,#FFE24A,var(--bolt-2));color:#141414}.sup-card{background:var(--ink-2);border:var(--stroke);border-radius:18px;padding:14px;margin-bottom:11px;box-shadow:var(--hard-sm)}.sup-card h3{font-size:15px;font-weight:900;margin-bottom:5px}.sup-card p{font-size:12px;color:var(--muted);line-height:1.75;font-weight:700}.sup-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.sup-actions .btn{width:auto;padding:10px 12px;font-size:12px;border-radius:13px;box-shadow:var(--hard-sm)}.ticket-card{display:flex;gap:11px;align-items:flex-start;background:var(--ink-2);border:var(--stroke);border-radius:18px;padding:13px;margin-bottom:10px;box-shadow:var(--hard-sm)}.ticket-icon{width:44px;height:44px;border-radius:14px;background:var(--ink-3);border:2px solid #000;display:grid;place-items:center;font-size:22px;flex-shrink:0}.ticket-info{flex:1;min-width:0}.ticket-info b{display:block;font-size:14px;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ticket-info span{font-size:11px;color:var(--muted);font-weight:700;line-height:1.7}.ticket-badge{display:inline-flex;margin-top:6px;font-size:10px;font-weight:900;border:1.8px solid #000;border-radius:999px;padding:3px 8px}.ticket-badge.open{background:rgba(255,210,31,.16);color:var(--bolt)}.ticket-badge.answered{background:var(--ok-soft);color:var(--ok)}.ticket-badge.closed{background:rgba(255,255,255,.08);color:var(--muted)}.faq-item{background:var(--ink-2);border:var(--stroke);border-radius:17px;margin-bottom:10px;box-shadow:var(--hard-sm);overflow:hidden}.faq-q{width:100%;display:flex;align-items:center;gap:9px;padding:13px;background:transparent;color:var(--paper);border:0;font-family:inherit;text-align:right;cursor:pointer}.faq-q b{flex:1;font-size:13px;font-weight:900}.faq-q span{color:var(--bolt);font-weight:900}.faq-a{display:none;padding:0 14px 14px;color:var(--muted);font-size:12px;line-height:1.8;font-weight:700}.faq-item.open .faq-a{display:block}.status-row{display:flex;align-items:center;gap:11px;padding:13px;background:var(--ink-2);border:var(--stroke);border-radius:17px;margin-bottom:10px;box-shadow:var(--hard-sm)}.status-dot{width:14px;height:14px;border-radius:50%;border:2px solid #000;background:var(--ok);box-shadow:0 0 12px rgba(51,217,124,.7);flex-shrink:0}.status-dot.warn{background:var(--bolt)}.status-row b{font-size:13px}.status-row span{font-size:11px;color:var(--muted)}.sup-chat{display:flex;flex-direction:column;height:calc(100vh - 225px);min-height:430px;background:var(--ink-2);border:var(--stroke);border-radius:20px;box-shadow:var(--hard-sm);overflow:hidden}.sup-chat-head{display:flex;align-items:center;gap:10px;padding:12px;border-bottom:2px solid #000;background:linear-gradient(180deg,#24242b,#19191f)}.agent-av{width:42px;height:42px;border-radius:14px;background:linear-gradient(180deg,#7fd0fb,#3f9fd8);border:2px solid #000;display:grid;place-items:center;font-size:22px}.sup-chat-body{flex:1;overflow-y:auto;padding:14px 12px;display:flex;flex-direction:column;gap:9px}.sup-msg{max-width:82%;padding:10px 12px;border:2px solid #000;border-radius:16px;font-size:12.5px;font-weight:800;line-height:1.7;box-shadow:0 3px 0 #000}.sup-msg.me{align-self:flex-start;background:linear-gradient(180deg,#FFE24A,var(--bolt-2));color:#141414;border-bottom-left-radius:6px}.sup-msg.agent{align-self:flex-end;background:var(--paper);color:#141414;border-bottom-right-radius:6px}.sup-msg small{display:block;font-size:9px;opacity:.62;margin-top:3px}.sup-chat-send{display:flex;gap:8px;padding:10px;border-top:2px solid #000;background:#111116}.sup-chat-send .input{height:46px;padding:11px 13px}.sup-chat-send .btn{width:58px;border-radius:14px;padding:0}.sup-quick{display:flex;gap:7px;overflow-x:auto;padding:8px 10px;border-top:2px solid #000;background:#17171d}.sup-quick button{flex-shrink:0;border:2px solid #000;border-radius:999px;background:var(--ink-3);color:var(--paper);font-family:inherit;font-size:11px;font-weight:900;padding:7px 10px}.contact-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.contact-card{border:var(--stroke);border-radius:17px;background:var(--ink-2);padding:14px 10px;text-align:center;box-shadow:var(--hard-sm);cursor:pointer}.contact-card .ci{font-size:28px;display:block;margin-bottom:6px}.contact-card b{font-size:13px}.contact-card span{display:block;font-size:10.5px;color:var(--muted);margin-top:3px;line-height:1.5}.sup-empty{padding:22px 14px;text-align:center;border:var(--stroke);border-radius:20px;background:var(--ink-2);box-shadow:var(--hard-sm);color:var(--muted);font-size:13px;font-weight:800;line-height:1.8}.sup-empty .big{font-size:42px;display:block;margin-bottom:6px}
-@media(max-width:370px){.sup-tabs{grid-template-columns:repeat(3,1fr)}.sup-tab{font-size:10px}.sup-chat{height:calc(100vh - 205px);min-height:390px}.contact-grid{grid-template-columns:1fr}.sup-hero{padding:13px}.sup-actions .btn{width:100%}}
+.sup-hero{display:flex;align-items:center;gap:12px;margin-bottom:12px;padding:15px;border:var(--stroke);border-radius:20px;background:linear-gradient(135deg,#233042,#14171d);box-shadow:var(--hard-sm);position:relative;overflow:hidden}.sup-hero::after{content:"🎧";position:absolute;left:-8px;top:-18px;font-size:86px;opacity:.07}.sup-hero .ico{width:54px;height:54px;border-radius:18px;border:2.5px solid #000;background:linear-gradient(180deg,#7fd0fb,#3f9fd8);display:grid;place-items:center;font-size:28px;box-shadow:0 4px 0 #000}.sup-hero b{font-size:16px;font-weight:900}.sup-hero p{font-size:12px;color:var(--muted);font-weight:700;line-height:1.65;margin-top:2px}.sup-statline{display:flex;gap:7px;flex-wrap:wrap;margin-top:8px}.sup-stat{font-size:10.5px;font-weight:900;padding:4px 8px;border-radius:999px;border:2px solid #000;background:var(--ink-3);color:var(--paper)}.sup-stat.ok{color:var(--ok);background:var(--ok-soft)}.sup-tabs{display:grid;grid-template-columns:repeat(5,1fr);gap:7px;margin:10px 0 12px}.sup-tab{border:2px solid #000;border-radius:13px;background:var(--ink-2);color:var(--muted);font-family:inherit;font-size:10.5px;font-weight:900;padding:9px 2px;box-shadow:var(--hard-sm);cursor:pointer}.sup-tab.active{background:linear-gradient(180deg,#FFE24A,var(--bolt-2));color:#141414}.sup-card{background:var(--ink-2);border:var(--stroke);border-radius:18px;padding:14px;margin-bottom:11px;box-shadow:var(--hard-sm)}.sup-card h3{font-size:15px;font-weight:900;margin-bottom:5px}.sup-card p{font-size:12px;color:var(--muted);line-height:1.75;font-weight:700}.sup-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.sup-actions .btn{width:auto;padding:10px 12px;font-size:12px;border-radius:13px;box-shadow:var(--hard-sm)}.ticket-card{display:flex;gap:11px;align-items:flex-start;background:var(--ink-2);border:var(--stroke);border-radius:18px;padding:13px;margin-bottom:10px;box-shadow:var(--hard-sm)}.ticket-icon{width:44px;height:44px;border-radius:14px;background:var(--ink-3);border:2px solid #000;display:grid;place-items:center;font-size:22px;flex-shrink:0}.ticket-info{flex:1;min-width:0}.ticket-info b{display:block;font-size:14px;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ticket-info span{font-size:11px;color:var(--muted);font-weight:700;line-height:1.7}.ticket-badge{display:inline-flex;margin-top:6px;font-size:10px;font-weight:900;border:1.8px solid #000;border-radius:999px;padding:3px 8px}.ticket-badge.open{background:rgba(255,210,31,.16);color:var(--bolt)}.ticket-badge.answered{background:var(--ok-soft);color:var(--ok)}.ticket-badge.closed{background:rgba(255,255,255,.08);color:var(--muted)}.faq-item{background:var(--ink-2);border:var(--stroke);border-radius:17px;margin-bottom:10px;box-shadow:var(--hard-sm);overflow:hidden}.faq-q{width:100%;display:flex;align-items:center;gap:9px;padding:13px;background:transparent;color:var(--paper);border:0;font-family:inherit;text-align:right;cursor:pointer}.faq-q b{flex:1;font-size:13px;font-weight:900}.faq-q span{color:var(--bolt);font-weight:900}.faq-a{display:none;padding:0 14px 14px;color:var(--muted);font-size:12px;line-height:1.8;font-weight:700}.faq-item.open .faq-a{display:block}.status-row{display:flex;align-items:center;gap:11px;padding:13px;background:var(--ink-2);border:var(--stroke);border-radius:17px;margin-bottom:10px;box-shadow:var(--hard-sm)}.status-dot{width:14px;height:14px;border-radius:50%;border:2px solid #000;background:var(--ok);box-shadow:0 0 12px rgba(51,217,124,.7);flex-shrink:0}.status-dot.warn{background:var(--bolt)}.status-row b{font-size:13px}.status-row span{font-size:11px;color:var(--muted)}.sup-chat{display:flex;flex-direction:column;height:calc(var(--pz-vh,100vh) - 225px);min-height:430px;background:var(--ink-2);border:var(--stroke);border-radius:20px;box-shadow:var(--hard-sm);overflow:hidden}.sup-chat-head{display:flex;align-items:center;gap:10px;padding:12px;border-bottom:2px solid #000;background:linear-gradient(180deg,#24242b,#19191f)}.agent-av{width:42px;height:42px;border-radius:14px;background:linear-gradient(180deg,#7fd0fb,#3f9fd8);border:2px solid #000;display:grid;place-items:center;font-size:22px}.sup-chat-body{flex:1;overflow-y:auto;padding:14px 12px;display:flex;flex-direction:column;gap:9px}.sup-msg{max-width:82%;padding:10px 12px;border:2px solid #000;border-radius:16px;font-size:12.5px;font-weight:800;line-height:1.7;box-shadow:0 3px 0 #000}.sup-msg.me{align-self:flex-start;background:linear-gradient(180deg,#FFE24A,var(--bolt-2));color:#141414;border-bottom-left-radius:6px}.sup-msg.agent{align-self:flex-end;background:var(--paper);color:#141414;border-bottom-right-radius:6px}.sup-msg small{display:block;font-size:9px;opacity:.62;margin-top:3px}.sup-chat-send{display:flex;gap:8px;padding:10px;border-top:2px solid #000;background:#111116}.sup-chat-send .input{height:46px;padding:11px 13px}.sup-chat-send .btn{width:58px;border-radius:14px;padding:0}.sup-quick{display:flex;gap:7px;overflow-x:auto;padding:8px 10px;border-top:2px solid #000;background:#17171d}.sup-quick button{flex-shrink:0;border:2px solid #000;border-radius:999px;background:var(--ink-3);color:var(--paper);font-family:inherit;font-size:11px;font-weight:900;padding:7px 10px}.contact-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.contact-card{border:var(--stroke);border-radius:17px;background:var(--ink-2);padding:14px 10px;text-align:center;box-shadow:var(--hard-sm);cursor:pointer}.contact-card .ci{font-size:28px;display:block;margin-bottom:6px}.contact-card b{font-size:13px}.contact-card span{display:block;font-size:10.5px;color:var(--muted);margin-top:3px;line-height:1.5}.sup-empty{padding:22px 14px;text-align:center;border:var(--stroke);border-radius:20px;background:var(--ink-2);box-shadow:var(--hard-sm);color:var(--muted);font-size:13px;font-weight:800;line-height:1.8}.sup-empty .big{font-size:42px;display:block;margin-bottom:6px}
+@media(max-width:370px){.sup-tabs{grid-template-columns:repeat(3,1fr)}.sup-tab{font-size:10px}.sup-chat{height:calc(var(--pz-vh,100vh) - 205px);min-height:390px}.contact-grid{grid-template-columns:1fr}.sup-hero{padding:13px}.sup-actions .btn{width:100%}}
 
 
 
@@ -2500,21 +2518,53 @@ input,textarea,select,[contenteditable="true"],.pz-selectable,.pz-selectable *{
 #friends.chat-mode .fr-tabs,
 #friends.chat-mode .fr-search-row{display:none!important}
 #friends.chat-mode .pad{padding-top:4px!important;padding-bottom:calc(10px + env(safe-area-inset-bottom,0px))!important}
-#friends.chat-mode .chat-view{height:calc(100vh - 165px);min-height:0;max-height:none;margin-bottom:0}
+#friends.chat-mode .chat-view{height:calc(var(--pz-vh,100vh) - 165px);min-height:0;max-height:none;margin-bottom:0}
 #friends.chat-mode .chat-body{min-height:0}
 .chat-send{position:relative;z-index:8;flex-shrink:0}
 .chat-send .input{min-width:0;display:block!important}
 .chat-send .btn{display:flex!important;align-items:center;justify-content:center;flex-shrink:0}
 #support.chat-mode .sup-hero{display:none!important}
-#support.chat-mode .sup-chat{height:calc(100vh - 168px);min-height:0;max-height:none}
+#support.chat-mode .sup-chat{height:calc(var(--pz-vh,100vh) - 168px);min-height:0;max-height:none}
 #support.chat-mode .sup-chat-body{min-height:0}
 .sup-chat-send{position:relative;z-index:8;flex-shrink:0}
 .sup-chat-send .input{min-width:0;display:block!important}
 .sup-chat-send .btn{display:flex!important;align-items:center;justify-content:center;flex-shrink:0}
 @media(max-height:740px){
-  #friends.chat-mode .chat-view{height:calc(100vh - 145px)}
-  #support.chat-mode .sup-chat{height:calc(100vh - 148px)}
+  #friends.chat-mode .chat-view{height:calc(var(--pz-vh,100vh) - 145px)}
+  #support.chat-mode .sup-chat{height:calc(var(--pz-vh,100vh) - 148px)}
 }
+
+/* WITH THE KEYBOARD UP, THE TYPING BOX BELONGS ON THE KEYBOARD.
+   «کادر تایپ حروف بچسبه به کیبورد»
+   Two things stood between them. The bottom nav is 78px of buttons nobody can
+   press while typing, and the chat box's height was a hand-tuned constant that
+   only ever fitted the screen WITH that nav on it — so with the keyboard up the
+   composer floated ~90px above it. Here the nav goes away and the box simply
+   fills whatever is left, which needs no constant at all and therefore cannot
+   drift out of tune on a different phone. The header is outside the scrolling
+   part, so it stays put and only the messages move. */
+body.pz-kb-open #friends.chat-mode>.bottomnav,
+body.pz-kb-open #support.chat-mode>.bottomnav{display:none!important}
+/* The whole chain from the screen down to the chat box has to be a column that
+   passes its height along — one plain <div> in the middle that does not, and
+   the box below it goes back to being as tall as the conversation. */
+body.pz-kb-open #friends.chat-mode>.pad,
+body.pz-kb-open #support.chat-mode>.pad,
+body.pz-kb-open #friends.chat-mode #friendsContent,
+body.pz-kb-open #support.chat-mode #supportContent{display:flex;flex-direction:column;flex:1 1 auto;min-height:0;overflow:hidden;box-sizing:border-box}
+/* `flex:1`, not `height:100%` — a percentage of a box whose own height is still
+   being worked out resolves to «as tall as the contents», which is how a
+   thirty-message conversation once made the composer 2400px down the page.
+   Growing and shrinking is all it takes; the calc() height above becomes the
+   starting guess and flex corrects it, so nothing needs overriding by hand. */
+body.pz-kb-open #friends.chat-mode .chat-view,
+body.pz-kb-open #support.chat-mode .sup-chat{flex:1 1 auto}
+/* The support chat carries 18px of padding under it and 12px of margin — the
+   spacing every card on that screen gets. On the keyboard that is 30px of dark
+   nothing between the composer and the keys, so it comes down to the same
+   10px of breathing room the friends chat leaves. */
+body.pz-kb-open #support.chat-mode>#supportContent{padding-bottom:10px!important}
+body.pz-kb-open #support.chat-mode .sup-chat{margin-bottom:0!important}
 
 
 
@@ -3343,7 +3393,7 @@ body,button,input,select,textarea,.tab,#rankTabs .tab,#rankTabs .tab small,.rank
   margin-right:14px!important;
 }
 #support.chat-mode .sup-chat{
-  height:calc(100vh - 188px)!important;
+  height:calc(var(--pz-vh,100vh) - 188px)!important;
   max-height:none!important;
 }
 @media(max-width:390px){
@@ -3356,7 +3406,7 @@ body,button,input,select,textarea,.tab,#rankTabs .tab,#rankTabs .tab small,.rank
 @media(max-height:720px){
   #support > .sup-hero{padding:13px!important;margin-bottom:12px!important}
   #support .sup-tabs{margin-bottom:12px!important}
-  #support.chat-mode .sup-chat{height:calc(100vh - 168px)!important}
+  #support.chat-mode .sup-chat{height:calc(var(--pz-vh,100vh) - 168px)!important}
 }
 
 
@@ -3505,8 +3555,8 @@ body.pz-has-install .screen{top:calc(54px + env(safe-area-inset-top,0px))}
 }
 img,svg,canvas{max-width:100%}
 button,input,textarea,select{font-family:'Vazirmatn',system-ui,sans-serif}
-@supports(height:100dvh){
-  @media(max-width:480px){.phone{height:100dvh}.chat-view,.sup-chat{max-height:calc(100dvh - 150px)}}
+@supports(height:var(--pz-vh,100dvh)){
+  @media(max-width:480px){.phone{height:var(--pz-vh,100dvh)}.chat-view,.sup-chat{max-height:calc(var(--pz-vh,100dvh) - 150px)}}
 }
 
 
@@ -3842,7 +3892,7 @@ button,input,textarea,select{font-family:'Vazirmatn',system-ui,sans-serif}
 /* ===== AAA UX SPEC IMPLEMENTATION v48 ===== */
 /* Fullscreen + safe area */
 html,body{width:100%;min-height:100%;overflow:hidden;background:#050506}
-body{padding:0!important;align-items:stretch!important;justify-content:center!important}.phone{height:100vh!important;max-height:none!important;border-radius:0!important}.viewport{min-height:0}.screen{padding-top:0;scroll-padding-top:calc(12px + env(safe-area-inset-top,0px));overscroll-behavior:contain}.topbar,.q-head{padding-top:calc(12px + env(safe-area-inset-top,0px))!important}.bottomnav{padding-bottom:calc(12px + env(safe-area-inset-bottom,0px))!important}.sheet{padding-bottom:calc(22px + env(safe-area-inset-bottom,0px))!important;max-height:calc(100vh - env(safe-area-inset-top,0px) - 20px);overflow-y:auto;-webkit-overflow-scrolling:touch}.sheet::-webkit-scrollbar{width:0}@supports(height:100dvh){.phone{height:100dvh!important}.sheet{max-height:calc(100dvh - env(safe-area-inset-top,0px) - 20px)}}
+body{padding:0!important;align-items:stretch!important;justify-content:center!important}.phone{height:var(--pz-vh,100vh)!important;max-height:none!important;border-radius:0!important}.viewport{min-height:0}.screen{padding-top:0;scroll-padding-top:calc(12px + env(safe-area-inset-top,0px));overscroll-behavior:contain}.topbar,.q-head{padding-top:calc(12px + env(safe-area-inset-top,0px))!important}.bottomnav{padding-bottom:calc(12px + env(safe-area-inset-bottom,0px))!important}.sheet{padding-bottom:calc(22px + env(safe-area-inset-bottom,0px))!important;max-height:calc(var(--pz-vh,100vh) - env(safe-area-inset-top,0px) - 20px);overflow-y:auto;-webkit-overflow-scrolling:touch}.sheet::-webkit-scrollbar{width:0}@supports(height:var(--pz-vh,100dvh)){.phone{height:var(--pz-vh,100dvh)!important}.sheet{max-height:calc(var(--pz-vh,100dvh) - env(safe-area-inset-top,0px) - 20px)}}
 /* Weekly progress hero bar */
 .weekly-progress{margin:0 14px 10px;padding:12px 13px;border:var(--stroke);border-radius:18px;background:linear-gradient(135deg,#24242b,#121216);box-shadow:var(--hard-sm);position:relative;overflow:hidden}.weekly-progress::before{content:"";position:absolute;inset:-55%;background:conic-gradient(from 0deg,transparent 0 35deg,rgba(255,210,31,.10) 35deg 54deg,transparent 54deg 100deg);animation:raysSpin 16s linear infinite}.wp-top,.wp-marks,.wp-next{position:relative;z-index:1}.wp-top{display:flex;justify-content:space-between;gap:8px;align-items:center}.wp-top b{font-size:13px}.wp-score{font-size:12px;font-weight:900;color:var(--bolt)}.wp-track{position:relative;z-index:1;height:14px;margin:9px 0 8px;border-radius:999px;background:#000;border:2px solid #000;overflow:hidden}.wp-track i{display:block;height:100%;width:0;background:linear-gradient(90deg,#b87333,#c7c7c7,#FFD21F);border-radius:999px;transition:width 1s cubic-bezier(.2,.9,.3,1);box-shadow:0 0 14px rgba(255,210,31,.45)}.wp-marks{display:flex;justify-content:space-between;font-size:10px;font-weight:900;color:var(--muted)}.wp-marks span.done{color:var(--ok)}.wp-next{font-size:10.5px;color:var(--muted);font-weight:800;margin-top:5px;text-align:center}.wp-next b{color:var(--bolt)}
 /* Daily reward hero widget */
@@ -7231,6 +7281,7 @@ function lsIcon(name){ if(LS_ICONS[name])return LS_ICONS[name]; const n=String(n
 function lsStart(){ try{ _pzPreXp=(_usr&&_usr.xp)||0; _pzPreCup=weeklyScore; }catch(e){}
   try{ pzAnsTimes=[]; pzQShownAt=0; }catch(e){}   /* a new room starts a new average */
   try{ lsPotReset(); }catch(e){}                  /* and a new pot to count up */
+  try{ lsChatWatchStop(); }catch(e){}
   showRules('lastSurvivor',()=>{ lsEndShown=false; showScreen('lsTopics'); lsLoadTopics(); }); }
 /* Leaving the room.
    The websocket message only unsubscribes this tab from updates — it never told
@@ -7521,6 +7572,7 @@ async function lsDoJoin(topic,color){
   if(!r||r.ok===false){ toast((r&&r.error&&r.error.message)||'ورود ناموفق بود'); return; }
   const snap=r.data; if(!snap||!snap.room){ toast('خطا در ورود'); return; }
   lsRoomId=snap.room.id; lsLastKey=''; lsDeadDismissed=false; lsChatSeen=0; lsEndShown=false; lsForfeited=0; lsReadyShownRound='';
+  try{ lsChatWatchStop(); lsChatWatchStart(); }catch(e){}
   try{ if(typeof mTickets!=='undefined'&&mTickets[color]!=null){mTickets[color]=Math.max(0,mTickets[color]-1);renderHeaderTickets();} }catch(e){}
   showScreen('lsGame'); lsRender(snap); lsStartPoll();
 }
@@ -7916,6 +7968,7 @@ function lsLive(snap){
   set('lsAlive',lsFa(s.alive)); set('lsElim',lsFa(s.eliminated)); set('lsCash',lsFa(s.cashedOut));
   /* The pot and the player's own share are the two numbers that GROW when
      somebody goes out, so they are not set — they are counted up. */
+  try{ lsChatBadgePaint(); }catch(e){}          /* the tabs are redrawn often */
   lsPotPaint('lsRemain',s.remainingPot);
   { const mine=lsMyShare(snap); if(mine!=null) lsPotPaint('lsMyShare',mine); }
   const vf=document.getElementById('lsVoteFill'), vt=document.getElementById('lsVoteTxt');
@@ -8008,7 +8061,7 @@ function lsWaitHtml(snap){
   <div class="ls-grid" id="lsGrid" style="${lsTab==='players'?'':'display:none'}">${lsPlayersCells(snap,false)}</div>
   <div class="ls-chat" id="lsChatWrap" style="${lsTab==='chat'?'':'display:none'}"><div class="ls-chat-list" id="lsChatList"></div><div class="ls-chat-in"><input id="lsChatInput" placeholder="پیام…" maxlength="240"><button onclick="lsChatSend()">↑</button></div></div>
   ${r.manualStartEnabled?`<div class="ls-vote" id="lsVoteBtn" onclick="lsVote()"><i id="lsVoteFill"></i><span id="lsVoteTxt">شروع با همین تعداد</span></div>`:''}
-  <div class="ls-tabs" role="tablist"><div class="ls-tab ${lsTab==='players'?'on':''}" data-tab="players" role="tab" onclick="lsSetTab('players')"><span class="ti">👥</span>بازیکنان</div>${r.chatEnabled?`<div class="ls-tab ${lsTab==='chat'?'on':''}" data-tab="chat" role="tab" onclick="lsSetTab('chat')"><span class="ti">💬</span>چت روم</div>`:''}</div>`;
+  <div class="ls-tabs" role="tablist"><div class="ls-tab ${lsTab==='players'?'on':''}" data-tab="players" role="tab" onclick="lsSetTab('players')"><span class="ti">👥</span>بازیکنان</div>${r.chatEnabled?`<div class="ls-tab ${lsTab==='chat'?'on':''}" data-tab="chat" role="tab" onclick="lsSetTab('chat')"><span class="ti">💬</span>چت روم<b class="ls-chat-badge" id="lsChatBadge" style="display:none">۰</b></div>`:''}</div>`;
 }
 /* Last Survivor players get the same two-sided card as everywhere else. The
    deterministic colour-tinted mascot that used to stand in here is gone. */
@@ -8406,13 +8459,49 @@ async function lsAnswer(i){
   lsSecondSubmitted=false;
 }
 
-function lsSetTab(t){ lsTab=t; const g=document.getElementById('lsGrid'),c=document.getElementById('lsChatWrap');
+function lsSetTab(t){ lsTab=t;
+  /* Reading them is what clears them. */
+  if(t==='chat'){ lsChatUnread=0; try{ lsChatBadgePaint(); }catch(e){} }
+  const g=document.getElementById('lsGrid'),c=document.getElementById('lsChatWrap');
   if(g)g.style.display=t==='players'?'':'none'; if(c)c.style.display=t==='chat'?'':'none';
   document.querySelectorAll('#lsGame .ls-tab').forEach(el=>el.classList.toggle('on',el.getAttribute('data-tab')===t));
   if(t==='chat') lsLoadChat();
   try{vib(8);}catch(e){}
 }
 function lsBindChat(){ const inp=document.getElementById('lsChatInput'); if(inp)inp.addEventListener('keydown',e=>{if(e.key==='Enter')lsChatSend();}); }
+/* THE BADGE ON THE CHAT TAB.
+   A room fills up while people talk in it, and somebody watching the player
+   grid had no way of knowing anything had been said — the chat only existed
+   once you opened it. So the messages are counted while the tab is closed, the
+   count is drawn on the tab, and opening it clears the count. */
+function lsChatBadgePaint(){
+  const b=document.getElementById('lsChatBadge'); if(!b) return;
+  const n=Math.max(0,Number(lsChatUnread)||0);
+  if(n<=0||lsTab==='chat'){ b.style.display='none'; return; }
+  b.textContent=lsFa(n>99?99:n);
+  b.style.display='';
+}
+let lsChatUnread=0, lsChatCount=0, lsChatWatch=null;
+/* Counting has to happen whether or not the chat is on screen, so it reads the
+   room's messages on its own timer while the player is anywhere in the room. */
+async function lsChatWatchTick(){
+  try{
+    if(!lsRoomId||lsTab==='chat') return;
+    const r=await pzApi('GET','/last-survivor/rooms/'+lsRoomId+'/chat');
+    const msgs=(r&&r.data&&r.data.messages)||[];
+    const mine=(m)=>String(m.userId)===String(lsMyId);
+    const total=msgs.filter(m=>!mine(m)).length;      // my own words are not news
+    if(total>lsChatCount){ lsChatUnread+=(total-lsChatCount); lsChatBadgePaint(); }
+    lsChatCount=total;
+  }catch(e){}
+}
+function lsChatWatchStart(){
+  if(lsChatWatch) return;
+  lsChatWatch=setInterval(lsChatWatchTick,8000);
+  setTimeout(lsChatWatchTick,1200);
+}
+function lsChatWatchStop(){ if(lsChatWatch){ clearInterval(lsChatWatch); lsChatWatch=null; } lsChatUnread=0; lsChatCount=0; }
+
 async function lsLoadChat(){ if(!lsRoomId)return; const r=await pzApi('GET','/last-survivor/rooms/'+lsRoomId+'/chat'); const list=document.getElementById('lsChatList'); if(!list)return; const msgs=(r&&r.data&&r.data.messages)||[];
   /* «کنار اسم و متن، عکس کاربر هم باشه». The chat rows carry a name and a
      body and nothing else, so the face is taken from the room snapshot — the
@@ -11725,7 +11814,7 @@ function friendCard(f,mode){
   /* The badge follows the player all the way down to the person who wrote:
      the count sits on their row in BOTH lists, not only in the چت tab, so
      «کی پیام داده؟» is answered without opening anything. */
-  if(mode==='friend')actions=unread+'<button class="btn btn-primary btn-sm" onclick="openFriendChat(\''+f.id+'\')">چت</button><button class="btn btn-ghost btn-sm" onclick="inviteFriend(\''+f.id+'\')">دعوت</button><button class="btn btn-ghost btn-sm profile-btn" onclick="showFriendProfile(\''+f.id+'\')">پروفایل</button>';
+  if(mode==='friend')actions=unread+'<button class="btn btn-primary btn-sm" onclick="openFriendChat(\''+f.id+'\')">چت</button><button class="btn btn-green btn-sm" onclick="inviteFriend(\''+f.id+'\')">⚔️ دعوت</button><button class="btn btn-ghost btn-sm profile-btn" onclick="showFriendProfile(\''+f.id+'\')">پروفایل</button>';
   else if(isChat)actions=unread;
   const cardClick=isChat?'onclick="openFriendChat(\''+f.id+'\')"':'';
   const profileClick=isChat?'':'onclick="event.stopPropagation();showFriendProfile(\''+f.id+'\')"';
@@ -11765,7 +11854,22 @@ function renderChatView(id){
   setTimeout(()=>{const bb=document.getElementById('chatBody');if(bb)bb.scrollTop=bb.scrollHeight;},60);
 }
 async function sendChatMsg(){const i=document.getElementById('chatInput'),id=frActiveChat,f=FRIENDS_DATA.find(x=>x.id===id);if(!i||!f)return;const txt=i.value.trim();if(!txt)return;i.value='';f.m.push(['me',frMsgHTML(txt),'الان']);f.last=txt;renderChatMessages(id);i.focus();const r=await pzApi('POST','/friends/'+id+'/messages',{body:txt});if(!r||!r.ok){toast((r&&r.error&&r.error.message)||'پیام ارسال نشد');}await frLoadMessages(id);if(frActiveChat===id)renderChatMessages(id);}
-function inviteFriend(id){const f=FRIENDS_DATA.find(x=>x.id===id);if(!f)return;toast('دعوت بازی برای '+f.n+' ارسال شد 🎮');sfx('found');}
+/* «در قسمت دوستان هم دعوت به بازی داشته باشیم».
+   This button used to say «دعوت بازی ارسال شد» and do nothing else — no
+   invite was sent anywhere, so the friend never heard about a game they had
+   supposedly been asked to. It now sends the same real invite the online list
+   sends: the tier is chosen first, the server holds the invite for a minute,
+   and the two of them are paired with each other rather than with whoever
+   happens to be queueing.
+   An offline friend cannot answer inside that minute, so they are told plainly
+   instead of being handed a request that quietly expires. */
+function inviteFriend(id){
+  const f=FRIENDS_DATA.find(x=>x.id===id); if(!f) return;
+  if(!f.on){ toast(f.n+' الان آنلاین نیست — دعوت فقط تا یک دقیقه اعتبار دارد',3200); return; }
+  const who={id:f.id,userId:f.id,username:f.n,displayName:f.n};
+  pzInvitePickTicket(who,(tier)=>{ pzInviteSend(who,'duel',{ticketTier:tier}); });
+  sfx('found');
+}
 async function sendFriendRequest(){const i=document.getElementById('friendAddInput');const v=(i?.value||'').trim();if(!v){toast('یوزرنیم دوستت رو وارد کن');return;}const r=await pzApi('POST','/friends/requests',{username:v.replace(/^@/,'')});if(r&&r.ok){const st=r.data&&r.data.status;toast(st==='accepted'?'حالا دوست شدید ✅':'درخواست دوستی ارسال شد 🤝');recordMissionEvent('social',1);if(i)i.value='';friendsLoad();}else{toast((r&&r.error&&r.error.message)||'خطا در ارسال درخواست');}}
 async function acceptFriendRequest(id){const r=await pzApi('POST','/friends/requests/'+id+'/accept',{});if(r&&r.ok){toast('دوست جدید اضافه شد ✅');recordMissionEvent('social',1);}else{toast((r&&r.error&&r.error.message)||'خطا');}friendsLoad();}
 async function declineFriendRequest(id){const r=await pzApi('POST','/friends/requests/'+id+'/reject',{});toast(r&&r.ok?'درخواست رد شد':'خطا');friendsLoad();}
@@ -19366,11 +19470,49 @@ function pzNotifNav(url,data){
 }
 /* Unread badge on the bell (if present). */
 let PZ_UNREAD=0;      /* the bell button is gone; the rail badge reads this */
+/* ── A MESSAGE ARRIVING WHILE THE GAME IS OPEN ──────────────────────────
+   A push notification only reaches a phone that is NOT looking at the game;
+   somebody already inside it just saw a number change somewhere they were not
+   looking. So a message from a friend drops a banner across the top, says who
+   it is from, and takes them to that conversation when tapped. */
+let PZ_TOP_SEEN={};
+function pzTopNotice(opts){
+  try{
+    let el=document.getElementById('pzTopNote');
+    if(!el){
+      el=document.createElement('div'); el.id='pzTopNote';
+      (document.getElementById('vp')||document.body).appendChild(el);
+    }
+    el.innerHTML='<span class="pztn-ic">'+(opts.icon||'💬')+'</span>'+
+      '<span class="pztn-txt"><b>'+pzEsc(opts.title||'')+'</b>'+
+      (opts.body?'<small>'+pzEsc(opts.body)+'</small>':'')+'</span>';
+    el.onclick=()=>{ pzTopNoticeHide(); try{ opts.onTap&&opts.onTap(); }catch(e){} };
+    el.classList.add('show');
+    clearTimeout(el._t);
+    el._t=setTimeout(pzTopNoticeHide,6000);
+    try{ sfx('blip'); vib([12]); }catch(e){}
+  }catch(e){}
+}
+function pzTopNoticeHide(){ const el=document.getElementById('pzTopNote'); if(el) el.classList.remove('show'); }
+
 async function pzInboxBadge(){
   try{
     const r=await pzApi('GET','/notifications?limit=50'); const list=(r&&r.data)||r;
     const n=(Array.isArray(list)?list:[]).filter(x=>!x.readAt).length;
     PZ_UNREAD=n;
+    /* The newest unread message from a friend, shown once. Never over a live
+       match — a banner across a question is worse than a late notice. */
+    try{
+      const msg=(Array.isArray(list)?list:[]).filter(x=>!x.readAt&&x.type==='friend_message')[0];
+      const busy=(pzRt&&pzRt.active&&!pzRt.finished)||['duel','lsGame','wtaGame'].indexOf((document.querySelector('.screen.active')||{}).id)>=0;
+      if(msg&&!PZ_TOP_SEEN[msg.id]&&!busy){
+        PZ_TOP_SEEN[msg.id]=1;
+        const who=(msg.data&&(msg.data.fromName||msg.data.username))||msg.title||'یک دوست';
+        const fid=(msg.data&&(msg.data.fromUserId||msg.data.friendId||msg.data.userId))||null;
+        pzTopNotice({icon:'💬',title:who,body:msg.body||'پیام تازه',
+          onTap:()=>{ try{ go('friends'); if(fid&&typeof openFriendChat==='function') setTimeout(()=>openFriendChat(fid),260); }catch(e){} }});
+      }
+    }catch(e){}
     /* The bell this badge belonged to was moved to the side rail, so showing
        it here painted a bare «۱» in the corner of the header attached to
        nothing. The element stays because the rail badge and the push code read
@@ -19846,9 +19988,16 @@ function pzInviteGoNow(inv){
       return;
     }
     if(inv.mode==='ls'){
-      /* A room they were invited into: the entry screen for it, so the ticket
-         is chosen and paid the ordinary way. */
+      /* ONE SCREEN FURTHER THAN TOPIC-SELECTION. They were invited into a
+         PARTICULAR room, so being dropped on the topic list means guessing
+         which one — and the wrong guess puts them in a different room than the
+         person who asked them. The invite carries the room's topic, so the
+         ticket screen for that topic opens directly. */
       if(inv.roomId) lsInviteRoom=inv.roomId;
+      if(inv.roomTopic){
+        lsChooseColor(inv.roomTopic);
+        return;
+      }
       go('lsTopics');
       toast('اتاقی که دعوت شدی را انتخاب کن 🎟️',3000);
       return;
@@ -19937,6 +20086,47 @@ async function pzInviteSend(user,mode,extra){
   toast((r&&r.error&&r.error.message)||(code==='PLAYER_BUSY'?'این بازیکن وسط مسابقه است':'دعوت فرستاده نشد'),3000);
   return false;
 }
+
+/* ═══════════ THE KEYBOARD ═══════════════════════════════════════════════
+   «صفحه چت وقتی کیبورد میاد به هم ریخته میشه» — and registration, and the
+   phone number, and the code. All the same cause: `100vh` is the height of
+   the window as if no keyboard existed. The keyboard opens, the page keeps
+   claiming its old height, and the bottom half — the box you are typing into —
+   is underneath it.
+
+   The visual viewport is the part the person can actually SEE. Measured here
+   and published as --pz-vh, so the phone frame and every scroller inside it
+   end where the keyboard begins: the input sits ON the keyboard, the header
+   stays put, and only the messages between them scroll. Nothing to lay out
+   per screen — the frame shrinks and the flex columns inside do the rest. */
+(function(){
+  const vv=(typeof window!=='undefined')&&window.visualViewport;
+  const root=document.documentElement;
+  function apply(){
+    try{
+      const h=Math.round(vv?vv.height:window.innerHeight);
+      root.style.setProperty('--pz-vh',h+'px');
+      /* How much of the window the keyboard is covering. Anything that wants to
+         lift itself by hand can read it; most things do not need to. */
+      const kb=Math.max(0,Math.round(window.innerHeight-h-(vv?vv.offsetTop:0)));
+      root.style.setProperty('--pz-kb',kb+'px');
+      document.body.classList.toggle('pz-kb-open',kb>90);
+      /* An input that has just been focused must be the thing you can see. */
+      if(kb>90){
+        const a=document.activeElement;
+        if(a&&/^(INPUT|TEXTAREA)$/.test(a.tagName)){
+          try{ a.scrollIntoView({block:'nearest',behavior:'smooth'}); }catch(e){}
+        }
+      }
+    }catch(e){}
+  }
+  if(vv){ vv.addEventListener('resize',apply); vv.addEventListener('scroll',apply); }
+  window.addEventListener('orientationchange',()=>setTimeout(apply,250));
+  window.addEventListener('resize',apply);
+  document.addEventListener('focusin',(e)=>{ if(/^(INPUT|TEXTAREA)$/.test((e.target||{}).tagName||'')) setTimeout(apply,120); });
+  document.addEventListener('focusout',()=>setTimeout(apply,120));
+  apply();
+})();
 
 /* ===== Photo wallpapers per screen + floating glow particles ===== */
 function pzApplyWall(id){
