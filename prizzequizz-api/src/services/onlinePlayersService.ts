@@ -20,6 +20,9 @@ import { getPgPool } from '../database/postgres.js';
 import { logger } from './logger.js';
 import { onlineUserIds, lastSeenFor } from './presenceService.js';
 import { avatarUrlFor } from './avatarService.js';
+import { equippedCharacterFor } from './characterSelectionService.js';
+import { currentMatchOf } from './matchEngine.js';
+import { claimedAmong } from './gameInviteService.js';
 import type { Gender, User } from '../types/domain.js';
 import { randomInt } from 'node:crypto';
 
@@ -108,6 +111,14 @@ export interface OnlinePlayer {
   gender: Gender | null;
   level: number;
   avatar: string | null;
+  /** The equipped character — the face the rest of the game draws people with. */
+  character: { id: string; name: string; image: string; kind: 'normal' | 'vip' } | null;
+  /** Already inside a match, so not someone to invite. */
+  inMatch: boolean;
+  /** Somebody else's invite is already waiting for them. */
+  invitePending: boolean;
+  /** Neither of the above — free, in the lobby, invitable right now. */
+  canInvite: boolean;
   lastSeen: string;
 }
 export interface OnlineResult {
@@ -156,15 +167,30 @@ export async function listOnlinePlayers(userId: string, refresh = false): Promis
   const candidates = loaded.filter((u): u is User => !!u && u.status !== 'banned');
   const chosen = orderByPreference(candidates, viewer).slice(0, cfg.size);
   const seen = await lastSeenFor(chosen.map((u) => u.id));
-  const players: OnlinePlayer[] = await Promise.all(chosen.map(async (u) => ({
-    userId: u.id,
-    username: u.username,
-    displayName: u.displayName || u.username,
-    gender: u.gender ?? null,
-    level: Number(u.level) || 1,
-    avatar: await avatarUrlFor(u.id).catch(() => null),
-    lastSeen: (seen.get(u.id) ?? new Date()).toISOString()
-  })));
+  /* WHO CAN ACTUALLY BE INVITED, said by the server rather than guessed at by
+     the screen: somebody already inside a match is not in the lobby, and
+     somebody who already has an invite waiting is spoken for until they answer
+     it. Both are the difference between a list you can act on and a list that
+     sends invitations into the void. */
+  const claimed = await claimedAmong(chosen.map((u) => u.id)).catch(() => new Set<string>());
+  const players: OnlinePlayer[] = await Promise.all(chosen.map(async (u) => {
+    const inMatch = !!currentMatchOf(u.id);
+    return {
+      userId: u.id,
+      username: u.username,
+      displayName: u.displayName || u.username,
+      gender: u.gender ?? null,
+      level: Number(u.level) || 1,
+      avatar: await avatarUrlFor(u.id).catch(() => null),
+      /* The face this game draws people with. The online list was showing the
+         photo (or a bare emoji); it is the character everywhere else. */
+      character: await equippedCharacterFor(u.id).catch(() => null),
+      inMatch,
+      invitePending: claimed.has(u.id),
+      canInvite: !inMatch && !claimed.has(u.id),
+      lastSeen: (seen.get(u.id) ?? new Date()).toISOString()
+    };
+  }));
 
   let charged = 0;
   if (refresh) {

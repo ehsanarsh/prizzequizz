@@ -6,6 +6,7 @@ import { seedMemory } from './repositories/memory.js';
 import { registerAuthRoutes } from './modules/auth/routes.js';
 import { registerUserRoutes } from './modules/users/routes.js';
 import { registerMatchRoutes, registerDuelRunRoutes } from './modules/matches/routes.js';
+import { registerInviteRoutes } from './modules/invites/routes.js';
 import { registerMatchmakingRoutes } from './modules/matchmaking/routes.js';
 import { registerLeaderboardRoutes } from './modules/leaderboards/routes.js';
 import { registerNotificationRoutes } from './modules/notifications/routes.js';
@@ -57,6 +58,7 @@ export function createApiServer(options: ApiServerOptions = {}): Server {
   registerUserRoutes(router, base);
   registerMatchRoutes(router, base);
   registerDuelRunRoutes(router, base);
+  registerInviteRoutes(router, base);
   registerMatchmakingRoutes(router, base);
   registerLeaderboardRoutes(router, base);
   registerNotificationRoutes(router, base);

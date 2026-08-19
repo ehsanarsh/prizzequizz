@@ -232,7 +232,10 @@ export interface IntegritySignal {
   reviewedBy?: UUID | 'system';
 }
 
-export type NotificationType = 'match_update' | 'leaderboard_update' | 'wallet_update' | 'system' | 'promo' | 'friend_message';
+/* `game_invite` is a player asking another player to play, and `game_invite_reply`
+ * is the answer coming back — both are their own kind because the notification
+ * settings let a player switch each kind on and off separately. */
+export type NotificationType = 'match_update' | 'leaderboard_update' | 'wallet_update' | 'system' | 'promo' | 'friend_message' | 'game_invite' | 'game_invite_reply';
 export type NotificationChannel = 'in_app' | 'push';
 export type NotificationStatus = 'queued' | 'sent' | 'failed' | 'read';
 
