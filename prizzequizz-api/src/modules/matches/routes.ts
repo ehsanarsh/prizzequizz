@@ -6,6 +6,9 @@ import { validateAnswer } from '../../services/questionEngine.js';
 import { repositories } from '../../repositories/index.js';
 import { activeMatchState } from '../../services/matchStateStore.js';
 import { touchMatchPresence, presentInMatch } from '../../services/matchPresence.js';
+import { openRunFor } from '../../services/duelRunService.js';
+import { settleRunToWallet } from '../../services/duelRunPayout.js';
+import { netPrize } from '../../services/prizeService.js';
 import { selectQuestionForRound, pickDeterministic, DIFF_LEVELS, TOPIC_SELECT_CATEGORY } from '../../services/adaptiveDifficultyService.js';
 import type { GameModeId, Match, PlanType } from '../../types/domain.js';
 
@@ -350,6 +353,42 @@ export function registerMatchRoutes(router: Router, base: string): void {
       // already recorded, and the reply below is what they are waiting for.
     }
     json(ctx.res, 200, { correct: validation.correct, selectedIndex: body.selectedIndex, correctIndex: validation.correctIndex, score: match.players.find((p) => p.userId === (ctx.userId ?? 'u1'))?.score ?? 0, phase: match.phase, duplicate, events: [] });
+  });
+}
+
+/* ── THE LADDER: WHAT IS RIDING, AND TAKING IT ───────────────────────────
+   The run is what gets settled, not the matches inside it, so the client needs
+   to be able to ask what is parked and to say «برداشت». Both live here because
+   they are duel money. */
+export function registerDuelRunRoutes(router: Router, base: string): void {
+  /* What is riding right now — drives the result screen's «برداشت» figure. */
+  router.add('GET', `${base}/duel-runs/current`, async (ctx) => {
+    if (!ctx.userId) return error(ctx.res, 401, 'UNAUTHORIZED', 'Login required.');
+    const run = await openRunFor(ctx.userId);
+    if (!run) return json(ctx.res, 200, { run: null });
+    json(ctx.res, 200, {
+      run: {
+        id: run.id, stage: run.stage, stake: run.stake, status: run.status,
+        entryTier: run.entryTier,
+        /* The NET — what the wallet would actually receive. The gross is an
+           internal figure and is never quoted to a player. */
+        cashOut: run.pendingGross > 0 ? netPrize(run.pendingGross) : 0
+      }
+    });
+  });
+
+  /* «برداشت مبلغ و خروج». The single moment money moves in a ladder, and the
+     only one: netPrize of the rung reached, once, with the commission already
+     taken out of the figure the player sees rather than shown as a second row
+     that made the prize look bigger than it was. */
+  router.add('POST', `${base}/duel-runs/current/cashout`, async (ctx) => {
+    if (!ctx.userId) return error(ctx.res, 401, 'UNAUTHORIZED', 'Login required.');
+    const run = await openRunFor(ctx.userId);
+    if (!run || run.status !== 'won' || run.pendingGross <= 0) {
+      return json(ctx.res, 200, { paid: 0, alreadySettled: true });
+    }
+    const paid = await settleRunToWallet(run.id, ctx.userId);
+    json(ctx.res, 200, { paid, alreadySettled: paid === 0 });
   });
 }
 

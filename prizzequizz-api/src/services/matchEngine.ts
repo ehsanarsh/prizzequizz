@@ -1,7 +1,8 @@
 import { gameConfig } from '../core/config.js';
 import { repositories } from '../repositories/index.js';
 import { chargeEntry } from './economyEngine.js';
-import { applyReward, calculateDuelReward } from './rewardEngine.js';
+import { applyReward, calculateDuelReward, duelStake } from './rewardEngine.js';
+import { openRunFor, attachMatch, recordWin, recordLoss } from './duelRunService.js';
 import { activeMatchState } from './matchStateStore.js';
 import { updateSkillAfterMatch } from './skillRating.js';
 import { notifications } from './notificationService.js';
@@ -307,6 +308,13 @@ async function submitAnswerLocked(input: SubmitAnswerInput): Promise<{ match: Ma
  * winner's reward, apply XP/cup for both players, notify, and log. Reused by
  * lockstep completion, explicit leave (X button), and inactivity forfeit —
  * every ending path goes through the same authoritative settlement. */
+/* Only a real, played, cash duel belongs to a ladder. A free/practice match and
+ * one that was thrown away before the first question never touch a run — the
+ * latter refunds the entry ticket instead, above. */
+function isLadderMatch(match: Match): boolean {
+  return match.modeId === 'duel' && match.economyType !== 'free' && !!match.startedAt && !match.voided;
+}
+
 async function settleDuel(match: Match, winnerUserId: string | undefined, reason: string): Promise<void> {
   if (match.duelSettled) return;
   match.duelSettled = true;
@@ -322,6 +330,36 @@ async function settleDuel(match: Match, winnerUserId: string | undefined, reason
   match.phase = 'result';
   match.updatedAt = new Date().toISOString();
 
+  /* THE LADDER IS SETTLED, NOT THE RUNGS.
+   * A paid duel entered with a ticket opens a run: winning promotes the player
+   * and their winnings ride into the next rung at double the stake, on the SAME
+   * ticket. Paying out here as well is how a single 12,500 entry came to be
+   * worth 25,000 + 50,000 + 100,000 — three full pots against one ticket, with
+   * the platform funding the difference on every run. So a win inside a run is
+   * parked, and the money moves once, when the player stops. See
+   * services/duelRunService.ts. */
+  let parkedInRun = 0;
+  if (match.winnerUserId && !match.winnerUserId.startsWith('bot_')) {
+    try {
+      const run = await openRunFor(match.winnerUserId);
+      if (run && isLadderMatch(match)) {
+        const gross = duelStake(match) * 2;
+        await attachMatch(run.id, match.id);
+        await recordWin(run.id, gross);
+        parkedInRun = gross;
+      }
+    } catch (e) { logger.error('duel_run_win_failed', { matchId: match.id, message: e instanceof Error ? e.message : 'unknown' }); }
+  }
+  /* And the loser's run ends here, with nothing — the ride was the risk, and
+   * only the one entry ticket was ever spent. */
+  for (const p of match.players) {
+    if (!match.winnerUserId || p.userId === match.winnerUserId || p.userId.startsWith('bot_')) continue;
+    try {
+      const run = await openRunFor(p.userId);
+      if (run && isLadderMatch(match)) await recordLoss(run.id);
+    } catch (e) { logger.error('duel_run_loss_failed', { matchId: match.id, message: e instanceof Error ? e.message : 'unknown' }); }
+  }
+
   // Pay the WINNER (looked up directly), exactly once via reward idempotency.
   let cashPaid = 0;
   if (match.winnerUserId && !match.winnerUserId.startsWith('bot_')) {
@@ -331,8 +369,12 @@ async function settleDuel(match: Match, winnerUserId: string | undefined, reason
       // swallowed error here means a winner silently goes unpaid.
       const reward = calculateDuelReward(match, winner);
       try {
-        await applyReward(winner, reward, match.id);
-        if (reward.type === 'cash') cashPaid = Number(reward.amount) || 0;
+        /* Parked in a run → the wallet is not touched now. XP, cups and the
+         * rest of the settlement below still happen exactly as before. */
+        if (!(parkedInRun > 0 && reward.type === 'cash')) {
+          await applyReward(winner, reward, match.id);
+          if (reward.type === 'cash') cashPaid = Number(reward.amount) || 0;
+        }
       }
       catch (e) { logger.error('reward_apply_failed', { matchId: match.id, winnerUserId: winner.id, message: e instanceof Error ? e.message : 'unknown' }); }
     }

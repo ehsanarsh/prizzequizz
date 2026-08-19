@@ -5,7 +5,7 @@ import { json } from './http/response.js';
 import { seedMemory } from './repositories/memory.js';
 import { registerAuthRoutes } from './modules/auth/routes.js';
 import { registerUserRoutes } from './modules/users/routes.js';
-import { registerMatchRoutes } from './modules/matches/routes.js';
+import { registerMatchRoutes, registerDuelRunRoutes } from './modules/matches/routes.js';
 import { registerMatchmakingRoutes } from './modules/matchmaking/routes.js';
 import { registerLeaderboardRoutes } from './modules/leaderboards/routes.js';
 import { registerNotificationRoutes } from './modules/notifications/routes.js';
@@ -38,6 +38,7 @@ import { startMatchmakingWorker } from './services/matchmakingWorker.js';
 import { startLastSurvivorWorker } from './services/lastSurvivorWorker.js';
 import { startWtaWorker } from './services/wtaService.js';
 import { startLeagueWorker } from './services/leagueWorker.js';
+import { startDuelRunSweeper } from './services/duelRunPayout.js';
 
 export interface ApiServerOptions {
   attachRealtime?: boolean;
@@ -55,6 +56,7 @@ export function createApiServer(options: ApiServerOptions = {}): Server {
   registerAuthRoutes(router, base);
   registerUserRoutes(router, base);
   registerMatchRoutes(router, base);
+  registerDuelRunRoutes(router, base);
   registerMatchmakingRoutes(router, base);
   registerLeaderboardRoutes(router, base);
   registerNotificationRoutes(router, base);
@@ -93,7 +95,7 @@ export function createApiServer(options: ApiServerOptions = {}): Server {
   if (options.attachRealtime !== false) attachRealtimeGateway(server);
   if (process.env.MATCHMAKING_WORKER !== 'false') startMatchmakingWorker();
   if (process.env.LAST_SURVIVOR_WORKER !== 'false') startLastSurvivorWorker();
-  if (process.env.LEAGUE_WORKER !== 'false') { startWtaWorker(); startLeagueWorker(); }
+  if (process.env.LEAGUE_WORKER !== 'false') { startWtaWorker(); startLeagueWorker(); startDuelRunSweeper(); }
   if (process.env.SERVER_MONITOR !== 'false') startServerMonitorCollector();
   return server;
 }

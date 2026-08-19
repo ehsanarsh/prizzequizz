@@ -10000,9 +10000,29 @@ function continueGame(){
   if(gameType==='duel')return duelContinue();
   askArena();
 }
-/* The server applies the commission when it credits the win; the screen just
-   shows what the wallet actually receives. */
-function withdraw(){clearInterval(cpTimer);endGame(true,prize,true);}
+/* «برداشت مبلغ و خروج» — THE MOMENT THE LADDER PAYS.
+   Winning a rung no longer puts anything in the wallet: the winnings ride into
+   the next rung on the same entry ticket, which is what makes «ادامه» a real
+   gamble and what stops one 12,500 ticket being worth three full pots. This is
+   where the run is closed and the money actually moves, once, for the rung the
+   player reached — and the figure the server hands back is the NET, already
+   less commission, which is what the wallet receives and what the transaction
+   list will say. */
+async function withdraw(){
+  clearInterval(cpTimer);
+  const btn=document.getElementById('btnWithdraw');
+  if(btn){ btn.disabled=true; btn.textContent='در حال واریز…'; }
+  let paid=null;
+  try{
+    const r=await pzApi('POST','/duel-runs/current/cashout',{});
+    if(r&&r.ok&&r.data&&typeof r.data.paid==='number'&&r.data.paid>0) paid=r.data.paid;
+  }catch(e){}
+  if(btn){ btn.disabled=false; btn.textContent='برداشت مبلغ و خروج 💰'; }
+  try{ pzSyncWallet(); }catch(e){}
+  /* Nothing came back (an older server, or the run was already settled by the
+     sweeper) → show what the screen was showing rather than a blank. */
+  endGame(true,(paid!=null?paid:prize),true);
+}
 
 /* ============ RIPPLE MICRO-INTERACTION ============ */
 document.addEventListener('pointerdown',e=>{

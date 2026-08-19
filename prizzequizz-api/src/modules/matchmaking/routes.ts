@@ -4,9 +4,18 @@ import { matchmakingQueue } from '../../services/matchmakingQueue.js';
 import { logger } from '../../services/logger.js';
 import { TicketError } from '../../services/ticketService.js';
 import { bindHold, holdTicket, refundHoldById, refundHolds } from '../../services/ticketHoldService.js';
+import { startRun, openRunFor, advance } from '../../services/duelRunService.js';
 import { voidMatchBeforeStart } from '../../services/matchEngine.js';
 import type { GameModeId, PlanType } from '../../types/domain.js';
 import { bodyObject, optionalString, requiredString } from '../../utils/validation.js';
+
+/* The value bucket carries the stake: 'v25000' is 25,000 تومان a side. Same
+ * shape the queue matches on, read here rather than trusted from the client. */
+function ladderStake(economyType: string): number {
+  const m = /^v(\d+)$/.exec(String(economyType || ''));
+  const n = m ? Number(m[1]) : 0;
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
 
 export function registerMatchmakingRoutes(router: Router, base: string): void {
   router.add('GET', `${base}/matchmaking/stats`, async (ctx) => {
@@ -36,6 +45,21 @@ export function registerMatchmakingRoutes(router: Router, base: string): void {
         if (e instanceof TicketError) return error(ctx.res, e.code === 'NO_TICKET' ? 402 : 400, e.code, e.message);
         throw e;
       }
+    }
+    /* THE LADDER'S BOOKKEEPING STARTS AND CONTINUES HERE.
+     * A ticket means a fresh run at rung one. No ticket, with a rung already
+     * won, means «ادامه» — the same run climbs, on the same entry, and the
+     * winnings that were parked ride into it. Everything else (free play, a
+     * player with nothing parked) opens no run and behaves as it always did. */
+    const stakeNow = ladderStake(economyType);
+    if (modeId === 'duel' && economyType !== 'free' && stakeNow > 0) {
+      try {
+        if (ticketTier) await startRun(ctx.userId, ticketTier, stakeNow);
+        else {
+          const open = await openRunFor(ctx.userId);
+          if (open && open.status === 'won') await advance(open.id);
+        }
+      } catch { /* the run is bookkeeping; it must never block entry */ }
     }
     let ticket;
     try {
