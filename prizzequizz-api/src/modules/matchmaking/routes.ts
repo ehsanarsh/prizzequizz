@@ -5,6 +5,7 @@ import { logger } from '../../services/logger.js';
 import { TicketError } from '../../services/ticketService.js';
 import { bindHold, holdTicket, refundHoldById, refundHolds } from '../../services/ticketHoldService.js';
 import { startRun, openRunFor, advance } from '../../services/duelRunService.js';
+import { getInvite } from '../../services/gameInviteService.js';
 import { voidMatchBeforeStart } from '../../services/matchEngine.js';
 import type { GameModeId, PlanType } from '../../types/domain.js';
 import { bodyObject, optionalString, requiredString } from '../../utils/validation.js';
@@ -51,6 +52,14 @@ export function registerMatchmakingRoutes(router: Router, base: string): void {
      * won, means «ادامه» — the same run climbs, on the same entry, and the
      * winnings that were parked ride into it. Everything else (free play, a
      * player with nothing parked) opens no run and behaves as it always did. */
+    /* Only a real party to the invite may use its key. */
+    let pairKey = '';
+    const wanted = String((body as any).pairKey ?? '').trim();
+    if (wanted) {
+      const inv = await getInvite(wanted).catch(() => null);
+      if (inv && inv.status === 'accepted' && (inv.fromUserId === ctx.userId || inv.toUserId === ctx.userId)) pairKey = inv.id;
+    }
+
     const stakeNow = ladderStake(economyType);
     if (modeId === 'duel' && economyType !== 'free' && stakeNow > 0) {
       try {
@@ -63,7 +72,11 @@ export function registerMatchmakingRoutes(router: Router, base: string): void {
     }
     let ticket;
     try {
-      ticket = await matchmakingQueue.enqueue({ userId: ctx.userId, modeId, economyType, coinStake, skill });
+      /* THE ARRANGEMENT IS HONOURED. Both sides of an accepted invitation queue
+         with the invite's own id as their pair key, so they meet each other and
+         nobody else — and the key is only trusted when this player really is on
+         that invite, or anyone could jump into somebody else's game. */
+      ticket = await matchmakingQueue.enqueue({ userId: ctx.userId, modeId, economyType, coinStake, skill, pairKey });
     } catch (e) {
       if (holdId) { try { await refundHoldById(holdId, 'enqueue_failed'); } catch { /* best-effort */ } }
       throw e;

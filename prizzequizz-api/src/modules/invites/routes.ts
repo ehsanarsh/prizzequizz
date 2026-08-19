@@ -11,7 +11,7 @@ import { error, json } from '../../http/response.js';
 import { repositories } from '../../repositories/index.js';
 import { currentMatchOf } from '../../services/matchEngine.js';
 import {
-  createInvite, incomingFor, respond, cancelInvite, InviteError, type InviteMode
+  createInvite, incomingFor, respond, cancelInvite, getInvite, InviteError, type InviteMode
 } from '../../services/gameInviteService.js';
 import { notifications } from '../../services/notificationService.js';
 
@@ -89,6 +89,19 @@ export function registerInviteRoutes(router: Router, base: string): void {
       if (e instanceof InviteError) return error(ctx.res, e.code === 'NOT_YOURS' ? 403 : 409, e.code, e.message);
       throw e;
     }
+  });
+
+  /* The sender's side of the wait. They are sitting on «منتظر جواب» and need to
+     know the moment it turns — an invitation nobody can see the answer to is
+     just a message into the dark. */
+  router.add('GET', `${base}/invites/:id`, async (ctx) => {
+    if (!ctx.userId) return error(ctx.res, 401, 'UNAUTHORIZED', 'ابتدا وارد شو.');
+    const inv = await getInvite(ctx.params.id!);
+    if (!inv) return error(ctx.res, 404, 'INVITE_NOT_FOUND', 'این دعوت پیدا نشد');
+    if (inv.fromUserId !== ctx.userId && inv.toUserId !== ctx.userId) {
+      return error(ctx.res, 403, 'NOT_YOURS', 'این دعوت برای تو نیست');
+    }
+    json(ctx.res, 200, publicInvite(inv));
   });
 
   router.add('POST', `${base}/invites/:id/cancel`, async (ctx) => {

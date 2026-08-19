@@ -16,6 +16,12 @@ export interface MatchmakingTicket {
   economyType: PlanType;
   coinStake?: number;
   skill: number;
+  /** PRIVATE PAIRING. Two people who agreed to play each other queue with the
+   *  same key and meet ONLY each other; a ticket without a key never meets one
+   *  with a key. Without this an accepted invitation just put both players into
+   *  the open queue, where the first stranger to press «حریف‌یابی» took the
+   *  seat and the two who arranged the game never met. */
+  pairKey?: string;
   status: MatchmakingStatus;
   matchId?: string;
   opponentUserId?: string;
@@ -39,7 +45,7 @@ export interface MatchmakingStats {
 }
 
 export interface MatchmakingQueue {
-  enqueue(input: { userId: string; modeId: GameModeId; economyType: PlanType; coinStake?: number; skill?: number }): Promise<MatchmakingTicket>;
+  enqueue(input: { userId: string; modeId: GameModeId; economyType: PlanType; coinStake?: number; skill?: number; pairKey?: string }): Promise<MatchmakingTicket>;
   get(ticketId: string): Promise<MatchmakingTicket | null>;
   cancel(ticketId: string, userId: string): Promise<MatchmakingTicket | null>;
   forceBot(ticketId: string, userId: string): Promise<MatchmakingTicket | null>;
@@ -62,7 +68,7 @@ function isFresh(ticket: MatchmakingTicket): boolean {
 abstract class BaseMatchmakingQueue implements MatchmakingQueue {
   protected analytics = { enqueued: 0, matched: 0, botFallbacks: 0, cancelled: 0, expired: 0 };
 
-  abstract enqueue(input: { userId: string; modeId: GameModeId; economyType: PlanType; coinStake?: number; skill?: number }): Promise<MatchmakingTicket>;
+  abstract enqueue(input: { userId: string; modeId: GameModeId; economyType: PlanType; coinStake?: number; skill?: number; pairKey?: string }): Promise<MatchmakingTicket>;
   abstract get(ticketId: string): Promise<MatchmakingTicket | null>;
   abstract cancel(ticketId: string, userId: string): Promise<MatchmakingTicket | null>;
   abstract forceBot(ticketId: string, userId: string): Promise<MatchmakingTicket | null>;
@@ -90,15 +96,23 @@ abstract class BaseMatchmakingQueue implements MatchmakingQueue {
 export class MemoryMatchmakingQueue extends BaseMatchmakingQueue {
   private tickets = new Map<string, MatchmakingTicket>();
 
-  async enqueue(input: { userId: string; modeId: GameModeId; economyType: PlanType; coinStake?: number; skill?: number }): Promise<MatchmakingTicket> {
+  async enqueue(input: { userId: string; modeId: GameModeId; economyType: PlanType; coinStake?: number; skill?: number; pairKey?: string }): Promise<MatchmakingTicket> {
     await this.expireOldTickets();
     const now = new Date().toISOString();
     const skill = input.skill ?? 1000;
+    const pairKey = input.pairKey || '';
     this.analytics.enqueued += 1;
     const compatible = [...this.tickets.values()].find((t) =>
-      t.status === 'queued' && isFresh(t) && t.userId !== input.userId && t.modeId === input.modeId && t.economyType === input.economyType && Math.abs(t.skill - skill) <= wideningWindow(t.createdAt)
+      t.status === 'queued' && isFresh(t) && t.userId !== input.userId && t.modeId === input.modeId && t.economyType === input.economyType
+      /* The private key has to match BOTH ways: a keyed ticket only ever meets
+         the person it agreed to play, and an open ticket is never handed to
+         somebody else's arrangement. */
+      && (t.pairKey || '') === pairKey
+      /* Two people who agreed to play each other are not matched on skill —
+         they already chose. */
+      && (pairKey ? true : Math.abs(t.skill - skill) <= wideningWindow(t.createdAt))
     );
-    const ticket: MatchmakingTicket = { id: id(), userId: input.userId, modeId: input.modeId, economyType: input.economyType, coinStake: input.coinStake, skill, status: 'queued', createdAt: now, updatedAt: now };
+    const ticket: MatchmakingTicket = { id: id(), userId: input.userId, modeId: input.modeId, economyType: input.economyType, coinStake: input.coinStake, skill, pairKey: pairKey || undefined, status: 'queued', createdAt: now, updatedAt: now };
     if (compatible) return this.matchTickets(ticket, compatible, skill);
     this.tickets.set(ticket.id, ticket);
     /* economyType and skill are what pairing is actually done on, so a player
@@ -179,9 +193,10 @@ export class RedisMatchmakingQueue extends BaseMatchmakingQueue {
   private client: ReturnType<typeof createClient> | null = null;
   constructor(private readonly url = process.env.REDIS_URL ?? 'redis://localhost:6379') { super(); }
 
-  async enqueue(input: { userId: string; modeId: GameModeId; economyType: PlanType; coinStake?: number; skill?: number }): Promise<MatchmakingTicket> {
+  async enqueue(input: { userId: string; modeId: GameModeId; economyType: PlanType; coinStake?: number; skill?: number; pairKey?: string }): Promise<MatchmakingTicket> {
     await this.expireOldTickets();
     const client = await this.getClient(); const now = new Date().toISOString(); const skill = input.skill ?? 1000;
+    const pairKey = input.pairKey || '';
     this.analytics.enqueued += 1;
     const queueKey = this.queueKey(input.modeId, input.economyType);
     const ids = await client.zRangeByScore(queueKey, skill - 1000, skill + 1000);
@@ -189,12 +204,15 @@ export class RedisMatchmakingQueue extends BaseMatchmakingQueue {
       const candidate = await this.getRaw(candidateId);
       if (!candidate || candidate.status !== 'queued' || candidate.userId === input.userId) continue;
       if (!isFresh(candidate)) { await client.zRem(queueKey, candidate.id); continue; }
-      if (Math.abs(candidate.skill - skill) > wideningWindow(candidate.createdAt)) continue;
+      /* Same rule as the in-memory queue: a private arrangement is honoured
+         both ways, and skill does not come into a game two people chose. */
+      if ((candidate.pairKey || '') !== pairKey) continue;
+      if (!pairKey && Math.abs(candidate.skill - skill) > wideningWindow(candidate.createdAt)) continue;
       await client.zRem(queueKey, candidate.id);
-      const ticket: MatchmakingTicket = { id: id(), userId: input.userId, modeId: input.modeId, economyType: input.economyType, coinStake: input.coinStake, skill, status: 'queued', createdAt: now, updatedAt: now };
+      const ticket: MatchmakingTicket = { id: id(), userId: input.userId, modeId: input.modeId, economyType: input.economyType, coinStake: input.coinStake, skill, pairKey: pairKey || undefined, status: 'queued', createdAt: now, updatedAt: now };
       return this.matchTickets(ticket, candidate, skill);
     }
-    const ticket: MatchmakingTicket = { id: id(), userId: input.userId, modeId: input.modeId, economyType: input.economyType, coinStake: input.coinStake, skill, status: 'queued', createdAt: now, updatedAt: now };
+    const ticket: MatchmakingTicket = { id: id(), userId: input.userId, modeId: input.modeId, economyType: input.economyType, coinStake: input.coinStake, skill, pairKey: pairKey || undefined, status: 'queued', createdAt: now, updatedAt: now };
     await this.saveTicket(ticket); await client.zAdd(queueKey, { score: skill, value: ticket.id });
     logger.info('redis_matchmaking_queued', { ticketId: ticket.id, userId: ticket.userId, modeId: ticket.modeId, economyType: ticket.economyType, coinStake: ticket.coinStake, skill });
     return ticket;

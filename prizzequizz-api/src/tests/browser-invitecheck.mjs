@@ -32,6 +32,8 @@ const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromi
 /* The server's word on who is free — the client must not decide this itself. */
 let onlinePlayers = [];
 const posted = [];
+/* What the sender's poll gets back while they wait. */
+let inviteStatus = { id: 'inv1', status: 'pending', secondsLeft: 55 };
 
 async function makePage() {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
@@ -51,6 +53,7 @@ async function makePage() {
     }
     if (p === '/users/online') return send({ players: onlinePlayers, onlineTotal: onlinePlayers.length, nextCost: 0, freeLeft: 3, coins: 500 });
     if (p === '/invites/incoming') return send({ invites: [] });
+    if (/^\/invites\/[^/]+$/.test(p)) return send(inviteStatus);
     return send({});
   });
   const page = await ctx.newPage();
@@ -97,6 +100,12 @@ const modal = (page) => page.evaluate(() => {
   ok('and it really is the character image', await page.evaluate((c) => (document.querySelector('#onList .online-card .av img') || {}).src === c, CHAR), 'character');
 
   ok('somebody free can be challenged', rows[0].invite === true, String(rows[0].invite));
+  /* «دکمه دعوت به بازی سبز باشه» */
+  const green = await page.evaluate(() => {
+    const b = document.querySelector('#onList .online-card button[onclick*="onlineInvite"]');
+    return b ? getComputedStyle(b).backgroundImage + '|' + getComputedStyle(b).backgroundColor : '';
+  });
+  ok('and the challenge button is green', /61,\s*220,\s*132|3ddc84|31,\s*157,\s*85/i.test(green), green.slice(0, 70));
   /* «فقط به افرادی که داخل هیچ مسابقه‌ای نشده‌اند» */
   ok('somebody mid-match cannot', rows[1].invite === false, String(rows[1].invite));
   ok('and the row says why', /مسابقه/.test(rows[1].lv), rows[1].lv);
@@ -219,11 +228,16 @@ const modal = (page) => page.evaluate(() => {
   ok('accepting answers the server', !!answer && answer.body.accept === true, JSON.stringify(answer));
   const where = await page.evaluate(() => ({
     screen: [...document.querySelectorAll('.screen')].find((s) => s.classList.contains('active')).id,
-    tier: (0, eval)('selectedTicket')
+    tier: (0, eval)('selectedTicket'),
+    key: (0, eval)('pzPairKey')
   }));
   /* «قبول که کاربر رو به داخل روم هدایت کنه، البته به صفحه ورود با بلیط» */
   ok('and takes them to the ticket-entry screen', where.screen === 'mode-entry', JSON.stringify(where));
   ok('with the tier the sender picked already chosen', where.tier === 'blue', String(where.tier));
+  /* The accepter's half of the arrangement. Without the key they walk into the
+     open queue and are handed to whichever stranger is searching — which is
+     exactly the report: the two who agreed never meet. */
+  ok('and carrying the invite as their private pairing key', where.key === 'inv9', String(where.key));
   ok('no script errors', errs.length === 0, errs.join(' | '));
   await ctx.close();
 }
@@ -312,6 +326,53 @@ const modal = (page) => page.evaluate(() => {
   ok('each one carries a face beside the name', msgs.every((m) => m.face), JSON.stringify(msgs));
   ok('and the face is drawn, not an empty box', msgs[0].hasImg, JSON.stringify(msgs[0]));
   ok('the name and body are still there', /سارا/.test(msgs[0].text) && /سلام/.test(msgs[0].text), msgs[0].text);
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
+/* ── 7. THE SENDER IS TAKEN TO THE SAME GAME ────────────────────────────
+   «فرستنده با گیرنده وصل نمیشن — فقط درخواست ارسال میشه و کاربر به رادار میره
+    و اگه در اون لحظه شخص دیگری هم جستجوی حریف بزنه با اون مچ میشه». */
+{
+  const { ctx, page, errs } = await makePage();
+  console.log('the sender waiting for an answer:');
+  onlinePlayers = [{ userId: 'u1', username: 'سارا', level: 5, avatar: PHOTO, character: null, inMatch: false, invitePending: false, canInvite: true }];
+  inviteStatus = { id: 'inv1', status: 'pending', secondsLeft: 55 };
+  await page.evaluate(() => (0, eval)("userPlan='premium'; planExplicitlyChosen=true; go('online'); onlineLoad(false);"));
+  await page.waitForTimeout(800);
+
+  posted.length = 0;
+  await page.evaluate(() => { document.querySelector('#onList .online-card button[onclick*="onlineInvite"]').click(); });
+  await page.waitForTimeout(400);
+  await page.evaluate(() => { document.querySelector('.pz-inv-tk[data-tk="green"]').click(); });
+  await page.waitForTimeout(900);
+
+  const waiting = await modal(page);
+  ok('the sender is held on a «waiting» sheet, not dropped', /منتظر جواب/.test(waiting.title), waiting.title);
+  const stillHome = await page.evaluate(() => [...document.querySelectorAll('.screen')].find((s) => s.classList.contains('active')).id);
+  ok('and is not sent searching before there is an answer', stillHome === 'online', stillHome);
+
+  /* The other side accepts. */
+  inviteStatus = { id: 'inv1', status: 'accepted', secondsLeft: 40 };
+  await page.waitForTimeout(3200);
+  const landed = await page.evaluate(() => ({
+    screen: [...document.querySelectorAll('.screen')].find((s) => s.classList.contains('active')).id,
+    tier: (0, eval)('selectedTicket'),
+    key: (0, eval)('pzPairKey')
+  }));
+  ok('once accepted, the sender goes to the ticket-entry screen too', landed.screen === 'mode-entry', JSON.stringify(landed));
+  ok('at the tier they offered', landed.tier === 'green', String(landed.tier));
+  /* THE POINT: the pair carry the same private key, so the queue can only put
+     them together — a stranger searching at that moment cannot take the seat. */
+  ok('carrying the invite as a private pairing key', landed.key === 'inv1', String(landed.key));
+
+  posted.length = 0;
+  await page.evaluate(() => { try { (0, eval)('startMatchmaking')(); } catch (e) {} });
+  await page.waitForTimeout(1200);
+  const enq = posted.find((x) => /matchmaking\/enqueue/.test(x.path));
+  ok('and the search really carries it', !!enq && enq.body.pairKey === 'inv1', JSON.stringify(enq && enq.body));
+  const spent = await page.evaluate(() => (0, eval)('pzPairKey'));
+  ok('the key is spent once, so it cannot capture the next ordinary search', spent === null, String(spent));
   ok('no script errors', errs.length === 0, errs.join(' | '));
   await ctx.close();
 }

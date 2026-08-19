@@ -149,6 +149,62 @@ async function main(): Promise<void> {
       assert.equal(r.code, 'PLAYER_BUSY');
     });
 
+    /* THE HALF THAT WAS MISSING: an accepted invitation has to put the two of
+       them in the SAME match. It used to put the accepter into the open queue,
+       where the next stranger to press «حریف‌یابی» took the seat and the two
+       who arranged the game never met. */
+    console.log('\nthe two who agreed actually meet:');
+    const hana = await player('Hana');
+    const omid = await player('Omid');
+    const stranger = await player('Stranger');
+    const sh = createSession(hana), so = createSession(omid), sx = createSession(stranger);
+    let pairId = '';
+
+    await check('the invite is accepted', async () => {
+      const made = await call('POST', '/invites', sh.accessToken, { toUserId: omid, mode: 'duel', ticketTier: 'green' });
+      pairId = made.data.id;
+      const r = await call('POST', `/invites/${pairId}/respond`, so.accessToken, { accept: true });
+      assert.equal(r.data.status, 'accepted', JSON.stringify(r));
+    });
+
+    await check('the sender can see the answer, which is how they know to go', async () => {
+      const r = await call('GET', `/invites/${pairId}`, sh.accessToken);
+      assert.equal(r.status, 200, JSON.stringify(r));
+      assert.equal(r.data.status, 'accepted');
+    });
+
+    await check('a stranger searching at that moment does NOT take the seat', async () => {
+      const r = await call('POST', '/matchmaking/enqueue', sx.accessToken, { modeId: 'duel', economyType: 'v12500', skill: 800 });
+      assert.ok(r.status === 200 || r.status === 202, JSON.stringify(r));
+      assert.equal(r.data.status, 'queued', 'the stranger was paired into an arranged game');
+    });
+
+    await check('the first of the pair waits for the other, not for anyone', async () => {
+      const r = await call('POST', '/matchmaking/enqueue', sh.accessToken, { modeId: 'duel', economyType: 'v12500', skill: 800, pairKey: pairId });
+      assert.equal(r.data.status, 'queued', 'paired with somebody who is not on the invite: ' + JSON.stringify(r.data));
+    });
+
+    await check('and when the second arrives they are matched to each other', async () => {
+      const r = await call('POST', '/matchmaking/enqueue', so.accessToken, { modeId: 'duel', economyType: 'v12500', skill: 800, pairKey: pairId });
+      assert.equal(r.data.status, 'matched', JSON.stringify(r.data));
+      assert.equal(r.data.opponentUserId, hana, 'matched with ' + r.data.opponentUserId);
+      assert.ok(r.data.matchId, 'no match was made');
+    });
+
+    await check('somebody who is not on the invite cannot use its key', async () => {
+      const another = await player('Nosy');
+      const sn = createSession(another);
+      const made = await call('POST', '/invites', sh.accessToken, { toUserId: another, mode: 'duel', ticketTier: 'green' });
+      const key = made.data.id;
+      await call('POST', `/invites/${key}/respond`, sn.accessToken, { accept: true });
+      /* A third party quoting the key is queued as an ordinary player — the key
+         is ignored, not honoured. */
+      const r = await call('POST', '/matchmaking/enqueue', sx.accessToken, { modeId: 'duel', economyType: 'v25000', skill: 800, pairKey: key });
+      assert.equal(r.data.status, 'queued', JSON.stringify(r.data));
+      const mine = await call('POST', '/matchmaking/enqueue', sn.accessToken, { modeId: 'duel', economyType: 'v25000', skill: 800, pairKey: key });
+      assert.equal(mine.data.status, 'queued', 'the outsider was paired into the arranged game: ' + JSON.stringify(mine.data));
+    });
+
     console.log('\nthe other two modes:');
     await check('a Last Survivor invite carries the room instead of a ticket', async () => {
       const fresh = await player('Fred');

@@ -971,6 +971,12 @@ input,textarea,select,[contenteditable="true"],.pz-selectable,.pz-selectable *{
 .ls-msg-txt{flex:1 1 auto;min-width:0}
 .ls-msg.mine{flex-direction:row-reverse}
 
+/* «دکمه دعوت به بازی سبز باشه» — the one green button in a list where every
+   other action is grey, because it is the one that starts a game. */
+.online-add.pz-invite-go{background:linear-gradient(180deg,#3ddc84,#1f9d55);color:#08240f;
+  border-color:#000;font-weight:900}
+.online-add.pz-invite-go:active{transform:translateY(2px)}
+
 .pz-inv-row{display:flex;align-items:center;gap:9px;padding:8px 6px;border-bottom:1px solid rgba(255,255,255,.07)}
 .pz-inv-row .f{width:38px;height:38px;flex:0 0 auto;border-radius:12px;overflow:hidden;background:rgba(255,255,255,.06);
   display:flex;align-items:center;justify-content:center;font-size:19px}
@@ -14984,7 +14990,7 @@ async function onlineLoad(refresh){
       /* Only somebody free is offered a challenge; the rest keep the row so the
          list does not appear to lose people, but say why instead. */
       (p.canInvite
-        ? '<button class="online-add" style="background:var(--bolt);color:#141414" onclick="event.stopPropagation();onlineInvite('+i+')">⚔️ دعوت به بازی</button>'
+        ? '<button class="online-add pz-invite-go" onclick="event.stopPropagation();onlineInvite('+i+')">⚔️ دعوت به بازی</button>'
         : '')+
       '<button class="online-add" onclick="event.stopPropagation();onlineAdd('+i+')">🤝 دوستی</button>'+
     '</div>').join(''):'<div class="online-empty">الان کسی آنلاین نیست.<br>کمی بعد دوباره سر بزن.</div>';
@@ -16843,7 +16849,11 @@ startMatchmaking = async function(){
   /* ticketTier → the SERVER consumes exactly one ticket of this tier here
      (atomic, no wallet charge) and refunds it on cancel if no opponent. */
   const _tkTier=(userPlan==='premium'&&duelTicket)?duelTicket:undefined;
-  const r=await pzApi('POST','/matchmaking/enqueue',{modeId:'duel',economyType:_eco,skill:800,ticketTier:_tkTier});
+  /* An arranged game queues on its own key, so the pair meet each other and no
+     passer-by can take the seat. Spent on use: a key left lying about would
+     quietly capture the NEXT ordinary search too. */
+  const _pair=pzPairKey||undefined; pzPairKey=null;
+  const r=await pzApi('POST','/matchmaking/enqueue',{modeId:'duel',economyType:_eco,skill:800,ticketTier:_tkTier,pairKey:_pair});
   if(r&&!r.ok&&r.error&&(r.error.code==='NO_TICKET'||r.error.code==='TICKET_TIER_INVALID')){ clearInterval(mmTimer);clearInterval(mmPingT); toast('بلیط لازم را نداری؛ از فروشگاه تهیه کن',3500); try{pzSyncWallet();}catch(e){} go('home'); return; }
   if(!r.ok){clearInterval(mmTimer);clearInterval(mmPingT);_pzRefundEntry();toast((r&&r.error&&r.error.message)||'خطای سرور در شروع جستجو',3500);go('home');return;}
   
@@ -19679,6 +19689,57 @@ try{ setTimeout(()=>{ try{ if(_tok) pzInvitePollStart(); }catch(e){} }, 4000); }
 try{ setInterval(()=>{ try{ if(_tok) pzInboxBadge(); }catch(e){} }, 45000); }catch(e){}
 
 
+/* The sender's side of the wait: a sheet that says who they are waiting for,
+   and closes itself the moment the answer lands. Refusing or letting it lapse
+   costs nothing — no ticket has been spent by either side yet. */
+let PZ_INV_WAIT=null;
+function pzInviteWait(inv,tier){
+  PZ_INV_WAIT={id:inv.id,tier:tier,until:Date.now()+62000};
+  try{
+    showAaaModal({icon:'⏳',title:'منتظر جواب',
+      sub:'دعوت فرستاده شد. تا وقتی جواب بدهد اینجا منتظر می‌مانی — اگر قبول کند، مستقیم با هم روبه‌رو می‌شوید.',
+      dismissible:true, primaryText:'', secondaryText:'بی‌خیال',
+      onSecondary:()=>{ const w=PZ_INV_WAIT; PZ_INV_WAIT=null; closeAaaModal(false);
+        if(w) try{ pzApi('POST','/invites/'+encodeURIComponent(w.id)+'/cancel',{}); }catch(e){} }});
+  }catch(e){}
+  pzInviteWaitTick();
+}
+async function pzInviteWaitTick(){
+  const w=PZ_INV_WAIT; if(!w) return;
+  if(Date.now()>w.until){
+    PZ_INV_WAIT=null;
+    try{ closeAaaModal(false); }catch(e){}
+    toast('جوابی نیامد — بعداً دوباره امتحان کن',3000);
+    return;
+  }
+  let st=null;
+  try{ const r=await pzApi('GET','/invites/'+encodeURIComponent(w.id)); st=(r&&r.data)||null; }catch(e){}
+  if(!PZ_INV_WAIT) return;                       // cancelled while asking
+  if(st&&st.status==='accepted'){
+    PZ_INV_WAIT=null;
+    try{ closeAaaModal(true); }catch(e){}
+    setTimeout(()=>{
+      /* Same key, same tier, so the queue can only pair the two of them. */
+      pzPairKey=w.id;
+      if(w.tier) selectedTicket=w.tier;
+      duelTicket=null;
+      enterMode('survivor',true);
+      setTimeout(()=>{ try{ updateModeEntryPlan(); }catch(e){} try{ renderTicketSelect(); }catch(e){} },250);
+    },260);
+    return;
+  }
+  if(st&&(st.status==='rejected'||st.status==='expired'||st.status==='cancelled')){
+    PZ_INV_WAIT=null;
+    try{ closeAaaModal(false); }catch(e){}
+    toast(st.status==='rejected'?'دعوتت رد شد':'وقت دعوت تمام شد',2800);
+    return;
+  }
+  setTimeout(pzInviteWaitTick,2000);
+}
+/* The private appointment this player is queueing for, if any. Cleared as soon
+   as it is spent so an old arrangement can never capture a later search. */
+let pzPairKey=null;
+
 /* ── ADDING PEOPLE TO THE ROOM YOU ARE WAITING IN ────────────────────────
    «لیست افراد آنلاین میاد و فقط میتونی به افرادی که داخل هیچ مسابقه‌ای
    نشده‌اند و در لابی بازی میچرخن بره نه اونایی که داخل مسابقه هستند» — so
@@ -19779,6 +19840,7 @@ function pzInviteGoNow(inv){
   try{
     if(inv.mode==='duel'){
       if(inv.ticketTier){ selectedTicket=inv.ticketTier; duelTicket=null; }
+      pzPairKey=inv.id;                 // meet the person who invited them, nobody else
       enterMode('survivor',true);
       setTimeout(()=>{ try{ updateModeEntryPlan(); }catch(e){} try{ renderTicketSelect(); }catch(e){} },250);
       return;
@@ -19860,7 +19922,15 @@ async function pzInviteSend(user,mode,extra){
   const body=Object.assign({toUserId:user.userId||user.id,mode:mode},extra);
   const r=await pzApi('POST','/invites',body);
   if(r&&r.ok!==false){
-    toast('دعوت فرستاده شد — منتظر جواب ⏳',2600);
+    /* A DUEL INVITE IS AN APPOINTMENT, NOT A MESSAGE. Sending it used to be the
+       whole of the sender's side: the other player accepted, walked into the
+       open queue, and was handed to whichever stranger happened to be searching
+       at that second — the two who arranged the game never met. So the sender
+       now waits for the answer and then queues on the invite's own key, which
+       is the only ticket the other one can be paired with. */
+    const inv=(r&&r.data)||{};
+    if(mode==='duel'&&inv.id) pzInviteWait(inv,extra.ticketTier||'');
+    else toast('دعوت فرستاده شد — منتظر جواب ⏳',2600);
     return true;
   }
   const code=(r&&r.error&&r.error.code)||'';
