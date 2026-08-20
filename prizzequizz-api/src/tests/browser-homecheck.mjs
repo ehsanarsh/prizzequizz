@@ -371,11 +371,31 @@ console.log('the banner is the one exception:');
     if (!host) { host = document.createElement('div'); host.className = 'tk-promo-host'; home.insertBefore(host, home.firstChild); }
     host.innerHTML = '<div style="height:150px;background:#333">بنر</div>';
     (0, eval)('pzHomeBannerFit')(host);
-    await new Promise((r2) => setTimeout(r2, 250));
+    /* WAIT FOR THE LAYOUT, DO NOT GUESS AT IT. pzHomeBannerFit defers itself
+       through requestAnimationFrame until the screen has a real height, so how
+       long it takes depends on how busy the machine is — with nine browsers
+       running side by side a fixed 250ms landed mid-reflow and reported a page
+       that had not grown yet. Wait for the room to appear, with a ceiling: a
+       page that never grows still reaches the assertion and still fails. */
+    const grown = async () => {
+      for (let i = 0; i < 80; i++) {
+        const bh = host.getBoundingClientRect().height;
+        if (bh > 20 && home.scrollHeight >= home.clientHeight + bh - 2
+            && getComputedStyle(home).overflowY === 'auto') return;
+        await new Promise((r2) => setTimeout(r2, 50));
+      }
+    };
+    await grown();
     const withB = { overflow: getComputedStyle(home).overflowY, sh: home.scrollHeight, ch: home.clientHeight,
                     bh: Math.round(host.getBoundingClientRect().height) };
     /* Scroll it away and back, the way a thumb would. */
-    home.scrollTop = 999; await new Promise((r2) => setTimeout(r2, 120));
+    /* Same reason: pushing the page up is instant, but the browser applies it
+       on its own schedule. Wait for the scroll to take, not for a fixed pause. */
+    home.scrollTop = 999;
+    for (let i = 0; i < 40 && home.scrollTop <= 100; i++) {
+      await new Promise((r2) => setTimeout(r2, 25));
+      home.scrollTop = 999;
+    }
     const scrolledAway = home.scrollTop > 100;
     const bannerTop = host.getBoundingClientRect().bottom;
     home.scrollTop = 0; await new Promise((r2) => setTimeout(r2, 120));

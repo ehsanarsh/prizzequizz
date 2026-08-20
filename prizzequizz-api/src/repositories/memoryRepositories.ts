@@ -27,6 +27,7 @@ export const memoryRepositories: RepositoryBundle = {
     async findByPhone(phone: string): Promise<User | null> { return [...db.users.values()].find((u) => u.phone === phone) ?? null; },
     async list(limit = 1000): Promise<User[]> { return [...db.users.values()].slice(0, limit); },
     async save(user: User): Promise<void> { db.users.set(user.id, user); },
+    async remove(id: string): Promise<void> { db.users.delete(id); },
     async updateLifelines(userId: string, lifelines: Record<string, number>): Promise<void> { const u = db.users.get(userId); if (u) { u.lifelines = lifelines; db.users.set(userId, u); } }
   },
   questions: {

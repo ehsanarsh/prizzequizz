@@ -31,6 +31,9 @@ export interface UserRepository {
   /** Persist ONLY the lifeline inventory (kept separate from save() so the main
    *  user write never clobbers it). */
   updateLifelines(userId: string, lifelines: Record<string, number>): Promise<void>;
+  /** Remove an account for good. Callers are responsible for checking there is
+   *  no money left on it first — see the admin delete route. */
+  remove(id: string): Promise<void>;
 }
 
 export interface QuestionRepository {

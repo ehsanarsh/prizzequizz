@@ -205,6 +205,79 @@ async function run(): Promise<void> {
     await setOtpSettings({ maxPerHour: 5, resendSeconds: 60 });
   });
 
+  /* ── A SEND THAT NEVER LEFT ───────────────────────────────────────────
+   *
+   * «میزنه پیامک ارسال نشد، دوباره میزنی میگه ارسال پیامک تا ۵۹ ثانیه دیگر، و
+   *  عملا برداشت نمیشه کرد.»
+   *
+   * The code was written down and the attempt counted BEFORE the SMS was
+   * tried. So a provider failure left a code nobody had, a minute's cooldown
+   * on asking for another, and — after a few tries — the hour limit. The
+   * withdrawal screen was shut for an hour over messages that never went out.
+   */
+  await check('a failed send does not start the one-minute wait', async () => {
+    _resetOtp();
+    await setOtpSettings({ maxPerHour: 5, resendSeconds: 60 });
+    /* A live provider that refuses. Nothing is delivered. */
+    await updateSmsConfig({ enabled: true, sandbox: false, provider: 'niazpardaz' as any,
+                            apiKey: 'test-key', sender: '3000', genericUrl: 'http://127.0.0.1:1' });
+    const uid = await player();
+    await assert.rejects(() => sendWithdrawOtp(uid, PHONE), (e: any) => e.code === 'OTP_SEND_FAILED',
+      'a live send that fails must say so');
+    /* THE POINT: the very next press works, instead of «۵۹ ثانیه دیگر». */
+    await smsLive();
+    const ok2 = await sendWithdrawOtp(uid, PHONE);
+    assert.equal(ok2.mode, 'sms', 'the retry was blocked by a cooldown for a code nobody received');
+  });
+
+  await check('and does not eat the hour’s allowance either', async () => {
+    _resetOtp();
+    await setOtpSettings({ maxPerHour: 2, resendSeconds: 0 });
+    await updateSmsConfig({ enabled: true, sandbox: false, provider: 'niazpardaz' as any,
+                            apiKey: 'test-key', sender: '3000', genericUrl: 'http://127.0.0.1:1' });
+    const uid = await player();
+    for (let i = 0; i < 4; i++) {
+      await assert.rejects(() => sendWithdrawOtp(uid, PHONE), (e: any) => e.code === 'OTP_SEND_FAILED');
+    }
+    await smsLive();
+    const ok2 = await sendWithdrawOtp(uid, PHONE);
+    assert.equal(ok2.mode, 'sms', 'four undelivered messages used up an allowance of two');
+    await setOtpSettings({ maxPerHour: 5, resendSeconds: 60 });
+  });
+
+  await check('but a code that DID go out still has to be waited for', async () => {
+    /* The rollback must not become a way around the cooldown: a delivered code
+       is exactly what the wait is there to protect. */
+    _resetOtp();
+    await smsLive();
+    await setOtpSettings({ maxPerHour: 5, resendSeconds: 60 });
+    const uid = await player();
+    await sendWithdrawOtp(uid, PHONE);
+    await assert.rejects(() => sendWithdrawOtp(uid, PHONE), (e: any) => e.code === 'OTP_TOO_SOON',
+      'a second code was handed out a moment after the first');
+  });
+
+  await check('and the code from a failed send cannot be used', async () => {
+    /* It was never delivered, so anybody typing it is guessing. */
+    _resetOtp();
+    await setOtpSettings({ maxPerHour: 5, resendSeconds: 0, digits: 4 });
+    await updateSmsConfig({ enabled: true, sandbox: false, provider: 'niazpardaz' as any,
+                            apiKey: 'test-key', sender: '3000', genericUrl: 'http://127.0.0.1:1' });
+    const uid = await player();
+    await assert.rejects(() => sendWithdrawOtp(uid, PHONE), (e: any) => e.code === 'OTP_SEND_FAILED');
+    let anyWorked = false;
+    for (let n = 0; n < 10_000; n++) {
+      try { await verifyWithdrawOtp(uid, String(n).padStart(4, '0')); anyWorked = true; break; }
+      catch { /* every one of them should be refused */ }
+    }
+    assert.equal(anyWorked, false, 'a code from a message that never went out was still live');
+    await setOtpSettings({ resendSeconds: 60 });
+    /* Hand the file back the way it was found: the checks after this one read
+       `testCode`, which only exists in sandbox. Leaving a dead provider — or a
+       live one — behind would fail them for a reason of my making. */
+    await smsSandbox();
+  });
+
   /* ── the withdrawal itself ────────────────────────────────────────── */
 
   await check('a payout without a code is refused', async () => {

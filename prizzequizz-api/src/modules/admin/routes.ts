@@ -18,6 +18,7 @@ import { getOtpSettings, setOtpSettings } from '../../services/withdrawOtpServic
 import { getSmsConfig, smsIsLive } from '../../services/smsService.js';
 import { listReports, reportCounts, setReportStatus } from '../../services/questionReportService.js';
 import { RESET_AREAS, type ResetArea, dashboardMetrics, financeSummary, finishedMatches, resetArea, runningMatches, suspiciousUsers } from '../../services/adminOpsService.js';
+import { currentMatchOf } from '../../services/matchEngine.js';
 import { getAccount } from '../../services/walletLedgerService.js';
 import { matchmakingQueue } from '../../services/matchmakingQueue.js';
 import { leaderboards } from '../../services/leaderboardService.js';
@@ -538,6 +539,50 @@ export function registerAdminRoutes(router: Router, base: string): void {
     audit(ctx.userId, 'USER_FIELDS_UPDATED', 'user', updated.id, b);
     if (updated) { const u = await repositories.users.findById(updated.id); if (u) await leaderboards.updateUser(u); }
     json(ctx.res, 200, updated);
+  });
+
+  /* DELETE AN ACCOUNT, FOR GOOD.
+   *
+   * «در تب کاربران کنار دکمهٔ مدیریت یک دکمهٔ حذف کاربر باید باشه.»
+   *
+   * This is the one admin action with no undo, in an app that holds people's
+   * money — so it refuses before it destroys. An account with a balance, with
+   * money locked in a withdrawal that has not been paid, or that is in the
+   * middle of a match, is not deleted: the operator is told which of those it
+   * is and can settle it first. Anything else would leave the ledger describing
+   * money belonging to somebody who no longer exists. */
+  router.add('DELETE', `${base}/admin/users/:id`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    const uid = ctx.params.id!;
+    const user = await repositories.users.findById(uid);
+    if (!user) return error(ctx.res, 404, 'USER_NOT_FOUND', 'کاربر پیدا نشد.');
+    if (uid === ctx.userId) return error(ctx.res, 400, 'DELETE_SELF', 'حساب خودت را نمی‌توانی حذف کنی.');
+
+    /* `available` and `locked` — the ledger's own words. Reading a `balance`
+       field that does not exist would make every account look empty, which is
+       the one mistake this check exists to prevent. `pendingSettlement` counts
+       too: it is money on its way in. */
+    const acct = await getAccount(uid).catch(() => null);
+    const available = Number(acct?.available ?? 0);
+    const locked = Number(acct?.locked ?? 0);
+    const pending = Number(acct?.pendingSettlement ?? 0);
+    if (available > 0 || locked > 0 || pending > 0) {
+      const bits: string[] = [];
+      if (available > 0) bits.push(`${available.toLocaleString('fa-IR')} تومان موجودی`);
+      if (locked > 0) bits.push(`${locked.toLocaleString('fa-IR')} تومان در انتظار برداشت`);
+      if (pending > 0) bits.push(`${pending.toLocaleString('fa-IR')} تومان در حال تسویه`);
+      return error(ctx.res, 409, 'USER_HAS_FUNDS',
+        `این حساب هنوز ${bits.join(' و ')} دارد. اول تسویه کن، بعد حذف.`);
+    }
+    if (currentMatchOf(uid)) {
+      return error(ctx.res, 409, 'USER_IN_MATCH', 'این کاربر وسط یک مسابقه است — بعد از تمام شدنش دوباره امتحان کن.');
+    }
+    /* Written down BEFORE the row goes, because afterwards there is nothing
+       left to describe who was removed. */
+    audit(ctx.userId, 'USER_DELETED', 'user', uid,
+      { username: user.username, displayName: user.displayName, phone: user.phone, level: user.level });
+    await repositories.users.remove(uid);
+    json(ctx.res, 200, { deleted: true, id: uid, username: user.username });
   });
 
   // Grant / set a user's tickets (a granted asset — not a wallet movement).

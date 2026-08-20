@@ -102,6 +102,7 @@ export const postgresRepositories: RepositoryBundle = {
         on conflict(id) do update set phone=$2, username=$3, display_name=$4, plan=$5, coins=$6, hearts=$7, wallet_balance=$8, xp=$9, level=$10, weekly_score=$11, role=$12, status=$13, ban_reason=$14, banned_at=$15, updated_at=now()`,
         values);
     },
+    async remove(id: string): Promise<void> { await pool().query('delete from users where id=$1', [id]); },
     async updateLifelines(userId: string, lifelines: Record<string, number>): Promise<void> {
       await pool().query('update users set lifelines=$1, updated_at=now() where id=$2', [JSON.stringify(lifelines), userId]);
     }

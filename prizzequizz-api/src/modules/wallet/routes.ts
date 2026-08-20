@@ -44,6 +44,16 @@ function userRateLimit(ctx: RequestContext, userId: string, group: string, max: 
   if (b.count > max) { error(ctx.res, 429, 'WALLET_RATE_LIMITED', 'تعداد درخواست‌ها بیش از حد مجاز است؛ کمی بعد دوباره تلاش کن.'); return false; }
   return true;
 }
+/* Give a slot back when the thing it was spent on never happened.
+ *
+ * This limiter counts REQUESTS, which is what it is for — but an SMS the
+ * provider refused is not an attempt the player made. Without this, six failed
+ * sends lock the withdrawal screen for an hour over messages that were never
+ * delivered. It is deliberately only reachable from a failure path. */
+function refundRateLimit(userId: string, group: string): void {
+  const b = rlBuckets.get(`${userId}:${group}`);
+  if (b && b.count > 0) b.count -= 1;
+}
 
 function walletError(ctx: RequestContext, e: unknown): void {
   if (e instanceof WalletError) { error(ctx.res, e.code === 'INSUFFICIENT_FUNDS' ? 402 : 400, e.code, e.message); return; }
@@ -208,7 +218,16 @@ export function registerWalletRoutes(router: Router, base: string): void {
       }
       json(ctx.res, 200, { sent: true, phone: r.phoneMasked, mode: r.mode, expiresInSeconds: r.expiresInSeconds, testCode: r.testCode });
     } catch (e) {
-      if (e instanceof OtpError) return error(ctx.res, 429, e.code, e.message);
+      if (e instanceof OtpError) {
+        /* A code that could not be sent costs the player nothing — neither the
+           minute's cooldown (rolled back in the service) nor one of their six
+           tries an hour. Being asked to wait applies only when a code really
+           did go out. */
+        if (e.code === 'OTP_SEND_FAILED' || e.code === 'NO_PHONE') refundRateLimit(uid, 'withdraw_otp');
+        /* «کمی بعد» is a wait; the others are refusals. Answering 429 to all of
+           them made a misconfigured account look like a rate limit. */
+        return error(ctx.res, e.code === 'OTP_TOO_SOON' || e.code === 'OTP_RATE_LIMIT' ? 429 : 400, e.code, e.message);
+      }
       throw e;
     }
   });

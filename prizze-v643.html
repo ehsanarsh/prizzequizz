@@ -9238,7 +9238,17 @@ function go(id){
   /* Walked out of the shop without buying — the errand is over, and a purchase
      made on some later visit must not teleport the player somewhere. */
   if(id!=='shop'){ try{ _pzShopReturn=null; }catch(e){} }
-  if(id==='support'){ _supLoaded=false; _supOpenId=null; supportActiveTab='home'; try{renderSupport();}catch(e){} }
+  /* Opening «پشتیبانی» from the menu starts at the top. But when something
+     ELSE sent the player here to continue one particular conversation — a
+     feedback note they tapped — clearing it would land them on the home tab
+     and lose the thing they asked for. `_supGoTo` is that request, and it is
+     consumed once. */
+  if(id==='support'){
+    _supLoaded=false;
+    if(_supGoTo){ _supOpenId=_supGoTo; supportActiveTab='chat'; _supGoTo=null; }
+    else { _supOpenId=null; supportActiveTab='home'; }
+    try{renderSupport();}catch(e){}
+  }
   /* THE RECORD SCREEN FETCHES ITS OWN CONTENT.
      It never did. rmOpen() — the one function that showed the screen AND loaded
      it — was called from the old home's record tile, and the home rebuild
@@ -11893,11 +11903,80 @@ function openLeagues(){
 
 /* ============ FEEDBACK + QUICK QUESTION SUBMIT ============ */
 let currentFeedbackType='idea',currentRating=5;
-let FEEDBACKS=[{t:'idea',s:'بهبود گردونه شانس',b:'طراحی گردونه خیلی بهتر شد، فقط جایزه‌ها بیشتر شود.',time:'امروز',st:'در بررسی'},{t:'rate',s:'امتیاز تجربه بازی',b:'۴ از ۵ ستاره برای سرعت و هیجان.',time:'دیروز',st:'ثبت شد'}];
+/* NOTHING INVENTED. The list used to open with two made-up entries that
+   looked like the player's own past feedback — «بهبود گردونه شانس» from a
+   player who had never written anything. It starts empty and fills from the
+   server. */
+let FEEDBACKS=[];
+/* Feedback IS a support ticket. It used to be pushed onto an array in the page
+   and answered with «بازخوردت برای تیم محصول ارسال شد» — nothing left the
+   phone, nobody read it, and there was no way to reply. Each kind gets its own
+   support category so the panel can sort them, and the reply comes back in the
+   support chat the player already has. */
+const FB_CAT={idea:'پیشنهاد',bug:'گزارش مشکل',rate:'امتیازدهی'};
+const FB_ICO={'پیشنهاد':'💡','گزارش مشکل':'🐞','امتیازدهی':'⭐'};
 function feedbackType(t){currentFeedbackType=t;document.querySelectorAll('#feedbackTabs .feedback-tab').forEach(b=>b.classList.toggle('active',b.dataset.t===t));const title=document.getElementById('feedbackTitle'),hint=document.getElementById('feedbackHint'),rate=document.getElementById('feedbackRatingBox');if(!title)return;rate.style.display=t==='rate'?'block':'none';if(t==='bug'){title.textContent='مشکل رو گزارش کن';hint.textContent='مشکل دقیق، صفحه‌ای که دیدی و کاری که انجام دادی رو بنویس.';}else if(t==='rate'){title.textContent='به تجربه بازی امتیاز بده';hint.textContent='امتیازت و یک توضیح کوتاه برای تیم محصول ثبت می‌شود.';buildRatingStars();}else{title.textContent='پیشنهادت رو بنویس';hint.textContent='مثلاً درباره مودهای بازی، جایزه‌ها، UI یا لیگ هفتگی.';}}
 function buildRatingStars(){const r=document.getElementById('rateRow');if(!r)return;r.innerHTML='';for(let i=1;i<=5;i++){const s=document.createElement('button');s.className='rate-star '+(i<=currentRating?'on':'');s.textContent='⭐';s.onclick=()=>{currentRating=i;buildRatingStars();};r.appendChild(s);}}
-function renderFeedbackList(){const l=document.getElementById('feedbackList');if(!l)return;l.innerHTML=FEEDBACKS.map(f=>'<div class="feedback-list-item"><div class="fi">'+(f.t==='bug'?'🐞':f.t==='rate'?'⭐':'💡')+'</div><div style="flex:1"><b>'+f.s+'</b><br><span>'+f.b+'</span><br><span>'+f.time+' · '+f.st+'</span></div></div>').join('');}
-function submitFeedback(){const s=document.getElementById('feedbackSubject').value.trim()|| (currentFeedbackType==='rate'?'امتیاز '+fa(currentRating)+' ستاره':'بدون عنوان'),b=document.getElementById('feedbackBody').value.trim();if(!b&&currentFeedbackType!=='rate'){showAaaModal({icon:'✍️',title:'متن نظر خالیه',sub:'برای ثبت نظر، یک توضیح کوتاه بنویس.',primaryText:'باشه',secondaryText:''});return;}FEEDBACKS.unshift({t:currentFeedbackType,s,b:currentFeedbackType==='rate'?'امتیاز '+fa(currentRating)+' از ۵ · '+(b||'بدون توضیح'):b,time:'همین حالا',st:'ثبت شد'});document.getElementById('feedbackSubject').value='';document.getElementById('feedbackBody').value='';renderFeedbackList();showAaaModal({icon:'💬',title:'نظرت ثبت شد',sub:'ممنون! بازخوردت برای تیم محصول ارسال شد.',primaryText:'عالیه',secondaryText:''});}
+function renderFeedbackList(){
+  const l=document.getElementById('feedbackList'); if(!l) return;
+  if(!FEEDBACKS.length){ l.innerHTML='<div class="fr-empty" style="padding:18px 14px"><span class="big">💬</span>هنوز نظری نفرستاده‌ای.</div>'; return; }
+  l.innerHTML=FEEDBACKS.map(f=>
+    '<div class="feedback-list-item" onclick="openFeedbackThread(\''+jsStr(f.id)+'\')" style="cursor:pointer">'+
+      '<div class="fi">'+(FB_ICO[f.cat]||'💬')+'</div>'+
+      '<div style="flex:1;min-width:0"><b>'+frEsc(f.title)+'</b><br>'+
+        '<span>'+frEsc(String(f.last||'').slice(0,80))+'</span><br>'+
+        '<span>'+frEsc(f.when)+' · '+frEsc(f.status)+(f.unread?' · <b style="color:var(--bolt)">پاسخ تازه</b>':'')+'</span></div>'+
+      '<span class="r-arrow">‹</span>'+
+    '</div>').join('');
+}
+/* «به پشتیبانی متصل بشه» — a reply to feedback is a support conversation, so
+   tapping one opens it there instead of somewhere new that would have to grow
+   its own chat. */
+function openFeedbackThread(id){
+  if(!id) return;
+  try{ _supGoTo=id; go('support'); }
+  catch(e){ go('support'); }
+}
+async function loadFeedback(){
+  try{
+    const r=await pzApi('GET','/support/tickets');
+    const rows=(r&&r.ok!==false)?((r.data&&r.data.rows)||r.data||r||[]):[];
+    const mine=(Array.isArray(rows)?rows:[]).filter(t=>t&&FB_ICO[t.category||t.cat]);
+    FEEDBACKS=mine.map(t=>({
+      id:t.id, cat:t.category||t.cat, title:t.title||'بدون عنوان',
+      last:t.lastMessage||t.body||'', when:frTime(t.updatedAt||t.createdAt),
+      status:supportStatusText(t.status), unread:!!t.unreadForUser
+    }));
+  }catch(e){ FEEDBACKS=[]; }
+  renderFeedbackList();
+}
+async function submitFeedback(){
+  const subEl=document.getElementById('feedbackSubject'), bodyEl=document.getElementById('feedbackBody');
+  const b=(bodyEl?bodyEl.value:'').trim();
+  const isRate=currentFeedbackType==='rate';
+  const s=(subEl?subEl.value:'').trim()||(isRate?('امتیاز '+fa(currentRating)+' ستاره'):'');
+  if(!b&&!isRate){ showAaaModal({icon:'✍️',title:'متن نظر خالیه',sub:'برای ثبت نظر، یک توضیح کوتاه بنویس.',primaryText:'باشه',secondaryText:''}); return; }
+  if(!s){ showAaaModal({icon:'✍️',title:'عنوان خالیه',sub:'یک عنوان کوتاه بنویس تا پشتیبانی سریع بفهمد موضوع چیست.',primaryText:'باشه',secondaryText:''}); return; }
+  const btn=document.querySelector('#feedback .btn-primary'); const _t=btn?btn.textContent:'';
+  if(btn){ if(btn.disabled) return; btn.disabled=true; btn.textContent='در حال ارسال…'; }
+  /* The rating rides in the body: it is what the operator needs to read, and a
+     score with no words beside it is not feedback anybody can act on. */
+  const text=isRate ? ('امتیاز '+fa(currentRating)+' از ۵'+(b?(' — '+b):'')) : b;
+  const r=await pzApi('POST','/support/tickets',{title:s,category:FB_CAT[currentFeedbackType]||'پیشنهاد',body:text});
+  if(btn){ btn.disabled=false; btn.textContent=_t; }
+  if(!r||r.ok===false||!r.data){
+    showAaaModal({icon:'⚠️',title:'ارسال نشد',sub:(r&&r.error&&r.error.message)||'اتصالت را بررسی کن و دوباره بفرست.',primaryText:'باشه',secondaryText:''});
+    return;
+  }
+  if(subEl)subEl.value=''; if(bodyEl)bodyEl.value='';
+  await loadFeedback();
+  const tid=(r.data&&(r.data.id||(r.data.ticket&&r.data.ticket.id)))||'';
+  showAaaModal({icon:'💬',title:'نظرت ثبت شد',
+    sub:'به پشتیبانی رفت و آنجا قابل پیگیری است. اگر جوابی بیاید، در همان گفتگو می‌بینی‌اش.',
+    primaryText:'دیدن گفتگو',secondaryText:'باشه',
+    onPrimary:()=>{ closeAaaModal(true); if(tid) openFeedbackThread(tid); },
+    onSecondary:()=>closeAaaModal(false)});
+}
 /* THE QUESTION MAKER.
  *
  * It used to ask for the right answer in one box and «سه گزینه نادرست» in
@@ -12032,13 +12111,16 @@ async function qsLoadMine(scroll){
   if(scroll) box.scrollIntoView({behavior:'smooth',block:'start'});
 }
 function showFriendRequestSnackbar(name){let s=document.getElementById('friendSnackbar');if(!s){s=document.createElement('div');s.id='friendSnackbar';s.className='friend-snackbar';document.querySelector('.phone').appendChild(s);}s.innerHTML='<div class="fs-ico">🤝</div><div style="flex:1"><b>درخواست دوستی ارسال شد</b><br><span>'+(name||'کاربر')+' درخواستت رو دریافت می‌کنه.</span></div><button class="btn btn-ghost" onclick="this.closest(\'.friend-snackbar\').classList.remove(\'show\')">باشه</button>';s.classList.add('show');clearTimeout(s._t);s._t=setTimeout(()=>s.classList.remove('show'),3200);}
-setTimeout(()=>{renderFeedbackList();buildRatingStars();},300);
+setTimeout(()=>{buildRatingStars();},300);
 
 /* ============ SUPPORT CENTER (live chat / tickets / FAQ / status) ============ */
 let supportActiveTab='home';
 /* Real, server-backed support: tickets + messages come from the API. */
 let supportTickets=[];
 let _supLoaded=false, _supOpenId=null, _supMsgs=[];
+/* Set by whatever sends the player into support to continue one conversation;
+   read and cleared by the screen hook. */
+let _supGoTo=null;
 function supTime(iso){try{const d=new Date(iso);if(isNaN(d))return '—';return fa(('0'+d.getHours()).slice(-2))+':'+fa(('0'+d.getMinutes()).slice(-2));}catch(e){return '—';}}
 function mapTicket(t){return {id:t.id, cat:t.category||'عمومی', title:t.title, body:t.body, status:t.status, time:supTime(t.updatedAt||t.createdAt), reply:t.reply||''};}
 async function supLoad(){
@@ -16078,7 +16160,7 @@ go=function(id){_origGo(id);
   if(id==='stats'){ try{ pzHydrateStats(); }catch(e){} }
   if(id==='wallet'){recordMissionEvent('walletVisit',1);setTimeout(()=>{try{renderWallet();}catch(e){}},80);}
   if(id==='support')recordMissionEvent('supportVisit',1);
-  if(id==='feedback')setTimeout(()=>{renderFeedbackList();buildRatingStars();},80);
+  if(id==='feedback')setTimeout(()=>{loadFeedback();buildRatingStars();},80);
   /* (removed) the game guide no longer pops up on the start-game screen — the
      one-time onboarding now runs after the first Home entry instead. */
   if(id==='home'){setTimeout(()=>{applyPlanTheme();animateXP();renderWeeklyProgress();renderDailyHero();renderBadges();setTimeout(updateMissionHome,120);},80);

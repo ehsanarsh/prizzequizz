@@ -3,6 +3,7 @@ import { error, json } from '../../http/response.js';
 import { requireAdmin } from '../../services/adminGuard.js';
 import { assignSupportTicket, createSupportTicket, getSupportTicket, listSupportTickets, replyToSupportTicket, supportDiagnostics, updateSupportTicketStatus, userReplyToSupportTicket } from '../../services/supportService.js';
 import type { SupportTicketPriority, SupportTicketStatus } from '../../types/domain.js';
+import { listMacros, createMacro, updateMacro, deleteMacro, MacroError } from '../../services/supportMacroService.js';
 import { bodyObject, optionalString, requiredString } from '../../utils/validation.js';
 
 export function registerSupportRoutes(router: Router, base: string): void {
@@ -42,6 +43,32 @@ export function registerSupportRoutes(router: Router, base: string): void {
   router.add('GET', `${base}/admin/support/diagnostics`, async (ctx) => {
     if (!requireAdmin(ctx)) return;
     json(ctx.res, 200, await supportDiagnostics());
+  });
+
+  /* CANNED REPLIES — «جملات آماده و قابل اضافه و تغییر و حذف کردن از همان
+     پنل». Kept on the server so every operator has the same set. */
+  router.add('GET', `${base}/admin/support/macros`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    json(ctx.res, 200, { rows: await listMacros() });
+  });
+  router.add('POST', `${base}/admin/support/macros`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    try { json(ctx.res, 201, await createMacro(ctx.body ?? {})); }
+    catch (e) { if (e instanceof MacroError) return error(ctx.res, 422, e.code, e.message); throw e; }
+  });
+  router.add('PATCH', `${base}/admin/support/macros/:id`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    try { json(ctx.res, 200, await updateMacro(ctx.params.id!, ctx.body ?? {})); }
+    catch (e) {
+      if (e instanceof MacroError) return error(ctx.res, e.code === 'MACRO_NOT_FOUND' ? 404 : 422, e.code, e.message);
+      throw e;
+    }
+  });
+  router.add('DELETE', `${base}/admin/support/macros/:id`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    const gone = await deleteMacro(ctx.params.id!);
+    if (!gone) return error(ctx.res, 404, 'MACRO_NOT_FOUND', 'این جمله پیدا نشد.');
+    json(ctx.res, 200, { deleted: true, id: ctx.params.id });
   });
 
   router.add('GET', `${base}/admin/support/tickets`, async (ctx) => {

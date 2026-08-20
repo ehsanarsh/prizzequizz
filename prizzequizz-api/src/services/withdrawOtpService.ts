@@ -127,6 +127,23 @@ function sendsThisHour(userId: string): number {
   const now = Date.now();
   return (sentTimes.get(userId) ?? []).filter((t) => now - t < 3_600_000).length;
 }
+/* A SEND THAT NEVER LEFT DOES NOT COUNT.
+ *
+ * The code is written down before the SMS is attempted, which is right — the
+ * provider can answer slowly and the player may be typing the code from a
+ * message that arrived first. But when the send FAILS, that bookkeeping is a
+ * trap: «ارسال پیامک ناموفق بود», then a second press answers «۵۹ ثانیه دیگر»
+ * for a code nobody ever received, and after a few tries the hour limit closes
+ * the door completely. Nobody could withdraw.
+ *
+ * So a failed send is rolled back: the undelivered code is thrown away and the
+ * attempt is uncounted, and the player may try again at once. */
+function undoSend(userId: string): void {
+  pending.delete(userId);
+  const list = sentTimes.get(userId) ?? [];
+  list.pop();                       // the one just recorded, and only that one
+  if (list.length) sentTimes.set(userId, list); else sentTimes.delete(userId);
+}
 
 export interface SendResult {
   sent: boolean;
@@ -171,15 +188,28 @@ export async function sendWithdrawOtp(userId: string, phone: string): Promise<Se
    * silently sends nothing leaves them with no way to tell a misconfiguration
    * from a working test. Only the CODE differs between the two modes. */
   if (cfg.enabled) {
-    if (!phone) throw new OtpError('NO_PHONE', 'شماره موبایلی برای این حساب ثبت نشده است.');
+    if (!phone) { undoSend(userId); throw new OtpError('NO_PHONE', 'شماره موبایلی برای این حساب ثبت نشده است.'); }
+    /* THE PROVIDER REPORTS FAILURE BY STATUS, NOT BY THROWING.
+     *
+     * sendSms catches its own transport errors and returns a log entry marked
+     * 'failed' — so a try/catch alone saw a refused message as a successful
+     * one, and the player was handed an OTP screen for a code that had never
+     * left the building. Both routes to failure are checked here. */
+    let failed = false;
     try {
-      await sendTemplate(phone, 'withdraw_code', { code, expiry: Math.round(s.ttlSeconds / 60) });
+      const log = await sendTemplate(phone, 'withdraw_code', { code, expiry: Math.round(s.ttlSeconds / 60) });
+      failed = !(log.status === 'sent' || log.status === 'disabled');
+      if (failed) logger.warn('withdraw_otp_sms_failed', { userId, live, status: log.status, error: log.error });
     } catch (e) {
+      failed = true;
       logger.warn('withdraw_otp_sms_failed', { userId, live, message: e instanceof Error ? e.message : 'unknown' });
-      /* A real player waiting for a real SMS must be told it failed. In sandbox
-       * the code on screen is the test code, so a provider hiccup is not worth
-       * blocking the flow the operator is trying to walk through. */
-      if (live) throw new OtpError('OTP_SEND_FAILED', 'ارسال پیامک ناموفق بود. کمی بعد دوباره تلاش کن.');
+    }
+    /* A real player waiting for a real SMS must be told it failed. In sandbox
+     * the code is on screen anyway, so a provider hiccup is not worth blocking
+     * the flow the operator is trying to walk through. */
+    if (failed && live) {
+      undoSend(userId);   // and let them try again now, not in a minute
+      throw new OtpError('OTP_SEND_FAILED', 'ارسال پیامک ناموفق بود. دوباره تلاش کن.');
     }
   }
   return {
