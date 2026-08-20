@@ -12,6 +12,7 @@ import { joinTopic, snapshot, addVote, addChat, listChat, getRoom, saveRoom, lis
          leaveRoom, touchPlayer, sweepIdlePlayers, LastSurvivorError, listActiveRooms,
          getPlayer, listRounds, listMyAnswers, createPrivateRoom} from '../../services/lastSurvivorService.js';
 import { acceptedForRoom } from '../../services/gameInviteService.js';
+import { realtimeRooms } from '../../realtime/roomRegistry.js';
 import { submitAnswer, submitDecision, useLifeline, advanceRoom } from '../../services/lastSurvivorWorker.js';
 import { requireAdmin } from '../../services/adminGuard.js';
 import { avatarUrlFor } from '../../services/avatarService.js';
@@ -499,12 +500,30 @@ export function registerLastSurvivorRoutes(router: Router, base: string): void {
   router.add('POST', `${base}/last-survivor/rooms/:id/chat`, async (ctx) => {
     const room = await getRoom(ctx.params.id!);
     if (!room) return error(ctx.res, 404, 'ROOM_NOT_FOUND', 'روم یافت نشد.');
-    if (!room.config.features.chat || room.status !== 'waiting') return error(ctx.res, 409, 'CHAT_CLOSED', 'چت فقط در اتاق انتظار باز است.');
+    /* CHAT IS NOT ONLY FOR THE WAITING ROOM ANY MORE.
+     *
+     * It used to be refused the moment the match began, which is why the
+     * ready-made phrases sent from inside a match reached nobody: the sender
+     * saw their own bubble drawn locally and the server threw the message
+     * away. A finished room is still closed — there is nobody left to read it. */
+    if (!room.config.features.chat) return error(ctx.res, 409, 'CHAT_CLOSED', 'چت این اتاق بسته است.');
+    if (room.status !== 'waiting' && room.status !== 'running') return error(ctx.res, 409, 'CHAT_CLOSED', 'مسابقهٔ این اتاق تمام شده.');
     const body = bodyObject(ctx.body) as any;
     const userId = ctx.userId;
     if (!userId) return error(ctx.res, 401, 'UNAUTHORIZED', 'ابتدا وارد شو.');
     let user: any = null; try { user = await repositories.users.findById(userId); } catch { /* ignore */ }
-    await addChat(ctx.params.id!, userId, user?.username || user?.displayName || 'بازیکن', String(body.body || ''));
+    const username = user?.username || user?.displayName || 'بازیکن';
+    const text = String(body.body || '');
+    await addChat(ctx.params.id!, userId, username, text);
+    /* Pushed to the room at once. During a match the chat list is not on
+       screen — what everyone sees is a bubble under the speaker's picture — and
+       a bubble that turns up eight seconds later, on the next poll, is not a
+       conversation. The poll stays as the fallback for anyone without a live
+       socket. */
+    try {
+      realtimeRooms.broadcastTopic(`ls:${ctx.params.id!}`,
+        { type: 'ls:chat', payload: { userId, username, body: text, createdAt: Date.now() } } as any);
+    } catch { /* realtime is optional; the poll still carries it */ }
     json(ctx.res, 201, { sent: true });
   });
 }

@@ -51,6 +51,15 @@ async function makePage() {
       return send({});
     }
     if (p === '/chat-packs') return send({ packs: PACKS });
+    if (p === '/friends') return send([
+      { id: 'f-sara', username: 'sara', displayName: 'سارا', avatar: '', character: null, level: 4, online: true, unread: 0, lastMessage: '' },
+      { id: 'f-nima', username: 'nima', displayName: 'نیما', avatar: '', character: null, level: 2, online: false, unread: 0, lastMessage: '' }
+    ]);
+    if (p === '/users/online') return send({ players: [
+      /* سارا is a friend AND in the lobby — one person, one row. */
+      { userId: 'f-sara', username: 'سارا', level: 4, avatar: '', character: null, inMatch: false, invitePending: false, canInvite: true },
+      { userId: 'o-1', username: 'غریبه', level: 7, avatar: '', character: null, inMatch: false, invitePending: false, canInvite: true }
+    ], onlineTotal: 2, nextCost: 0, freeLeft: 3, coins: 500 });
     if (/\/last-survivor\/rooms\/[^/]+\/chat$/.test(p)) return send({ messages: chatMsgs });
     return send({});
   });
@@ -209,66 +218,117 @@ const hasBtn = (page) => page.evaluate(() => {
   ok('to this room', sent[0] && /rooms\/R9\/chat$/.test(sent[0].path), sent[0] && sent[0].path);
 
   const after = await page.evaluate(() => ({
-    open: document.getElementById('qcpSheet').classList.contains('show'),
-    bubble: document.querySelectorAll('.taunt').length
+    open: document.getElementById('qcpSheet').classList.contains('show')
   }));
   ok('the sheet closes behind it', after.open === false, String(after.open));
-  ok('and the sender sees it go, as in a duel', after.bubble > 0, String(after.bubble));
 
-  /* AND THE OTHER DIRECTION. A phrase everybody else can only read after the
-     match would be a button that sends into a void, so what the room says
-     floats past during the match the same way a duel's taunts do. */
+  /* «باید همه ببینن و دقیقا زیر عکس پروفایل» — the sender's own words land on
+     the sender's own card, where everybody else will see them too. */
+  const mine = await page.evaluate(() => {
+    const b = document.querySelector('#lsGame .ls-pl[data-uid="me"] .ls-say');
+    return b ? b.textContent : null;
+  });
+  ok('and it appears under the sender’s own picture', mine === 'موفق باشی', String(mine));
+
+  /* AND THE OTHER DIRECTION. Pushed over the socket, not waited for on the
+     eight-second poll: a bubble that arrives eight seconds late is not a
+     conversation. */
   const heard = await page.evaluate(async () => {
-    document.querySelectorAll('.taunt').forEach((e) => e.remove());
-    (0, eval)('lsChatCount=0; lsChatFloated=true;');
-    return null;
+    document.querySelectorAll('.ls-say').forEach((e) => e.remove());
+    (0, eval)('lsOnWs')('ls:chat', { userId: 'p1', username: 'سارا', body: 'ایول', createdAt: Date.now() });
+    await new Promise((r) => setTimeout(r, 300));
+    const b = document.querySelector('#lsGame .ls-pl[data-uid="p1"] .ls-say');
+    return { text: b ? b.textContent : null,
+             onMine: !!document.querySelector('#lsGame .ls-pl[data-uid="me"] .ls-say') };
   });
-  chatMsgs = chatMsgs.concat([{ userId: 'p1', username: 'سارا', body: 'ایول', createdAt: Date.now() }]);
-  const floated = await page.evaluate(async () => {
-    await (0, eval)('lsChatWatchTick')();
-    await new Promise((r) => setTimeout(r, 500));
-    return [...document.querySelectorAll('.taunt')].map((e) => e.textContent);
+  ok('what somebody else says arrives at once', heard.text === 'ایول', JSON.stringify(heard));
+  ok('on THEIR card, not mine', heard.onMine === false, String(heard.onMine));
+
+  /* «چت دو نفر بغل هم روی هم نیوفته» — two neighbours talking at once. */
+  const apart = await page.evaluate(async () => {
+    (0, eval)('lsOnWs')('ls:chat', { userId: 'p1', username: 'سارا', body: 'من بردم', createdAt: Date.now() });
+    (0, eval)('lsSayBubble')('me', 'نه من بردم');
+    await new Promise((r) => setTimeout(r, 250));
+    const a = document.querySelector('#lsGame .ls-pl[data-uid="me"] .ls-say');
+    const b = document.querySelector('#lsGame .ls-pl[data-uid="p1"] .ls-say');
+    if (!a || !b) return null;
+    const ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect();
+    const cellA = document.querySelector('#lsGame .ls-pl[data-uid="me"]').getBoundingClientRect();
+    const overlap = !(ra.right <= rb.left + 0.5 || rb.right <= ra.left + 0.5)
+                 && !(ra.bottom <= rb.top + 0.5 || rb.bottom <= ra.top + 0.5);
+    return { overlap, insideOwnCell: ra.left >= cellA.left - 0.5 && ra.right <= cellA.right + 0.5,
+             wa: Math.round(ra.width), wb: Math.round(rb.width) };
   });
-  ok('what the room says floats past during the match', floated.length === 1, JSON.stringify(floated));
-  ok('naming who said it', /سارا/.test(floated[0] || ''), floated[0] || '');
+  ok('two people talking at once do not land on top of each other', !!apart && apart.overlap === false, JSON.stringify(apart));
+  ok('because each bubble stays inside its own card', apart.insideOwnCell, JSON.stringify(apart));
+
+  /* One player, one bubble: the newest thing they said replaces the last. */
+  const single = await page.evaluate(async () => {
+    (0, eval)('lsSayBubble')('p1', 'دوباره');
+    await new Promise((r) => setTimeout(r, 200));
+    const all = document.querySelectorAll('#lsGame .ls-pl[data-uid="p1"] .ls-say');
+    return { n: all.length, text: all[0] ? all[0].textContent : null };
+  });
+  ok('one player has one bubble, not a stack', single.n === 1 && single.text === 'دوباره', JSON.stringify(single));
+
+  /* The room broadcasts to everybody, the sender included. My own words coming
+     back must not be counted as an unread message from somebody else. */
+  const echo = await page.evaluate(async () => {
+    (0, eval)("lsTab='players'; lsChatUnread=0; lsChatBadgePaint();");
+    (0, eval)('lsOnWs')('ls:chat', { userId: 'me', username: 'احسان', body: 'موفق باشی', createdAt: Date.now() });
+    await new Promise((r) => setTimeout(r, 250));
+    const b = document.getElementById('lsChatBadge');
+    return { unread: (0, eval)('lsChatUnread'), shown: !!b && b.style.display !== 'none' };
+  });
+  ok('my own message coming back does not raise the badge', echo.unread === 0 && echo.shown === false, JSON.stringify(echo));
+
+  const theirs = await page.evaluate(async () => {
+    (0, eval)('lsOnWs')('ls:chat', { userId: 'p1', username: 'سارا', body: 'سلام', createdAt: Date.now() });
+    await new Promise((r) => setTimeout(r, 250));
+    return (0, eval)('lsChatUnread');
+  });
+  ok('but somebody else’s does', theirs === 1, String(theirs));
 
   /* The very first read is catching up with a room that was talking before the
      player arrived — forty old lines are not forty arriving now. */
   const backlog = await page.evaluate(async () => {
-    document.querySelectorAll('.taunt').forEach((e) => e.remove());
+    document.querySelectorAll('.ls-say').forEach((e) => e.remove());
     (0, eval)('lsChatCount=0; lsChatFloated=false;');
     await (0, eval)('lsChatWatchTick')();
     await new Promise((r) => setTimeout(r, 500));
-    return document.querySelectorAll('.taunt').length;
+    return document.querySelectorAll('.ls-say').length;
   });
   ok('but the backlog does not', backlog === 0, String(backlog));
 
   /* Never over a question — the same rule the button obeys. */
   const overQ = await page.evaluate(async (sn) => {
-    document.querySelectorAll('.taunt').forEach((e) => e.remove());
+    document.querySelectorAll('.ls-say').forEach((e) => e.remove());
     (0, eval)("lsSnap=null; lsLastKey='';");
     (0, eval)('lsRender')(sn);
     await new Promise((r) => setTimeout(r, 300));
-    (0, eval)('lsChatCount=0; lsChatFloated=true;');
-    await (0, eval)('lsChatWatchTick')();
-    await new Promise((r) => setTimeout(r, 500));
-    return document.querySelectorAll('.taunt').length;
+    (0, eval)('lsOnWs')('ls:chat', { userId: 'p1', username: 'سارا', body: 'الان', createdAt: Date.now() });
+    await new Promise((r) => setTimeout(r, 300));
+    return { bubbles: document.querySelectorAll('.ls-say').length,
+             cells: document.querySelectorAll('#lsGame .ls-pl').length };
   }, room({ question: { id: 'q2', text: 'پایتخت؟', options: ['الف', 'ب', 'ج', 'د'] } },
      { round: 4, phase: 'question', phaseEndsAt: Date.now() + 20000 }));
-  ok('and never across a live question', overQ === 0, String(overQ));
+  ok('and never across a live question', overQ.bubbles === 0, String(overQ.bubbles));
+  /* Belt AND braces: the phase is checked, and there is no player grid on that
+     screen for a bubble to attach to in the first place. Worth stating, because
+     it is the second of the two that makes the first unable to fail. */
+  ok('the question screen has no player cards to attach one to', overQ.cells === 0, String(overQ.cells));
 
   /* Turning quick chat off means off in both directions: somebody who does not
-     want to be talked at during a match must not have the room float past. */
+     want to be talked at during a match must not be. */
   const quiet = await page.evaluate(async (sn) => {
     (0, eval)("lsSnap=null; lsLastKey='';");
     (0, eval)('lsRender')(sn);
     await new Promise((r) => setTimeout(r, 300));
-    document.querySelectorAll('.taunt').forEach((e) => e.remove());
+    document.querySelectorAll('.ls-say').forEach((e) => e.remove());
     (0, eval)('appSettings').quickChat = false;
-    (0, eval)('lsChatCount=0; lsChatFloated=true;');
-    await (0, eval)('lsChatWatchTick')();
-    await new Promise((r) => setTimeout(r, 500));
-    const n = document.querySelectorAll('.taunt').length;
+    (0, eval)('lsOnWs')('ls:chat', { userId: 'p1', username: 'سارا', body: 'هوی', createdAt: Date.now() });
+    await new Promise((r) => setTimeout(r, 300));
+    const n = document.querySelectorAll('.ls-say').length;
     (0, eval)('appSettings').quickChat = true;
     return n;
   }, room({}, { round: 5, phase: 'dashboard' }));
@@ -335,6 +395,84 @@ const hasBtn = (page) => page.evaluate(() => {
   const duel = await page.evaluate(() => document.querySelectorAll('.taunt').length);
   ok('still floats a bubble', duel > 0, String(duel));
   ok('and posts to no room', posted.filter((x) => /\/chat$/.test(x.path)).length === 0, JSON.stringify(posted));
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
+/* ── THE FIRST QUESTION IS NOT «THE NEXT QUESTION» ───────────────────────── */
+{
+  const { ctx, page, errs } = await makePage();
+  console.log('the modal before the very first question:');
+  await enter(page, room({ question: { id: 'q1', text: 'پایتخت؟', options: ['الف', 'ب', 'ج', 'د'], difficulty: 'easy' } },
+    { round: 1, phase: 'ready', phaseEndsAt: Date.now() + 5000 }));
+  await page.waitForTimeout(600);
+  const first = await page.evaluate(() => {
+    const t = document.getElementById('aaaTitle'), s = document.getElementById('aaaSub');
+    const big = s && s.querySelector('.ls-first-line');
+    return { title: t ? t.textContent.trim() : '', sub: s ? s.textContent.replace(/\s+/g, ' ').trim() : '',
+             bigText: big ? big.textContent.trim() : null,
+             bigPx: big ? Math.round(parseFloat(getComputedStyle(big).fontSize)) : 0,
+             subPx: s ? Math.round(parseFloat(getComputedStyle(s).fontSize)) : 0 };
+  });
+  /* «نوشته سوال بعدی با اینکه این اولین سوال هست» */
+  ok('it does not call the first question the next one', !/سوال بعدی/.test(first.sub) && !/سوال بعدی/.test(first.title), JSON.stringify(first));
+  /* «باید متنی بزرگ بنویسه با هیجان که آماده اولین سوال بازی باش» */
+  ok('it says the first question is coming', /اولین سوال/.test(first.bigText || ''), String(first.bigText));
+  ok('and says it big', first.bigPx >= 17 && first.bigPx > first.subPx, first.bigPx + 'px vs ' + first.subPx + 'px');
+
+  /* Round two goes back to the ordinary words. */
+  const later = await page.evaluate(async (sn) => {
+    (0, eval)("closeAaaModal(false); lsReadyShownRound=''; lsSnap=null; lsLastKey='';");
+    await new Promise((r) => setTimeout(r, 300));
+    (0, eval)('lsRender')(sn);
+    await new Promise((r) => setTimeout(r, 500));
+    const s = document.getElementById('aaaSub');
+    return { title: (document.getElementById('aaaTitle') || {}).textContent.trim(),
+             big: !!(s && s.querySelector('.ls-first-line')),
+             sub: s ? s.textContent.replace(/\s+/g, ' ').trim() : '' };
+  }, room({ question: { id: 'q2', text: 'پایتخت؟', options: ['الف', 'ب', 'ج', 'د'], difficulty: 'easy' } },
+     { round: 2, phase: 'ready', phaseEndsAt: Date.now() + 5000 }));
+  ok('and round two is an ordinary round again', later.title === 'آماده‌ای؟' && later.big === false, JSON.stringify(later));
+  ok('counted from two', /۲/.test(later.sub), later.sub);
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
+/* ── ASKING FRIENDS INTO THE WAITING ROOM ────────────────────────────────── */
+/* «در اتاق انتظار به غیر از افراد آنلاین، دوستان رو هم بتونیم دعوت کنیم.» */
+{
+  const { ctx, page, errs } = await makePage();
+  console.log('adding people to the waiting room:');
+  await enter(page, room({}, { status: 'waiting', phase: 'waiting', startsAt: Date.now() + 90000 }));
+  await page.waitForTimeout(400);
+  await page.evaluate(async () => { await (0, eval)('lsInviteOpen')(); await new Promise((r) => setTimeout(r, 700)); });
+  const sheet = await page.evaluate(() => ({
+    heads: [...document.querySelectorAll('#lsInvList .pz-inv-head')].map((h) => h.textContent.trim()),
+    rows: [...document.querySelectorAll('#lsInvList .pz-inv-row')].map((r) => ({
+      name: r.querySelector('.n').childNodes[0].textContent.trim(),
+      note: (r.querySelector('.n small') || {}).textContent || '',
+      can: !!r.querySelector('button.go')
+    }))
+  }));
+  ok('the sheet has a friends section', sheet.heads.indexOf('دوستان') >= 0, sheet.heads.join(' | '));
+  ok('and the lobby section as before', sheet.heads.indexOf('افراد آنلاین') >= 0, sheet.heads.join(' | '));
+  ok('friends come first', sheet.heads[0] === 'دوستان', sheet.heads.join(' | '));
+  const names = sheet.rows.map((r) => r.name);
+  ok('an online friend can be invited', sheet.rows.some((r) => r.name === 'سارا' && r.can), JSON.stringify(sheet.rows));
+  /* An invite lasts a minute; somebody who is not there cannot answer it. */
+  ok('an offline friend is shown but not offered', sheet.rows.some((r) => r.name === 'نیما' && !r.can && /آفلاین/.test(r.note)), JSON.stringify(sheet.rows));
+  /* One person, one row: a friend who is also in the lobby is still one person. */
+  ok('nobody is listed twice', new Set(names).size === names.length, names.join(' / '));
+  ok('and a stranger in the lobby is still there', names.indexOf('غریبه') >= 0, names.join(' / '));
+
+  posted.length = 0;
+  await page.evaluate(() => [...document.querySelectorAll('#lsInvList button.go')]
+    .find((b) => b.closest('.pz-inv-row').querySelector('.n').textContent.indexOf('سارا') >= 0).click());
+  await page.waitForTimeout(600);
+  const sent = posted.find((x) => x.path === '/invites');
+  ok('inviting a friend sends a real invite into this room', !!sent && sent.body.roomId === 'R9', JSON.stringify(sent && sent.body));
+  ok('as a Last Survivor invite', !!sent && sent.body.mode === 'ls', JSON.stringify(sent && sent.body));
+  ok('to that friend', !!sent && sent.body.toUserId === 'f-sara', JSON.stringify(sent && sent.body));
   ok('no script errors', errs.length === 0, errs.join(' | '));
   await ctx.close();
 }

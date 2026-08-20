@@ -23,8 +23,9 @@ import { createSession } from '../services/sessionService.js';
 import { id } from '../utils/id.js';
 import { _resetInvites } from '../services/gameInviteService.js';
 import { _resetCurrentMatches } from '../services/matchEngine.js';
-import { getRoom, listPlayers, getPlayer, saveRoom } from '../services/lastSurvivorService.js';
+import { getRoom, listPlayers, getPlayer, saveRoom, removePlayer } from '../services/lastSurvivorService.js';
 import { updateConfig } from '../services/lastSurvivorConfig.js';
+import { tick } from '../services/lastSurvivorWorker.js';
 import { getTickets, grantTickets } from '../services/ticketService.js';
 
 let passed = 0, failed = 0;
@@ -104,6 +105,75 @@ async function main(): Promise<void> {
     await check('nothing is charged for opening it', async () => {
       const t = await getTickets(owner);
       assert.equal(t.green, 5, 'a ticket went missing just for making a room');
+    });
+
+    /* THE ROOM HAS TO SURVIVE THE SECOND AFTER IT IS MADE.
+     *
+     * The worker sweeps every active room once a second and closes any waiting
+     * room with nobody in it. A private room is created empty on purpose — the
+     * owner is still choosing a ticket — so without an exception for it the
+     * room was gone before its owner could reach the door, and they were told
+     * «مسابقهٔ این اتاق شروع شده» at their own room. Ticking the worker here is
+     * what makes this test see the world the server actually runs in. */
+    await check('the worker does not sweep it away before the owner arrives', async () => {
+      for (let i = 0; i < 3; i++) await tick(Date.now());
+      const room = await getRoom(roomId);
+      assert.ok(room, 'the room was deleted outright');
+      assert.equal(room!.status, 'waiting', 'the room was closed while its owner was picking a ticket');
+    });
+
+    await check('and the owner can still walk in after it', async () => {
+      const r = await call('POST', '/last-survivor/join', so.accessToken, { topic: TOPIC, color: 'blue', roomId });
+      assert.equal(r.status, 201, JSON.stringify(r));
+      assert.equal(r.data.room.id, roomId);
+      /* Put it back the way the rest of this file expects: the owner pays with
+         a green ticket a few checks below. */
+      await call('POST', `/last-survivor/rooms/${roomId}/leave`, so.accessToken, {});
+    });
+
+    await check('but an empty one does not linger for ever', async () => {
+      /* A room of its OWN, never joined and never left: leaving a room closes
+         it on the way out, so testing this on a room somebody walked out of
+         would pass whether the worker did its job or not. */
+      const drifter = await player('Drifter');
+      const sd = createSession(drifter);
+      const made = await call('POST', '/last-survivor/rooms', sd.accessToken, { topic: TOPIC });
+      assert.equal(made.status, 201, JSON.stringify(made));
+      const lone = await getRoom(made.data.roomId);
+      assert.equal(lone!.status, 'waiting', 'it was not open to begin with');
+      await tick(lone!.startsAt + 1000);
+      const after = await getRoom(made.data.roomId);
+      assert.equal(after!.status, 'finished', 'a room nobody ever came to stayed open for ever');
+    });
+
+    await check('while an ordinary empty room is still closed on the spot', async () => {
+      /* The grace is for private rooms only. An ordinary room that empties has
+         to go at once, whatever its deadline says: the reason the rule exists
+         is that matchmaking would otherwise hand the next player a room with
+         somebody else's countdown already running. */
+      const passer = await player('Passer');
+      const sp = createSession(passer);
+      const j = await call('POST', '/last-survivor/join', sp.accessToken, { topic: OTHER, color: 'green' });
+      assert.equal(j.status, 201, JSON.stringify(j));
+      const rid = j.data.room.id;
+      assert.equal((await getRoom(rid))!.isPrivate, false, 'that was not a public room');
+      /* Emptied WITHOUT going out through leaveRoom, which closes a room behind
+         the last person out — otherwise this would pass without the worker. */
+      await removePlayer(rid, passer);
+      await tick(Date.now());
+      assert.equal((await getRoom(rid))!.status, 'finished',
+        'a public room with nobody in it was kept until its deadline');
+    });
+
+    await check('and the owner’s own room is back to being empty and open', async () => {
+      /* The owner joined and left a moment ago, which closes a room behind the
+         last person out — so the rest of this file needs a fresh one. */
+      const again = await call('POST', '/last-survivor/rooms', so.accessToken, { topic: TOPIC });
+      assert.equal(again.status, 201, JSON.stringify(again));
+      roomId = again.data.roomId;
+      const room = await getRoom(roomId);
+      assert.equal(room!.status, 'waiting');
+      assert.equal(room!.isPrivate, true);
     });
 
     await check('tapping twice does not leave two rooms open', async () => {
@@ -241,6 +311,38 @@ async function main(): Promise<void> {
       assert.equal(r.code, 'ROOM_STARTED');
       const t = await getTickets(late);
       assert.equal(t.green, 5, 'a locked door still took their ticket');
+    });
+
+    /* THE PHRASES SENT FROM INSIDE A MATCH.
+     *
+     * Chat was refused the moment a room stopped waiting — «چت فقط در اتاق
+     * انتظار باز است» — so every ready-made phrase sent during a match was
+     * thrown away by the server. The sender saw their own bubble, drawn on
+     * their own phone, and nobody else ever saw anything. */
+    console.log('talking during the match:');
+
+    await check('a phrase sent while the match is running is kept', async () => {
+      const room = await getRoom(roomId);
+      room!.status = 'running'; room!.phase = 'dashboard'; room!.startedAt = Date.now();
+      await saveRoom(room!);
+      const r = await call('POST', `/last-survivor/rooms/${roomId}/chat`, so.accessToken, { body: 'موفق باشی' });
+      assert.equal(r.status, 201, JSON.stringify(r));
+    });
+
+    await check('and everybody in the room can read it', async () => {
+      const r = await call('GET', `/last-survivor/rooms/${roomId}/chat`, sf.accessToken);
+      assert.equal(r.status, 200, JSON.stringify(r));
+      const bodies = (r.data.messages || []).map((m: any) => m.body);
+      assert.ok(bodies.includes('موفق باشی'), 'the message never reached the room: ' + JSON.stringify(bodies));
+    });
+
+    await check('a finished room is closed for good', async () => {
+      const room = await getRoom(roomId);
+      room!.status = 'finished'; room!.phase = 'finished'; room!.endedAt = Date.now();
+      await saveRoom(room!);
+      const r = await call('POST', `/last-survivor/rooms/${roomId}/chat`, so.accessToken, { body: 'کسی هست؟' });
+      assert.equal(r.status, 409, JSON.stringify(r));
+      assert.equal(r.code, 'CHAT_CLOSED');
     });
 
     await check('a player already in the room is not charged twice', async () => {

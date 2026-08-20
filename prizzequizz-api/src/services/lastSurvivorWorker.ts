@@ -84,7 +84,24 @@ async function maybeStart(room: RoomRow, now: number): Promise<void> {
    * lived, findOrCreateRoom would hand it to the next player to pick this
    * topic — with the countdown it was created with, which by then had already
    * expired. A player who walks in has to start a clock, not inherit one. */
-  if (count === 0) { room.status = 'finished'; room.phase = 'finished'; room.endedAt = now; await saveRoom(room); logger.info('ls_room_closed_empty', { roomId: room.id, via: 'tick' }); return; }
+  if (count === 0) {
+    /* EXCEPT A PRIVATE ROOM, WHICH IS MADE BEFORE ANYBODY IS IN IT.
+     *
+     * The owner opens the room, invites their friend, and only then walks to
+     * the ticket screen to pay their way in — several seconds during which the
+     * room is legitimately empty. This tick runs every second, so it was
+     * closing every private room within a second of its being created, and the
+     * owner arrived at their own door to be told «مسابقهٔ این اتاق شروع شده».
+     *
+     * The reason for closing empty rooms does not apply here anyway: it exists
+     * so matchmaking never hands a stale room to the next player, and
+     * matchmaking never hands out a private room at all. So it is given until
+     * its own start deadline to fill — and if nobody has come by then, it
+     * closes exactly like any other. */
+    if (room.isPrivate && now < room.startsAt) return;
+    room.status = 'finished'; room.phase = 'finished'; room.endedAt = now; await saveRoom(room);
+    logger.info('ls_room_closed_empty', { roomId: room.id, via: 'tick', private: room.isPrivate }); return;
+  }
 
   const cfg = room.config;
   const votes = await import('./lastSurvivorService.js').then((m) => m.countVotes(room.id));

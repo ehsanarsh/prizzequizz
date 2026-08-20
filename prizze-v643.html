@@ -996,6 +996,8 @@ input,textarea,select,[contenteditable="true"],.pz-selectable,.pz-selectable *{
 .online-add.pz-invite-go:active{transform:translateY(2px)}
 
 .pz-inv-row{display:flex;align-items:center;gap:9px;padding:8px 6px;border-bottom:1px solid rgba(255,255,255,.07)}
+/* Two lists in one sheet — friends, then whoever else is in the lobby. */
+.pz-inv-head{font-size:11px;font-weight:900;color:var(--bolt);padding:10px 4px 4px;letter-spacing:.3px}
 .pz-inv-row .f{width:38px;height:38px;flex:0 0 auto;border-radius:12px;overflow:hidden;background:rgba(255,255,255,.06);
   display:flex;align-items:center;justify-content:center;font-size:19px}
 .pz-inv-row .f img{width:100%;height:100%;object-fit:cover;display:block}
@@ -1441,6 +1443,32 @@ input,textarea,select,[contenteditable="true"],.pz-selectable,.pz-selectable *{
    at the right-hand side of the «وضعیت مسابقه» heading. It is placed OVER that
    row rather than in its flow, so the heading stays exactly where it was —
    centred — instead of being shoved off to make room. */
+/* THE OPENING OF A MATCH, SAID LIKE ONE. The first question's modal used to
+   read «سوال بعدی» in the same small grey type as every other round. */
+.ls-first-line{
+  font-size:19px;font-weight:900;line-height:1.5;margin:2px 0 8px;
+  color:var(--bolt);text-shadow:0 2px 0 rgba(0,0,0,.55);
+  animation:lsFirstPulse 1.1s ease-in-out infinite alternate
+}
+@keyframes lsFirstPulse{from{transform:scale(1)}to{transform:scale(1.045)}}
+@media(max-width:370px){.ls-first-line{font-size:17px}}
+
+/* WHAT A PLAYER SAID, ON THEIR OWN CARD.
+   Pinned inside the cell and never wider than it, so two people side by side
+   cannot land on top of each other however many of them are talking. It sits
+   across the lower part of the picture — under the face, above the name — so
+   the name stays readable and the row below is never covered. */
+.ls-pl .ls-say{
+  position:absolute;left:0;right:0;top:30px;z-index:9;
+  background:linear-gradient(180deg,#FFE24A,var(--bolt-2));color:#141414;
+  border:2px solid #000;border-radius:11px;box-shadow:0 3px 0 #000;
+  font-size:10px;font-weight:900;line-height:1.35;padding:4px 5px;text-align:center;
+  overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
+  word-break:break-word;animation:lsSayIn .16s cubic-bezier(.22,.89,.32,1) both;
+  pointer-events:none
+}
+.ls-pl .ls-say.out{opacity:0;transform:translateY(-5px);transition:opacity .4s ease,transform .4s ease}
+@keyframes lsSayIn{from{opacity:0;transform:translateY(6px) scale(.9)}to{opacity:1;transform:none}}
 .ls-elim-hd{position:relative}
 .ls-elim-hd.bare{padding:12px 14px 6px;min-height:46px}
 .ls-quickchat{position:absolute;inset-inline-start:14px;top:12px;
@@ -7714,6 +7742,17 @@ function lsOnWs(type,payload){
   /* The room ended. `forfeited` is the pot that nobody won because the last
      players all answered wrongly — remembered here so the result screen can
      say what happened to the money instead of showing a blank podium. */
+  /* Somebody in this room said something. Pushed rather than polled: a bubble
+     that turns up on the next eight-second poll is not a conversation. My own
+     words are already on screen — they were drawn the moment I sent them. */
+  if(type==='ls:chat'){
+    if(!payload||!payload.userId) return;
+    if(String(payload.userId)===String(lsMyId)) return;
+    try{ lsSayBubble(payload.userId,payload.body); }catch(e){}
+    /* Keep the tab badge honest whichever route the message arrived by. */
+    try{ if(lsTab!=='chat'){ lsChatUnread++; lsChatCount++; lsChatBadgePaint(); } else lsLoadChat(); }catch(e){}
+    return;
+  }
   if(type==='ls:ended'){ lsForfeited=Number((payload&&payload.forfeited)||0); lsWipeout=(payload&&payload.wipeout)||null; }
   /* THE ORDER PLAYERS GO OUT IN IS THE SERVER'S, NOT THE GRID'S.
      When a round wipes the room, the last one out is the only one who is paid —
@@ -8006,7 +8045,10 @@ function lsHeadRow(snap,withText){
    too, so the sender gets the same instant answer they get in a duel. */
 async function lsQuickSay(text){
   if(!lsRoomId||!text) return;
-  try{ spawnTaunt(text,'me'); }catch(e){}
+  /* Drawn under the sender's own picture straight away — the same place
+     everybody else will see it a moment later — so the phrase does not sit
+     waiting on the network before it looks like it was said. */
+  try{ lsSayBubble(lsMyId,text); }catch(e){}
   const r=await pzApi('POST','/last-survivor/rooms/'+lsRoomId+'/chat',{body:text});
   if(r&&r.ok===false){ toast((r.error&&r.error.message)||'پیام فرستاده نشد'); return; }
   if(lsTab==='chat'){ try{ lsLoadChat(); }catch(e){} }
@@ -8188,7 +8230,7 @@ function lsPlayersCells(snap,markElim){
     /* The ✕ and the «برداشت» tag sit OUTSIDE .av. Inside it they inherited the
        grayscale filter meant for the photo, which is why the elimination cross
        came out grey — the one thing on that card that has to be red. */
-    return `<div class="ls-pl ${cls} ${now}" style="cursor:pointer" ${tap}><div class="ls-avwrap"><div class="av">${lsAvatarHTML(p)}</div>${p.status==='eliminated'?'<span class="xx">✕</span>':''}${p.status==='cashed_out'?'<span class="cashb">برداشت</span>':''}${mark}</div><small>${(p.username||'').slice(0,8)}</small></div>`;
+    return `<div class="ls-pl ${cls} ${now}" data-uid="${jsStr(p.userId||'')}" style="cursor:pointer" ${tap}><div class="ls-avwrap"><div class="av">${lsAvatarHTML(p)}</div>${p.status==='eliminated'?'<span class="xx">✕</span>':''}${p.status==='cashed_out'?'<span class="cashb">برداشت</span>':''}${mark}</div><small>${(p.username||'').slice(0,8)}</small></div>`;
   }).join('');
 }
 function lsGridHtml(snap,markElim){ return `<div class="ls-grid" id="lsElimGrid" style="grid-template-columns:repeat(4,1fr)">${lsPlayersCells(snap,markElim)}</div>`; }
@@ -8366,13 +8408,25 @@ function lsReadyGate(snap){
      watching the same room was a way to read the question before the people
      answering it. Same countdown, same concealment, different words. */
   const playing=!lsWatching&&!!(snap.me&&snap.me.status==='alive');
-  const title=playing?'آماده‌ای؟':'سوال بعدی';
-  const sub=playing
-    ? 'سوال '+lsFa(r.round)+' از '+lsFa(r.totalRounds)+' — جواب اشتباه یعنی حذف!'
-    : 'سوال '+lsFa(r.round)+' از '+lsFa(r.totalRounds)+' — همراه بقیه می‌بینی‌اش';
+  /* THE FIRST QUESTION IS NOT «THE NEXT QUESTION».
+     It said «سوال بعدی» at the very start of a match, as if something had
+     already happened — the one moment that should feel like the match opening.
+     So round one gets its own words, and they are the biggest thing on the
+     card. */
+  const first=Number(r.round)===1;
+  const title=first?(playing?'شروع شد!':'مسابقه شروع شد!')
+                   :(playing?'آماده‌ای؟':'سوال بعدی');
+  const big=(t)=>'<div class="ls-first-line">'+t+'</div>';
+  const sub=first
+    ? big(playing?'آمادهٔ اولین سوال بازی باش ⚡':'اولین سوال بازی در راه است ⚡')+
+      (playing?'سوال ۱ از '+lsFa(r.totalRounds)+' — جواب اشتباه یعنی حذف!'
+             :'سوال ۱ از '+lsFa(r.totalRounds)+' — همراه بقیه می‌بینی‌اش')
+    : (playing
+      ? 'سوال '+lsFa(r.round)+' از '+lsFa(r.totalRounds)+' — جواب اشتباه یعنی حذف!'
+      : 'سوال '+lsFa(r.round)+' از '+lsFa(r.totalRounds)+' — همراه بقیه می‌بینی‌اش');
   try{
     if(typeof showCountdownModal==='function'){
-      showCountdownModal({icon:playing?'🎯':'👁️',title:title,sub:sub,
+      showCountdownModal({icon:first?'🚀':(playing?'🎯':'👁️'),title:title,sub:sub,
         seconds:secs,reward:(typeof pzDiffBadge==='function'?pzDiffBadge(diff):'')},function(){});
     }
   }catch(e){}
@@ -8567,25 +8621,40 @@ async function lsChatWatchTick(){
     lsChatCount=total; lsChatFloated=true;
   }catch(e){}
 }
-/* WHAT SOMEBODY ELSE JUST SAID, WHERE THE PLAYER IS ACTUALLY LOOKING.
-   The chat list lives on the waiting-room screen, so once the match starts a
-   phrase posted to the room would be read by nobody until it was over — which
-   would make the in-match chat button a thing that sends into a void. These are
-   the duel's floating bubbles carrying the room's real messages, and they obey
-   the same two rules the button does: never over a question, and never when the
-   player has turned quick chat off. */
-function lsFloatRoomChat(msgs){
-  if(!msgs||!msgs.length) return;
+/* WHAT SOMEBODY SAID, UNDER THEIR OWN PICTURE.
+   «باید همه ببینن و دقیقا زیر عکس پروفایل، و چت دو نفر بغل هم روی هم نیوفته.»
+
+   A duel's taunt floats up the middle of the screen because there are only two
+   people and no doubt about who spoke. A room holds twenty, so the message has
+   to say WHO by being attached to them — and it is drawn inside that player's
+   own cell, never wider than it, so the person beside them cannot be covered by
+   it however many people talk at once. */
+function lsSayBubble(userId,text){
+  if(!userId||!text) return;
   if((document.querySelector('.screen.active')||{}).id!=='lsGame') return;
-  if(lsTab==='chat') return;
+  if(typeof appSettings!=='undefined'&&appSettings&&appSettings.quickChat===false) return;
   const ph=(lsSnap&&lsSnap.room&&lsSnap.room.phase)||'';
   if(ph==='ready'||ph==='question') return;
-  if(typeof appSettings!=='undefined'&&appSettings&&appSettings.quickChat===false) return;
-  /* Three at a time, spaced out. A room of twenty that all press a button at
-     once must not bury the screen it is floating over. */
+  const cell=document.querySelector('#lsGame .ls-pl[data-uid="'+String(userId).replace(/"/g,'')+'"]');
+  if(!cell) return;
+  /* One bubble per player: the newest thing they said replaces the last, rather
+     than stacking down the grid. */
+  const old=cell.querySelector('.ls-say'); if(old) old.remove();
+  const b=document.createElement('div');
+  b.className='ls-say';
+  b.textContent=String(text).slice(0,90);
+  cell.appendChild(b);
+  setTimeout(()=>{ try{ b.classList.add('out'); }catch(e){} },3400);
+  setTimeout(()=>{ try{ b.remove(); }catch(e){} },3900);
+}
+/* The fallback path: whatever the poll found that the socket did not deliver. */
+function lsFloatRoomChat(msgs){
+  if(!msgs||!msgs.length) return;
+  if(lsTab==='chat') return;
+  /* Three at a time. A room where everybody presses a button at once must not
+     turn into twenty bubbles appearing in the same frame. */
   msgs.slice(-3).forEach((m,i)=>{
-    const line=String(m.username||'').slice(0,18)+': '+String(m.body||'').slice(0,60);
-    setTimeout(()=>{ try{ spawnTaunt(line,'them'); }catch(e){} },i*450);
+    setTimeout(()=>{ try{ lsSayBubble(m.userId,m.body); }catch(e){} },i*350);
   });
 }
 function lsChatWatchStart(){
@@ -20006,21 +20075,36 @@ async function lsInviteOpen(){
       onSecondary:()=>closeAaaModal(false)});
   }catch(e){ return; }
   const box=()=>document.getElementById('lsInvList');
-  let list=[];
-  try{
-    const r=await pzApi('GET','/users/online');
-    list=(r&&r.data&&r.data.players)||[];
-  }catch(e){}
+  /* «به غیر از افراد آنلاین، دوستان رو هم بتونیم دعوت کنیم به اتاق.»
+     The two lists are fetched together and the friends come first: they are the
+     people this player actually wants in their room. Somebody who is both a
+     friend and in the lobby is one person, so they appear once — under
+     «دوستان», where the player will look for them. */
+  let online=[],friends=[];
+  try{ const r=await pzApi('GET','/users/online'); online=(r&&r.data&&r.data.players)||[]; }catch(e){}
+  try{ const r=await pzApi('GET','/friends'); const d=(r&&r.data)||[]; friends=Array.isArray(d)?d:[]; }catch(e){}
+  const fid=new Set(friends.map(f=>String(f.id)));
+  const list=[]
+    .concat(friends.map(f=>({ userId:f.id, username:f.displayName||f.username, level:f.level||1,
+                              avatar:f.avatar||'', character:f.character||null,
+                              /* An invite lasts a minute; somebody who is not
+                                 there cannot answer inside it. */
+                              canInvite:!!f.online, why:f.online?'':'آفلاین', kind:'friend' })))
+    .concat(online.filter(p=>!fid.has(String(p.userId||p.id))).map(p=>Object.assign({},p,{
+      why:p.inMatch?'وسط مسابقه':(p.invitePending?'دعوت دیگری دارد':''), kind:'online' })));
   const el=box(); if(!el) return;
-  if(!list.length){ el.innerHTML='<div style="opacity:.75;padding:10px 4px">الان کسی در لابی نیست.</div>'; return; }
+  if(!list.length){ el.innerHTML='<div style="opacity:.75;padding:10px 4px">نه دوستی داری نه کسی در لابی است.</div>'; return; }
+  let lastKind='';
   el.innerHTML=list.map((p,i)=>{
-    const why=p.inMatch?'وسط مسابقه':(p.invitePending?'دعوت دیگری دارد':'');
+    const head=(p.kind!==lastKind)
+      ? '<div class="pz-inv-head">'+(p.kind==='friend'?'دوستان':'افراد آنلاین')+'</div>' : '';
+    lastKind=p.kind;
     const face=(p.character&&p.character.image)
       ? '<img src="'+frEsc(p.character.image)+'" alt="">'
       : (p.avatar?'<img src="'+frEsc(p.avatar)+'" alt="">':'👤');
-    return '<div class="pz-inv-row"><div class="f">'+face+'</div>'+
+    return head+'<div class="pz-inv-row"><div class="f">'+face+'</div>'+
       '<div class="n">'+pzEsc(p.username||p.displayName||'بازیکن')+
-        '<small>سطح '+fa(p.level||1)+(why?(' · '+why):'')+'</small></div>'+
+        '<small>سطح '+fa(p.level||1)+(p.why?(' · '+p.why):'')+'</small></div>'+
       (p.canInvite
         ? '<button class="go" data-i="'+i+'">دعوت</button>'
         : '<button class="off" disabled>—</button>')+

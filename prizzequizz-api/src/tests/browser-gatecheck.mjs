@@ -132,8 +132,12 @@ const readable = (page, needle) => page.evaluate((txt) => {
   ok('nor its options', peek.options === 0, String(peek.options));
   ok('they get a countdown of their own', peek.modal === true, JSON.stringify(peek.modal));
   /* Not «آماده‌ای؟» — they are not about to answer anything, and being asked
-     that while knocked out was its own complaint. */
-  ok('worded for someone who is watching, not answering', /سوال بعدی/.test(peek.modalText) && !/آماده‌ای/.test(peek.modalText), peek.modalText.trim());
+     that while knocked out was its own complaint. The rest of the wording
+     depends on the round: round one opens the match for everybody, later
+     rounds are «سوال بعدی». Both say the same thing to a watcher — you will
+     see it with everyone else. */
+  ok('never asked whether they are ready', !/آماده‌ای/.test(peek.modalText), peek.modalText.trim());
+  ok('worded for someone who is watching, not answering', /همراه بقیه/.test(peek.modalText), peek.modalText.trim());
 
   await feed(page, snap({ room: { phase: 'question', phaseEndsAt: Date.now() + 15000 }, me: { status: 'eliminated', eliminatedRound: 1 } }));
   await page.waitForTimeout(500);
