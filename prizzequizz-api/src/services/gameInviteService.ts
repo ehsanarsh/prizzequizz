@@ -171,6 +171,31 @@ export async function claimedAmong(userIds: string[], now = Date.now()): Promise
   return out;
 }
 
+/* THE KEY TO A PRIVATE ROOM.
+ *
+ * Was this person asked into this room, and did they say yes? Deliberately NOT
+ * bounded by the invite's sixty-second window: that window is how long they
+ * have to ANSWER, not how long they have to pick a ticket and walk in. The room
+ * closes long before this does, so the room is the real limit. */
+const ROOM_KEY_TTL_MS = 2 * 60 * 60_000;
+export async function acceptedForRoom(userId: string, roomId: string, now = Date.now()): Promise<boolean> {
+  if (!userId || !roomId) return false;
+  const since = now - ROOM_KEY_TTL_MS;
+  const pool = pg();
+  if (!pool) {
+    for (const i of mem.values()) {
+      if (i.toUserId === userId && i.roomId === roomId && i.status === 'accepted' && i.createdAt >= since) return true;
+    }
+    return false;
+  }
+  await ensureSchema(pool);
+  const { rows } = await pool.query(
+    `SELECT 1 FROM game_invites WHERE to_user_id=$1 AND room_id=$2 AND status='accepted' AND created_at >= $3 LIMIT 1`,
+    [userId, roomId, since]
+  );
+  return rows.length > 0;
+}
+
 export interface CreateInviteInput {
   fromUserId: string;
   fromName: string;

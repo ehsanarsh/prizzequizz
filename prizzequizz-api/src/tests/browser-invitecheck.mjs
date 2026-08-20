@@ -34,6 +34,8 @@ let onlinePlayers = [];
 const posted = [];
 /* What the sender's poll gets back while they wait. */
 let inviteStatus = { id: 'inv1', status: 'pending', secondsLeft: 55 };
+/* Flipped on to make the next entry fail the way a real one fails: no ticket. */
+let joinFails = false;
 
 async function makePage() {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
@@ -49,9 +51,36 @@ async function makePage() {
       let body = {}; try { body = JSON.parse(route.request().postData() || '{}'); } catch (e) {}
       posted.push({ path: p, body });
       if (/^\/invites$/.test(p)) return route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ ok: true, data: { id: 'inv1', status: 'pending' } }) });
+      if (p === '/last-survivor/rooms') return route.fulfill({ status: 201, contentType: 'application/json',
+        body: JSON.stringify({ ok: true, data: { roomId: 'R-PRIV', topic: body.topic, isPrivate: true, startsAt: Date.now() + 90000, capacity: 20, minUsers: 2 } }) });
+      if (p === '/last-survivor/join' && joinFails) return route.fulfill({ status: 409, contentType: 'application/json',
+        body: JSON.stringify({ ok: false, error: { code: 'NO_TICKET', message: 'بلیط سبز نداری.', status: 409 } }) });
+      if (p === '/last-survivor/join') return route.fulfill({ status: 201, contentType: 'application/json',
+        body: JSON.stringify({ ok: true, data: { room: { id: body.roomId || 'R-PUB', topic: body.topic, status: 'waiting', phase: 'waiting', round: 0,
+          totalRounds: 12, capacity: 20, startsAt: Date.now() + 60000, phaseEndsAt: 0, serverNow: Date.now(), grossPool: 12500, chatEnabled: true, forfeited: 0 },
+          players: [], me: { userId: 'me', status: 'waiting', shields: 0, units: 1, lifelinesUsed: [] },
+          stats: { alive: 1, eliminated: 0, cashedOut: 0, totalPlayers: 1, grossPot: 12500, remainingPot: 12500, paidOut: 0 }, question: null, votes: 0 } }) });
       return send({});
     }
     if (p === '/users/online') return send({ players: onlinePlayers, onlineTotal: onlinePlayers.length, nextCost: 0, freeLeft: 3, coins: 500 });
+    /* The room poll answers with a real snapshot. The server's own route 404s
+       when there is no room rather than handing back an empty object, so a stub
+       that returns `{}` here is testing a reply the game never sends. */
+    if (/^\/last-survivor\/rooms\/[^/]+$/.test(p)) {
+      const rid = p.split('/').pop();
+      const now = Date.now();
+      return send({ room: { id: rid, topic: 'ورزشی', status: 'waiting', phase: 'waiting', round: 0, totalRounds: 12,
+        capacity: 20, startsAt: now + 60000, phaseEndsAt: 0, serverNow: now, grossPool: 12500, chatEnabled: true, forfeited: 0 },
+        players: [{ userId: 'me', username: 'احسان', avatar: '', character: null, color: 'green', status: 'waiting', shields: 0, units: 1 }],
+        me: { userId: 'me', username: 'احسان', status: 'waiting', shields: 0, units: 1, currentShare: 0, lifelinesUsed: [] },
+        stats: { alive: 1, eliminated: 0, cashedOut: 0, totalPlayers: 1, grossPot: 12500, remainingPot: 12500, paidOut: 0 },
+        question: null, votes: 0 });
+    }
+    if (p === '/last-survivor/topics') return send({
+      tickets: { green: { value: 12500 }, blue: { value: 25000 }, red: { value: 50000 } },
+      topics: [{ name: 'ورزشی', playable: true, questionCount: 40, icon: '⚽' },
+               { name: 'تاریخ', playable: true, questionCount: 25, icon: '🏛️' },
+               { name: 'قفل', playable: false, questionCount: 0, icon: '🔒' }] });
     if (p === '/invites/incoming') return send({ invites: [] });
     if (/^\/invites\/[^/]+$/.test(p)) return send(inviteStatus);
     return send({});
@@ -405,10 +434,19 @@ const modal = (page) => page.evaluate(() => {
   posted.length = 0;
   await page.evaluate(() => (0, eval)('inviteFriend')('u-sara'));
   await page.waitForTimeout(500);
+  /* «اول مود بازی‌ها بیاد انتخاب کنی» — the game comes before the ticket. */
+  const modes = await page.evaluate(() => [...document.querySelectorAll('.pz-inv-mode')].map((b) => b.getAttribute('data-mode')));
+  ok('it asks which game first', modes.length === 2, modes.join(','));
+  ok('a duel', modes.indexOf('duel') >= 0, modes.join(','));
+  ok('or Last Survivor', modes.indexOf('ls') >= 0, modes.join(','));
+  ok('and nothing is sent while it is still asking', posted.length === 0, JSON.stringify(posted));
+
+  await page.evaluate(() => document.querySelector('.pz-inv-mode[data-mode="duel"]').click());
+  await page.waitForTimeout(500);
   const tiers = await page.evaluate(() => [...document.querySelectorAll('.pz-inv-tk')].map((b) => b.getAttribute('data-tk')));
   /* «نوع بلیط رو مشخص کنی» — it must ask, not assume. */
-  ok('it asks which ticket first', tiers.length > 0, tiers.join(','));
-  ok('and nothing has been sent while it is still asking', posted.length === 0, JSON.stringify(posted));
+  ok('picking a duel then asks which ticket', tiers.length > 0, tiers.join(','));
+  ok('and still nothing sent', posted.length === 0, JSON.stringify(posted));
 
   await page.evaluate(() => { const b = document.querySelector('.pz-inv-tk[data-tk="green"]') || document.querySelector('.pz-inv-tk'); b.click(); });
   await page.waitForTimeout(600);
@@ -430,6 +468,83 @@ const modal = (page) => page.evaluate(() => {
   }));
   ok('an offline friend is not invited into a minute they cannot answer', posted.length === 0 && offline.asked === 0, JSON.stringify(offline));
   ok('and the player is told why', /آنلاین نیست/.test(offline.said), offline.said);
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
+/* ── A ROOM OF YOUR OWN ──────────────────────────────────────────────────── */
+/* «اگه آخرین بازمانده رو انتخاب کردی بتونی روم اختصاصی داشته باشی و بتونی
+   دوستانت رو به بازی دعوت کنی.» */
+{
+  const { ctx, page, errs } = await makePage();
+  console.log('asking a friend into a private room:');
+  await page.evaluate(() => {
+    const D = (0, eval)('FRIENDS_DATA');
+    D.length = 0;
+    D.push({ id: 'u-sara', a: '', ch: null, n: 'سارا', u: 'sara', lvl: 4, on: true, seen: null,
+             unread: 0, fav: false, s: '', league: '', last: '', m: [] });
+    (0, eval)("userPlan='premium'; planExplicitlyChosen=true; frActiveChat=null; frActiveTab='friends'; go('friends');");
+    (0, eval)('renderFriendsHub')();
+  });
+  await page.waitForTimeout(400);
+  posted.length = 0;
+  await page.evaluate(() => (0, eval)('inviteFriend')('u-sara'));
+  await page.waitForTimeout(400);
+  await page.evaluate(() => document.querySelector('.pz-inv-mode[data-mode="ls"]').click());
+  await page.waitForTimeout(800);
+
+  const topics = await page.evaluate(() => [...document.querySelectorAll('.pz-inv-topic')].map((b) => b.getAttribute('data-t')));
+  ok('it asks which topic the room is for', topics.length > 0, topics.join(' / '));
+  /* A topic with nothing behind it is not a room anybody can play. */
+  ok('and only offers ones the game can play', topics.indexOf('قفل') < 0 && topics.every(Boolean), topics.join(' / '));
+  ok('nothing sent yet', posted.length === 0, JSON.stringify(posted));
+
+  await page.evaluate(() => document.querySelector('.pz-inv-topic').click());
+  await page.waitForTimeout(900);
+
+  const made = posted.find((x) => x.path === '/last-survivor/rooms');
+  ok('picking one opens a private room on the server', !!made, JSON.stringify(posted.map((p) => p.path)));
+  ok('for that topic', !!made && made.body.topic === topics[0], JSON.stringify(made && made.body));
+
+  const inv = posted.find((x) => x.path === '/invites');
+  ok('and the friend is invited into it', !!inv, JSON.stringify(inv && inv.body));
+  ok('as a Last Survivor invite, not a duel', !!inv && inv.body.mode === 'ls', JSON.stringify(inv && inv.body));
+  ok('carrying the room that was just made', !!inv && inv.body.roomId === 'R-PRIV', JSON.stringify(inv && inv.body));
+  /* The room is what locks everybody else out of asking the same person. */
+  ok('and the room it was sent from', !!inv && inv.body.fromRoomId === 'R-PRIV', JSON.stringify(inv && inv.body));
+
+  const landed = await page.evaluate(() => ({
+    screen: [...document.querySelectorAll('.screen')].find((s) => s.classList.contains('active')).id,
+    topic: (0, eval)('lsEntryTopic'),
+    room: (0, eval)('lsInviteRoom')
+  }));
+  ok('the owner is taken to their own room’s ticket screen', landed.screen === 'lsEntry', JSON.stringify(landed));
+  ok('for the topic they chose', landed.topic === topics[0], String(landed.topic));
+  ok('and will be put in that room, not another one', landed.room === 'R-PRIV', String(landed.room));
+
+  /* THE POINT OF THE WHOLE THING: paying takes them into THAT room. */
+  posted.length = 0;
+  await page.evaluate(async () => { await (0, eval)('lsDoJoin')((0, eval)('lsEntryTopic'), 'green'); await new Promise((r) => setTimeout(r, 400)); });
+  const joined = posted.find((x) => x.path === '/last-survivor/join');
+  ok('and the entry names the room', !!joined && joined.body.roomId === 'R-PRIV', JSON.stringify(joined && joined.body));
+  const spent = await page.evaluate(() => (0, eval)('lsInviteRoom'));
+  ok('the room is spent once, so the next ordinary game is not hijacked', spent === null, String(spent));
+
+  /* A FAILED ENTRY MUST NOT BURN THE INVITATION. Out of tickets, a slow
+     network, a room that filled up while they were choosing — the player fixes
+     it and tries again, and must still be going to the room they were asked
+     into rather than a public one. */
+  joinFails = true;
+  await page.evaluate(() => { (0, eval)("lsInviteRoom='R-PRIV';"); });
+  posted.length = 0;
+  await page.evaluate(async () => { await (0, eval)('lsDoJoin')('ورزشی', 'green'); await new Promise((r) => setTimeout(r, 400)); });
+  const kept = await page.evaluate(() => (0, eval)('lsInviteRoom'));
+  ok('a refused entry leaves the invitation standing', kept === 'R-PRIV', String(kept));
+  joinFails = false;
+  posted.length = 0;
+  await page.evaluate(async () => { await (0, eval)('lsDoJoin')('ورزشی', 'green'); await new Promise((r) => setTimeout(r, 400)); });
+  const retried = posted.find((x) => x.path === '/last-survivor/join');
+  ok('so trying again still goes to that room', !!retried && retried.body.roomId === 'R-PRIV', JSON.stringify(retried && retried.body));
   ok('no script errors', errs.length === 0, errs.join(' | '));
   await ctx.close();
 }

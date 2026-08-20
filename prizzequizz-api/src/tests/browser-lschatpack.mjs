@@ -97,6 +97,25 @@ const hasBtn = (page) => page.evaluate(() => {
   ok('it is on the match dashboard', dash.there && dash.shown, JSON.stringify(dash));
   ok('and says what it is', /چت/.test(dash.text), dash.text);
 
+  /* «باید زیر کادر بالا و سمت راست نوشتهٔ وضعیت مسابقه باشه» — on the heading's
+     line, at the right-hand edge, not banished to a far corner. */
+  const place = await page.evaluate(() => {
+    const b = document.getElementById('lsQuickChat');
+    const hd = document.querySelector('#lsBody .ls-elim-hd h2');
+    const card = document.querySelector('#lsBody .ls-dash-mini');
+    if (!b || !hd || !card) return null;
+    const rb = b.getBoundingClientRect(), rh = hd.getBoundingClientRect();
+    const vw = document.getElementById('vp').getBoundingClientRect();
+    return { sameLine: Math.abs((rb.top + rb.height / 2) - (rh.top + rh.height / 2)) <= 26,
+             fromRight: Math.round(vw.right - rb.right),
+             belowCard: Math.round(rb.top - card.getBoundingClientRect().bottom),
+             headingCentred: Math.abs((rh.left + rh.right) / 2 - (vw.left + vw.right) / 2) <= 8 };
+  });
+  ok('on the same line as the heading', !!place && place.sameLine, JSON.stringify(place));
+  ok('at the right-hand side', place.fromRight >= 0 && place.fromRight <= 24, place.fromRight + 'px from the right');
+  ok('below the card above it', place.belowCard >= 0 && place.belowCard <= 40, place.belowCard + 'px under the card');
+  ok('and the heading is still centred', place.headingCentred, String(place.headingCentred));
+
   /* Each phase is entered fresh, not pushed on top of the last one: the room
      only ever moves forward, and lsRender rightly throws away a snapshot that
      goes backwards. */
@@ -164,6 +183,19 @@ const hasBtn = (page) => page.evaluate(() => {
              phrases: [...document.querySelectorAll('#qcpBody .qcp-grid button')].map((b) => b.textContent.trim()) };
   });
   ok('the pack sheet opens', sheet.open, String(sheet.open));
+  /* IT MUST BE ON SCREEN, not merely marked open. The sheet used to be a child
+     of the duel screen — display:none everywhere else — so pressing «چت» in a
+     room opened something nobody could see, and the player found it already
+     open the next time they walked into a duel. */
+  const seen = await page.evaluate(() => {
+    const sh = document.getElementById('qcpSheet');
+    const r = sh.getBoundingClientRect();
+    const inside = document.getElementById('duel').contains(sh);
+    return { visible: sh.offsetParent !== null && r.width > 100 && r.height > 100,
+             insideDuel: inside, w: Math.round(r.width), h: Math.round(r.height) };
+  });
+  ok('and is actually on screen', seen.visible, JSON.stringify(seen));
+  ok('because it does not belong to the duel screen', seen.insideDuel === false, String(seen.insideDuel));
   ok('with the packs the player owns', sheet.phrases.length === 3, sheet.phrases.join(' / '));
   ok('and the locked one still offered', sheet.tabs.length === 2, sheet.tabs.join(' | '));
 
@@ -255,6 +287,34 @@ const hasBtn = (page) => page.evaluate(() => {
     phrases: document.querySelectorAll('#qcpBody .qcp-grid button').length
   }));
   ok('a pack that is not owned cannot be sent from here either', locked.buy && locked.phrases === 0, JSON.stringify(locked));
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
+/* ── IT DOES NOT FOLLOW THE PLAYER OUT ───────────────────────────────────── */
+/* «وقتی خروج میکنی میری دوئل میبینی اتوماتیک دکمهٔ چت زده شده و متن‌ها رو نشون
+   میده» — the sheet was left open behind the room and turned up by itself on
+   the next screen. Leaving a screen closes it. */
+{
+  const { ctx, page, errs } = await makePage();
+  console.log('walking out of the room with the sheet open:');
+  chatMsgs = []; posted.length = 0;
+  await enter(page, room());
+  await page.waitForTimeout(400);
+  await page.evaluate(() => document.getElementById('lsQuickChat').click());
+  await page.waitForTimeout(600);
+  const wasOpen = await page.evaluate(() => document.getElementById('qcpSheet').classList.contains('show'));
+  ok('it is open in the room', wasOpen, String(wasOpen));
+
+  const after = await page.evaluate(async () => {
+    (0, eval)("go('duel')");
+    await new Promise((r) => setTimeout(r, 500));
+    const sh = document.getElementById('qcpSheet');
+    return { open: sh.classList.contains('show'), phrases: document.querySelectorAll('#qcpBody .qcp-grid button').length,
+             visible: sh.offsetParent !== null };
+  });
+  ok('and shut the moment the player leaves', after.open === false, JSON.stringify(after));
+  ok('so nothing greets them on the next screen', after.visible === false, String(after.visible));
   ok('no script errors', errs.length === 0, errs.join(' | '));
   await ctx.close();
 }

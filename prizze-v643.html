@@ -1437,11 +1437,14 @@ input,textarea,select,[contenteditable="true"],.pz-selectable,.pz-selectable *{
   font-weight:900;color:#141414;background:linear-gradient(180deg,#FFE24A,var(--bolt-2));
   box-shadow:0 3px 0 #000;cursor:pointer;white-space:nowrap;line-height:1.5}
 .pzm-chatbtn:active{transform:translateY(3px);box-shadow:0 0 0 #000}
-/* The Last Survivor match's chat button. Bigger than the duel's — it stands on
-   its own line here instead of tucking under an avatar — and pinned to the end
-   of the row so it never lands where a thumb is already reaching for an answer. */
-.ls-quickbar{display:flex;justify-content:flex-end;margin:0 0 8px}
-.ls-quickbar .pzm-chatbtn{font-size:12.5px;padding:8px 14px;border-radius:13px}
+/* The Last Survivor match's chat button: on the line under the dashboard card,
+   at the right-hand side of the «وضعیت مسابقه» heading. It is placed OVER that
+   row rather than in its flow, so the heading stays exactly where it was —
+   centred — instead of being shoved off to make room. */
+.ls-elim-hd{position:relative}
+.ls-elim-hd.bare{padding:12px 14px 6px;min-height:46px}
+.ls-quickchat{position:absolute;inset-inline-start:14px;top:12px;
+  font-size:12.5px;padding:8px 14px;border-radius:13px;z-index:2}
 
 .qcp-sheet{position:absolute;inset:0;z-index:60;display:none;background:rgba(0,0,0,.5);backdrop-filter:blur(2px)}
 .qcp-sheet.show{display:block}
@@ -5656,16 +5659,6 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
         <div class="timer-ring" id="dRing"><svg width="54" height="54"><circle cx="27" cy="27" r="23" fill="none" stroke="rgba(255,255,255,.14)" stroke-width="5"/><circle id="dTimerArc" cx="27" cy="27" r="23" fill="none" stroke="#FFD23F" stroke-width="5" stroke-linecap="round" stroke-dasharray="145"/></svg></div>
         <div class="pen-slots" id="myDots"></div><div class="pen-slots" id="oppDots"></div>
       </div>
-      <!-- QUICK-CHAT SHEET: the packs, their sentences, and the lock on the
-           ones not bought yet. Everything in it comes from /chat-packs. -->
-      <div class="qcp-sheet" id="qcpSheet" aria-hidden="true">
-        <div class="qcp-panel" role="dialog" aria-label="چت سریع">
-          <div class="qcp-grip"></div>
-          <div class="qcp-head"><b>چت سریع</b><button class="qcp-x" onclick="qcClose()" aria-label="بستن">✕</button></div>
-          <div class="qcp-tabs" id="qcpTabs"></div>
-          <div class="qcp-body" id="qcpBody"></div>
-        </div>
-      </div>
       <!-- Duel toss intro overlay -->
       <div id="duelTossIntro">
         <div class="dti-rays"></div>
@@ -6371,6 +6364,23 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
   <!-- Live connection-quality banner (own + opponent). Only visible during a
        real match; slides down from the top of the game area. -->
   <div id="pzConnBanner" aria-live="polite"><span id="pzConnIco">⚠️</span><span id="pzConnTxt"></span></div>
+
+  <!-- QUICK-CHAT SHEET: the packs, their sentences, and the lock on the ones
+       not bought yet. Everything in it comes from /chat-packs.
+
+       IT LIVES HERE, not inside the duel screen, because it is not the duel's.
+       While it was a child of <section id="duel"> — which is display:none for
+       every other screen — pressing «چت» inside a Last Survivor match opened a
+       sheet that was on the page but invisible, and then it was found already
+       open the next time the player walked into a duel. -->
+  <div class="qcp-sheet" id="qcpSheet" aria-hidden="true">
+    <div class="qcp-panel" role="dialog" aria-label="چت سریع">
+      <div class="qcp-grip"></div>
+      <div class="qcp-head"><b>چت سریع</b><button class="qcp-x" onclick="qcClose()" aria-label="بستن">✕</button></div>
+      <div class="qcp-tabs" id="qcpTabs"></div>
+      <div class="qcp-body" id="qcpBody"></div>
+    </div>
+  </div>
 
   <!-- Shared AAA modal system -->
   <div id="aaaModal" role="dialog" aria-modal="true" aria-hidden="true">
@@ -7573,8 +7583,17 @@ function lsEntryStart(){
 
 async function lsDoJoin(topic,color){
   toast('در حال ورود…');
-  const r=await pzApi('POST','/last-survivor/join',{topic,color});
+  /* THE ROOM THEY WERE ASKED INTO.
+     Without this the server picks whichever room for this topic happens to be
+     open, so two people who arranged to play could pay their tickets and end up
+     in different rooms — and a private room could not be entered at all. It is
+     cleared only once the entry succeeded: a failed join (no ticket, room full)
+     must leave the invitation still standing. */
+  const body={topic,color};
+  if(lsInviteRoom) body.roomId=lsInviteRoom;
+  const r=await pzApi('POST','/last-survivor/join',body);
   if(!r||r.ok===false){ toast((r&&r.error&&r.error.message)||'ورود ناموفق بود'); return; }
+  lsInviteRoom=null;
   const snap=r.data; if(!snap||!snap.room){ toast('خطا در ورود'); return; }
   lsRoomId=snap.room.id; lsLastKey=''; lsDeadDismissed=false; lsChatSeen=0; lsEndShown=false; lsForfeited=0; lsReadyShownRound='';
   try{ lsChatWatchStop(); lsChatWatchStart(); }catch(e){}
@@ -7942,11 +7961,12 @@ function lsBuild(snap){
     verdict='<div class="ls-verdict bad">'+(timedOut?'⏳ زمان شما به پایان رسید — ':'❌ ')+
       'پاسخ درست: <b>'+(correctTxt||'—')+'</b> — شما حذف شدید</div>';
   }
-  body.innerHTML=watch+lsQuickBar(snap)+lsDashHtml(snap,true)+verdict+
+  body.innerHTML=watch+lsDashHtml(snap,true)+verdict+
     /* The elimination screen says nothing: the grid is already showing who went
        out, and a heading over it only repeats what the cards are saying. The
-       other phases keep their line. */
-    (r.phase==='elimination'?'':'<div class="ls-elim-hd"><h2>وضعیت مسابقه</h2><p>جایزه با حذف هر نفر بیشتر می‌شود</p></div>')+
+       other phases keep their line. The row itself stays either way, because
+       the chat button rides on it. */
+    lsHeadRow(snap,r.phase!=='elimination')+
     lsGridHtml(snap,r.phase==='elimination');
   if(r.phase==='elimination') lsAnimateElimination(snap);
 }
@@ -7966,8 +7986,16 @@ function lsQuickBar(snap){
      time as well as toggled later, because a button drawn after the setting
      changed would otherwise appear until the next time settings were applied. */
   const off=(typeof appSettings!=='undefined'&&appSettings&&appSettings.quickChat===false);
-  return '<div class="ls-quickbar"><button class="pzm-chatbtn" id="lsQuickChat"'+
-    (off?' style="display:none"':'')+' onclick="qcOpen()">💬 چت</button></div>';
+  return '<button class="pzm-chatbtn ls-quickchat" id="lsQuickChat"'+
+    (off?' style="display:none"':'')+' onclick="qcOpen()">💬 چت</button>';
+}
+/* The line under the dashboard card. It carries the heading on the phases that
+   have one, and the chat button on all of them. */
+function lsHeadRow(snap,withText){
+  const btn=lsQuickBar(snap);
+  if(!btn&&!withText) return '';
+  return '<div class="ls-elim-hd'+(withText?'':' bare')+'">'+btn+
+    (withText?'<h2>وضعیت مسابقه</h2><p>جایزه با حذف هر نفر بیشتر می‌شود</p>':'')+'</div>';
 }
 
 /* WHERE A READY-MADE PHRASE GOES.
@@ -8903,6 +8931,9 @@ function showScreen(id){
   try{pzApplyWall(id);}catch(e){}
   syncNav(id);
   document.querySelectorAll('.qc-bar').forEach(b=>b.classList.remove('show'));
+  /* The quick-chat sheet belongs to the screen it was opened from. Now that it
+     lives outside them it would otherwise follow the player around. */
+  try{ qcClose(); }catch(e){}
   return true;
 }
 let screenStack=[];
@@ -11932,7 +11963,12 @@ function inviteFriend(id){
   const f=FRIENDS_DATA.find(x=>x.id===id); if(!f) return;
   if(!f.on){ toast(f.n+' الان آنلاین نیست — دعوت فقط تا یک دقیقه اعتبار دارد',3200); return; }
   const who={id:f.id,userId:f.id,username:f.n,displayName:f.n};
-  pzInvitePickTicket(who,(tier)=>{ pzInviteSend(who,'duel',{ticketTier:tier}); });
+  /* «اول مود بازی‌ها بیاد انتخاب کنی» — a friend is not always being asked to
+     a duel, so the game comes first and the rest follows from it. */
+  pzInvitePickMode(who,(mode)=>{
+    if(mode==='ls'){ pzInvitePickTopic(who); return; }
+    pzInvitePickTicket(who,(tier)=>{ pzInviteSend(who,'duel',{ticketTier:tier}); });
+  });
   sfx('found');
 }
 async function sendFriendRequest(){const i=document.getElementById('friendAddInput');const v=(i?.value||'').trim();if(!v){toast('یوزرنیم دوستت رو وارد کن');return;}const r=await pzApi('POST','/friends/requests',{username:v.replace(/^@/,'')});if(r&&r.ok){const st=r.data&&r.data.status;toast(st==='accepted'?'حالا دوست شدید ✅':'درخواست دوستی ارسال شد 🤝');recordMissionEvent('social',1);if(i)i.value='';friendsLoad();}else{toast((r&&r.error&&r.error.message)||'خطا در ارسال درخواست');}}
@@ -20118,6 +20154,77 @@ async function pzInvitePoll(){
 /* ── SENDING ONE ─────────────────────────────────────────────────────────
    For a duel the tier has to be chosen first: «در هنگام ارسال درخواست بازی
    باید نوع بلیط رو مشخص کنی و ارسال کنی». */
+/* WHICH GAME, BEFORE WHICH TICKET.
+   Two ways to play with one person you know: a duel, which is the two of you,
+   or a Last Survivor room that belongs to you and holds everybody you ask. */
+function pzInvitePickMode(user,onPick){
+  const who=pzEsc(user.username||user.displayName||'بازیکن');
+  try{
+    showAaaModal({
+      icon:'🎮', title:'کدام بازی؟',
+      sub:'<div style="margin-bottom:8px;font-size:12.5px">دعوت برای <b>'+who+'</b></div>'+
+        '<button class="btn btn-green pz-inv-mode" data-mode="duel" style="width:100%;margin-bottom:8px">⚔️ دوئل تن‌به‌تن</button>'+
+        '<button class="btn btn-primary pz-inv-mode" data-mode="ls" style="width:100%">🏆 آخرین بازمانده — اتاق خصوصی</button>',
+      dismissible:true, primaryText:'', secondaryText:'بی‌خیال',
+      onSecondary:()=>closeAaaModal(false)
+    });
+    setTimeout(()=>{
+      document.querySelectorAll('.pz-inv-mode').forEach(b=>{
+        b.onclick=()=>{ const m=b.getAttribute('data-mode'); closeAaaModal(true); setTimeout(()=>onPick(m),150); };
+      });
+    },60);
+  }catch(e){}
+}
+
+/* A PRIVATE ROOM IS A ROOM FOR A TOPIC. There is no such thing as a room with
+   no subject, so the topic is asked for before the room is made — and only the
+   topics the game can actually play are offered. */
+async function pzInvitePickTopic(user){
+  let rows=Object.keys(LS_TOPIC_ROWS||{}).map(k=>LS_TOPIC_ROWS[k]).filter(t=>t&&t.playable);
+  if(!rows.length){
+    toast('در حال گرفتن موضوع‌ها…');
+    try{ await lsLoadTopics(); }catch(e){}
+    rows=Object.keys(LS_TOPIC_ROWS||{}).map(k=>LS_TOPIC_ROWS[k]).filter(t=>t&&t.playable);
+  }
+  if(!rows.length){ toast('الان موضوع فعالی برای ساخت اتاق نیست',3000); return; }
+  const who=pzEsc(user.username||user.displayName||'بازیکن');
+  try{
+    showAaaModal({
+      icon:'🏆', title:'اتاق خصوصی برای کدام موضوع؟',
+      sub:'<div style="margin-bottom:8px;font-size:12.5px">اتاق مال توست و '+who+' با دعوت وارد می‌شود</div>'+
+        '<div style="max-height:44vh;overflow:auto;text-align:start">'+
+        rows.map(t=>'<button class="btn btn-ghost pz-inv-topic" data-t="'+frEsc(t.name)+'" style="width:100%;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">'+
+          '<span>'+frEsc(t.name)+'</span><span style="opacity:.8;font-size:12px">'+fa(t.questionCount||0)+' سوال</span></button>').join('')+
+        '</div>',
+      dismissible:true, primaryText:'', secondaryText:'بی‌خیال',
+      onSecondary:()=>closeAaaModal(false)
+    });
+    setTimeout(()=>{
+      document.querySelectorAll('.pz-inv-topic').forEach(b=>{
+        b.onclick=()=>{ const t=b.getAttribute('data-t'); closeAaaModal(true); setTimeout(()=>pzInviteMakeRoom(user,t),150); };
+      });
+    },60);
+  }catch(e){}
+}
+
+/* Open the room, ask them in, and walk the owner to their own door.
+   Nothing is charged for the room itself — the owner pays the ordinary ticket
+   on the ordinary entry screen, exactly like every other player, which is what
+   keeps this away from the code that handles money. */
+async function pzInviteMakeRoom(user,topic){
+  if(!topic) return;
+  const r=await pzApi('POST','/last-survivor/rooms',{topic});
+  const roomId=(r&&r.data&&r.data.roomId)||'';
+  if(!r||r.ok===false||!roomId){ toast((r&&r.error&&r.error.message)||'ساخت اتاق ناموفق بود',3000); return; }
+  const sent=await pzInviteSend(user,'ls',{roomId:roomId,fromRoomId:roomId});
+  /* The owner goes in either way. If the invite bounced — they were already
+     asked by somebody else, say — the room still exists and more people can be
+     asked from inside it, which is better than throwing it away. */
+  lsInviteRoom=roomId;
+  lsChooseColor(topic);
+  toast(sent?'اتاق خصوصی ساخته شد — دعوت فرستاده شد ⏳':'اتاق ساخته شد — از داخل اتاق دعوت کن',3200);
+}
+
 function pzInvitePickTicket(user,onPick){
   const rows=(typeof TICKET_DEFS!=='undefined'?TICKET_DEFS:[]).map(t=>
     '<button class="btn btn-ghost pz-inv-tk" data-tk="'+frEsc(t.key)+'" style="width:100%;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">'+

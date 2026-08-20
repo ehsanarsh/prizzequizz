@@ -46,6 +46,13 @@ export interface RoomRow {
   startsAt: number;             // waiting-room deadline
   startedAt: number | null;
   endedAt: number | null;
+  /* A PRIVATE ROOM. «اگه آخرین بازمانده رو انتخاب کردی بتونی روم اختصاصی داشته
+   * باشی و دوستانت رو دعوت کنی» — a room matchmaking will never hand to a
+   * passer-by. It is the ordinary game in every other respect: same tickets,
+   * same pot, same rake. `ownerId` is whoever opened it, and only people they
+   * invited can get in. */
+  isPrivate: boolean;
+  ownerId: string | null;
 }
 
 export interface PlayerRow {
@@ -88,7 +95,14 @@ async function ensureSchema(pool: ReturnType<typeof getPgPool>): Promise<void> {
     manual_start_enabled BOOLEAN NOT NULL, start_pct INT NOT NULL, total_rounds INT NOT NULL,
     round INT NOT NULL DEFAULT 0, gross_pool BIGINT NOT NULL DEFAULT 0, rake_percent INT NOT NULL DEFAULT 0,
     question_id TEXT, correct_index INT, phase_ends_at BIGINT,
-    created_at BIGINT NOT NULL, starts_at BIGINT NOT NULL, started_at BIGINT, ended_at BIGINT)`);
+    created_at BIGINT NOT NULL, starts_at BIGINT NOT NULL, started_at BIGINT, ended_at BIGINT,
+    is_private BOOLEAN NOT NULL DEFAULT false, owner_id TEXT)`);
+  /* `CREATE TABLE IF NOT EXISTS` leaves an existing table exactly as it is, so
+     anything added to the shape above must be added again here for the
+     databases that predate it — see schemaUpgrade.test.ts. */
+  for (const col of ['is_private BOOLEAN NOT NULL DEFAULT false', 'owner_id TEXT']) {
+    await pool.query(`ALTER TABLE ls_rooms ADD COLUMN IF NOT EXISTS ${col}`);
+  }
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_ls_rooms_status ON ls_rooms(status, topic)`);
   await pool.query(`CREATE TABLE IF NOT EXISTS ls_room_players (
     room_id TEXT NOT NULL, user_id TEXT NOT NULL, username TEXT NOT NULL, avatar TEXT,
@@ -135,7 +149,8 @@ function roomToRow(r: any): RoomRow {
     questionId: r.question_id ?? null, correctIndex: r.correct_index != null ? Number(r.correct_index) : null,
     phaseEndsAt: r.phase_ends_at != null ? Number(r.phase_ends_at) : null,
     createdAt: Number(r.created_at), startsAt: Number(r.starts_at),
-    startedAt: r.started_at != null ? Number(r.started_at) : null, endedAt: r.ended_at != null ? Number(r.ended_at) : null
+    startedAt: r.started_at != null ? Number(r.started_at) : null, endedAt: r.ended_at != null ? Number(r.ended_at) : null,
+    isPrivate: r.is_private === true, ownerId: r.owner_id ?? null
   };
 }
 function playerToRow(r: any): PlayerRow {
@@ -158,10 +173,10 @@ export async function saveRoom(room: RoomRow): Promise<void> {
   if (pool) {
     await ensureSchema(pool);
     await pool.query(
-      `INSERT INTO ls_rooms(id,topic,status,phase,config,capacity,min_users,wait_seconds,manual_start_enabled,start_pct,total_rounds,round,gross_pool,rake_percent,question_id,correct_index,phase_ends_at,created_at,starts_at,started_at,ended_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
+      `INSERT INTO ls_rooms(id,topic,status,phase,config,capacity,min_users,wait_seconds,manual_start_enabled,start_pct,total_rounds,round,gross_pool,rake_percent,question_id,correct_index,phase_ends_at,created_at,starts_at,started_at,ended_at,is_private,owner_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
        ON CONFLICT (id) DO UPDATE SET status=$3,phase=$4,round=$12,gross_pool=$13,question_id=$15,correct_index=$16,phase_ends_at=$17,started_at=$20,ended_at=$21`,
-      [room.id, room.topic, room.status, room.phase, JSON.stringify(room.config), room.capacity, room.minUsers, room.waitSeconds, room.manualStartEnabled, room.startPct, room.totalRounds, room.round, room.grossPool, room.rakePercent, room.questionId, room.correctIndex, room.phaseEndsAt, room.createdAt, room.startsAt, room.startedAt, room.endedAt]);
+      [room.id, room.topic, room.status, room.phase, JSON.stringify(room.config), room.capacity, room.minUsers, room.waitSeconds, room.manualStartEnabled, room.startPct, room.totalRounds, room.round, room.grossPool, room.rakePercent, room.questionId, room.correctIndex, room.phaseEndsAt, room.createdAt, room.startsAt, room.startedAt, room.endedAt, room.isPrivate === true, room.ownerId ?? null]);
   } else {
     memRooms.set(room.id, { ...room });
   }
@@ -328,6 +343,9 @@ export async function findOrCreateRoom(topic: string, cfg: LastSurvivorConfig): 
   // passed its start deadline; otherwise open a fresh one.
   const active = await listActiveRooms();
   for (const r of active) {
+    /* A private room is somebody's own party. Matchmaking must not walk a
+       stranger into it, however much space it has. */
+    if (r.isPrivate) continue;
     if (r.topic === topic && r.status === 'waiting') {
       const count = (await listPlayers(r.id)).length;
       /* An EMPTY waiting room is never reused, whatever the reason it emptied.
@@ -346,9 +364,48 @@ export async function findOrCreateRoom(topic: string, cfg: LastSurvivorConfig): 
     capacity: cfg.room.capacity, minUsers: topicMin != null ? topicMin : cfg.room.minUsers, waitSeconds: cfg.room.waitSeconds,
     manualStartEnabled: cfg.room.manualStartEnabled, startPct: cfg.room.startPct, totalRounds: cfg.match.totalRounds,
     round: 0, grossPool: 0, rakePercent: cfg.economy.rakePercent, questionId: null, correctIndex: null, phaseEndsAt: null,
-    createdAt: now, startsAt: now + cfg.room.waitSeconds * 1000, startedAt: null, endedAt: null
+    createdAt: now, startsAt: now + cfg.room.waitSeconds * 1000, startedAt: null, endedAt: null,
+    isPrivate: false, ownerId: null
   };
   await saveRoom(room);
+  return room;
+}
+
+/* A ROOM OF YOUR OWN, FOR THE PEOPLE YOU ASK.
+ *
+ * Identical to a public room in every way that costs money — the same tickets,
+ * the same pot, the same rake, the same rules — and different in exactly two:
+ * matchmaking skips it, and only the owner and the people they invited can get
+ * in. It is created empty; the owner walks in through the ordinary ticket
+ * screen like everybody else, so there is no second path that handles money. */
+export async function createPrivateRoom(topic: string, ownerId: string): Promise<RoomRow> {
+  const cfg = await getConfig();
+  if (!isTopicPlayable(cfg, topic)) throw new LastSurvivorError('TOPIC_LOCKED', 'این موضوع فعلاً فعال نیست (به‌زودی).');
+  /* One at a time. Otherwise a player who taps twice opens two rooms, invites
+     their friends to one and waits in the other. An existing empty one is
+     handed straight back. */
+  const active = await listActiveRooms();
+  for (const r of active) {
+    if (r.isPrivate && r.ownerId === ownerId && r.status === 'waiting') {
+      if (r.topic === topic) return r;
+      /* A different topic means they changed their mind; the old room has
+         nobody in it who paid, so it can simply close. */
+      if ((await listPlayers(r.id)).length === 0) await closeIfEmpty(r.id);
+      else throw new LastSurvivorError('ROOM_OPEN', 'یک اتاق خصوصی باز داری — اول همان را تمام کن.');
+    }
+  }
+  const now = Date.now();
+  const topicMin = cfg.topics?.[topic]?.minUsers;
+  const room: RoomRow = {
+    id: id(), topic, status: 'waiting', phase: 'waiting', config: cfg,
+    capacity: cfg.room.capacity, minUsers: topicMin != null ? topicMin : cfg.room.minUsers, waitSeconds: cfg.room.waitSeconds,
+    manualStartEnabled: cfg.room.manualStartEnabled, startPct: cfg.room.startPct, totalRounds: cfg.match.totalRounds,
+    round: 0, grossPool: 0, rakePercent: cfg.economy.rakePercent, questionId: null, correctIndex: null, phaseEndsAt: null,
+    createdAt: now, startsAt: now + cfg.room.waitSeconds * 1000, startedAt: null, endedAt: null,
+    isPrivate: true, ownerId
+  };
+  await saveRoom(room);
+  logger.info('ls_private_room', { roomId: room.id, ownerId, topic });
   return room;
 }
 
@@ -356,15 +413,32 @@ export async function findOrCreateRoom(topic: string, cfg: LastSurvivorConfig): 
  * Join Last Survivor for a topic with a ticket colour. Consumes ONE real ticket
  * and adds its value to the room pot. Returns the room the player landed in.
  */
-export async function joinTopic(user: { id: string; username: string; avatar?: string | null; character?: { id: string; name: string; image: string; kind: 'normal' | 'vip' } | null }, topic: string, color: string): Promise<{ room: RoomRow; player: PlayerRow }> {
+export async function joinTopic(user: { id: string; username: string; avatar?: string | null; character?: { id: string; name: string; image: string; kind: 'normal' | 'vip' } | null }, topic: string, color: string, roomId?: string): Promise<{ room: RoomRow; player: PlayerRow }> {
   const cfg = await getConfig();
   if (!isTopicPlayable(cfg, topic)) throw new LastSurvivorError('TOPIC_LOCKED', 'این موضوع فعلاً فعال نیست (به‌زودی).');
   if (!cfg.economy.tickets[color]) throw new LastSurvivorError('TICKET_COLOR_INVALID', 'نوع بلیط نامعتبر است.');
 
+  /* ASKED INTO A PARTICULAR ROOM. Without this an invited player paid their
+     ticket and was handed whichever room for that topic happened to be open —
+     so the two who arranged to play could end up in different rooms, which is
+     the whole of what an invite is for. Checked BEFORE the ticket is taken:
+     being turned away must not cost anything. */
+  let asked: RoomRow | null = null;
+  if (roomId) {
+    asked = await getRoom(roomId);
+    if (!asked) throw new LastSurvivorError('ROOM_NOT_FOUND', 'اتاق پیدا نشد — شاید بسته شده.');
+    if (asked.status !== 'waiting') throw new LastSurvivorError('ROOM_STARTED', 'مسابقهٔ این اتاق شروع شده.');
+    if (asked.topic !== topic) throw new LastSurvivorError('ROOM_TOPIC', 'این اتاق برای موضوع دیگری است.');
+    const already = await getPlayer(asked.id, user.id);
+    if (!already && (await listPlayers(asked.id)).length >= asked.capacity) {
+      throw new LastSurvivorError('ROOM_FULL', 'این اتاق پر شده.');
+    }
+  }
+
   // Consume the ticket up front (atomic). If anything else fails, refund it.
   await consumeTicket(user.id, color);
   try {
-    const room = await findOrCreateRoom(topic, cfg);
+    const room = asked || await findOrCreateRoom(topic, cfg);
     const existing = await getPlayer(room.id, user.id);
     if (existing) { await refundTicket(user.id, color); return { room, player: existing }; } // already in — don't double-charge
     const now = Date.now();

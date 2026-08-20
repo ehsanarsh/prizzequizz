@@ -10,7 +10,8 @@ import { getConfig, updateConfig, setTopicEnabled, isTopicPlayable, isTopicHidde
          type LastSurvivorConfig } from '../../services/lastSurvivorConfig.js';
 import { joinTopic, snapshot, addVote, addChat, listChat, getRoom, saveRoom, listAllRooms, listPlayers,
          leaveRoom, touchPlayer, sweepIdlePlayers, LastSurvivorError, listActiveRooms,
-         getPlayer, listRounds, listMyAnswers} from '../../services/lastSurvivorService.js';
+         getPlayer, listRounds, listMyAnswers, createPrivateRoom} from '../../services/lastSurvivorService.js';
+import { acceptedForRoom } from '../../services/gameInviteService.js';
 import { submitAnswer, submitDecision, useLifeline, advanceRoom } from '../../services/lastSurvivorWorker.js';
 import { requireAdmin } from '../../services/adminGuard.js';
 import { avatarUrlFor } from '../../services/avatarService.js';
@@ -298,16 +299,48 @@ export function registerLastSurvivorRoutes(router: Router, base: string): void {
     const body = bodyObject(ctx.body) as any;
     const topic = String(body.topic || '').trim();
     const color = String(body.color || '').trim();
+    const roomId = String(body.roomId || '').trim();
     if (!topic || !color) return error(ctx.res, 422, 'FIELDS_REQUIRED', 'موضوع و رنگ بلیط لازم است.');
     const userId = ctx.userId;
     if (!userId) return error(ctx.res, 401, 'UNAUTHORIZED', 'ابتدا وارد شو.');
+    /* THE DOOR ON A PRIVATE ROOM. Asking for a room by id is how an invited
+       player lands with the person who invited them; for a private room it is
+       also the only way in, so the key is checked here — before any ticket is
+       spent, and by the server rather than by whoever sent the request. */
+    if (roomId) {
+      const asked = await getRoom(roomId);
+      if (asked?.isPrivate && asked.ownerId !== userId) {
+        const invited = await acceptedForRoom(userId, roomId).catch(() => false);
+        if (!invited) return error(ctx.res, 403, 'ROOM_PRIVATE', 'این اتاق خصوصی است — فقط با دعوت می‌شود وارد شد.');
+      }
+    }
     let user: any = null; try { user = await repositories.users.findById(userId); } catch { /* fallback below */ }
     try {
-      const { room } = await joinTopic({ id: userId, username: user?.username || user?.displayName || 'بازیکن', avatar: await avatarUrlFor(userId), character: await equippedCharacterFor(userId) }, topic, color);
+      const { room } = await joinTopic({ id: userId, username: user?.username || user?.displayName || 'بازیکن', avatar: await avatarUrlFor(userId), character: await equippedCharacterFor(userId) }, topic, color, roomId || undefined);
       json(ctx.res, 201, await snapshot(room.id, userId));
     } catch (e) {
       if (e instanceof LastSurvivorError) return error(ctx.res, 409, e.code, e.message);
       return error(ctx.res, 400, 'JOIN_FAILED', (e as Error).message || 'ورود ناموفق بود.');
+    }
+  });
+
+  /* «بتونی روم اختصاصی داشته باشی و بتونی دوستانت رو به بازی دعوت کنی» —
+     opens an empty private room for this topic. Nothing is charged here: the
+     owner then walks in through the ordinary ticket screen like everybody
+     else, and that is the only place money changes hands. */
+  router.add('POST', `${base}/last-survivor/rooms`, async (ctx) => {
+    const userId = ctx.userId;
+    if (!userId) return error(ctx.res, 401, 'UNAUTHORIZED', 'ابتدا وارد شو.');
+    const body = bodyObject(ctx.body) as any;
+    const topic = String(body.topic || '').trim();
+    if (!topic) return error(ctx.res, 422, 'FIELDS_REQUIRED', 'موضوع لازم است.');
+    try {
+      const room = await createPrivateRoom(topic, userId);
+      json(ctx.res, 201, { roomId: room.id, topic: room.topic, startsAt: room.startsAt,
+                           capacity: room.capacity, minUsers: room.minUsers, isPrivate: true });
+    } catch (e) {
+      if (e instanceof LastSurvivorError) return error(ctx.res, 409, e.code, e.message);
+      return error(ctx.res, 400, 'ROOM_FAILED', (e as Error).message || 'ساخت اتاق ناموفق بود.');
     }
   });
 
