@@ -76,6 +76,28 @@ async function ensureSchema(pool: ReturnType<typeof getPgPool>): Promise<void> {
     status TEXT NOT NULL DEFAULT 'pending',
     created_at BIGINT NOT NULL,
     expires_at BIGINT NOT NULL)`);
+  /* THE TABLE ABOVE IS ONLY EVER CREATED ONCE.
+   *
+   * `CREATE TABLE IF NOT EXISTS` does nothing at all to a table that is already
+   * there — it does not compare the columns. So the day `room_topic` was added
+   * here, every server that had already created the table went on without it,
+   * and every INSERT died with «column room_topic does not exist»: no invite
+   * could be sent from anywhere in the game.
+   *
+   * Each column added after the first release therefore needs saying twice:
+   * once for a fresh database, and once for the ones already out there. These
+   * are cheap no-ops when the column is present, so they can simply stay. */
+  for (const col of [
+    `from_name TEXT NOT NULL DEFAULT ''`,
+    `mode TEXT NOT NULL DEFAULT 'duel'`,
+    `ticket_tier TEXT NOT NULL DEFAULT ''`,
+    `room_id TEXT NOT NULL DEFAULT ''`,
+    `room_topic TEXT NOT NULL DEFAULT ''`,
+    `from_room_id TEXT NOT NULL DEFAULT ''`,
+    `status TEXT NOT NULL DEFAULT 'pending'`
+  ]) {
+    await pool.query(`ALTER TABLE game_invites ADD COLUMN IF NOT EXISTS ${col}`);
+  }
   await pool.query(`CREATE INDEX IF NOT EXISTS game_invites_to ON game_invites(to_user_id, status, expires_at)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS game_invites_from ON game_invites(from_user_id, status)`);
   _schemaReady = true;

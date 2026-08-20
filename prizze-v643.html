@@ -1437,6 +1437,11 @@ input,textarea,select,[contenteditable="true"],.pz-selectable,.pz-selectable *{
   font-weight:900;color:#141414;background:linear-gradient(180deg,#FFE24A,var(--bolt-2));
   box-shadow:0 3px 0 #000;cursor:pointer;white-space:nowrap;line-height:1.5}
 .pzm-chatbtn:active{transform:translateY(3px);box-shadow:0 0 0 #000}
+/* The Last Survivor match's chat button. Bigger than the duel's — it stands on
+   its own line here instead of tucking under an avatar — and pinned to the end
+   of the row so it never lands where a thumb is already reaching for an answer. */
+.ls-quickbar{display:flex;justify-content:flex-end;margin:0 0 8px}
+.ls-quickbar .pzm-chatbtn{font-size:12.5px;padding:8px 14px;border-radius:13px}
 
 .qcp-sheet{position:absolute;inset:0;z-index:60;display:none;background:rgba(0,0,0,.5);backdrop-filter:blur(2px)}
 .qcp-sheet.show{display:block}
@@ -7937,13 +7942,46 @@ function lsBuild(snap){
     verdict='<div class="ls-verdict bad">'+(timedOut?'⏳ زمان شما به پایان رسید — ':'❌ ')+
       'پاسخ درست: <b>'+(correctTxt||'—')+'</b> — شما حذف شدید</div>';
   }
-  body.innerHTML=watch+lsDashHtml(snap,true)+verdict+
+  body.innerHTML=watch+lsQuickBar(snap)+lsDashHtml(snap,true)+verdict+
     /* The elimination screen says nothing: the grid is already showing who went
        out, and a heading over it only repeats what the cards are saying. The
        other phases keep their line. */
     (r.phase==='elimination'?'':'<div class="ls-elim-hd"><h2>وضعیت مسابقه</h2><p>جایزه با حذف هر نفر بیشتر می‌شود</p></div>')+
     lsGridHtml(snap,r.phase==='elimination');
   if(r.phase==='elimination') lsAnimateElimination(snap);
+}
+
+/* THE CHAT BUTTON INSIDE THE MATCH.
+   «به غیر از صفحه‌های اتاق انتظار و صفحهٔ پخش سوالات باید دکمهٔ چت باشه که
+    پک چت‌های آماده‌ای که در دوئل داریم اینجا هم فعال بشه».
+   The waiting room already has a typing box of its own, and a question screen
+   is the one place a sheet must never open over — so this belongs to exactly
+   the screens that are left: the dashboard, the elimination grid and cash-out.
+   The caller places it after those two have already returned, which is why
+   there is no phase check here: reaching this line IS the check. */
+function lsQuickBar(snap){
+  const r=(snap&&snap.room)||{};
+  if(!r.chatEnabled) return '';
+  /* The same «چت سریع داخل بازی» switch the duel button obeys. Painted at build
+     time as well as toggled later, because a button drawn after the setting
+     changed would otherwise appear until the next time settings were applied. */
+  const off=(typeof appSettings!=='undefined'&&appSettings&&appSettings.quickChat===false);
+  return '<div class="ls-quickbar"><button class="pzm-chatbtn" id="lsQuickChat"'+
+    (off?' style="display:none"':'')+' onclick="qcOpen()">💬 چت</button></div>';
+}
+
+/* WHERE A READY-MADE PHRASE GOES.
+   In a duel it is a bubble that floats up the screen — a thing between two
+   people. A Last Survivor room holds twenty, and it already has a real chat
+   they can all read, so the phrase is POSTED there: everyone in the room sees
+   it, and it is still there when they open the chat tab. The bubble is drawn
+   too, so the sender gets the same instant answer they get in a duel. */
+async function lsQuickSay(text){
+  if(!lsRoomId||!text) return;
+  try{ spawnTaunt(text,'me'); }catch(e){}
+  const r=await pzApi('POST','/last-survivor/rooms/'+lsRoomId+'/chat',{body:text});
+  if(r&&r.ok===false){ toast((r.error&&r.error.message)||'پیام فرستاده نشد'); return; }
+  if(lsTab==='chat'){ try{ lsLoadChat(); }catch(e){} }
 }
 
 // live in-place updates that must not rebuild the DOM (timer, counts, vote)
@@ -8481,7 +8519,7 @@ function lsChatBadgePaint(){
   b.textContent=lsFa(n>99?99:n);
   b.style.display='';
 }
-let lsChatUnread=0, lsChatCount=0, lsChatWatch=null;
+let lsChatUnread=0, lsChatCount=0, lsChatWatch=null, lsChatFloated=false;
 /* Counting has to happen whether or not the chat is on screen, so it reads the
    room's messages on its own timer while the player is anywhere in the room. */
 async function lsChatWatchTick(){
@@ -8490,17 +8528,44 @@ async function lsChatWatchTick(){
     const r=await pzApi('GET','/last-survivor/rooms/'+lsRoomId+'/chat');
     const msgs=(r&&r.data&&r.data.messages)||[];
     const mine=(m)=>String(m.userId)===String(lsMyId);
-    const total=msgs.filter(m=>!mine(m)).length;      // my own words are not news
+    const others=msgs.filter(m=>!mine(m));            // my own words are not news
+    const total=others.length;
+    const fresh=others.slice(lsChatCount);
     if(total>lsChatCount){ lsChatUnread+=(total-lsChatCount); lsChatBadgePaint(); }
-    lsChatCount=total;
+    /* Not on the first read: that one is catching up with a room that has been
+       talking since before this player walked in, and forty old messages are
+       not news arriving. */
+    if(lsChatFloated) lsFloatRoomChat(fresh);
+    lsChatCount=total; lsChatFloated=true;
   }catch(e){}
+}
+/* WHAT SOMEBODY ELSE JUST SAID, WHERE THE PLAYER IS ACTUALLY LOOKING.
+   The chat list lives on the waiting-room screen, so once the match starts a
+   phrase posted to the room would be read by nobody until it was over — which
+   would make the in-match chat button a thing that sends into a void. These are
+   the duel's floating bubbles carrying the room's real messages, and they obey
+   the same two rules the button does: never over a question, and never when the
+   player has turned quick chat off. */
+function lsFloatRoomChat(msgs){
+  if(!msgs||!msgs.length) return;
+  if((document.querySelector('.screen.active')||{}).id!=='lsGame') return;
+  if(lsTab==='chat') return;
+  const ph=(lsSnap&&lsSnap.room&&lsSnap.room.phase)||'';
+  if(ph==='ready'||ph==='question') return;
+  if(typeof appSettings!=='undefined'&&appSettings&&appSettings.quickChat===false) return;
+  /* Three at a time, spaced out. A room of twenty that all press a button at
+     once must not bury the screen it is floating over. */
+  msgs.slice(-3).forEach((m,i)=>{
+    const line=String(m.username||'').slice(0,18)+': '+String(m.body||'').slice(0,60);
+    setTimeout(()=>{ try{ spawnTaunt(line,'them'); }catch(e){} },i*450);
+  });
 }
 function lsChatWatchStart(){
   if(lsChatWatch) return;
   lsChatWatch=setInterval(lsChatWatchTick,8000);
   setTimeout(lsChatWatchTick,1200);
 }
-function lsChatWatchStop(){ if(lsChatWatch){ clearInterval(lsChatWatch); lsChatWatch=null; } lsChatUnread=0; lsChatCount=0; }
+function lsChatWatchStop(){ if(lsChatWatch){ clearInterval(lsChatWatch); lsChatWatch=null; } lsChatUnread=0; lsChatCount=0; lsChatFloated=false; }
 
 async function lsLoadChat(){ if(!lsRoomId)return; const r=await pzApi('GET','/last-survivor/rooms/'+lsRoomId+'/chat'); const list=document.getElementById('lsChatList'); if(!list)return; const msgs=(r&&r.data&&r.data.messages)||[];
   /* «کنار اسم و متن، عکس کاربر هم باشه». The chat rows carry a name and a
@@ -13059,7 +13124,13 @@ function qcSay(packKey,i){
     text=p.phrases[i];
   }else{ text=TAUNTS[i]; }
   if(!text) return;
-  qcClose(); sendTaunt(text);
+  qcClose();
+  /* One sheet, two games. Inside a Last Survivor room the phrase goes into the
+     room's own chat rather than the duel's floating bubble — see lsQuickSay. */
+  const inRoom=(typeof lsRoomId!=='undefined'&&lsRoomId)&&
+    ((document.querySelector('.screen.active')||{}).id==='lsGame');
+  if(inRoom){ lsQuickSay(text); return; }
+  sendTaunt(text);
 }
 async function qcBuy(key){
   if(_qcBusy) return; _qcBusy=true;

@@ -74,6 +74,21 @@ async function ensureSchema(pool: ReturnType<typeof getPgPool>): Promise<void> {
     status TEXT NOT NULL DEFAULT 'open',
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now())`);
+  /* Same trap as game_invites: a table that already exists is left exactly as
+     it is, so anything added to the shape above has to be added again here for
+     the databases that were created before it. */
+  for (const col of [
+    `entry_tier TEXT NOT NULL DEFAULT ''`,
+    `stage INT NOT NULL DEFAULT 1`,
+    `stake BIGINT NOT NULL DEFAULT 0`,
+    `match_id TEXT`,
+    `pending_gross BIGINT NOT NULL DEFAULT 0`,
+    `status TEXT NOT NULL DEFAULT 'open'`,
+    `created_at TIMESTAMPTZ NOT NULL DEFAULT now()`,
+    `updated_at TIMESTAMPTZ NOT NULL DEFAULT now()`
+  ]) {
+    await pool.query(`ALTER TABLE duel_runs ADD COLUMN IF NOT EXISTS ${col}`);
+  }
   await pool.query(`CREATE INDEX IF NOT EXISTS duel_runs_user ON duel_runs(user_id, status)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS duel_runs_match ON duel_runs(match_id)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS duel_runs_open ON duel_runs(status, updated_at)`);
