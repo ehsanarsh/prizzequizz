@@ -60,7 +60,9 @@ console.log('the card:');
   const box = await page.evaluate(() => { const r = document.getElementById('mcard').getBoundingClientRect(); return { w: Math.round(r.width), h: Math.round(r.height), top: Math.round(r.top) }; });
   ok('the card is actually laid out', box.w > 150 && box.h > 200, box.w + '×' + box.h);
   const rails = await page.evaluate(() => ({ r: document.querySelectorAll('#hrailR .hside').length, l: document.querySelectorAll('#hrailL .hside').length }));
-  ok('both rails carry their icons', rails.r === 3 && rails.l === 4, 'right ' + rails.r + ', left ' + rails.l);
+  /* Six, three a side, since the bell went up to the header and «افراد آنلاین»
+     crossed over to the right-hand column. */
+  ok('both rails carry their icons', rails.r === 3 && rails.l === 3, 'right ' + rails.r + ', left ' + rails.l);
   const dots = await page.evaluate(() => document.querySelectorAll('#mdots i').length);
   ok('there is one dot per mode', dots === 4, String(dots));
 }
@@ -84,15 +86,17 @@ console.log('the header:');
     const hdr = document.querySelector('#home .pz-header');
     return {
       buttons: hdr ? hdr.querySelectorAll('button').length : -1,
+      bell: !!hdr?.querySelector('#pzHdrBell'),
       hasCup: !!hdr?.querySelector('.weekly-progress-line'),
       hasName: !!hdr?.querySelector('#hdrName'),
       hasWallet: !!hdr?.querySelector('#hdrWallet'),
       bg: hdr ? getComputedStyle(hdr).backgroundImage.replace(/\s+/g, '') : ''
     };
   });
-  /* The wheel, the bell and the daily gift moved to the rails. A control in
-     two places is a control whose badge is wrong in one of them. */
-  ok('the header carries no action buttons any more', h.buttons === 0, String(h.buttons));
+  /* The wheel and the daily gift are on the rails. The BELL came back up here
+     — «اعلان باید بره روی هدر» — and it is the only button on it, so a control
+     is still never in two places at once. */
+  ok('the header carries exactly one button: the bell', h.buttons === 1 && h.bell, JSON.stringify(h));
   ok('the cup rail is inside the header now', h.hasCup);
   ok('and the name and belongings are still there', h.hasName && h.hasWallet);
   /* The header was left exactly as it was: a dark bar carrying light text.
@@ -106,7 +110,43 @@ console.log('the header:');
   /* Light text on a dark bar: anything dark here means it vanished. */
   ok('XP, the vault and the tickets are light enough to read on it', legible.xp > 140 && legible.wallet > 140, JSON.stringify(legible));
   const rails = await page.evaluate(() => [...document.querySelectorAll('.hside .lbl')].map((e) => e.textContent));
-  for (const must of ['گردونه', 'اعلان‌ها', 'هدایا']) ok('«' + must + '» is on a rail', rails.includes(must), rails.join('،'));
+  for (const must of ['گردونه', 'هدایا', 'افراد آنلاین']) ok('«' + must + '» is on a rail', rails.includes(must), rails.join('،'));
+  ok('«اعلان‌ها» is not on a rail as well', !rails.includes('اعلان‌ها'), rails.join('،'));
+  /* «بدون اینکه در هدر تغییری در سایز بقیهٔ نوشته‌ها و کارت‌ها انجام بشه» — the
+     bell is placed OVER the header rather than in its flow, so nothing beside
+     it can be pushed or shrunk by it. */
+  const noPush = await page.evaluate(() => {
+    const bell = document.getElementById('pzHdrBell');
+    const row = bell.closest('.pzh-row1');
+    const before = { name: getComputedStyle(document.getElementById('hdrName')).fontSize,
+                     rowH: Math.round(row.getBoundingClientRect().height) };
+    bell.style.display = 'none';
+    const after = { name: getComputedStyle(document.getElementById('hdrName')).fontSize,
+                    rowH: Math.round(row.getBoundingClientRect().height) };
+    bell.style.display = '';
+    return { before, after, absolute: getComputedStyle(bell).position };
+  });
+  ok('the bell is laid over the header, not in its row', noPush.absolute === 'absolute', noPush.absolute);
+  ok('so removing it changes nothing else', noPush.before.name === noPush.after.name && noPush.before.rowH === noPush.after.rowH, JSON.stringify(noPush));
+  /* Being out of the flow is only half of it: laid over the row, it must not
+     come to rest ON TOP of the name or the XP bar either. */
+  const clearOf = await page.evaluate(() => {
+    const r = (s) => { const e = document.querySelector(s); return e ? e.getBoundingClientRect() : null; };
+    const b = r('#pzHdrBell'), n = r('#home #hdrName'), x = r('#home .pzh-xpbar');
+    const hits = (a, c) => !!a && !!c && !(a.right <= c.left + 0.5 || c.right <= a.left + 0.5)
+                                      && !(a.bottom <= c.top + 0.5 || c.bottom <= a.top + 0.5);
+    return { overName: hits(b, n), overXp: hits(b, x) };
+  });
+  ok('and it covers neither the name nor the XP bar', clearOf.overName === false && clearOf.overXp === false, JSON.stringify(clearOf));
+  /* «رنگش زرده و معلوم نیست» — a count has to be readable, so it is red. */
+  const tagColour = await page.evaluate(() => {
+    const t = document.getElementById('pzHdrBellTag');
+    const rail = document.querySelector('.hside .tag');
+    const rgb = (e) => e ? getComputedStyle(e).backgroundColor : null;
+    return { bell: rgb(t), rail: rgb(rail) };
+  });
+  const isRed = (c) => { const m = (c || '').match(/\d+/g); return !!m && +m[0] > 180 && +m[1] < 140 && +m[2] < 140; };
+  ok('the bell’s count is red, not yellow', isRed(tagColour.bell), String(tagColour.bell));
 }
 
 console.log('touching the card:');
@@ -148,7 +188,33 @@ console.log('the deck reads as a deck:');
     const b = e.getBoundingClientRect(), c = document.querySelector('#mcard').getBoundingClientRect();
     return { onEdge: Math.abs(b.left - c.left) < 40 || Math.abs(b.right - c.right) < 40, midHeight: Math.abs((b.top + b.bottom) / 2 - (c.top + c.bottom) / 2) < 60 };
   }));
-  ok('both arrows sit on the card edges at its middle', arrows.length === 2 && arrows.every((a) => a.onEdge && a.midHeight), JSON.stringify(arrows));
+  /* ‹ and › are quotation marks and the bidi algorithm mirrors them in RTL:
+     the arrow on the right pointed left. Drawn, not typed, so it cannot flip —
+     and the one on the right must actually point right. */
+  const chev = await page.evaluate(() => {
+    const dir = (sel) => { const p = document.querySelector(sel + ' svg path'); if (!p) return null;
+      const d = p.getAttribute('d').match(/-?\d+(\.\d+)?/g).map(Number);
+      return d[2] > d[0] ? 'right' : 'left'; };   /* mid x vs start x */
+    return { next: dir('.mk-arrow.next'), prev: dir('.mk-arrow.prev') };
+  });
+  ok('the right arrow points right and the left one left', chev.next === 'right' && chev.prev === 'left', JSON.stringify(chev));
+  /* «باید بیاد پایین دو طرف دکمهٔ شروع بازی، گرد» — level with the start
+     button, one each side of it, and round rather than an edge-tab. */
+  const place = await page.evaluate(() => {
+    const s = document.querySelector('#mcard .mk-start');
+    const n = document.querySelector('.mk-arrow.next'), p = document.querySelector('.mk-arrow.prev');
+    if (!s || !n || !p) return null;
+    const rs = s.getBoundingClientRect(), rn = n.getBoundingClientRect(), rp = p.getBoundingClientRect();
+    const mid = (r) => (r.top + r.bottom) / 2;
+    const round = (e) => { const st = getComputedStyle(e); return parseFloat(st.borderRadius) >= e.getBoundingClientRect().width / 2 - 1; };
+    return { levelN: Math.round(Math.abs(mid(rn) - mid(rs))), levelP: Math.round(Math.abs(mid(rp) - mid(rs))),
+             flanking: rn.left >= rs.right - 2 || rp.right <= rs.left + 2,
+             clear: rn.left >= rs.right - 2 && rp.right <= rs.left + 2,
+             round: round(n) && round(p) };
+  });
+  ok('the arrows are level with the start button', !!place && place.levelN <= 26 && place.levelP <= 26, JSON.stringify(place));
+  ok('one on each side of it, not over it', place.clear, JSON.stringify(place));
+  ok('and they are round', place.round, String(place.round));
 }
 
 console.log('the mode pictures:');
@@ -222,12 +288,21 @@ console.log('the rest:');
 {
   await page.evaluate(() => { try { (0, eval)('hmSet')(0); } catch (e) {} });
   await page.waitForTimeout(200);
+  /* «وقتی راست رو میزنی به چپ بره، چپ رو بزنی به راست بره» — the two buttons
+     stay where they are, arrows and all; what changed is the step each takes.
+     So pressing them in turn has to land back where it started. */
   const arrow = await page.evaluate(async () => {
+    const at = () => document.querySelector('#mcard h2').textContent;
+    const start = at();
     document.querySelector('.mk-arrow.next').click();
     await new Promise((r) => setTimeout(r, 700));
-    return document.querySelector('#mcard h2').textContent;
+    const afterNext = at();
+    document.querySelector('.mk-arrow.prev').click();
+    await new Promise((r) => setTimeout(r, 700));
+    return { start, afterNext, back: at() };
   });
-  ok('the arrow works too', /بازمانده/.test(arrow), arrow);
+  ok('the arrows change the card', arrow.afterNext !== arrow.start, JSON.stringify(arrow));
+  ok('and the other one undoes it', arrow.back === arrow.start, JSON.stringify(arrow));
 
   const t3 = await page.evaluate(() => ({ n: document.querySelectorAll('#top3Row .t3p').length, txt: (document.getElementById('top3Row').textContent || '').replace(/\s+/g, ' ').slice(0, 60) }));
   ok('the week’s three biggest prizes are real rows', t3.n === 3, t3.txt);
@@ -297,7 +372,8 @@ console.log('the banner is the one exception:');
     host.innerHTML = '<div style="height:150px;background:#333">بنر</div>';
     (0, eval)('pzHomeBannerFit')(host);
     await new Promise((r2) => setTimeout(r2, 250));
-    const withB = { overflow: getComputedStyle(home).overflowY, sh: home.scrollHeight, ch: home.clientHeight };
+    const withB = { overflow: getComputedStyle(home).overflowY, sh: home.scrollHeight, ch: home.clientHeight,
+                    bh: Math.round(host.getBoundingClientRect().height) };
     /* Scroll it away and back, the way a thumb would. */
     home.scrollTop = 999; await new Promise((r2) => setTimeout(r2, 120));
     const scrolledAway = home.scrollTop > 100;
@@ -312,7 +388,12 @@ console.log('the banner is the one exception:');
   ok('and it may scroll while one is shown', r.withB.overflow === 'auto', r.withB.overflow + ', ' + r.withB.sh + ' vs ' + r.withB.ch);
   /* The banner has to ADD height, not squeeze the page — otherwise there is
      nothing to scroll and it can never go away. */
-  ok('the banner adds real scroll room', r.withB.sh > r.withB.ch + 100, r.withB.sh + ' vs ' + r.withB.ch);
+  /* Measured against the banner's OWN height, not a round number: the host is
+     free to size itself, and an assertion that assumes 150px passes or fails on
+     how tall the banner happens to be rather than on whether the page grew by
+     it. */
+  ok('the banner adds real scroll room', r.withB.sh >= r.withB.ch + r.withB.bh - 2 && r.withB.bh > 20,
+     r.withB.sh + ' vs ' + r.withB.ch + ' + banner ' + r.withB.bh);
   ok('pushing the page up scrolls the banner away', r.scrolledAway && r.bannerTop <= 0, 'banner bottom at ' + Math.round(r.bannerTop));
   ok('and pulling back down brings it again', r.backAgain);
   ok('removing the banner puts home back to one screen', r.afterSh <= r.afterCh + 2, r.afterSh + ' vs ' + r.afterCh);

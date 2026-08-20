@@ -338,6 +338,7 @@ const cardSkin = () =>
       shadow: cs.boxShadow,
       halo: getComputedStyle(el, '::after').boxShadow,
       plain: getComputedStyle(document.querySelector('.card')).borderTopColor,
+      plainShadow: getComputedStyle(document.querySelector('.card')).boxShadow,
     };
   });
 let freeSkin = null;
@@ -397,8 +398,12 @@ console.log('back in the main plan:');
   ok('which is not the frame the friendly deck wears', skin.border !== freeSkin.border, skin.border + ' vs ' + freeSkin.border);
   ok('the drop shadow is gold too, not the flat black one', /255,\s*210/.test(skin.shadow), skin.shadow.slice(0, 90));
   ok('and the card you are on carries a halo', /255,\s*210/.test(skin.halo || ''), String(skin.halo).slice(0, 70));
-  const [pr, pg, pb] = rgb(skin.plain);
-  ok('while an ordinary card is left alone, so the deck stands apart', !(pr > 200 && pg > 150 && pb < 100), skin.plain);
+  /* Every card is edged in the brand colour now — «در تمام کارت‌ها دور کارت‌ها
+     زرد رنگ باشه» — so the border is no longer what sets the deck apart. What
+     still does is the gold drop shadow and the halo on the card you are on,
+     both checked just above; an ordinary card has neither. */
+  ok('but an ordinary card gets no gold shadow, so the deck still stands apart',
+     !/255,\s*210/.test(skin.plainShadow || ''), String(skin.plainShadow).slice(0, 70));
 
   seen.length = 0;
   await page.evaluate(() => (0, eval)('hmOnline()'));

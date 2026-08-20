@@ -142,10 +142,32 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
 .hside:active .art{transform:translateY(2px);box-shadow:0 2px 0 #000}
 .hside .lbl{font-size:clamp(7.5px,1.25vh,9.5px);font-weight:900;text-align:center;line-height:1.2;color:#1A241C;
   background:#EDEADC;border:2px solid #000;border-radius:7px;padding:1px 4px;box-shadow:0 2px 0 #000;max-width:58px}
-.hside .tag{position:absolute;bottom:-6px;left:50%;transform:translateX(-50%);background:var(--bolt);color:#141414;
-  border:2px solid #000;border-radius:999px;font-size:8px;font-weight:900;padding:0 5px;white-space:nowrap;z-index:2}
+/* RED, NOT YELLOW. «رنگش زرده و معلوم نیست» — a yellow pill on a rail full of
+   yellow was invisible. A count of things waiting for you is the one mark on
+   this screen that has to be seen at a glance. */
+.hside .tag{position:absolute;bottom:-6px;left:50%;transform:translateX(-50%);background:var(--bad);color:#fff;
+  border:2px solid #000;border-radius:999px;font-size:8.5px;font-weight:900;padding:0 5px;min-width:16px;text-align:center;
+  white-space:nowrap;z-index:3;box-shadow:0 2px 0 #000;line-height:1.7}
 .hside .live{position:absolute;top:-3px;right:-3px;width:12px;height:12px;border-radius:50%;background:var(--ok);
-  border:2px solid #000;box-shadow:0 0 8px rgba(51,217,124,.9)}
+  border:2px solid #000;box-shadow:0 0 8px rgba(51,217,124,.9);z-index:3}
+
+/* AFRAD-E ONLINE: the live one.
+   «رنگش زرد باشه با نوشته مشکی، با آیکون رنگی و متمایز، با موشن زنده بودن —
+    مثلا از پشتش امواج گرد بزنه بیرون.» The rings are drawn behind the icon and
+   ripple outward, which is the only thing on these rails that moves. */
+.hside.hs-online .art{background:linear-gradient(180deg,#FFE24A,#F0A400);border-color:#000;
+  box-shadow:0 3px 0 #000;color:#141414;text-shadow:none}
+.hside.hs-online .lbl{background:linear-gradient(180deg,#FFE24A,#F0A400);color:#141414;border-color:#000}
+.hside.hs-online .waves{position:absolute;inset:0;border-radius:16px;pointer-events:none;z-index:0}
+.hside.hs-online .waves::before,
+.hside.hs-online .waves::after{content:"";position:absolute;inset:0;border-radius:50%;
+  border:2.5px solid rgba(255,226,74,.85);animation:hsWave 2.2s ease-out infinite}
+.hside.hs-online .waves::after{animation-delay:1.1s}
+@keyframes hsWave{
+  0%{transform:scale(.72);opacity:.9}
+  100%{transform:scale(1.75);opacity:0}
+}
+@media (prefers-reduced-motion:reduce){.hside.hs-online .waves::before,.hside.hs-online .waves::after{animation:none;opacity:0}}
 
 .hcenter{position:relative;display:flex;flex-direction:column;align-items:center;min-width:0;min-height:0;overflow:visible}
 /* A real track: three cards side by side, the middle one centred and the other
@@ -201,15 +223,19 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
 @keyframes mcHalo{0%,100%{opacity:.4}50%{opacity:1}}
 @media (prefers-reduced-motion:reduce){.phone:not(.theme-free) .mcard.cur::after{animation:none;opacity:.7}}
 
-/* The arrows straddle the edge between the card and the sliver they lead to,
-   at the card's middle — the one place where "this way" is unambiguous. */
-.mk-arrow{position:absolute;top:calc(50% - 8px);transform:translateY(-50%);z-index:6;width:34px;height:52px;
-  border-radius:16px;display:grid;place-items:center;background:linear-gradient(180deg,#FFD84D,#F0A400);
-  border:2.5px solid #000;box-shadow:0 4px 0 #000;font-size:22px;color:#12203a;font-weight:900;cursor:pointer;padding:0}
-.mk-arrow.next{right:-2px}
-.mk-arrow svg{width:20px;height:20px;display:block}
-.mk-arrow.prev{left:-2px}
-.mk-arrow:active{transform:translateY(-50%) translateY(3px);box-shadow:0 1px 0 #000}
+/* THE ARROWS COME DOWN, EITHER SIDE OF THE START BUTTON.
+   «دو تا فلش چپ و راست زرد باید بیاد پایین دو طرف دکمهٔ شروع بازی، گرد و زرد.»
+   They used to straddle the card's middle edges; down here they flank the one
+   button the thumb is already on, and being round says «tap me» rather than
+   «edge of the card». */
+.mk-arrow{position:absolute;bottom:var(--mk-arrow-bottom,18px);z-index:6;width:44px;height:44px;
+  border-radius:50%;display:grid;place-items:center;background:linear-gradient(180deg,#FFE24A,#F0A400);
+  border:2.5px solid #000;box-shadow:0 4px 0 #000;font-size:22px;color:#141414;font-weight:900;cursor:pointer;padding:0}
+.mk-arrow.next{right:2px}
+.mk-arrow svg{width:22px;height:22px;display:block}
+.mk-arrow.prev{left:2px}
+.mk-arrow:active{transform:translateY(3px);box-shadow:0 1px 0 #000}
+@media(max-width:370px){.mk-arrow{width:40px;height:40px}.mk-arrow svg{width:20px;height:20px}}
 /* THE ARCH.
    The picture does not sit in a rectangle inside the card — it sits in a domed
    frame that rises above the card's top edge, the way the trophy does on the
@@ -254,7 +280,9 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
 .mk-facts span{background:rgba(255,255,255,.10);border:2px solid rgba(255,255,255,.16);border-radius:999px;padding:2px 8px;font-size:10px;font-weight:900;color:var(--text)}
 .mk-live{margin-top:8px;font-size:11px;font-weight:900;color:var(--ok);display:flex;align-items:center;justify-content:center;gap:6px}
 .mk-live i{width:9px;height:9px;border-radius:50%;background:var(--ok);border:1.5px solid #000;display:inline-block}
-.mk-start{margin-top:auto;width:100%;padding:10px 0;border-radius:14px;border:2.5px solid #000;
+/* The two arrows now stand either side of this button, so it stops short of
+   the card's edges and the three of them sit in a row with daylight between. */
+.mk-start{margin-top:auto;width:calc(100% - 24px);margin-inline:12px;padding:10px 0;border-radius:14px;border:2.5px solid #000;
   background:linear-gradient(180deg,#4BE38B,#22A85C);color:#06301a;font-size:17px;font-weight:900;box-shadow:0 5px 0 #000}
 .mk-start:active{transform:translateY(3px);box-shadow:0 2px 0 #000}
 .mk-start.soon{background:linear-gradient(180deg,#d7d2c4,#a8a293);color:#2a2a2a}
@@ -429,6 +457,11 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
 .sheet .input,.card .input{box-shadow:none;border-width:2px}
 
 /* ===== STICKER CARD ===== */
+/* «در تمام کارت‌ها دور کارت‌ها زرد رنگ باشه» — and «این زردها در قسمت دوستانه
+   باید آبی باشه», which costs nothing here: --bolt is already the yellow in
+   the paid theme and the blue in the friendly one, so one token does both and
+   the two can never drift apart. The black keyline stays underneath as the
+   shadow, so the cards keep their weight. */
 .card{background:var(--ink-2);border:var(--stroke);border-radius:var(--sticker-r);padding:18px;box-shadow:var(--hard),0 16px 30px -14px rgba(0,0,0,.5)}
 .chip{display:inline-flex;align-items:center;gap:6px;background:var(--ink-2);border:2px solid #000;border-radius:100px;padding:7px 14px;font-size:13px;font-weight:800;box-shadow:var(--hard-sm);color:var(--paper)}
 .section-title{font-size:13px;font-weight:900;color:var(--muted);margin:18px 0 10px;letter-spacing:.3px}
@@ -3090,6 +3123,15 @@ body,button,input,select,textarea,.tab,#rankTabs .tab,#rankTabs .tab small,.rank
 .phone.theme-free .weekly-progress-line i,
 .phone.theme-free .pzh-xpbar i{background:linear-gradient(90deg,#B9F0FF,#1FA8E5)}
 .phone.theme-free .mk-arrow{background:linear-gradient(180deg,#B9F0FF,#1597D2);color:#03202f}
+/* «این زردها در قسمت دوستانه باید آبی باشه» — the new yellow pieces follow the
+   same rule as every other accent on the friendly side. The card borders and
+   the back button need no line here: they are painted from --bolt, which this
+   theme already redefines. */
+.phone.theme-free .pzh-bell{background:linear-gradient(180deg,#B9F0FF,#1597D2);color:#03202f}
+.phone.theme-free .hside.hs-online .art,
+.phone.theme-free .hside.hs-online .lbl{background:linear-gradient(180deg,#B9F0FF,#1597D2);color:#03202f}
+.phone.theme-free .hside.hs-online .waves::before,
+.phone.theme-free .hside.hs-online .waves::after{border-color:rgba(185,240,255,.85)}
 .phone.theme-free #mdots i.on{background:#73D9FF}
 .phone.theme-free .btn-primary,
 .phone.theme-free .btn-yellow,
@@ -3140,8 +3182,24 @@ body,button,input,select,textarea,.tab,#rankTabs .tab,#rankTabs .tab small,.rank
 .phone.theme-free .mission-card,
 .phone.theme-free .support-card{
   background:linear-gradient(180deg,rgba(21,43,57,.96),rgba(10,25,36,.96));
-  border-color:#000;
 }
+/* «در تمام کارت‌ها دور کارت‌ها زرد رنگ باشه» — and «این زردها در قسمت دوستانه
+   باید آبی باشه», which needs no second rule: --bolt is the yellow in the paid
+   theme and the blue in the friendly one, so one line gives both and they can
+   never drift apart. The list is the game's own idea of what a card is — the
+   same one the friendly theme repaints — so nothing is left behind with a
+   black edge next to a coloured one. The heavy black keyline lives on in the
+   drop shadow, which is what gives these cards their weight. */
+.hero,.card,.row,.mini-lb,.friend-card,.wallet-card,.stats-card,.mission-card,.support-card,
+.phone.theme-free .hero,
+.phone.theme-free .card,
+.phone.theme-free .row,
+.phone.theme-free .mini-lb,
+.phone.theme-free .friend-card,
+.phone.theme-free .wallet-card,
+.phone.theme-free .stats-card,
+.phone.theme-free .mission-card,
+.phone.theme-free .support-card{border-color:var(--bolt)}
 .phone.theme-free .hero{
   box-shadow:var(--hard),0 0 38px rgba(75,199,245,.18);
 }
@@ -3828,7 +3886,13 @@ button,input,textarea,select{font-family:'Vazirmatn',system-ui,sans-serif}
   padding:4px 0 10px;
   background:linear-gradient(180deg,var(--ink-2) 0%,var(--ink-2) 74%,rgba(23,23,28,0));
 }
-.menu-sheet-head h2{flex:1;font-size:17px;font-weight:900;margin:0;text-align:center}.menu-sheet-head .iconbtn{width:40px;height:40px;border-radius:13px;font-size:16px}.menu-sheet-section{font-size:11px;color:var(--muted);font-weight:900;margin:14px 2px 8px}
+.menu-sheet-head h2{flex:1;font-size:17px;font-weight:900;margin:0;text-align:center}.menu-sheet-head .iconbtn{width:40px;height:40px;border-radius:13px;font-size:16px}
+/* «دکمه ضربدر خروج رنگش قرمز بشه، دکمه بک رنگش زرد» — two buttons that did
+   different things and looked identical, so which one closed and which one
+   went back was a guess. Back takes the brand colour (blue on the friendly
+   side, because --bolt is), and closing is red everywhere. */
+.iconbtn.ib-back{background:linear-gradient(180deg,var(--bolt),var(--bolt-2))!important;color:#141414!important}
+.iconbtn.ib-close{background:linear-gradient(180deg,#FF7A6B,var(--bad-d))!important;color:#fff!important}.menu-sheet-section{font-size:11px;color:var(--muted);font-weight:900;margin:14px 2px 8px}
 
 
 
@@ -4026,7 +4090,20 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
 
 /* ===================== AAA HEADER (redesigned) ===================== */
 .pz-header{display:flex;flex-direction:column;gap:9px;padding:12px 13px 10px;background:linear-gradient(180deg,#1a2532,#12181f);border-bottom:2px solid #000;box-shadow:0 4px 14px rgba(0,0,0,.35)}
-.pzh-row1{display:flex;align-items:center;gap:11px}
+.pzh-row1{display:flex;align-items:center;gap:11px;position:relative}
+/* Out of the flow on purpose — see the markup. It overlays the corner of the
+   header's first row, so the avatar, the name and the XP bar keep exactly the
+   width and the size they had. */
+.pzh-bell{position:absolute;inset-inline-end:0;top:50%;transform:translateY(-50%);z-index:4;
+  width:38px;height:38px;border-radius:13px;display:grid;place-items:center;padding:0;
+  background:linear-gradient(180deg,#FFE24A,#F0A400);border:2.5px solid #000;box-shadow:0 3px 0 #000;
+  font-size:18px;line-height:1;cursor:pointer;font-family:inherit}
+.pzh-bell:active{transform:translateY(-50%) translateY(3px);box-shadow:0 1px 0 #000}
+/* The count, in the colour a count has to be to be read at a glance. */
+.pzh-bell .bt{position:absolute;top:-7px;inset-inline-start:-7px;min-width:18px;height:18px;padding:0 4px;
+  border-radius:999px;background:var(--bad);color:#fff;border:2px solid #000;box-shadow:0 2px 0 #000;
+  font-size:9.5px;font-weight:900;display:none;place-items:center;line-height:1}
+.pzh-bell .bt.on{display:grid}
 .pzh-plan{display:none;align-items:center;gap:4px;flex:0 0 auto;font-size:10px;font-weight:900;padding:5px 8px;border-radius:999px;border:2px solid #000;background:linear-gradient(180deg,#B9F0FF,#1597D2);color:#03202f;white-space:nowrap;box-shadow:0 3px 0 #000}
 .pzh-user{flex-shrink:0;cursor:pointer}
 .pzh-av{position:relative;width:48px;height:48px;border-radius:15px;border:2.5px solid #000;background:linear-gradient(180deg,#26384c,#141d28);display:grid;place-items:center;box-shadow:0 3px 0 #000}
@@ -4042,7 +4119,10 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
   color:#fff;font-size:11.5px;font-weight:900;display:grid;place-items:center;
   text-shadow:0 1px 1px rgba(2,18,34,.9),0 0 3px rgba(2,18,34,.75);
   filter:drop-shadow(0 2px 3px rgba(0,0,0,.5))}
-.pzh-xpwrap{flex:1;min-width:0}
+/* The bell sits over the end of this row, so the name and the XP bar stop
+   short of it. Nothing here changes size — the bar is simply that much
+   shorter, the way it would be on a narrower phone. */
+.pzh-xpwrap{flex:1;min-width:0;padding-inline-end:46px}
 .pzh-nameline{display:flex;align-items:baseline;gap:8px;min-width:0}
 .pzh-nameline b{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;letter-spacing:-.2px}
 .pzh-nameline b{font-size:14.5px;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -5437,6 +5517,13 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
                The unread counter still exists, hidden, because the rail badge
                and the push code both read it. -->
           <span id="pzBellBadge" style="display:none">۰</span>
+          <!-- THE BELL, BACK ON THE HEADER.
+               «اعلان باید بره روی هدر بدون اینکه در هدر تغییری در سایز بقیهٔ
+                نوشته‌ها و کارت‌ها انجام بشه» — so it is taken OUT of the flow
+               entirely and placed over the header's corner. Nothing beside it
+               moves or resizes, because as far as the layout is concerned it
+               is not there. -->
+          <button class="pzh-bell" id="pzHdrBell" onclick="pzOpenInbox()" aria-label="اعلان‌ها">🔔<span class="bt" id="pzHdrBellTag"></span></button>
           <!-- Which half of the game this is. It was a badge bolted onto a hero
                block that no longer exists after the home rebuild, so nothing
                said «رایگان» anywhere. Here it is next to the name, on every
@@ -5492,8 +5579,12 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
           <!-- Outside the deck on purpose: inside it, they were dragged along
                with the cards instead of staying put. They point the way you
                push, which is the same direction as the drag. -->
-          <button class="mk-arrow prev" onclick="hmGo(-1)" aria-label="قبلی"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 4 L7 12 L15 20" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
-          <button class="mk-arrow next" onclick="hmGo(1)" aria-label="بعدی"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4 L17 12 L9 20" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+          <!-- «وقتی راست رو میزنی به چپ بره، چپ رو بزنی به راست بره — جای
+               دکمه‌ها رو عوض نکن چون اینجوری عکس فلش‌ها برعکس میشه.» So the
+               buttons stay exactly where they are, arrows and all, and it is
+               the step each one takes that is swapped. -->
+          <button class="mk-arrow prev" onclick="hmGo(1)" aria-label="قبلی"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 4 L7 12 L15 20" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+          <button class="mk-arrow next" onclick="hmGo(-1)" aria-label="بعدی"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4 L17 12 L9 20" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
           <div class="mdots" id="mdots"></div>
         </div>
         <div class="hrail" id="hrailL"></div>
@@ -6636,7 +6727,10 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
   <div class="sheet-bg" id="menuBg" onclick="closeMenu()"></div>
   <div class="sheet" id="menuSheet">
     <div class="grab"></div>
-    <div class="menu-sheet-head"><button class="iconbtn" onclick="closeMenu()">→</button><h2>منوی بیشتر</h2><button class="iconbtn" onclick="closeMenu()">✕</button></div>
+    <!-- «دکمه ضربدر خروج رنگش قرمز بشه، دکمه بک رنگش زرد» — two buttons that
+         did the same thing and looked the same, so which one closed and which
+         one went back was a guess. -->
+    <div class="menu-sheet-head"><button class="iconbtn ib-back" onclick="closeMenu()" aria-label="بازگشت">→</button><h2>منوی بیشتر</h2><button class="iconbtn ib-close" onclick="closeMenu()" aria-label="بستن">✕</button></div>
     <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px" onclick="menuGo('profile')">
       <div class="prof-av" style="width:52px;height:52px;border-radius:16px;border-width:2px"><div class="mascot" id="mascotMenu" style="width:38px;height:38px;border-radius:50%;overflow:hidden"></div></div>
       <div style="flex:1"><b style="font-size:15px" id="menuProfName">بازیکن</b><div style="color:var(--muted);font-size:12px"><span id="menuProfLvl">سطح ۱</span> · مشاهده پروفایل</div></div><span style="color:var(--muted)">‹</span></div>
@@ -15026,26 +15120,59 @@ let hmIdx=0;
 function hmRailItems(){
   return {
     right:[
-      {ico:'🎡',lbl:'گردونه',go:()=>openSpin()},
+      {ico:'🎡',lbl:'گردونه',go:()=>openSpin(),tag:()=>hmSpinTag()},
       {ico:'🎯',lbl:'مأموریت‌ها',go:()=>go('missions'),tag:()=>hmMissionTag()},
-      {ico:'🔔',lbl:'اعلان‌ها',go:()=>pzOpenInbox(),tag:()=>hmBellTag()}
+      /* «افراد آنلاین بیاد به ستون سمت راست» — and it is the one thing on
+         these rails that changes by itself, so it is the one that gets a
+         colour of its own and a pulse to say so. */
+      {ico:'👥',lbl:'افراد آنلاین',go:()=>hmOnline(),live:true,cls:'hs-online'}
     ],
     left:[
-      {ico:'🎁',lbl:'هدایا',go:()=>openDailyRewards()},
-      {ico:'👥',lbl:'آنلاین',go:()=>hmOnline(),live:true},
+      {ico:'🎁',lbl:'هدایا',go:()=>openDailyRewards(),tag:()=>hmGiftTag()},
       {ico:'🤝',lbl:'دعوت',go:()=>go('friends')},
       {ico:'✏️',lbl:'کوییزساز',go:()=>hmQuizMaker()}
     ]
   };
 }
-function hmMissionTag(){ try{ const n=(typeof missionsClaimable==='function')?missionsClaimable():0; return n>0?fa(n):''; }catch(e){ return ''; } }
+/* THE THREE BADGES THAT NEVER APPEARED.
+ *
+ * They were painted onto `spinHdrBtn` and `dailyHdrBtn` — two header buttons
+ * that stopped existing when home was rebuilt around the rails — so both
+ * functions returned on their first line and nothing was ever drawn. The
+ * missions one asked for `missionsClaimable()`, which is not a function in this
+ * file at all, and its try/catch turned that into a silent empty string.
+ *
+ * All three now read the same state the screens behind them read. */
+function hmSpinTag(){ try{ return (pzRW&&pzRW.loaded&&pzRW.ready)?'!':''; }catch(e){ return ''; } }
+function hmGiftTag(){
+  try{
+    const d=dailyState||{};
+    return (!d.claimed&&d.enabled!==false&&(d.days||[]).length>0)?'!':'';
+  }catch(e){ return ''; }
+}
+function hmMissionTag(){
+  try{
+    /* What is waiting to be COLLECTED, not what is left to do: a badge that
+       counts unfinished work never goes away and stops meaning anything. */
+    let n=(pzMS.daily||[]).filter(m=>m&&m.completed&&!m.claimed).length;
+    if(pzMS.box&&pzMS.box.ready&&!pzMS.box.opened) n++;
+    return n>0?fa(n):'';
+  }catch(e){ return ''; }
+}
 function hmBellTag(){ return (typeof PZ_UNREAD==='number'&&PZ_UNREAD>0)?fa(PZ_UNREAD>99?'99+':PZ_UNREAD):''; }
+/* The bell moved from the rail to the header, so its count goes with it. */
+function pzPaintBellTag(){
+  const b=document.getElementById('pzHdrBellTag'); if(!b) return;
+  const t=hmBellTag();
+  b.textContent=t;
+  b.classList.toggle('on',!!t);
+}
 function hmRails(){
   const R=hmRailItems();
   const one=(it,i,side)=>{
     const tag=it.tag?it.tag():'';
-    return '<div class="hside" onclick="hmRailTap(\''+side+'\','+i+')">'+
-      '<div class="art">'+it.ico+
+    return '<div class="hside'+(it.cls?' '+it.cls:'')+'" onclick="hmRailTap(\''+side+'\','+i+')">'+
+      '<div class="art">'+(it.live?'<span class="waves"></span>':'')+it.ico+
         (tag?'<span class="tag">'+tag+'</span>':'')+
         (it.live?'<span class="live"></span>':'')+
       '</div><div class="lbl">'+it.lbl+'</div></div>';
@@ -15421,6 +15548,11 @@ function renderBadges(){
   /* The daily card is gone; its badge lives on the header button now and is
      driven by the server's claimed-today flag rather than a local flag. */
   try{ pzDailySyncBadge(); }catch(e){}
+  /* The rail carries three of these counts now, so whatever made the badges
+     change — a spin taken, a gift collected, a mission claimed — redraws them
+     too. It costs nothing off the home screen: hmRails returns at once when
+     the rails are not on the page. */
+  try{ hmRails(); pzPaintBellTag(); }catch(e){}
   document.querySelectorAll('[data-badge-key]').forEach(el=>{
     const v=badges[el.dataset.badgeKey];
     const numeric=(typeof v==='number');
@@ -15652,7 +15784,14 @@ go=function(id){_origGo(id);
     /* The wheel no longer throws itself over the screen when it is ready.
        It loads its state quietly and puts a badge on the header button, so the
        player finds out without having their screen taken away from them. */
-    try{ pzRewardsLoad(true); }catch(e){}
+    /* AND THE RAILS ARE REPAINTED ONCE IT LANDS. The wheel and the gift badge
+       are drawn from this state, so drawing the rails before it arrives shows
+       an empty rail every time home opens. The missions are fetched here for
+       the same reason — until now they were only ever loaded by the missions
+       screen itself, so their badge could not exist before you had already
+       been there. */
+    try{ pzRewardsLoad(true).then(()=>{ try{ hmRails(); pzPaintBellTag(); }catch(e){} }); }catch(e){}
+    try{ pzMissionsLoad(true).then(()=>{ try{ hmRails(); updateMissionHome(); }catch(e){} }); }catch(e){}
   }
 };
 setTimeout(animateXP,200);
@@ -19676,6 +19815,7 @@ async function pzInboxBadge(){
     const r=await pzApi('GET','/notifications?limit=50'); const list=(r&&r.data)||r;
     const n=(Array.isArray(list)?list:[]).filter(x=>!x.readAt).length;
     PZ_UNREAD=n;
+    try{ pzPaintBellTag(); }catch(e){}
     /* The newest unread message from a friend, shown once. Never over a live
        match — a banner across a question is worse than a late notice. */
     try{
