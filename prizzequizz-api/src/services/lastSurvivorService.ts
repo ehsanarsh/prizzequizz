@@ -14,6 +14,7 @@ import { getPgPool } from '../database/postgres.js';
 import { repositories } from '../repositories/index.js';
 import { id } from '../utils/id.js';
 import { consumeTicket, refundTicket } from './ticketService.js';
+import { authorNameFor } from './questionAuthorService.js';
 import { postEntry } from './walletLedgerService.js';
 import { logger } from './logger.js';
 import { usedIn as lifelinesUsedIn } from './lifelineService.js';
@@ -630,6 +631,9 @@ export async function snapshot(roomId: string, forUserId?: string): Promise<any>
         // the same «سطح سختی» badge the duel shows before each question.
         view.question.difficulty = q.difficulty;
         view.question.text = q.text; view.question.options = q.options;
+        /* Credited under the question every time it is asked, not only on the
+           day it was approved. Empty for anything the operator wrote. */
+        view.question.authorName = await authorNameFor(q);
       }
     } catch { /* text is best-effort; the id/round still drive the flow */ }
   }

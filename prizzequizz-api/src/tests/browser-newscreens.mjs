@@ -133,6 +133,15 @@ await ctx.route('**/v1/**', (route) => {
       { userId: 'z', username: 'زهرا', score: 9, rank: 2 }
     ] } });
   }
+  /* The maker's topic list is the server's own, so the fake server has to have
+     one — a question cannot be filed under a subject the game does not have. */
+  if (p.startsWith('/last-survivor/topics')) {
+    return send({ ok: true, data: { tickets: {}, topics: [
+      { name: 'تصادفی', random: true, playable: true, questionCount: 90, icon: '🎲' },
+      { name: 'جغرافیا', random: false, playable: true, questionCount: 30, icon: '🌍' },
+      { name: 'تاریخ', random: false, playable: true, questionCount: 22, icon: '🏛️' }
+    ] } });
+  }
   if (p === '/friends/requests') { friendReq = route.request().postDataJSON(); return send({ ok: true, data: { status: 'pending' } }, 201); }
   /* The signed-in player. Without this the catch-all answers with {} and the
      client ends up with a user that has no id — which quietly breaks anything
@@ -282,10 +291,12 @@ console.log('quiz maker:');
   const prize = await page.evaluate(() => document.querySelector('#qsMine .qs-prize')?.textContent || '');
   ok('with what the approved one actually paid', /۱۲۰/.test(prize), prize);
 
+  /* Four boxes, and the right one is tapped — the maker was rebuilt around
+     that, so the old «correct» + slash-separated «wrong» fields are gone. */
   await page.evaluate(() => {
     document.getElementById('qsText').value = 'پایتخت ژاپن کدام است؟';
-    document.getElementById('qsCorrect').value = 'توکیو';
-    document.getElementById('qsWrong').value = 'اوساکا / کیوتو / ناگویا';
+    ['توکیو', 'اوساکا', 'کیوتو', 'ناگویا'].forEach((t, i) => { document.getElementById('qsO' + i).value = t; });
+    (0, eval)('qsPickCorrect')(0);
     (0, eval)('submitQuestion()');
   });
   await page.waitForTimeout(600);
@@ -294,7 +305,7 @@ console.log('quiz maker:');
   ok('and the right one marked correct',
     submitted && submitted.options[submitted.correctIndex] === 'توکیو', String(submitted?.correctIndex));
   ok('the difficulty is sent in the form the server stores',
-    submitted && ['easy', 'medium', 'hard'].includes(submitted.difficulty), String(submitted?.difficulty));
+    submitted && ['easy', 'medium', 'hard', 'veryhard'].includes(submitted.difficulty), String(submitted?.difficulty));
 }
 
 console.log('an incomplete question:');
@@ -303,8 +314,7 @@ console.log('an incomplete question:');
   await page.evaluate(() => {
     (0, eval)('closeAaaModal(false)');
     document.getElementById('qsText').value = 'فقط متن';
-    document.getElementById('qsCorrect').value = '';
-    document.getElementById('qsWrong').value = '';
+    [0, 1, 2, 3].forEach((i) => { document.getElementById('qsO' + i).value = ''; });
     (0, eval)('submitQuestion()');
   });
   await page.waitForTimeout(400);

@@ -1,0 +1,336 @@
+/* THE QUESTION MAKER, THE RULES, THE CREDIT LINE, AND THE WAY OUT.
+ *
+ *   • «تولید سوال باید بازطراحی بشه — برای هر گزینه یک کادر مجزا، موضوعات با
+ *     موضوعات سرور یکی باشه، سختی آسان/متوسط/سخت/خیلی سخت»
+ *   • «در موقع پخش سوال ریز زیر سوال بنویسه طراحی‌شده توسط اسم کاربر»
+ *   • «باتم‌شیت‌ها راه خروجی ندارن — دکمهٔ ضربدر قرمز باشه»
+ *   • «موقع ثبت‌نام باید مستقیم بره به انتخاب کاراکتر»
+ *   • «قوانین و مقررات رو کامل بنویس»
+ *   • «دور همهٔ کارت‌ها زرد، همهٔ دکمه‌های بک زرد»
+ */
+import pw from '/tmp/node_modules/playwright-core/index.js';
+const { chromium } = pw;
+import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
+
+const ROOT = '/home/user/prizzequizz';
+let pass = 0, fail = 0;
+const ok = (n, c, extra = '') => { if (c) { pass++; console.log('  ok   ' + n + (extra ? '  [' + extra + ']' : '')); } else { fail++; console.log('  FAIL ' + n + (extra ? '  [' + extra + ']' : '')); } };
+
+const server = http.createServer((q, r) => {
+  const f = path.join(ROOT, q.url === '/' ? 'prizze-v643.html' : decodeURIComponent(q.url.split('?')[0]));
+  if (!f.startsWith(ROOT) || !fs.existsSync(f) || fs.statSync(f).isDirectory()) { r.writeHead(404); return r.end('no'); }
+  r.writeHead(200); fs.createReadStream(f).pipe(r);
+});
+await new Promise((r) => server.listen(0, '127.0.0.1', r));
+const PORT = server.address().port;
+const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
+
+/* The server's own topic list — what the maker must offer, and nothing else. */
+const TOPICS = [
+  { name: 'تصادفی', random: true, playable: true, questionCount: 90, icon: '🎲' },
+  { name: 'ورزشی', random: false, playable: true, questionCount: 40, icon: '⚽' },
+  { name: 'تاریخ', random: false, playable: true, questionCount: 25, icon: '🏛️' },
+  { name: 'سینما', random: false, playable: false, questionCount: 0, icon: '🎬' },
+  { name: 'بایگانی', random: false, playable: true, hidden: true, questionCount: 5, icon: '📦' }
+];
+const posted = [];
+
+async function makePage() {
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+  await ctx.addInitScript(() => {
+    localStorage.setItem('pz_tok', 't'); localStorage.setItem('pz_rtok', 'r');
+    localStorage.setItem('pz_usr', JSON.stringify({ id: 'me', username: 'ehsan', displayName: 'احسان', level: 3, coins: 50, hearts: 5 }));
+  });
+  await ctx.route('**/v1/**', (route) => {
+    const p = new URL(route.request().url()).pathname.replace(/^.*\/v1/, '');
+    const send = (d) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, data: d }) });
+    if (route.request().method() === 'POST' || route.request().method() === 'PATCH') {
+      let body = {}; try { body = JSON.parse(route.request().postData() || '{}'); } catch (e) {}
+      posted.push({ path: p, body });
+      if (p === '/questions/submit') return route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ ok: true, data: { questionId: 'q9' } }) });
+      if (p === '/users/me') return send({ id: 'me', username: body.username, displayName: body.displayName, level: 1, coins: 0, hearts: 5 });
+      return send({});
+    }
+    if (p === '/last-survivor/topics') return send({ topics: TOPICS, tickets: {} });
+    if (p === '/questions/mine') return send({ rows: [] });
+    return send({});
+  });
+  const page = await ctx.newPage();
+  const errs = []; page.on('pageerror', (e) => errs.push(String(e.message || e).slice(0, 200)));
+  await page.goto('http://127.0.0.1:' + PORT + '/');
+  await page.waitForTimeout(5200);
+  await page.evaluate(() => (0, eval)("userPlan='premium'; planExplicitlyChosen=true;"));
+  return { ctx, page, errs };
+}
+
+/* ── THE QUESTION MAKER ──────────────────────────────────────────────────── */
+{
+  const { ctx, page, errs } = await makePage();
+  console.log('writing a question:');
+  await page.evaluate(async () => { (0, eval)('hmQuizMaker')(); await new Promise((r) => setTimeout(r, 800)); });
+
+  const cats = await page.evaluate(() => [...document.querySelectorAll('#qsCats .qs-chip')].map((b) => b.getAttribute('data-c')));
+  /* «موضوعات باید با موضوعات موجود در سرور یکی باشه» */
+  ok('the topics come from the server', cats.indexOf('ورزشی') >= 0 && cats.indexOf('تاریخ') >= 0, cats.join(' / '));
+  ok('«تصادفی» is not something you write a question for', cats.indexOf('تصادفی') < 0, cats.join(' / '));
+  ok('nor a topic taken off the list', cats.indexOf('بایگانی') < 0, cats.join(' / '));
+  ok('one is chosen to begin with', await page.evaluate(() => (0, eval)('QS_CAT')) === cats[0], cats[0]);
+
+  const diffs = await page.evaluate(() => [...document.querySelectorAll('#qsDiffs .qs-chip')].map((b) => ({ d: b.getAttribute('data-d'), t: b.textContent.trim() })));
+  /* «سطح سختی باید آسان متوسط سخت و خیلی سخت باشه» */
+  ok('there are four levels of difficulty', diffs.length === 4, diffs.map((x) => x.d).join(','));
+  ok('including خیلی سخت, which was missing', diffs.some((x) => x.d === 'veryhard' && /خیلی سخت/.test(x.t)), JSON.stringify(diffs.map((x) => x.t)));
+
+  /* «برای هر گزینه یک کادر مجزا» */
+  const boxes = await page.evaluate(() => document.querySelectorAll('#qsOpts .qs-opt .input').length);
+  ok('each option has a box of its own', boxes === 4, String(boxes));
+  const oldFields = await page.evaluate(() => [!!document.getElementById('qsCorrect'), !!document.getElementById('qsWrong')]);
+  ok('and the slash-separated field is gone', oldFields[0] === false && oldFields[1] === false, JSON.stringify(oldFields));
+
+  posted.length = 0;
+  const sent = await page.evaluate(async () => {
+    (0, eval)('qsPickCat')('تاریخ');
+    (0, eval)('qsPickDiff')('veryhard');
+    document.getElementById('qsText').value = 'کدام سردار در نبرد گاگامل شکست خورد؟';
+    ['اسکندر', 'داریوش سوم', 'کوروش', 'خشایارشا'].forEach((t, i) => { document.getElementById('qsO' + i).value = t; });
+    (0, eval)('qsPickCorrect')(1);
+    await (0, eval)('submitQuestion')();
+    await new Promise((r) => setTimeout(r, 500));
+    return null;
+  });
+  const body = (posted.find((x) => x.path === '/questions/submit') || {}).body;
+  ok('the question is sent to the server', !!body, JSON.stringify(posted.map((p) => p.path)));
+  ok('with all four options in order', !!body && body.options.length === 4 && body.options[1] === 'داریوش سوم', JSON.stringify(body && body.options));
+  /* THE POINT of tapping rather than typing into a «correct» field: the right
+     answer can be any of the four, so the bank does not always hold it first. */
+  ok('and the right answer wherever it was put', !!body && body.correctIndex === 1, String(body && body.correctIndex));
+  ok('carrying the topic that was chosen', !!body && body.category === 'تاریخ', String(body && body.category));
+  ok('and the difficulty, in the words the server uses', !!body && body.difficulty === 'veryhard', String(body && body.difficulty));
+
+  /* It must refuse to send half a question rather than let one through. */
+  posted.length = 0;
+  const refused = await page.evaluate(async () => {
+    (0, eval)("closeAaaModal(false);");
+    await new Promise((r) => setTimeout(r, 300));
+    document.getElementById('qsText').value = 'یک سوال ناقص';
+    ['الف', 'الف', '', ''].forEach((t, i) => { document.getElementById('qsO' + i).value = t; });
+    await (0, eval)('submitQuestion')();
+    await new Promise((r) => setTimeout(r, 300));
+    return (document.getElementById('aaaSub') || {}).textContent || '';
+  });
+  ok('an unfinished question is not sent', posted.length === 0, JSON.stringify(posted));
+  ok('and it says what is missing', /گزینه/.test(refused), refused.trim());
+
+  /* Four boxes all filled, two of them the same — a question with two right
+     answers, or two wrong ones the player cannot tell apart. */
+  posted.length = 0;
+  const dup = await page.evaluate(async () => {
+    (0, eval)("closeAaaModal(false);");
+    await new Promise((r) => setTimeout(r, 300));
+    document.getElementById('qsText').value = 'کدام‌یک پایتخت فرانسه است؟';
+    ['پاریس', 'رم', 'رم', 'لندن'].forEach((t, i) => { document.getElementById('qsO' + i).value = t; });
+    await (0, eval)('submitQuestion')();
+    await new Promise((r) => setTimeout(r, 300));
+    return (document.getElementById('aaaSub') || {}).textContent || '';
+  });
+  ok('two identical options are refused', posted.length === 0, JSON.stringify(posted));
+  ok('and said so plainly', /مثل هم/.test(dup), dup.trim());
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
+/* ── THE CREDIT UNDER THE QUESTION ───────────────────────────────────────── */
+{
+  const { ctx, page, errs } = await makePage();
+  console.log('a question somebody wrote, while it is being asked:');
+  const snap = (author) => {
+    const now = Date.now();
+    return { room: { id: 'R9', topic: 'ورزشی', status: 'running', phase: 'question', round: 3, totalRounds: 12,
+             capacity: 20, startsAt: now - 60000, phaseEndsAt: now + 20000, serverNow: now, grossPool: 250000, chatEnabled: true, forfeited: 0 },
+      players: [{ userId: 'me', username: 'احسان', avatar: '', character: null, color: 'green', status: 'alive', shields: 0, units: 1 }],
+      me: { userId: 'me', username: 'احسان', status: 'alive', shields: 0, units: 1, currentShare: 0, lifelinesUsed: [] },
+      stats: { alive: 1, eliminated: 0, cashedOut: 0, totalPlayers: 1, grossPot: 250000, remainingPot: 250000, paidOut: 0 },
+      question: { id: 'q1', text: 'پایتخت فرانسه؟', options: ['پاریس', 'رم', 'مادرید', 'لندن'], difficulty: 'easy', authorName: author },
+      votes: 0 };
+  };
+  await page.evaluate((sn) => {
+    (0, eval)("lsRoomId='R9'; lsMyId='me'; lsSnap=null; lsLastKey=''; lsWatching=false; go('lsGame');");
+    (0, eval)('lsRender')(sn);
+  }, snap('سارا'));
+  await page.waitForTimeout(500);
+  const line = await page.evaluate(() => {
+    const el = document.querySelector('#lsGame .pz-byline');
+    if (!el) return null;
+    const q = document.querySelector('#lsGame .ls-qtext');
+    return { text: el.textContent.trim(),
+             px: Math.round(parseFloat(getComputedStyle(el).fontSize)),
+             qpx: Math.round(parseFloat(getComputedStyle(q).fontSize)),
+             below: el.getBoundingClientRect().top >= q.getBoundingClientRect().bottom - 1 };
+  });
+  ok('the author is credited under the question', !!line && /سارا/.test(line.text), JSON.stringify(line));
+  ok('in the words asked for', !!line && /طراحی‌شده توسط/.test(line.text), line && line.text);
+  /* «ریز» — small. Bigger than the question would be absurd. */
+  ok('and small, under the question itself', line.px < line.qpx && line.below, line.px + 'px vs ' + line.qpx + 'px');
+
+  const none = await page.evaluate(async (sn) => {
+    (0, eval)("lsSnap=null; lsLastKey='';");
+    (0, eval)('lsRender')(sn);
+    await new Promise((r) => setTimeout(r, 400));
+    return document.querySelectorAll('#lsGame .pz-byline').length;
+  }, snap(''));
+  /* A question the operator wrote has nobody to credit — and a line reading
+     «طراحی‌شده توسط» with nothing after it is worse than no line. */
+  ok('a question with no author gets no line at all', none === 0, String(none));
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
+/* ── A WAY OUT OF EVERY BOTTOM SHEET ─────────────────────────────────────── */
+{
+  const { ctx, page, errs } = await makePage();
+  console.log('the bottom sheets:');
+  const sheets = await page.evaluate(() => {
+    const out = [];
+    document.querySelectorAll('.sheet').forEach((s) => {
+      const x = s.querySelector('.sheet-x') || s.querySelector('.ib-close');
+      out.push({ id: s.id, hasX: !!x });
+    });
+    return out;
+  });
+  ok('every sheet has a close button', sheets.every((s) => s.hasX), JSON.stringify(sheets));
+
+  const red = await page.evaluate(() => {
+    (0, eval)('openKyc')();
+    const b = document.querySelector('#kycSheet .sheet-x');
+    if (!b) return null;
+    const bg = getComputedStyle(b).backgroundImage + getComputedStyle(b).backgroundColor;
+    const r = b.getBoundingClientRect();
+    return { red: /255,\s*122,\s*107|#FF7A6B/i.test(bg), w: Math.round(r.width), onScreen: r.width > 20 && r.top >= 0 };
+  });
+  ok('the prize sheet’s way out is red', !!red && red.red, JSON.stringify(red));
+  ok('and big enough to hit', red.onScreen, JSON.stringify(red));
+
+  const closed = await page.evaluate(async () => {
+    document.querySelector('#kycSheet .sheet-x').click();
+    await new Promise((r) => setTimeout(r, 500));
+    return document.getElementById('kycSheet').classList.contains('show');
+  });
+  ok('and pressing it actually closes the sheet', closed === false, String(closed));
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
+/* ── REGISTRATION GOES STRAIGHT ON ───────────────────────────────────────── */
+{
+  const { ctx, page, errs } = await makePage();
+  console.log('finishing registration:');
+  /* The REAL submit, filled in and pressed — driving the navigation by hand
+     here would only be testing the harness. */
+  const landed = await page.evaluate(async () => {
+    (0, eval)("go('register')");
+    await new Promise((r) => setTimeout(r, 300));
+    document.getElementById('regFullName').value = 'احسان رضایی';
+    document.getElementById('regUsername').value = 'ehsan_1364';
+    const g = document.getElementById('regGender'); if (g) g.value = 'male';
+    await (0, eval)('submitRegister')();
+    await new Promise((r) => setTimeout(r, 900));
+    return { screen: [...document.querySelectorAll('.screen')].find((s) => s.classList.contains('active')).id,
+             back: (0, eval)('charBack'),
+             note: !!document.getElementById('regSavedNote') };
+  });
+  ok('the details really were saved', landed.note, JSON.stringify(landed));
+  /* «الان وقتی ثبت رو میزنی اسم دکمه به انتخاب کاراکتر تغییر پیدا میکنه و باید
+     دوباره همونو بزنی» — one press, not two. */
+  ok('the character picker opens by itself', landed.screen === 'character', JSON.stringify(landed));
+  ok('and finishing it lands on home, not the profile', landed.back === 'home', String(landed.back));
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
+/* ── THE RULES ───────────────────────────────────────────────────────────── */
+{
+  const { ctx, page, errs } = await makePage();
+  console.log('the rules page:');
+  await page.evaluate(async () => { (0, eval)("go('rules')"); await new Promise((r) => setTimeout(r, 500)); });
+  const rules = await page.evaluate(() => {
+    const cards = [...document.querySelectorAll('#rulesBody .rule-card')];
+    return { cards: cards.length,
+             lines: document.querySelectorAll('#rulesBody .rule-list li').length,
+             heads: cards.map((c) => c.querySelector('.rule-h').textContent.replace(/\s+/g, ' ').trim()),
+             text: document.getElementById('rulesBody').textContent };
+  });
+  ok('it is a real set of rules, not three sentences', rules.cards >= 8, String(rules.cards));
+  ok('with a numbered line for each rule', rules.lines >= 25, String(rules.lines));
+  /* The subjects a player actually needs the rules for. */
+  for (const [what, re] of [['tickets', /بلیط/], ['Last Survivor', /آخرین بازمانده/], ['the ladder', /نردبان/],
+                            ['invites', /دعوت/], ['the quiz maker', /کوییزساز/], ['withdrawals', /برداشت/],
+                            ['fair play', /جوانمردانه|تقلب/], ['support', /پشتیبانی/]]) {
+    ok('covers ' + what, re.test(rules.text), '');
+  }
+  /* The server sends take-home figures and the operator can change the rest, so
+     a percentage written here would be the one official-looking number in the
+     app that could be wrong. */
+  ok('and quotes no fee percentage it cannot keep true', !/٪|درصد|%/.test(rules.text), (rules.text.match(/.{0,20}(٪|درصد|%).{0,20}/) || [''])[0]);
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
+/* ── YELLOW EDGES, YELLOW BACK BUTTONS ───────────────────────────────────── */
+{
+  const { ctx, page, errs } = await makePage();
+  console.log('the colours:');
+  const paint = await page.evaluate(async () => {
+    const seen = [];
+    for (const id of ['rules', 'qsubmit', 'support', 'friends', 'wallet', 'settings']) {
+      (0, eval)("go('" + id + "')");
+      await new Promise((r) => setTimeout(r, 320));
+      /* The BACK arrow, found by what it is rather than by where it sits: the
+         friends screen's first icon button is «＋», which must stay as it was. */
+      const btns = [...document.querySelectorAll('#' + id + ' .topbar .iconbtn')];
+      const back = btns.find((b) => /→|‹/.test(b.textContent));
+      const other = btns.find((b) => !/→|‹/.test(b.textContent));
+      const card = document.querySelector('#' + id + ' .card, #' + id + ' .qsubmit-card, #' + id + ' .sup-card, #' + id + ' .friend-card');
+      seen.push({
+        id,
+        back: back ? back.classList.contains('ib-back') : null,
+        backBg: back ? getComputedStyle(back).backgroundImage : '',
+        otherBg: other ? getComputedStyle(other).backgroundImage : null,
+        cardBorder: card ? getComputedStyle(card).borderTopColor : null
+      });
+    }
+    return seen;
+  });
+  const yellow = (s) => /255,\s*210,\s*31|255,\s*226,\s*74|240,\s*164,\s*0/.test(s);
+  ok('every screen checked was actually reached', paint.length === 6, JSON.stringify(paint.map((s) => s.id)));
+  const withBack = paint.filter((s) => s.back !== null);
+  ok('and most of them have a back arrow to colour', withBack.length >= 5, String(withBack.length));
+  for (const s of withBack) {
+    ok('the back button on ' + s.id + ' is yellow', s.back && yellow(s.backBg), s.backBg.slice(0, 60));
+  }
+  for (const s of paint) {
+    if (s.cardBorder !== null) ok('the cards on ' + s.id + ' have a yellow edge', yellow(s.cardBorder), s.cardBorder);
+  }
+  /* Yellow means «back». A different button in the same bar must not borrow it,
+     or the colour stops telling the player anything. */
+  const others = paint.filter((s) => s.otherBg);
+  ok('and a button that is not «back» does not take the colour', others.length > 0 && others.every((s) => !yellow(s.otherBg)),
+     JSON.stringify(others.map((s) => s.id + ':' + s.otherBg.slice(0, 24))));
+  /* «این زردها در قسمت دوستانه باید آبی باشه» */
+  const free = await page.evaluate(async () => {
+    document.querySelector('.phone').classList.add('theme-free');
+    (0, eval)("go('rules')");
+    await new Promise((r) => setTimeout(r, 400));
+    const back = document.querySelector('#rules .topbar .iconbtn');
+    const card = document.querySelector('#rules .card');
+    return { back: getComputedStyle(back).backgroundImage, card: getComputedStyle(card).borderTopColor };
+  });
+  const blue = (s) => /115,\s*217,\s*255|185,\s*240,\s*255|21,\s*151,\s*210/.test(s);
+  ok('on the friendly side the back button is blue', blue(free.back), free.back.slice(0, 60));
+  ok('and so is the edge of the cards', blue(free.card), free.card);
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
+console.log('\n' + pass + ' passed, ' + fail + ' failed');
+await browser.close(); server.close();
+process.exit(fail ? 1 : 0);

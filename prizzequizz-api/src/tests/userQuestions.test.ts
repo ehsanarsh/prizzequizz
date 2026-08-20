@@ -260,16 +260,34 @@ async function run(): Promise<void> {
   await check('the four options are sent with the right one marked', async () => {
     const i = client.indexOf('async function submitQuestion(');
     const body = client.slice(i, client.indexOf('async function qsLoadMine('));
-    assert.match(body, /options:\[c,\.\.\.w\.slice\(0,3\)\],\s*correctIndex:0/,
-      'the correct answer is the option the server will mark correct');
-    assert.ok(body.includes('QS_DIFF['), 'and the Persian difficulty is translated, not sent as Persian');
+    /* Four separate boxes, and the correct one is whichever the player TAPPED.
+       It used to be `[correct, ...wrong]` with `correctIndex:0`, which put the
+       right answer first in every question anybody ever wrote. */
+    assert.match(body, /options:\s*o,\s*correctIndex:\s*QS_CORRECT/,
+      'the correct answer is the one the player marked, in the place they put it');
+    assert.ok(body.includes('difficulty:QS_DIFFICULTY'),
+      'and the difficulty is sent in the server’s own words, not in Persian');
+    /* The four levels the ladder climbs — «خیلی سخت» was missing entirely. */
+    for (const d of ['easy', 'medium', 'hard', 'veryhard']) {
+      assert.ok(client.includes(`data-d="${d}"`), 'the maker offers ' + d);
+    }
+  });
+
+  await check('the topics offered are the server’s own', async () => {
+    const i = client.indexOf('async function qsLoadCats(');
+    const body = client.slice(i, client.indexOf('function qsPickCat('));
+    assert.ok(body.includes("pzApi('GET','/last-survivor/topics')"),
+      'the list is fetched rather than typed into the page');
+    assert.ok(body.includes('!t.random') && body.includes('!t.hidden'),
+      'and «تصادفی» and anything taken off the list are not offered');
   });
 
   await check('the player can see what their questions earned', async () => {
     assert.ok(client.includes("pzApi('GET','/questions/mine')"), 'the list is fetched');
     assert.ok(client.includes('id="qsMine"'), 'and it has somewhere to go');
-    assert.match(client, /function hmQuizMaker\(\)\{ go\('qsubmit'\); qsLoadMine\(\); \}/,
-      'opening the screen loads it');
+    /* Reached from the home rail and from the More menu; both have to load it. */
+    assert.match(client, /function hmQuizMaker\(\)\{[^}]*qsLoadMine\(\)/, 'the home rail loads it');
+    assert.match(client, /if\(id==='qsubmit'\)\{[^}]*qsLoadMine\(\)/, 'and so does the menu');
   });
 
   await check('double-tapping «ارسال» cannot submit twice', async () => {

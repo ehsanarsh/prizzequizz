@@ -9,6 +9,7 @@ import { touchMatchPresence, presentInMatch } from '../../services/matchPresence
 import { openRunFor } from '../../services/duelRunService.js';
 import { settleRunToWallet } from '../../services/duelRunPayout.js';
 import { netPrize } from '../../services/prizeService.js';
+import { withAuthor } from '../../services/questionAuthorService.js';
 import { selectQuestionForRound, pickDeterministic, DIFF_LEVELS, TOPIC_SELECT_CATEGORY } from '../../services/adaptiveDifficultyService.js';
 import type { GameModeId, Match, PlanType } from '../../types/domain.js';
 
@@ -208,7 +209,7 @@ export function registerMatchRoutes(router: Router, base: string): void {
     // Option order is intentionally NOT shuffled server-side: option-shuffle (9)
     // is done per-player on the CLIENT with display→original index translation,
     // which is safe now that scoring is server-authoritative.
-    json(ctx.res, 200, { id: q.id, text: q.text, options: q.options, correctIndex: q.correctIndex, category: q.category, difficulty: q.difficulty });
+    json(ctx.res, 200, await withAuthor({ id: q.id, text: q.text, options: q.options, correctIndex: q.correctIndex, category: q.category, difficulty: q.difficulty }, q));
   });
 
   // Toss / topic-selection question: a simple, fast question drawn ONLY from the

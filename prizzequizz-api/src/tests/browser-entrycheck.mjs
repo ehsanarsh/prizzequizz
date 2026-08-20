@@ -195,21 +195,20 @@ for (const [w, h] of [[390, 844], [360, 640]]) {
       charDone: localStorage.getItem('pz_charDone')
     };
   });
-  /* «بعد از ثبت مشخصات در پایین دکمه انتخاب کاراکتر بیاد» — on this screen,
-     not somewhere the player has to go and find. */
   ok('the details were sent', patches.length === 1 && patches[0].username === 'ehsan_r', JSON.stringify(patches[0] || {}));
-  ok('and the player stays here to pick a character', after.screen === 'register', after.screen);
-  ok('the button becomes «انتخاب کاراکتر»', /انتخاب کاراکتر/.test(after.label), after.label);
+  /* «باید مستقیم بره به انتخاب کاراکتر — الان اسم دکمه عوض میشه و باید دوباره
+     همونو بزنی.» Saving and opening the picker were two presses of one button,
+     which reads as the first press having done nothing. One press now. */
+  ok('the picker opens straight away', after.screen === 'character', after.screen);
+  ok('the button behind it is «انتخاب کاراکتر»', /انتخاب کاراکتر/.test(after.label), after.label);
   ok('with a line saying the details were saved', /ذخیره شد/.test(after.note), after.note.replace(/\n/g, ' '));
   /* And the step is NOT quietly marked done, which is what used to skip it. */
   ok('and the character step is not pre-marked as done', after.charDone !== '1', String(after.charDone));
 
-  const went = await page.evaluate(async () => {
-    document.querySelector('#register .btn-yellow,#register .btn-primary').click();
-    await new Promise((r) => setTimeout(r, 600));
-    return (document.querySelector('.screen.active') || {}).id;
-  });
-  ok('and pressing it opens the character picker', went === 'character', went);
+  /* Coming back out of the picker ends registration at home, not at the
+     profile screen the picker returns to when opened from anywhere else. */
+  const dest = await page.evaluate(() => (0, eval)('charBack'));
+  ok('and finishing it lands in the game', dest === 'home', String(dest));
   ok('no script errors', errs.length === 0, errs.join(' | '));
   await ctx.close();
 }

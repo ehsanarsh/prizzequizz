@@ -30,6 +30,7 @@
  * deliberate trade: a durable turn-by-turn state machine is a great deal more
  * machinery than a five-minute match needs, and the money only moves at the end.
  */
+import { withAuthor } from './questionAuthorService.js';
 import { repositories } from '../repositories/index.js';
 import { logger } from './logger.js';
 import { randomInt } from 'node:crypto';
@@ -198,10 +199,10 @@ async function openQuestion(room: WtaRoom, now: number): Promise<void> {
   room.asked.push(q.id);
   room.phase = 'turn';
   room.endsAt = now + WTA_ANSWER_SECONDS * 1000;
-  publish(room.id, 'wta:question', {
+  publish(room.id, 'wta:question', await withAuthor({
     turnUserId: room.turnUserId, questionId: q.id, text: q.text, options: q.options,
     category: q.category, difficulty: q.difficulty, endsAt: room.endsAt, serverNow: now
-  });
+  }, q));
 }
 
 /** Whoever is best placed to be called the winner when a room ends early. */
@@ -393,7 +394,7 @@ export async function snapshot(roomId: string, forUserId?: string): Promise<any>
    * the turn is over, in the events, never here while it is open. */
   if (room.phase === 'turn' && room.questionId) {
     const q = await repositories.questions.findById(room.questionId).catch(() => null);
-    if (q) view.question = { id: q.id, text: q.text, options: q.options, category: q.category, difficulty: q.difficulty };
+    if (q) view.question = await withAuthor({ id: q.id, text: q.text, options: q.options, category: q.category, difficulty: q.difficulty }, q);
   }
   if (forUserId) {
     const me = room.players.find((p) => p.userId === forUserId);
