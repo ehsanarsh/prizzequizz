@@ -3447,6 +3447,11 @@ function lsMusicUpload(){
   xhr.onload=()=>{
     let d=null; try{ d=JSON.parse(xhr.responseText); }catch(e){}
     if(xhr.status>=200&&xhr.status<300){ done('موزیک اضافه شد ✅','ok'); renderLastSurvivor(); return; }
+    /* A SERVER THAT HAS NOT BEEN UPDATED YET still has the older door. Falling
+       back to it means the operator is not stuck between a new panel and an old
+       API — the upload is slower and heavier that way, which is why it is the
+       fallback and not the road. */
+    if(xhr.status===404){ lsMusicUploadLegacy(file,name,btn,done); return; }
     /* The server's own words when it has any — «حجم فایل باید کمتر از…» is far
        more use than a status code. */
     done((d&&d.error&&d.error.message)||('آپلود نشد — خطای '+fa(xhr.status)),'bad');
@@ -3458,6 +3463,23 @@ function lsMusicUpload(){
   xhr.ontimeout=()=>done('آپلود بیش از حد طول کشید','bad');
   xhr.send(file);
 }
+/* The older upload: the file as base64 inside JSON. Kept only for an API that
+   predates the raw door, and reached only when that door answers 404. */
+async function lsMusicUploadLegacy(file,name,btn,done){
+  if(btn) btn.textContent='در حال آپلود (روش قدیمی)…';
+  try{
+    const dataUri=await new Promise((res,rej)=>{
+      const fr=new FileReader();
+      fr.onerror=()=>rej(new Error('خواندن فایل ناموفق بود'));
+      fr.onload=()=>res(String(fr.result));
+      fr.readAsDataURL(file);
+    });
+    await api('POST','/admin/waiting-music',{title:name,audio:dataUri});
+    done('موزیک اضافه شد ✅','ok');
+    renderLastSurvivor();
+  }catch(e){ done((e&&e.message)||'آپلود نشد','bad'); }
+}
+
 async function lsMusicToggleTrack(id,enabled){
   try{ await api('PATCH','/admin/waiting-music/'+encodeURIComponent(id),{enabled:!!enabled}); renderLastSurvivor(); }
   catch(e){ toast(e.message||'انجام نشد','bad'); }

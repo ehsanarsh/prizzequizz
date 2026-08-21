@@ -178,7 +178,10 @@ function run(): void {
     assert.equal(audio.length, 1, 'expected exactly one audio upload, found ' + audio.length);
     const i = script.indexOf('function lsMusicUpload(');
     assert.ok(i > 0, 'the music upload handler is missing');
-    const body = script.slice(i, script.indexOf('async function lsMusicToggleTrack('));
+    /* The primary handler only. The base64 route still exists below it as a
+       fallback for an API that predates the raw door — that one is allowed to
+       build a string, and is checked separately. */
+    const body = script.slice(i, script.indexOf('async function lsMusicUploadLegacy('));
     assert.ok(/file\.size\s*>\s*_LSM_MAX/.test(body), 'the size is not checked before uploading');
     /* THE FILE GOES AS ITSELF. Reading it into a base64 string first is what
        made a ten-megabyte upload die in the browser: the string, the JSON copy
@@ -193,6 +196,9 @@ function run(): void {
     /* And the operator sees it moving, rather than a button that sits there. */
     assert.ok(/xhr\.upload\.onprogress/.test(body), 'a long upload gives no sign of progress');
     assert.ok(/xhr\.onerror/.test(body), 'a network failure would be reported as nothing at all');
+    /* And the old way is a FALLBACK, not a second road: only a 404 may take it. */
+    assert.match(body, /xhr\.status===404\s*\)\s*\{\s*lsMusicUploadLegacy/,
+      'the base64 upload must only be reached when the raw route is missing');
   });
 
   check('an SVG is passed through instead of being rasterised', () => {

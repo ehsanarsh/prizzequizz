@@ -92,6 +92,14 @@ export class Router {
       }
       return;
     }
+    /* ANSWERING BEFORE THE BODY HAS BEEN READ RESETS THE CONNECTION.
+     * A browser uploading ten megabytes to a path this build does not have gets
+     * the 404 written while it is still sending; Node then tears the socket
+     * down, and what reaches the person is not «404» but a dead connection —
+     * «ارتباط با سرور قطع شد», with no way to tell a missing route from a
+     * broken internet. Reading the rest of the request first costs nothing on
+     * the ordinary tiny 404 and turns the big one into a real answer. */
+    await drainRequest(req);
     error(res, 404, 'NOT_FOUND', 'Route not found');
     recordHttpRequest({ method, route: 'NOT_FOUND', statusCode: 404, durationMs: performance.now() - started });
   }
@@ -107,6 +115,23 @@ function match(route: string[], path: string[]): Record<string, string> | null {
     else if (r !== p) return null;
   }
   return params;
+}
+
+/* Read and throw away whatever is left of a request body, so a response can be
+ * sent without the connection being cut from under the sender. Bounded: a body
+ * that will not stop is not worth waiting for either. */
+export function drainRequest(req: IncomingMessage, limitBytes = 64 * 1024 * 1024): Promise<void> {
+  if (req.readableEnded || req.destroyed || !req.readable) return Promise.resolve();
+  return new Promise<void>((resolve) => {
+    let seen = 0;
+    let done = false;
+    const finish = () => { if (done) return; done = true; req.removeAllListeners('data'); resolve(); };
+    req.on('data', (c: Buffer) => { seen += c.length; if (seen > limitBytes) { req.destroy(); finish(); } });
+    req.on('end', finish);
+    req.on('error', finish);
+    req.on('aborted', finish);
+    req.resume();
+  });
 }
 
 function parseBody(req: IncomingMessage, maxBody = DEFAULT_MAX_BODY): Promise<unknown> {

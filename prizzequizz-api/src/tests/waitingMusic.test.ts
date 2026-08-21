@@ -270,6 +270,47 @@ async function main(): Promise<void> {
       assert.ok(!list.data.rows.some((x: any) => x.title === 'دزدکی'), 'an unauthenticated upload got through');
     });
 
+    /* THE FAILURE THAT LOOKED LIKE A BROKEN INTERNET.
+     *
+     * Answering a big upload BEFORE reading its body cuts the connection from
+     * under the sender: the browser never sees the status, only a dead socket,
+     * and reports «ارتباط با سرور قطع شد». Both early answers — a route this
+     * build does not have, and a key it will not accept — have to come back as
+     * real HTTP while a large body is still being sent. */
+    /* SENT SLOWLY, THE WAY A REAL UPLOAD ARRIVES. Over loopback a few megabytes
+       are gone before the server has finished thinking, and the fault hides.
+       A body that trickles in over a couple of seconds is what a phone on a
+       home line actually does — and it is while that is still happening that an
+       early answer cuts the connection. */
+    const trickle = (chunks: number, size = 512 * 1024, gapMs = 120) => new ReadableStream({
+      async pull(controller) {
+        if (chunks-- <= 0) { controller.close(); return; }
+        controller.enqueue(new Uint8Array(bytes(size)));
+        await new Promise((r) => setTimeout(r, gapMs));
+      }
+    });
+    const slowPost = async (path: string, key: string) => {
+      try {
+        const res = await fetch(base + path, {
+          method: 'POST', headers: { 'content-type': 'audio/mpeg', 'x-admin-key': key },
+          body: trickle(16), duplex: 'half'
+        } as any);
+        return res.status;
+      } catch (e) { return 'network: ' + ((e as Error).cause as any)?.code || 'network'; }
+    };
+
+    await check('a slow upload to a route that does not exist gets a 404, not a dead socket', async () => {
+      const status = await slowPost('/admin/waiting-music/no-such-door', adminKey);
+      assert.equal(status, 404, String(status));
+    });
+
+    await check('and a slow upload with the wrong key gets a real refusal', async () => {
+      const status = await slowPost('/admin/waiting-music/raw', 'not-the-key');
+      assert.ok(status === 401 || status === 403, String(status));
+      const list = await admin('GET', '/admin/waiting-music');
+      assert.ok(!list.data.rows.some((x: any) => x.title === 'دزدکی بزرگ'), 'it was stored anyway');
+    });
+
     await check('the raw upload leaves the same anonymous playlist behind it', async () => {
       const res = await fetch(base + '/waiting-music');
       const parsed = await res.json() as any;

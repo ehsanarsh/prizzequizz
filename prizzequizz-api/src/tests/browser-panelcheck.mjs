@@ -30,7 +30,8 @@ const characters = [
   { id: 'ch-a', name: 'پهلوان', description: '', image: '', kind: 'normal', enabled: true, unlockLevel: 12, viaLevel: false, viaReward: false, viaPurchase: true, viaEvent: false, viaRandom: false, price: 700, group: 'قهرمانان', sortOrder: 0, newUntil: '', createdAt: '' },
   { id: 'ch-b', name: 'روباه', description: '', image: '', kind: 'normal', enabled: true, unlockLevel: 0, viaLevel: false, viaReward: false, viaPurchase: true, viaEvent: false, viaRandom: false, price: 300, group: 'حیوانات', sortOrder: 1, newUntil: '', createdAt: '' }
 ];
-const saved = { box: null, character: null, config: null, music: null, musicUpload: null };
+const saved = { box: null, character: null, config: null, music: null, musicUpload: null, musicLegacy: null };
+let rawIs404 = false;
 /* Two tracks the operator has already uploaded, and the settings the Last
    Survivor screen is built from. */
 const MUSIC = [
@@ -73,6 +74,8 @@ await ctx.route('**/*', (route) => {
   if (p === '/admin/notifications/campaigns' || /^\/admin\/notifications/.test(p)) return send({ rows: [], types: [], policy: { types: {} }, labels: {} });
   if (p === '/admin/users' || /^\/admin\/users/.test(p)) return send({ rows: [], total: 0 });
   if (p === '/admin/waiting-music/raw') {
+    /* Stand in for an API that predates this route. */
+    if (rawIs404) return route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ ok: false, error: { code: 'NOT_FOUND', message: 'Route not found' } }) });
     /* The file goes as itself now: the body IS the bytes, and the name rides
        in the query string. */
     saved.musicUpload = {
@@ -84,7 +87,7 @@ await ctx.route('**/*', (route) => {
     return send({ id: 'm3', bytes: saved.musicUpload.bytes });
   }
   if (p === '/admin/waiting-music') {
-    if (m === 'POST') { try { saved.musicUpload = JSON.parse(route.request().postData() || '{}'); } catch (e) {} return send({ id: 'm3' }); }
+    if (m === 'POST') { try { saved.musicLegacy = JSON.parse(route.request().postData() || '{}'); } catch (e) {} return send({ id: 'm3' }); }
     return send({ rows: MUSIC, maxBytes: 15 * 1024 * 1024 });
   }
   if (/^\/admin\/waiting-music\//.test(p)) {
@@ -329,6 +332,19 @@ await page.waitForTimeout(900);
      !!saved.musicUpload && saved.musicUpload.title === 'تست' && /^audio\//.test(saved.musicUpload.type),
      JSON.stringify(saved.musicUpload && { t: saved.musicUpload.title, ty: saved.musicUpload.type }));
   ok('and the admin key on it', !!saved.musicUpload && saved.musicUpload.key === 'k', String(saved.musicUpload && saved.musicUpload.key));
+
+  /* AN API THAT HAS NOT BEEN UPDATED YET. The new panel talks to the raw door;
+     if that door is not there, the operator must not be stranded — the older
+     JSON upload is used instead, automatically. */
+  saved.musicUpload = null; saved.musicLegacy = null; rawIs404 = true;
+  await page.setInputFiles('#lsm_file', { name: 'old.mp3', mimeType: 'audio/mpeg', buffer: Buffer.concat([Buffer.from('ID3'), Buffer.alloc(4096)]) });
+  await page.evaluate(() => { document.getElementById('lsm_title').value = 'قدیمی'; document.getElementById('lsm_add').click(); });
+  await page.waitForTimeout(1600);
+  ok('a server without the new door still gets the file', !!saved.musicLegacy, JSON.stringify(saved.musicLegacy && Object.keys(saved.musicLegacy)));
+  ok('through the older base64 route, with the same name',
+     !!saved.musicLegacy && saved.musicLegacy.title === 'قدیمی' && /^data:audio\//.test(saved.musicLegacy.audio || ''),
+     JSON.stringify(saved.musicLegacy && { t: saved.musicLegacy.title, a: String(saved.musicLegacy.audio).slice(0, 22) }));
+  rawIs404 = false;
 
   saved.music = null;
   await page.evaluate(async () => {

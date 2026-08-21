@@ -8,7 +8,7 @@
  * from a server that answers 200 with the whole body — so without this the
  * feature would be silent on every iPhone.
  */
-import type { Router } from '../../http/router.js';
+import { drainRequest, type Router } from '../../http/router.js';
 import { error, json } from '../../http/response.js';
 import { requireAdmin } from '../../services/adminGuard.js';
 import { recordAdmin } from '../../services/adminAuditService.js';
@@ -109,7 +109,11 @@ export function registerWaitingMusicRoutes(router: Router, base: string): void {
    * Here the file goes as itself: same size on the wire, no copies, and the
    * browser streams it. Same checks on arrival, since they run on the bytes. */
   router.add('POST', `${base}/admin/waiting-music/raw`, async (ctx) => {
-    if (!requireAdmin(ctx)) return;
+    /* THE REFUSAL HAS TO BE READABLE TOO. Answering 403 while the browser is
+       still pushing a ten-megabyte file cuts the socket, and the operator is
+       told the connection died rather than that their key was not accepted.
+       So the rest of the upload is read and discarded first. */
+    if (!requireAdmin(ctx)) { await drainRequest(ctx.req); return; }
     const mime = String(ctx.req.headers['content-type'] ?? '');
     const title = ctx.query.get('title') ?? '';
     /* Read with a ceiling. Once it is passed, the bytes are DROPPED but the
