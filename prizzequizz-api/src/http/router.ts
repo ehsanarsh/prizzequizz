@@ -31,6 +31,7 @@ interface Route {
   parts: string[];
   handler: Handler;
   maxBody?: number;
+  rawBody?: boolean;
 }
 
 /* A MEGABYTE IS RIGHT FOR EVERY ROUTE BUT ONE.
@@ -40,13 +41,19 @@ interface Route {
  * set to 12m, so anything above that never reaches Node anyway. */
 const DEFAULT_MAX_BODY = 1_000_000;
 
-export interface RouteOptions { maxBody?: number }
+export interface RouteOptions {
+  maxBody?: number;
+  /** Leave the request stream alone: the handler reads the body itself. For
+   *  binary uploads, where turning bytes into a string would corrupt them. */
+  rawBody?: boolean;
+}
 
 export class Router {
   private routes: Route[] = [];
 
   add(method: Method, path: string, handler: Handler, opts?: RouteOptions): void {
-    this.routes.push({ method, path, parts: path.split('/').filter(Boolean), handler, maxBody: opts?.maxBody });
+    this.routes.push({ method, path, parts: path.split('/').filter(Boolean), handler,
+      maxBody: opts?.maxBody, rawBody: opts?.rawBody });
   }
 
   async handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -65,7 +72,7 @@ export class Router {
       const params = match(route.parts, pathParts);
       if (!params) continue;
       try {
-        const body = await parseBody(req, route.maxBody ?? DEFAULT_MAX_BODY);
+        const body = route.rawBody ? undefined : await parseBody(req, route.maxBody ?? DEFAULT_MAX_BODY);
         const auth = readAuth(req);
         const device = auth.userId ? await observeDeviceSafely(req, auth.userId) : null;
         /* Presence, recorded from the one place every authenticated request

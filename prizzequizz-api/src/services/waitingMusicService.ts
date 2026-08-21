@@ -98,36 +98,64 @@ export function parseAudioDataUri(dataUri: string): { mime: string; buf: Buffer 
   if (buf.length > MUSIC_MAX_BYTES) {
     throw new MusicError('AUDIO_TOO_LARGE', `حجم فایل باید کمتر از ${Math.round(MUSIC_MAX_BYTES / (1024 * 1024))} مگابایت باشد.`);
   }
-  /* Magic bytes, so a renamed file cannot be stored and then served back from
-     our own origin as audio. Each container is recognised by its own header. */
+  if (!magicOk(mime, buf)) throw new MusicError('AUDIO_CORRUPT', 'محتوای فایل با فرمت اعلام‌شده هم‌خوانی ندارد.');
+  return { mime, buf };
+}
+
+/* Magic bytes, so a renamed file cannot be stored and then served back from our
+   own origin as audio. Each container is recognised by its own header. */
+function magicOk(mime: string, buf: Buffer): boolean {
   const ascii = (from: number, to: number) => buf.toString('ascii', from, to);
   const isMp3 = ascii(0, 3) === 'ID3' || (buf[0] === 0xff && ((buf[1]! & 0xe0) === 0xe0));
   const isMp4 = buf.length > 12 && ascii(4, 8) === 'ftyp';
   const isOgg = ascii(0, 4) === 'OggS';
   const isWav = ascii(0, 4) === 'RIFF' && ascii(8, 12) === 'WAVE';
   const isWebm = buf.length > 4 && buf[0] === 0x1a && buf[1] === 0x45 && buf[2] === 0xdf && buf[3] === 0xa3;
-  const okMagic =
-    ((mime === 'audio/mpeg' || mime === 'audio/mp3') && isMp3) ||
+  return ((mime === 'audio/mpeg' || mime === 'audio/mp3') && isMp3) ||
     ((mime === 'audio/mp4' || mime === 'audio/aac') && (isMp4 || isMp3)) ||
     (mime === 'audio/ogg' && isOgg) ||
     (mime === 'audio/webm' && isWebm) ||
     ((mime === 'audio/wav' || mime === 'audio/x-wav') && isWav);
-  if (!okMagic) throw new MusicError('AUDIO_CORRUPT', 'محتوای فایل با فرمت اعلام‌شده هم‌خوانی ندارد.');
-  return { mime, buf };
 }
 
 export function musicUrl(trackId: string, etag: string): string {
   return `/v1/waiting-music/${encodeURIComponent(trackId)}?v=${encodeURIComponent(etag.slice(0, 12))}`;
 }
 
+/* THE SAME CHECKS, WITHOUT THE DETOUR THROUGH TEXT.
+ * A file sent as base64 inside JSON is a third bigger on the wire and is copied
+ * several times over on the way — by the encoder, by JSON.stringify, and by the
+ * request body itself. For a ten-megabyte track that is the difference between
+ * an upload that arrives and one that dies in the browser. Raw bytes go through
+ * exactly the same validation; only the wrapping is gone. */
+export function checkAudio(mime: string, buf: Buffer): { mime: string; buf: Buffer } {
+  const type = String(mime || '').toLowerCase().split(';')[0]!.trim();
+  if (!ALLOWED.has(type)) throw new MusicError('AUDIO_TYPE_INVALID', 'فقط MP3، M4A/AAC، OGG یا WAV پذیرفته می‌شود.');
+  if (!buf.length) throw new MusicError('AUDIO_EMPTY', 'فایل صوتی خالی است.');
+  if (buf.length > MUSIC_MAX_BYTES) {
+    throw new MusicError('AUDIO_TOO_LARGE', `حجم فایل باید کمتر از ${Math.round(MUSIC_MAX_BYTES / (1024 * 1024))} مگابایت باشد.`);
+  }
+  if (!magicOk(type, buf)) throw new MusicError('AUDIO_CORRUPT', 'محتوای فایل با فرمت اعلام‌شده هم‌خوانی ندارد.');
+  return { mime: type, buf };
+}
+
+export async function addTrackBytes(input: { title?: unknown; mime: string; buf: Buffer }): Promise<MusicTrack> {
+  const { mime, buf } = checkAudio(input.mime, input.buf);
+  return storeTrack(String(input.title ?? ''), mime, buf);
+}
+
 export async function addTrack(input: { title?: unknown; audio?: unknown; sortOrder?: unknown }): Promise<MusicTrack> {
   const { mime, buf } = parseAudioDataUri(String(input.audio ?? ''));
+  return storeTrack(String(input.title ?? ''), mime, buf, Number(input.sortOrder) || 0);
+}
+
+async function storeTrack(rawTitle: string, mime: string, buf: Buffer, sortOrder = 0): Promise<MusicTrack> {
   const track: StoredTrack = {
     id: id(),
-    title: String(input.title ?? '').trim().slice(0, 80) || 'قطعهٔ بدون نام',
+    title: String(rawTitle ?? '').trim().slice(0, 80) || 'قطعهٔ بدون نام',
     mime, bytes: buf.length,
     etag: createHash('sha1').update(buf).digest('hex').slice(0, 32),
-    enabled: true, sortOrder: Number(input.sortOrder) || 0,
+    enabled: true, sortOrder,
     createdAt: new Date().toISOString(),
     data: buf
   };

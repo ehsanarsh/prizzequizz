@@ -3421,26 +3421,42 @@ function lsMusicCard(music){
       : '<div class="empty">هنوز موزیکی آپلود نشده — اتاق انتظار بدون پخش‌کننده نمایش داده می‌شود.</div>')+
   '</div>';
 }
-async function lsMusicUpload(){
+/* THE FILE GOES AS ITSELF.
+   It used to be read into a base64 string, wrapped in JSON and posted — three
+   copies of a ten-megabyte file built inside the tab before anything left it,
+   and on a real connection the upload died there: «failed to fetch», with no
+   POST reaching the server at all. Now the File is the body. Same bytes, one
+   copy, and XHR so there is a progress bar instead of a long silence. */
+function lsMusicUpload(){
   const f=$('#lsm_file'), t=$('#lsm_title'), btn=$('#lsm_add');
   const file=f&&f.files&&f.files[0];
   if(!file){ toast('اول فایل صوتی را انتخاب کن','bad'); return; }
-  /* Checked here as well as on the server, because a rejected 6MB upload is a
-     6MB upload the operator waited for. */
-  if(file.size>_LSM_MAX){ toast('حجم فایل بیشتر از حد مجاز است','bad'); return; }
-  if(btn){ btn.disabled=true; btn.textContent='در حال آپلود…'; }
-  try{
-    const dataUri=await new Promise((res,rej)=>{
-      const fr=new FileReader();
-      fr.onerror=()=>rej(new Error('خواندن فایل ناموفق بود'));
-      fr.onload=()=>res(String(fr.result));
-      fr.readAsDataURL(file);
-    });
-    await api('POST','/admin/waiting-music',{title:(t&&t.value)||file.name,audio:dataUri});
-    toast('موزیک اضافه شد ✅','ok');
-    renderLastSurvivor();
-  }catch(e){ toast(e.message||'آپلود نشد','bad'); }
-  finally{ if(btn){ btn.disabled=false; btn.textContent='⬆️ آپلود'; } }
+  /* Checked here as well as on the server, because a rejected upload is an
+     upload the operator waited for. */
+  if(file.size>_LSM_MAX){ toast('حجم فایل بیشتر از حد مجاز است — حداکثر '+fa(Math.round(_LSM_MAX/1024/1024))+' مگابایت','bad'); return; }
+  const name=(t&&t.value)||file.name;
+  const done=(msg,kind)=>{ if(btn){ btn.disabled=false; btn.textContent='⬆️ آپلود'; } toast(msg,kind); };
+  if(btn){ btn.disabled=true; btn.textContent='در حال آپلود… ۰٪'; }
+  const xhr=new XMLHttpRequest();
+  xhr.open('POST',API+'/admin/waiting-music/raw?title='+encodeURIComponent(name));
+  xhr.setRequestHeader('x-admin-key',KEY);
+  xhr.setRequestHeader('Content-Type',file.type||'audio/mpeg');
+  /* «در حال آپلود» with a number on it: a ten-megabyte file over a home line
+     takes a while, and a button that just sits there looks broken. */
+  xhr.upload.onprogress=(e)=>{ if(btn&&e.lengthComputable) btn.textContent='در حال آپلود… '+fa(Math.round(e.loaded/e.total*100))+'٪'; };
+  xhr.onload=()=>{
+    let d=null; try{ d=JSON.parse(xhr.responseText); }catch(e){}
+    if(xhr.status>=200&&xhr.status<300){ done('موزیک اضافه شد ✅','ok'); renderLastSurvivor(); return; }
+    /* The server's own words when it has any — «حجم فایل باید کمتر از…» is far
+       more use than a status code. */
+    done((d&&d.error&&d.error.message)||('آپلود نشد — خطای '+fa(xhr.status)),'bad');
+  };
+  /* A network failure is not a status code, and «failed to fetch» told the
+     operator nothing. Say which half it was. */
+  xhr.onerror=()=>done('ارتباط با سرور قطع شد — اینترنت یا حجم فایل را بررسی کن','bad');
+  xhr.onabort=()=>done('آپلود لغو شد','bad');
+  xhr.ontimeout=()=>done('آپلود بیش از حد طول کشید','bad');
+  xhr.send(file);
 }
 async function lsMusicToggleTrack(id,enabled){
   try{ await api('PATCH','/admin/waiting-music/'+encodeURIComponent(id),{enabled:!!enabled}); renderLastSurvivor(); }

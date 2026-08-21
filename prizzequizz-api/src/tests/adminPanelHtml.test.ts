@@ -176,15 +176,23 @@ function run(): void {
     const inputs = [...html.matchAll(/<input[^>]*type=["']file["'][^>]*>/g)].map((m) => m[0]);
     const audio = inputs.filter((t) => /accept=["'][^"']*audio/i.test(t));
     assert.equal(audio.length, 1, 'expected exactly one audio upload, found ' + audio.length);
-    const i = script.indexOf('async function lsMusicUpload(');
+    const i = script.indexOf('function lsMusicUpload(');
     assert.ok(i > 0, 'the music upload handler is missing');
     const body = script.slice(i, script.indexOf('async function lsMusicToggleTrack('));
     assert.ok(/file\.size\s*>\s*_LSM_MAX/.test(body), 'the size is not checked before uploading');
-    assert.ok(/readAsDataURL/.test(body), 'the file is not read as a data URI');
+    /* THE FILE GOES AS ITSELF. Reading it into a base64 string first is what
+       made a ten-megabyte upload die in the browser: the string, the JSON copy
+       and the request body are three copies of the file before a byte leaves.
+       So the body must be the File, and readAsDataURL must be nowhere near it. */
+    assert.ok(/xhr\.send\(file\)/.test(body), 'the file itself is not what gets sent');
+    assert.ok(!/readAsDataURL|JSON\.stringify/.test(body), 'the file is still being turned into a string first');
     /* Followed one level down, the same way the WebP rule follows its handlers:
        an encoder reached through a helper is still an encoder. */
     assert.ok(!encodesWebp('lsMusicUpload'), 'music must not go through the image pipeline');
-    assert.ok(/'\/admin\/waiting-music'/.test(body), 'it does not post to the music endpoint');
+    assert.ok(/'\/admin\/waiting-music\/raw/.test(body), 'it does not post to the music endpoint');
+    /* And the operator sees it moving, rather than a button that sits there. */
+    assert.ok(/xhr\.upload\.onprogress/.test(body), 'a long upload gives no sign of progress');
+    assert.ok(/xhr\.onerror/.test(body), 'a network failure would be reported as nothing at all');
   });
 
   check('an SVG is passed through instead of being rasterised', () => {

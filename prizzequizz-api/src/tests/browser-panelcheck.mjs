@@ -72,9 +72,20 @@ await ctx.route('**/*', (route) => {
   }
   if (p === '/admin/notifications/campaigns' || /^\/admin\/notifications/.test(p)) return send({ rows: [], types: [], policy: { types: {} }, labels: {} });
   if (p === '/admin/users' || /^\/admin\/users/.test(p)) return send({ rows: [], total: 0 });
+  if (p === '/admin/waiting-music/raw') {
+    /* The file goes as itself now: the body IS the bytes, and the name rides
+       in the query string. */
+    saved.musicUpload = {
+      title: u.searchParams.get('title') || '',
+      type: route.request().headers()['content-type'] || '',
+      bytes: (route.request().postDataBuffer() || Buffer.alloc(0)).length,
+      key: route.request().headers()['x-admin-key'] || ''
+    };
+    return send({ id: 'm3', bytes: saved.musicUpload.bytes });
+  }
   if (p === '/admin/waiting-music') {
     if (m === 'POST') { try { saved.musicUpload = JSON.parse(route.request().postData() || '{}'); } catch (e) {} return send({ id: 'm3' }); }
-    return send({ rows: MUSIC, maxBytes: 6 * 1024 * 1024 });
+    return send({ rows: MUSIC, maxBytes: 15 * 1024 * 1024 });
   }
   if (/^\/admin\/waiting-music\//.test(p)) {
     if (m === 'PATCH') { try { saved.music = JSON.parse(route.request().postData() || '{}'); } catch (e) {} return send({ id: 'm1', enabled: false }); }
@@ -293,7 +304,7 @@ await page.waitForTimeout(900);
      megabytes and being told no at the end of it is the operator's time spent
      for nothing. */
   saved.musicUpload = null;
-  await page.setInputFiles('#lsm_file', { name: 'big.mp3', mimeType: 'audio/mpeg', buffer: Buffer.alloc(7 * 1024 * 1024) });
+  await page.setInputFiles('#lsm_file', { name: 'big.mp3', mimeType: 'audio/mpeg', buffer: Buffer.alloc(16 * 1024 * 1024) });
   await page.evaluate(() => document.getElementById('lsm_add').click());
   await page.waitForTimeout(900);
   ok('a file over the limit is not uploaded at all', saved.musicUpload === null, JSON.stringify(saved.musicUpload && Object.keys(saved.musicUpload)));
@@ -302,15 +313,22 @@ await page.waitForTimeout(900);
     return /حجم/.test((t && t.textContent) || '');
   }));
 
-  /* One inside the limit really is sent. */
+  /* One inside the limit really is sent — and sent as the FILE, not as a
+     base64 string wrapped in JSON. That wrapping is what killed a ten-megabyte
+     upload in the browser before it ever left. */
   saved.musicUpload = null;
-  await page.setInputFiles('#lsm_file', { name: 'ok.mp3', mimeType: 'audio/mpeg', buffer: Buffer.concat([Buffer.from('ID3'), Buffer.alloc(2048)]) });
+  const audio = Buffer.concat([Buffer.from('ID3'), Buffer.alloc(200000)]);
+  await page.setInputFiles('#lsm_file', { name: 'ok.mp3', mimeType: 'audio/mpeg', buffer: audio });
   await page.evaluate(() => { document.getElementById('lsm_title').value = 'تست'; document.getElementById('lsm_add').click(); });
-  await page.waitForTimeout(1200);
-  ok('a file inside the limit is uploaded', !!saved.musicUpload, JSON.stringify(saved.musicUpload && Object.keys(saved.musicUpload)));
-  ok('as audio data with the operator’s own name on it',
-     !!saved.musicUpload && saved.musicUpload.title === 'تست' && /^data:audio\//.test(saved.musicUpload.audio || ''),
-     JSON.stringify(saved.musicUpload && { t: saved.musicUpload.title, a: String(saved.musicUpload.audio).slice(0, 24) }));
+  await page.waitForTimeout(1500);
+  ok('a file inside the limit is uploaded', !!saved.musicUpload, JSON.stringify(saved.musicUpload));
+  ok('as the file itself, byte for byte, with no base64 in front of it',
+     !!saved.musicUpload && saved.musicUpload.bytes === audio.length,
+     JSON.stringify(saved.musicUpload && { sent: saved.musicUpload.bytes, file: audio.length }));
+  ok('with the operator’s own name and the file’s own type',
+     !!saved.musicUpload && saved.musicUpload.title === 'تست' && /^audio\//.test(saved.musicUpload.type),
+     JSON.stringify(saved.musicUpload && { t: saved.musicUpload.title, ty: saved.musicUpload.type }));
+  ok('and the admin key on it', !!saved.musicUpload && saved.musicUpload.key === 'k', String(saved.musicUpload && saved.musicUpload.key));
 
   saved.music = null;
   await page.evaluate(async () => {

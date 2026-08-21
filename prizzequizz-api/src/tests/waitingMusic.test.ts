@@ -193,6 +193,92 @@ async function main(): Promise<void> {
       assert.ok(res.status >= 400, 'a 1.2MB body was accepted on an ordinary route: ' + res.status);
     });
 
+    /* ── THE RAW DOOR ────────────────────────────────────────────────────
+       The one the panel uses now: the file as itself, no base64, no JSON. */
+    console.log('\nuploading the file as bytes:');
+    const raw = async (body: Buffer, mime = 'audio/mpeg', title = 'خام', key = adminKey) => {
+      const res = await fetch(base + '/admin/waiting-music/raw?title=' + encodeURIComponent(title), {
+        method: 'POST', headers: { 'content-type': mime, 'x-admin-key': key },
+        body: new Uint8Array(body)
+      });
+      const parsed = await res.json().catch(() => null) as any;
+      return { status: res.status, data: parsed?.data, code: parsed?.error?.code ?? '' };
+    };
+    const bytes = (size: number, seed = 5) => {
+      const buf = Buffer.alloc(size);
+      buf.write('ID3', 0, 'ascii');
+      for (let i = 3; i < size; i++) buf[i] = (i * seed) % 251;
+      return buf;
+    };
+
+    let rawId = '';
+    await check('a file sent as bytes is stored', async () => {
+      const r = await raw(bytes(8192));
+      assert.equal(r.status, 201, JSON.stringify(r));
+      assert.equal(r.data.bytes, 8192, 'the bytes changed on the way in');
+      assert.equal(r.data.mime, 'audio/mpeg');
+      assert.equal(r.data.title, 'خام', 'the operator’s name did not travel');
+      rawId = r.data.id;
+    });
+
+    await check('and comes back byte for byte', async () => {
+      const res = await fetch(base + '/waiting-music/' + rawId);
+      const back = Buffer.from(await res.arrayBuffer());
+      assert.equal(back.length, 8192);
+      assert.deepEqual(back, bytes(8192), 'the file was altered in storage');
+    });
+
+    /* THE WHOLE POINT: ten megabytes, the size the operator actually has, with
+       no base64 inflation in front of it. */
+    await check('a ten-megabyte file goes through this door too', async () => {
+      const r = await raw(bytes(10 * 1024 * 1024, 3), 'audio/mpeg', 'ده مگ خام');
+      assert.equal(r.status, 201, JSON.stringify({ status: r.status, code: r.code }));
+      assert.equal(r.data.bytes, 10 * 1024 * 1024);
+      await admin('DELETE', '/admin/waiting-music/' + r.data.id);
+    });
+
+    await check('the same checks apply — a file that is not audio is refused', async () => {
+      const r = await raw(Buffer.from('this is not audio at all, it is a sentence'), 'audio/mpeg');
+      assert.equal(r.status, 422, JSON.stringify(r));
+      assert.equal(r.code, 'AUDIO_CORRUPT');
+    });
+
+    await check('and a type nobody asked for', async () => {
+      const r = await raw(bytes(1024), 'application/zip');
+      assert.equal(r.status, 422, JSON.stringify(r));
+      assert.equal(r.code, 'AUDIO_TYPE_INVALID');
+    });
+
+    await check('a browser’s «audio/mpeg; charset=…» is still audio/mpeg', async () => {
+      const r = await raw(bytes(2048), 'audio/mpeg; charset=binary', 'با پارامتر');
+      assert.equal(r.status, 201, JSON.stringify(r));
+      await admin('DELETE', '/admin/waiting-music/' + r.data.id);
+    });
+
+    await check('one over the limit is refused rather than stored', async () => {
+      const r = await raw(bytes(MUSIC_MAX_BYTES + 4096), 'audio/mpeg', 'خیلی بزرگ');
+      assert.equal(r.status, 422, JSON.stringify({ status: r.status, code: r.code }));
+      assert.equal(r.code, 'AUDIO_TOO_LARGE');
+      const list = await admin('GET', '/admin/waiting-music');
+      assert.ok(!list.data.rows.some((x: any) => x.title === 'خیلی بزرگ'), 'the oversized file was stored anyway');
+    });
+
+    await check('and nobody without the admin key may use it', async () => {
+      const r = await raw(bytes(1024), 'audio/mpeg', 'دزدکی', 'not-the-key');
+      assert.ok(r.status === 401 || r.status === 403, 'status ' + r.status);
+      const list = await admin('GET', '/admin/waiting-music');
+      assert.ok(!list.data.rows.some((x: any) => x.title === 'دزدکی'), 'an unauthenticated upload got through');
+    });
+
+    await check('the raw upload leaves the same anonymous playlist behind it', async () => {
+      const res = await fetch(base + '/waiting-music');
+      const parsed = await res.json() as any;
+      const t = parsed.data.tracks.find((x: any) => x.id === rawId);
+      assert.ok(t, 'the raw track is not on the playlist');
+      assert.deepEqual(Object.keys(t).sort(), ['id', 'url'], JSON.stringify(t));
+      await admin('DELETE', '/admin/waiting-music/' + rawId);
+    });
+
     console.log('\nswitching one off:');
     await check('it leaves the players’ playlist', async () => {
       const off = await admin('PATCH', '/admin/waiting-music/' + trackId, { enabled: false });
