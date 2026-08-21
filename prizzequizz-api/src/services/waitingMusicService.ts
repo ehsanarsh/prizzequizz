@@ -70,6 +70,7 @@ async function ensureSchema(pool: ReturnType<typeof getPgPool>): Promise<void> {
   for (const col of [
     `title TEXT NOT NULL DEFAULT ''`,
     `bytes INT NOT NULL DEFAULT 0`,
+    `data_bin BYTEA`,
     `etag VARCHAR(64) NOT NULL DEFAULT ''`,
     `enabled BOOLEAN NOT NULL DEFAULT true`,
     `sort_order INT NOT NULL DEFAULT 0`,
@@ -77,6 +78,14 @@ async function ensureSchema(pool: ReturnType<typeof getPgPool>): Promise<void> {
   ]) {
     await pool.query(`ALTER TABLE waiting_music ADD COLUMN IF NOT EXISTS ${col}`);
   }
+  /* THE FILE IS BYTES, AND IT IS STORED AS BYTES NOW.
+   * It used to go into a TEXT column as base64: a third bigger, and built as a
+   * string in memory on the way in and on the way out again. For a ten-megabyte
+   * track that is a 13MB string per upload and another per read, in the same
+   * process that runs the matches. `data_bin` holds the file itself.
+   * The old TEXT column stays, and is still read for anything already stored —
+   * it only has to stop being REQUIRED so new rows need not fill it. */
+  await pool.query(`ALTER TABLE waiting_music ALTER COLUMN data DROP NOT NULL`);
   _schemaReady = true;
 }
 
@@ -163,9 +172,9 @@ async function storeTrack(rawTitle: string, mime: string, buf: Buffer, sortOrder
   if (!pool) { mem.set(track.id, track); return stripData(track); }
   await ensureSchema(pool);
   await pool.query(
-    `INSERT INTO waiting_music(id,title,mime,bytes,data,etag,enabled,sort_order)
+    `INSERT INTO waiting_music(id,title,mime,bytes,data_bin,etag,enabled,sort_order)
      VALUES ($1,$2,$3,$4,$5,$6,true,$7)`,
-    [track.id, track.title, track.mime, track.bytes, buf.toString('base64'), track.etag, track.sortOrder]
+    [track.id, track.title, track.mime, track.bytes, buf, track.etag, track.sortOrder]
   );
   /* Already decoded and in hand — the operator's own «play» button on the panel
      is usually the very next request for it. */
@@ -255,7 +264,11 @@ export async function getTrack(trackId: string): Promise<StoredTrack | null> {
   const { rows } = await pool.query(`SELECT * FROM waiting_music WHERE id=$1`, [key]);
   const r = rows[0];
   if (!r) return null;
-  const track: StoredTrack = { ...rowToTrack(r), data: Buffer.from(r.data, 'base64') };
+  /* Bytes when they are there, and the old base64 text for anything stored
+     before that column existed — an operator's uploads must not stop playing
+     because the storage changed underneath them. */
+  const data: Buffer = r.data_bin ? Buffer.from(r.data_bin) : Buffer.from(String(r.data ?? ''), 'base64');
+  const track: StoredTrack = { ...rowToTrack(r), data };
   cachePut(track);
   return track;
 }

@@ -154,6 +154,33 @@ await check('and its bytes come back byte for byte', async () => {
   assert.strictEqual(back!.data.toString('ascii', 0, 3), 'ID3', 'the file came back corrupted');
 });
 
+/* THE FILE IS STORED AS BYTES NOW, and what was stored as base64 text before
+   must keep playing — an operator's uploads cannot stop working because the
+   storage underneath them changed. */
+await check('a track written the old way, as base64 text, still plays', async () => {
+  const raw = Buffer.alloc(1024);
+  raw.write('ID3', 0, 'ascii');
+  for (let i = 3; i < raw.length; i++) raw[i] = (i * 11) % 251;
+  await pool.query(
+    `INSERT INTO waiting_music(id,title,mime,bytes,data,etag,enabled,sort_order)
+     VALUES ('legacy-1','قدیمی','audio/mpeg',$1,$2,'legacyetag',true,9)`,
+    [raw.length, raw.toString('base64')]);
+  const back = await music.getTrack('legacy-1');
+  assert.ok(back, 'the old row cannot be read at all');
+  assert.strictEqual(back!.data.length, raw.length, 'the old row came back the wrong size');
+  assert.deepStrictEqual(back!.data, raw, 'the old row came back altered');
+  await music.removeTrack('legacy-1');
+});
+
+await check('and a new one is written as bytes, not as text', async () => {
+  const t = await music.addTrack({ title: 'بایتی', audio: mp3(4096) });
+  const { rows } = await pool.query(`SELECT data, data_bin FROM waiting_music WHERE id=$1`, [t.id]);
+  assert.ok(rows[0].data_bin, 'the bytes column is empty — it went in as text again');
+  assert.strictEqual(rows[0].data_bin.length, 4096, 'the stored bytes are the wrong size');
+  assert.ok(!rows[0].data, 'the text column was filled as well, which is the cost this avoids');
+  await music.removeTrack(t.id);
+});
+
 await check('the players’ playlist is built from it, with no titles on it', async () => {
   const list = await music.playlistForPlayers();
   assert.strictEqual(list.length, 1, JSON.stringify(list));
