@@ -30,13 +30,23 @@ interface Route {
   path: string;
   parts: string[];
   handler: Handler;
+  maxBody?: number;
 }
+
+/* A MEGABYTE IS RIGHT FOR EVERY ROUTE BUT ONE.
+ * The cap is a DoS guard, so it stays small by default and is raised only where
+ * the route is genuinely for a file — the waiting-room music upload, which is
+ * an audio file arriving as base64 from the panel. nginx in front of this is
+ * set to 12m, so anything above that never reaches Node anyway. */
+const DEFAULT_MAX_BODY = 1_000_000;
+
+export interface RouteOptions { maxBody?: number }
 
 export class Router {
   private routes: Route[] = [];
 
-  add(method: Method, path: string, handler: Handler): void {
-    this.routes.push({ method, path, parts: path.split('/').filter(Boolean), handler });
+  add(method: Method, path: string, handler: Handler, opts?: RouteOptions): void {
+    this.routes.push({ method, path, parts: path.split('/').filter(Boolean), handler, maxBody: opts?.maxBody });
   }
 
   async handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -55,7 +65,7 @@ export class Router {
       const params = match(route.parts, pathParts);
       if (!params) continue;
       try {
-        const body = await parseBody(req);
+        const body = await parseBody(req, route.maxBody ?? DEFAULT_MAX_BODY);
         const auth = readAuth(req);
         const device = auth.userId ? await observeDeviceSafely(req, auth.userId) : null;
         /* Presence, recorded from the one place every authenticated request
@@ -92,11 +102,11 @@ function match(route: string[], path: string[]): Record<string, string> | null {
   return params;
 }
 
-function parseBody(req: IncomingMessage): Promise<unknown> {
+function parseBody(req: IncomingMessage, maxBody = DEFAULT_MAX_BODY): Promise<unknown> {
   if (!['POST', 'PUT', 'PATCH'].includes(req.method ?? 'GET')) return Promise.resolve(undefined);
   return new Promise((resolve, reject) => {
     let raw = '';
-    req.on('data', (chunk: Buffer) => { raw += chunk; if (raw.length > 1_000_000) reject(new Error('Payload too large')); });
+    req.on('data', (chunk: Buffer) => { raw += chunk; if (raw.length > maxBody) reject(new Error('Payload too large')); });
     req.on('end', () => { try { resolve(raw ? JSON.parse(raw) : undefined); } catch { reject(new Error('Invalid JSON')); } });
   });
 }

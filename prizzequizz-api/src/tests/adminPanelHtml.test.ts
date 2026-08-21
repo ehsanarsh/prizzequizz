@@ -107,6 +107,34 @@ function run(): void {
     assert.ok(!/lsDeleteTopic/.test(random), '«تصادفی» must not offer a delete the server will refuse');
   });
 
+  /* The body of a named function in the panel's script, and whether that
+     function — or anything it calls — re-encodes a file as an image. Shared by
+     the two upload rules below: one requires it, the other forbids it. */
+  const bodyOf = (name: string): string => {
+    const i = script.indexOf('function ' + name + '(');
+    if (i < 0) return '';
+    // Walk braces from the first { after the signature to its match.
+    const start = script.indexOf('{', i);
+    let depth = 0;
+    for (let j = start; j < script.length; j++) {
+      if (script[j] === '{') depth++;
+      else if (script[j] === '}') { depth--; if (!depth) return script.slice(start, j + 1); }
+    }
+    return script.slice(start);
+  };
+  const encodesWebp = (name: string, seen = new Set<string>()): boolean => {
+    if (seen.has(name)) return false;
+    seen.add(name);
+    const body = bodyOf(name);
+    if (!body) return false;
+    if (/toDataURL\(\s*['"]image\/webp['"]/.test(body) || /['"]image\/webp['"]/.test(body)) return true;
+    // …otherwise follow the functions this one calls.
+    for (const m of body.matchAll(/\b([a-zA-Z_$][\w$]*)\s*\(/g)) {
+      if (encodesWebp(m[1]!, seen)) return true;
+    }
+    return false;
+  };
+
   check('every file the panel uploads is turned into WebP first', () => {
     /* All four upload paths already shrink and re-encode before sending, which
      * is why the game's artwork is small. Nothing enforced it, though — a fifth
@@ -115,37 +143,19 @@ function run(): void {
      *
      * The check follows one level of calls, because the handler on the input is
      * usually a thin wrapper around the function that does the encoding. */
-    const bodyOf = (name: string): string => {
-      const i = script.indexOf('function ' + name + '(');
-      if (i < 0) return '';
-      // Walk braces from the first { after the signature to its match.
-      const start = script.indexOf('{', i);
-      let depth = 0;
-      for (let j = start; j < script.length; j++) {
-        if (script[j] === '{') depth++;
-        else if (script[j] === '}') { depth--; if (!depth) return script.slice(start, j + 1); }
-      }
-      return script.slice(start);
-    };
-    const encodesWebp = (name: string, seen = new Set<string>()): boolean => {
-      if (seen.has(name)) return false;
-      seen.add(name);
-      const body = bodyOf(name);
-      if (!body) return false;
-      if (/toDataURL\(\s*['"]image\/webp['"]/.test(body) || /['"]image\/webp['"]/.test(body)) return true;
-      // …otherwise follow the functions this one calls.
-      for (const m of body.matchAll(/\b([a-zA-Z_$][\w$]*)\s*\(/g)) {
-        if (encodesWebp(m[1]!, seen)) return true;
-      }
-      return false;
-    };
-
-    /* Every <input type=file> in the markup, plus the one catPickImage builds
-     * at runtime — a dynamically created input is still an upload. */
+    /* Every IMAGE <input type=file> in the markup, plus the one catPickImage
+     * builds at runtime — a dynamically created input is still an upload.
+     *
+     * An input that takes something else is not covered by this rule and must
+     * not be: re-encoding an audio file as WebP would destroy it. Those are
+     * checked by the next test instead. */
     const handlers = new Set<string>();
     for (const m of html.matchAll(/<input[^>]*type=["']file["'][^>]*>/g)) {
+      const accept = /accept=["']([^"']*)["']/.exec(m[0]);
+      const isImage = !accept || /image/i.test(accept[1]!);
+      if (!isImage) continue;
       const on = /onchange=["']([a-zA-Z_$][\w$]*)\(/.exec(m[0]);
-      assert.ok(on, 'a file input with no onchange handler: ' + m[0]);
+      assert.ok(on, 'an image file input with no onchange handler: ' + m[0]);
       handlers.add(on![1]!);
     }
     for (const m of script.matchAll(/inp\.type\s*=\s*'file'/g)) {
@@ -156,6 +166,25 @@ function run(): void {
     for (const h of handlers) {
       assert.ok(encodesWebp(h), h + ' uploads without producing WebP — every upload must be converted');
     }
+  });
+
+  /* THE ONE UPLOAD THAT IS NOT A PICTURE. Waiting-room music is sent as it is —
+     there is nothing to shrink and re-encoding would ruin it — so what has to be
+     true instead is that its size is checked BEFORE the wait, and that it is not
+     run through the image pipeline. */
+  check('the music upload is sent as audio and sized before it is sent', () => {
+    const inputs = [...html.matchAll(/<input[^>]*type=["']file["'][^>]*>/g)].map((m) => m[0]);
+    const audio = inputs.filter((t) => /accept=["'][^"']*audio/i.test(t));
+    assert.equal(audio.length, 1, 'expected exactly one audio upload, found ' + audio.length);
+    const i = script.indexOf('async function lsMusicUpload(');
+    assert.ok(i > 0, 'the music upload handler is missing');
+    const body = script.slice(i, script.indexOf('async function lsMusicToggleTrack('));
+    assert.ok(/file\.size\s*>\s*_LSM_MAX/.test(body), 'the size is not checked before uploading');
+    assert.ok(/readAsDataURL/.test(body), 'the file is not read as a data URI');
+    /* Followed one level down, the same way the WebP rule follows its handlers:
+       an encoder reached through a helper is still an encoder. */
+    assert.ok(!encodesWebp('lsMusicUpload'), 'music must not go through the image pipeline');
+    assert.ok(/'\/admin\/waiting-music'/.test(body), 'it does not post to the music endpoint');
   });
 
   check('an SVG is passed through instead of being rasterised', () => {

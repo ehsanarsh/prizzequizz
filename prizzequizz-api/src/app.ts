@@ -23,6 +23,7 @@ import { registerOpsRoutes } from './modules/ops/routes.js';
 import { registerShopRoutes } from './modules/shop/routes.js';
 import { registerChatPackRoutes } from './modules/chatPacks/routes.js';
 import { registerLastSurvivorRoutes } from './modules/lastSurvivor/routes.js';
+import { registerWaitingMusicRoutes } from './modules/waitingMusic/routes.js';
 import { registerLeagueRoutes } from './modules/leagues/routes.js';
 import { registerSmsRoutes } from './modules/sms/routes.js';
 import { registerLifelineRoutes } from './modules/lifelines/routes.js';
@@ -75,6 +76,7 @@ export function createApiServer(options: ApiServerOptions = {}): Server {
   registerShopRoutes(router, base);
   registerChatPackRoutes(router, base);
   registerLastSurvivorRoutes(router, base);
+  registerWaitingMusicRoutes(router, base);
   registerLeagueRoutes(router, base);
   registerSmsRoutes(router, base);
   registerLifelineRoutes(router, base);

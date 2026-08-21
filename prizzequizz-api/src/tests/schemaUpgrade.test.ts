@@ -119,6 +119,47 @@ await check('and a win still parks the money on it', async () => {
   assert.equal(back?.pendingGross, 25_000, 'and it is not in the database either');
 });
 
+/* ── waiting_music, and its bytes ────────────────────────────────────────── */
+/* The music table is the newest of these, so it starts life in the shape a
+   first release would have had — and the same round trip has to work on it.
+   This is also the only test that puts a file through the service against a
+   REAL database rather than the in-memory stand-in. */
+console.log('a server booting on a music table from before the extra columns:');
+await pool.query('DROP TABLE IF EXISTS waiting_music');
+await pool.query(`CREATE TABLE waiting_music (
+  id TEXT PRIMARY KEY,
+  mime VARCHAR(32) NOT NULL,
+  data TEXT NOT NULL)`);
+
+const music = await import('../services/waitingMusicService.js');
+const mp3 = (size: number) => {
+  const buf = Buffer.alloc(size);
+  buf.write('ID3', 0, 'ascii');
+  for (let i = 3; i < size; i++) buf[i] = (i * 7) % 251;
+  return 'data:audio/mpeg;base64,' + buf.toString('base64');
+};
+
+await check('a track can be uploaded at all', async () => {
+  const t = await music.addTrack({ title: 'بی‌کلام', audio: mp3(2048) });
+  assert.ok(t.id, 'no track came back');
+  assert.strictEqual(t.bytes, 2048, 'the size column was lost');
+  assert.strictEqual(t.enabled, true, 'the enabled column was lost');
+});
+
+await check('and its bytes come back byte for byte', async () => {
+  const rows = await music.listTracks();
+  const back = await music.getTrack(rows[0]!.id);
+  assert.ok(back, 'the track vanished');
+  assert.strictEqual(back!.data.length, 2048, 'the file changed size on the round trip');
+  assert.strictEqual(back!.data.toString('ascii', 0, 3), 'ID3', 'the file came back corrupted');
+});
+
+await check('the players’ playlist is built from it, with no titles on it', async () => {
+  const list = await music.playlistForPlayers();
+  assert.strictEqual(list.length, 1, JSON.stringify(list));
+  assert.deepStrictEqual(Object.keys(list[0]!).sort(), ['id', 'url']);
+});
+
 /* ── the rule, so the next column added does not repeat this ─────────────── */
 console.log('every column a fresh database gets, an old one gets too:');
 const fs = await import('node:fs');
@@ -126,7 +167,8 @@ const url = await import('node:url');
 const here = url.fileURLToPath(new URL('.', import.meta.url));
 for (const [file, table] of [
   ['../services/gameInviteService.ts', 'game_invites'],
-  ['../services/duelRunService.ts', 'duel_runs']
+  ['../services/duelRunService.ts', 'duel_runs'],
+  ['../services/waitingMusicService.ts', 'waiting_music']
 ] as const) {
   await check(table + ' says every optional column twice', async () => {
     const src = fs.readFileSync(here + file, 'utf8');

@@ -1239,7 +1239,32 @@ input,textarea,select,[contenteditable="true"],.pz-selectable,.pz-selectable *{
 .tab{background:var(--ink-2);border:2px solid #000;border-radius:100px;padding:9px 16px;font-family:inherit;font-size:13px;font-weight:800;color:var(--muted);cursor:pointer;white-space:nowrap;flex-shrink:0;box-shadow:var(--hard-sm);transition:transform .08s}
 .tab:active{transform:translateY(2px);box-shadow:0 1px 0 #000}
 .tab.active{background:linear-gradient(180deg,#FFE24A,var(--bolt-2));color:#141414}
-.shop-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:14px 18px}
+.shop-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:14px 18px;align-items:stretch}
+/* EVERY BUY BUTTON ON THE SAME LINE.
+   «دکمه های خرید بسته به اندازه کارت های پشتشون بالا پایین میشن — دکمه ها باید
+   منظم بغل هم و هم راستا باشن نه اینکه یکی بالا یکی پایین.» The cards were
+   already the same height (the grid stretches them); it was the CONTENTS that
+   floated, because a two-line description pushed the price pill down and a
+   one-line one left it high. The card is a column now and the pill is pushed to
+   the bottom of it, so a row of buttons is a row. */
+.shop-grid .item{display:flex;flex-direction:column;align-items:stretch}
+.shop-grid .item>b{margin-bottom:4px}
+.shop-grid .item>p{margin-bottom:8px;text-align:center}
+.shop-grid .item .price{margin-top:auto;align-self:stretch}
+/* A CHARACTER IS A FIGURE, NOT A BAND ACROSS THE CARD.
+   «عکس کاراکتر ها خیلی بزرگه و معلوم نیست — باید خیلی منظم و هم اندازه کنار هم
+   باشن و واضح.» The artwork was stretched to the full width of the card at 64px
+   tall and cropped to fill, so what showed was a slice through the middle of
+   the character. One portrait frame, the same size on every card, with the
+   whole figure fitted inside it. */
+.shop-grid .it-ico.char-art{width:92px;height:112px;margin:0 auto 9px;flex:0 0 auto;
+  border:2px solid #000;border-radius:16px;background:linear-gradient(180deg,#232a33,#151a20);
+  box-shadow:inset 0 -8px 14px rgba(0,0,0,.35);overflow:hidden;
+  display:flex;align-items:center;justify-content:center;font-size:34px}
+.shop-grid .it-ico.char-art .pz-avc,
+.shop-grid .it-ico.char-art .pz-avc-in{width:100%;height:100%}
+.shop-grid .it-ico.char-art .pz-avc-img{object-fit:contain;padding:5px;box-sizing:border-box}
+@media(max-width:370px){.shop-grid .it-ico.char-art{width:80px;height:98px}}
 .item{background:var(--ink-2);border:var(--stroke);border-radius:18px;padding:16px;text-align:center;cursor:pointer;transition:transform .1s,box-shadow .1s;box-shadow:var(--hard-sm)}
 .item:active{transform:translateY(3px);box-shadow:0 1px 0 #000}
 .item .it-ico{font-size:34px;margin-bottom:8px;filter:drop-shadow(0 3px 0 rgba(0,0,0,.3))}
@@ -5351,6 +5376,34 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
       /* Real bottom TABS (زبانه) — pinned under the content, active one is lit
          and connected to the panel above it, not a floating button. */
       .ls-tabs{display:flex;margin-top:auto;background:var(--ink-2);border-top:var(--stroke);padding-bottom:env(safe-area-inset-bottom)}
+/* ── THE WAITING-ROOM MUSIC PLAYER ────────────────────────────────────────
+   At the bottom of the room, under everything else, so it reads as something
+   to do while you wait rather than part of the match. Three controls, big
+   enough for a thumb, with the play button obviously the main one. */
+.ls-music:empty{display:none}
+.ls-music{margin:10px 14px 12px;padding:12px 14px 13px;border:var(--stroke);border-radius:18px;
+  background:linear-gradient(180deg,#1d2530,#141a22);box-shadow:var(--hard-sm);text-align:center}
+.ls-music .lm-txt{display:flex;align-items:center;gap:8px;justify-content:center;
+  font-size:12.5px;font-weight:800;color:var(--paper);line-height:1.8}
+.ls-music .lm-note{font-size:18px}
+.ls-music .lm-ctrls{display:flex;align-items:center;justify-content:center;gap:14px;margin-top:10px}
+.ls-music .lm-btn{width:46px;height:46px;border-radius:50%;border:2.5px solid #000;background:var(--ink-3);
+  color:var(--paper);font-family:inherit;font-size:17px;display:grid;place-items:center;cursor:pointer;
+  box-shadow:0 3px 0 #000;transition:transform .08s,box-shadow .08s}
+.ls-music .lm-btn:active{transform:translateY(3px);box-shadow:0 0 0 #000}
+.ls-music .lm-btn.lm-play{width:58px;height:58px;font-size:22px;
+  background:linear-gradient(180deg,#FFE24A,var(--bolt-2));color:#141414}
+.ls-music .lm-btn.lm-play.on{background:linear-gradient(180deg,#7fe0a8,#1eaf5f);color:#06210f}
+.ls-music .lm-foot{margin-top:9px;font-size:11px;font-weight:800;color:var(--muted);line-height:1.8}
+.ls-music .lm-link{color:var(--bolt);cursor:pointer;text-decoration:underline}
+.lm-pol.on{border-color:var(--bolt)!important;background:rgba(255,210,31,.14)!important}
+/* The control that outlives the waiting room: while music is playing anywhere
+   else in the game, this is how it gets stopped. */
+.lm-fab{position:absolute;left:14px;bottom:118px;z-index:60;width:46px;height:46px;border-radius:50%;
+  border:2.5px solid #000;background:linear-gradient(180deg,#FFE24A,var(--bolt-2));color:#141414;
+  font-size:18px;display:grid;place-items:center;cursor:pointer;box-shadow:var(--hard-sm)}
+.lm-fab:active{transform:translateY(3px);box-shadow:0 0 0 #000}
+@media(max-width:370px){.ls-music .lm-ctrls{gap:10px}.ls-music .lm-btn{width:42px;height:42px}.ls-music .lm-btn.lm-play{width:52px;height:52px}}
       .ls-tab{flex:1;padding:12px 6px 13px;color:var(--muted);font-weight:900;font-size:13px;text-align:center;cursor:pointer;position:relative;display:flex;flex-direction:column;align-items:center;gap:3px;transition:color .15s}
       .ls-tab .ti{font-size:19px;line-height:1}
       .ls-tab.on{color:var(--bolt)}
@@ -7624,6 +7677,9 @@ async function lsLeave(to,skipAsk){
   lsStopPoll(); lsWatching=false; ['lsColorPick','lsDead','lsCashPop'].forEach(id=>{const e=document.getElementById(id);if(e)e.remove();});
   lsRoomId=null; lsSnap=null; lsLastKey='';
   try{ lsPotReset(); }catch(e){}
+  /* The room's music belongs to the room. Leaving it silences it — and this is
+     the one path every way out goes through. */
+  try{ lsMusicStop(); }catch(e){}
   go(to||'home');
 }
 function lsStopPoll(){ if(lsPoller){clearInterval(lsPoller);lsPoller=null;} }
@@ -8175,7 +8231,10 @@ function lsUnlockInPlace(snap){
 function lsBuild(snap){
   const r=snap.room, body=document.getElementById('lsBody'); if(!body)return;
   if(r.status==='finished'){ body.innerHTML=lsEndHtml(snap); return; }
-  if(r.status==='waiting'){ body.innerHTML=lsWaitHtml(snap); lsBindChat(); return; }
+  if(r.status==='waiting'){ body.innerHTML=lsWaitHtml(snap); lsBindChat(); try{ lsMusicMount(); }catch(e){} return; }
+  /* The room is no longer waiting: whatever the player chose for «وقتی مسابقه
+     شروع شد» happens now, once. */
+  try{ lsMusicMatchStarted(); }catch(e){}
   /* A spectator's banner belongs on EVERY screen of the room, not only the ones
      with a question on them — the dashboard and the elimination grid look just
      as much like playing. */
@@ -8436,6 +8495,10 @@ function lsWaitHtml(snap){
   <div class="ls-grid" id="lsGrid" style="${lsTab==='players'?'':'display:none'}">${lsPlayersCells(snap,false)}</div>
   <div class="ls-chat" id="lsChatWrap" style="${lsTab==='chat'?'':'display:none'}"><div class="ls-chat-list" id="lsChatList"></div><div class="ls-chat-in"><input id="lsChatInput" placeholder="پیام…" maxlength="240"><button onclick="lsChatSend()">↑</button></div></div>
   ${r.manualStartEnabled?`<div class="ls-vote" id="lsVoteBtn" onclick="lsVote()"><i id="lsVoteFill"></i><span id="lsVoteTxt">شروع با همین تعداد</span></div>`:''}
+  <!-- «یه قسمت در پایین اتاق انتظار به نام پخش موزیک» — filled in by
+       lsMusicMount, so the room's own re-renders never interrupt what is
+       playing: the audio element itself lives outside this markup. -->
+  <div class="ls-music" id="lsMusicBox"></div>
   <div class="ls-tabs" role="tablist"><div class="ls-tab ${lsTab==='players'?'on':''}" data-tab="players" role="tab" onclick="lsSetTab('players')"><span class="ti">👥</span>بازیکنان</div>${r.chatEnabled?`<div class="ls-tab ${lsTab==='chat'?'on':''}" data-tab="chat" role="tab" onclick="lsSetTab('chat')"><span class="ti">💬</span>چت روم<b class="ls-chat-badge" id="lsChatBadge" style="display:none">۰</b></div>`:''}</div>`;
 }
 /* Last Survivor players get the same two-sided card as everywhere else. The
@@ -8856,6 +8919,253 @@ function lsSetTab(t){ lsTab=t;
   try{vib(8);}catch(e){}
 }
 function lsBindChat(){ const inp=document.getElementById('lsChatInput'); if(inp)inp.addEventListener('keydown',e=>{if(e.key==='Enter')lsChatSend();}); }
+
+/* ═══════════ MUSIC WHILE YOU WAIT ═══════════════════════════════════════
+   «یه قسمت در اتاق انتظار آخرین بازمانده اضافه میشه به نام پخش موزیک و
+   موزیک‌هایی که از پنل ادمین آپلود میشه به صورت تصادفی پخش میشه بدون نام و
+   مشخصات، با یه دکمه پلی و پاوس و دو دکمه آهنگ بعدی و قبلی… و همیشه یه دکمه
+   پلی و پاوس باید باشه تا کاربر بتونه هر جا خواست موزیک رو قطع کنه.»
+
+   THE ELEMENT LIVES OUTSIDE THE ROOM. The waiting room rebuilds its own markup
+   whenever the snapshot changes — a player joining is enough — and an <audio>
+   inside that markup would be destroyed and recreated mid-bar, which in practice
+   means the music restarts every few seconds. So exactly one element is made,
+   attached to the page itself, and the room only paints buttons that talk to it.
+
+   NOTHING IS NAMED. The list the server sends carries an id and a URL and no
+   title at all, so there is no name for this screen to show even by accident. */
+const LSM={el:null,tracks:[],order:[],i:0,loaded:false,loading:null,started:false,
+  policy:null,matchApplied:false,fadeTimer:null};
+try{ LSM.policy=localStorage.getItem('pz_music_onstart')||null; }catch(e){}
+
+/* Where the audio actually is. One element, made once. */
+function lsMusicEl(){
+  if(LSM.el) return LSM.el;
+  const a=document.createElement('audio');
+  a.id='pzMusicEl'; a.preload='none'; a.crossOrigin='anonymous';
+  /* One track at a time, and the end of one is the start of the next — that is
+     what makes it a playlist rather than a single song on repeat. */
+  a.addEventListener('ended',()=>{ lsMusicNext(); });
+  /* A file that will not play must not freeze the player on a dead track. */
+  a.addEventListener('error',()=>{ if(LSM.started) lsMusicNext(); });
+  a.addEventListener('play',()=>lsMusicPaint());
+  a.addEventListener('pause',()=>lsMusicPaint());
+  document.body.appendChild(a);
+  LSM.el=a; return a;
+}
+
+function lsMusicShuffle(avoidFirst){
+  /* «به صورت تصادفی پخش میشه» — a shuffled ORDER rather than a random pick each
+     time, so «قبلی» has something to go back to and no track repeats until the
+     whole list has been heard.
+     `avoidFirst` is the track that has just finished: a fresh order that opens
+     with it would play the same thing twice in a row, which is the one thing a
+     shuffle is not allowed to do. */
+  const idx=LSM.tracks.map((_,i)=>i);
+  for(let i=idx.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); const t=idx[i]; idx[i]=idx[j]; idx[j]=t; }
+  if(idx.length>1&&avoidFirst!=null&&idx[0]===avoidFirst){
+    const j=1+Math.floor(Math.random()*(idx.length-1));
+    const t=idx[0]; idx[0]=idx[j]; idx[j]=t;
+  }
+  LSM.order=idx; LSM.i=0;
+}
+
+async function lsMusicLoad(){
+  if(LSM.loaded) return LSM.tracks;
+  if(LSM.loading) return LSM.loading;
+  LSM.loading=(async()=>{
+    try{
+      const r=await pzApi('GET','/waiting-music',null,false);
+      const rows=(r&&r.data&&r.data.tracks)||[];
+      LSM.tracks=rows.filter(t=>t&&t.url).map(t=>({id:String(t.id||''),url:String(t.url)}));
+    }catch(e){ LSM.tracks=[]; }
+    LSM.loaded=true; LSM.loading=null; lsMusicShuffle();
+    return LSM.tracks;
+  })();
+  return LSM.loading;
+}
+
+/* The absolute address of a track. The list carries a server path, and the game
+   is often served from a different origin than the API. */
+function lsMusicSrc(t){
+  if(!t||!t.url) return '';
+  if(/^https?:/i.test(t.url)) return t.url;
+  try{ return _A.replace(/\/v1$/,'')+t.url; }catch(e){ return t.url; }
+}
+
+function lsMusicMount(){
+  const box=document.getElementById('lsMusicBox'); if(!box) return;
+  if(!LSM.loaded){
+    box.innerHTML='';
+    lsMusicLoad().then(()=>{ try{ lsMusicMount(); }catch(e){} });
+    return;
+  }
+  /* No music uploaded → no player. An empty set of controls that cannot play
+     anything is worse than nothing at all. */
+  if(!LSM.tracks.length){ box.innerHTML=''; return; }
+  box.innerHTML=
+    '<div class="lm-txt"><span class="lm-note">🎧</span>'+
+      '<span>تا شروع مسابقه حوصله‌ات سر نره — یک موزیک بگذار</span></div>'+
+    '<div class="lm-ctrls">'+
+      '<button type="button" class="lm-btn" id="lsMusicPrev" onclick="lsMusicPrev()" aria-label="موزیک قبلی">⏮</button>'+
+      '<button type="button" class="lm-btn lm-play" id="lsMusicPlay" onclick="lsMusicToggle()" aria-label="پخش یا توقف">▶</button>'+
+      '<button type="button" class="lm-btn" id="lsMusicNext" onclick="lsMusicNext()" aria-label="موزیک بعدی">⏭</button>'+
+    '</div>'+
+    '<div class="lm-foot" id="lsMusicFoot"></div>';
+  lsMusicPaint();
+}
+
+/* Every control on screen says the same thing about what is happening: the
+   room's big button, the floating one, and the line under them. */
+function lsMusicPaint(){
+  const playing=!!(LSM.el&&!LSM.el.paused&&LSM.started);
+  const b=document.getElementById('lsMusicPlay');
+  if(b){ b.textContent=playing?'⏸':'▶'; b.classList.toggle('on',playing); }
+  const foot=document.getElementById('lsMusicFoot');
+  if(foot){
+    foot.innerHTML=playing
+      ? 'در حال پخش — هر وقت خواستی همین‌جا قطعش کن'+
+        (LSM.policy?' · <span class="lm-link" onclick="lsMusicAskPolicy(true)">'+lsMusicPolicyText()+'</span>':'')
+      : 'قطعه‌ها تصادفی پخش می‌شوند';
+  }
+  lsMusicFab();
+}
+
+function lsMusicPolicyText(){
+  return LSM.policy==='stop'?'با شروع مسابقه: قطع'
+    : LSM.policy==='keep'?'با شروع مسابقه: ادامه'
+    : 'با شروع مسابقه: کم می‌شود';
+}
+
+/* THE BUTTON THAT IS ALWAYS THERE.
+   «همیشه یه دکمه پلی و پاوس باید باشه تا کاربر بتونه هر جا خواست موزیک رو قطع
+   کنه» — once the match starts the room's own player is gone from the screen,
+   so if the music is still going there has to be something to press. It appears
+   only while something is playing, and takes itself away when it stops. */
+function lsMusicFab(){
+  let fab=document.getElementById('lsMusicFab');
+  const playing=!!(LSM.el&&!LSM.el.paused&&LSM.started);
+  const inWait=!!document.getElementById('lsMusicBox');
+  if(!playing||inWait){ if(fab) fab.remove(); return; }
+  if(!fab){
+    fab=document.createElement('button');
+    fab.id='lsMusicFab'; fab.type='button'; fab.className='lm-fab';
+    fab.setAttribute('aria-label','توقف موزیک');
+    fab.onclick=()=>lsMusicToggle();
+    const ph=document.querySelector('.phone')||document.body;
+    ph.appendChild(fab);
+  }
+  fab.innerHTML='<span>⏸</span>';
+}
+
+async function lsMusicToggle(){
+  const a=lsMusicEl();
+  if(LSM.started&&!a.paused){ a.pause(); lsMusicPaint(); return; }
+  await lsMusicLoad();
+  if(!LSM.tracks.length){ toast('فعلاً موزیکی برای پخش نیست'); return; }
+  /* ASKED ONCE, BEFORE THE FIRST NOTE. «وقتی پلی میکنی یه گزینه بیاد که در صورت
+     شروع مسابقه موسیقی چی بشه» — and the answer is remembered, because being
+     asked the same question every time you press play is its own annoyance. */
+  if(!LSM.policy){ lsMusicAskPolicy(false); return; }
+  lsMusicPlay();
+}
+
+function lsMusicPlay(){
+  const a=lsMusicEl();
+  if(!LSM.tracks.length) return;
+  if(!LSM.order.length) lsMusicShuffle();
+  const t=LSM.tracks[LSM.order[LSM.i]];
+  const src=lsMusicSrc(t);
+  if(!src) return;
+  if(a.getAttribute('src')!==src){ a.setAttribute('src',src); a.load(); }
+  a.volume=LSM.quiet?0.25:1;
+  LSM.started=true;
+  const p=a.play();
+  if(p&&p.catch) p.catch(()=>{ /* refused (no gesture yet) — the button stays */ lsMusicPaint(); });
+  lsMusicPaint();
+}
+
+/* `auto` marks the moves the player did not make — the end of a track — so a
+   finished playlist stops rather than starting over on its own. */
+function lsMusicNext(){
+  if(!LSM.tracks.length) return;
+  if(!LSM.order.length) lsMusicShuffle();
+  if(LSM.i+1>=LSM.order.length){
+    /* The end of the list, whether the track ran out or «بعدی» was pressed:
+       a new random order that does not open with the one just heard. */
+    lsMusicShuffle(LSM.order[LSM.i]);
+  } else {
+    LSM.i=LSM.i+1;
+  }
+  lsMusicPlay();
+}
+function lsMusicPrev(){
+  if(!LSM.tracks.length) return;
+  const a=LSM.el;
+  /* The first few seconds of a track mean «go back one»; after that, «start
+     this one again» — which is how every music player behaves. */
+  if(a&&LSM.started&&a.currentTime>3){ a.currentTime=0; lsMusicPlay(); return; }
+  LSM.i=(LSM.i-1+Math.max(1,LSM.order.length))%Math.max(1,LSM.order.length);
+  lsMusicPlay();
+}
+
+/* What happens to the music when the question appears. Three answers, and the
+   one they pick is kept. `change` is true when they came back to change it,
+   in which case nothing starts playing on the way out. */
+function lsMusicAskPolicy(change){
+  const row=(v,ico,title,sub)=>
+    '<button class="btn btn-ghost lm-pol'+(LSM.policy===v?' on':'')+'" data-v="'+v+'" style="width:100%;margin-bottom:8px;text-align:start;display:flex;gap:9px;align-items:center">'+
+      '<span style="font-size:17px">'+ico+'</span><span style="flex:1;min-width:0"><b style="display:block;font-size:13px">'+title+'</b>'+
+      '<small style="color:var(--muted);font-weight:800;font-size:11px">'+sub+'</small></span></button>';
+  try{
+    showAaaModal({
+      icon:'🎧', title:'وقتی مسابقه شروع شد؟',
+      sub:'<div style="margin-bottom:9px;font-size:12.5px;color:var(--muted);font-weight:800">یک بار انتخاب کن — هر وقت خواستی از همین‌جا عوضش کن.</div>'+
+        row('quiet','🔉','صدایش کم شود','موزیک می‌ماند ولی آرام‌تر، تا صدای بازی را بشنوی')+
+        row('stop','⏹','قطع شود','با اولین سؤال موزیک خاموش می‌شود')+
+        row('keep','🎶','همین‌طور ادامه دهد','هیچ تغییری نمی‌کند'),
+      dismissible:true, primaryText:'', secondaryText:'بی‌خیال',
+      onSecondary:()=>closeAaaModal(false)
+    });
+    setTimeout(()=>{
+      document.querySelectorAll('.lm-pol').forEach(b=>{
+        b.onclick=()=>{
+          const v=b.getAttribute('data-v');
+          LSM.policy=v; try{ localStorage.setItem('pz_music_onstart',v); }catch(e){}
+          closeAaaModal(true);
+          setTimeout(()=>{ if(change){ lsMusicPaint(); } else { lsMusicPlay(); } },150);
+        };
+      });
+    },60);
+  }catch(e){}
+}
+
+/* The first question is on its way. Applied once per room, so a snapshot that
+   arrives twice does not turn the volume down twice. */
+function lsMusicMatchStarted(){
+  /* PAINTED AGAIN AFTER THE ROOM HAS REDRAWN. This runs from inside lsBuild,
+     BEFORE the waiting-room markup is replaced with the match's — so at this
+     moment the room's own player is still on screen and the floating control
+     would decide it is not needed, and nothing would ask again. The second
+     paint happens once the new screen is up. */
+  const done=()=>{ lsMusicPaint(); setTimeout(lsMusicPaint,0); };
+  if(LSM.matchApplied){ done(); return; }
+  LSM.matchApplied=true;
+  if(!LSM.started||!LSM.el||LSM.el.paused){ done(); return; }
+  if(LSM.policy==='stop'){ LSM.el.pause(); done(); return; }
+  if(LSM.policy==='keep'){ LSM.quiet=false; LSM.el.volume=1; done(); return; }
+  LSM.quiet=true; LSM.el.volume=0.25;      // the default: quieter, not gone
+  done();
+}
+
+/* Leaving the room ends the room's music. Kept as its own function so every
+   way out — the back arrow, a finished match, the app being closed — stops it
+   the same way. */
+function lsMusicStop(){
+  try{ if(LSM.el){ LSM.el.pause(); LSM.el.removeAttribute('src'); LSM.el.load(); } }catch(e){}
+  LSM.started=false; LSM.quiet=false; LSM.matchApplied=false;
+  lsMusicPaint();
+}
 /* THE BADGE ON THE CHAT TAB.
    A room fills up while people talk in it, and somebody watching the player
    grid had no way of knowing anything had been said — the chat only existed
@@ -12945,7 +13255,7 @@ async function renderCharacterShop(){
       d.innerHTML=(owned
           ?'<span class="shop-badge" style="position:absolute;top:8px;left:8px;background:var(--ok,#33D97C);color:#08130c;font-size:9px;font-weight:900;padding:2px 7px;border-radius:8px">فعال</span>'
           :(ch.isNew?'<span class="shop-badge" style="position:absolute;top:8px;left:8px;background:var(--bolt,#FFD21F);color:#111;font-size:9px;font-weight:900;padding:2px 7px;border-radius:8px">تازه</span>':''))+
-        '<div class="it-ico" style="height:64px;display:flex;align-items:center;justify-content:center">'+pzFaceHTML({avatar:'',character:ch})+'</div>'+
+        '<div class="it-ico char-art">'+pzFaceHTML({avatar:'',character:ch})+'</div>'+
         '<b>'+esc0(ch.name||'کاراکتر')+'</b>'+
         '<p>'+esc0(owned?(ch.description||''):(ch.lockReason||ch.description||''))+'</p>'+
         '<div class="price"'+(owned?' style="color:var(--ok,#33D97C)"':'')+'>'+priceTxt+'</div>';
@@ -13013,15 +13323,25 @@ async function pzLoadShop(){
 }
 /* Rebuild the shop tab bar so admin-added custom categories appear too. */
 const _SHOP_TAB_LABELS={tickets:'🎫 بلیط مسابقات',coins:'🪙 سکه',characters:'🦸 کاراکترها',
-  util:'🧰 آیتم‌های کاربردی',cosmetic:'✨ آیتم‌های تزئینی',gift:'🎁 هدیه به دوست'};
+  util:'🧰 آیتم‌های کاربردی',cosmetic:'✨ آیتم‌های تزئینی',gift:'🎁 هدیه به دوست',
+  chat:'💬 پک‌های چت'};
+/* THE SHELVES THAT ARE NOT IN THE CATALOGUE.
+   «پک های چت در اولین باز کردن فروشگاه چند ثانیه میاد و دوباره میره و از
+   فروشگاه حذف میشه» — and that is exactly what happened: the tab bar is written
+   in the page, then `pzLoadShop` finishes a second or two later and REBUILDS it
+   from this list. Tickets and characters were named here as always-present;
+   chat packs were not, so the shelf the player had just seen was rebuilt
+   without it. Three shelves have their own source, so all three are named. */
+const _SHOP_ALWAYS=['tickets','characters','chat'];
 function pzRebuildShopTabs(serverCats){
   const bar=document.getElementById('shopTabs');if(!bar)return;
-  /* Tickets and characters are not in the /shop/items catalogue — tickets come
-     from the game config and characters from their own roster — so both are
-     always offered, and the rest appear when the server has something in them. */
-  const order=['tickets','coins','characters','util','cosmetic','gift'];
+  /* Tickets, characters and chat packs are not in the /shop/items catalogue —
+     tickets come from the game config, characters from their own roster and the
+     packs from the chat-pack service — so all three are always offered, and the
+     rest appear when the server has something in them. */
+  const order=['tickets','coins','characters','util','cosmetic','gift','chat'];
   (serverCats||[]).forEach(c=>{if(order.indexOf(c)<0)order.push(c);});
-  const cats=order.filter(c=>c==='tickets'||c==='characters'||(SHOP[c]&&SHOP[c].length));
+  const cats=order.filter(c=>_SHOP_ALWAYS.indexOf(c)>=0||(SHOP[c]&&SHOP[c].length));
   bar.innerHTML=cats.map((c,i)=>'<button class="tab'+(c===_shopCurTab?' active':'')+'" onclick="shopTab(this,\''+c+'\')">'+esc0(_SHOP_TAB_LABELS[c]||c)+'</button>').join('');
 }
 /* A help is bought on the SERVER: it takes the money from the wallet ledger and

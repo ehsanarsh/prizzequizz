@@ -30,7 +30,20 @@ const characters = [
   { id: 'ch-a', name: 'پهلوان', description: '', image: '', kind: 'normal', enabled: true, unlockLevel: 12, viaLevel: false, viaReward: false, viaPurchase: true, viaEvent: false, viaRandom: false, price: 700, group: 'قهرمانان', sortOrder: 0, newUntil: '', createdAt: '' },
   { id: 'ch-b', name: 'روباه', description: '', image: '', kind: 'normal', enabled: true, unlockLevel: 0, viaLevel: false, viaReward: false, viaPurchase: true, viaEvent: false, viaRandom: false, price: 300, group: 'حیوانات', sortOrder: 1, newUntil: '', createdAt: '' }
 ];
-const saved = { box: null, character: null, config: null };
+const saved = { box: null, character: null, config: null, music: null, musicUpload: null };
+/* Two tracks the operator has already uploaded, and the settings the Last
+   Survivor screen is built from. */
+const MUSIC = [
+  { id: 'm1', title: 'بی‌کلام ۱', mime: 'audio/mpeg', bytes: 2_300_000, enabled: true, sortOrder: 0, createdAt: '' },
+  { id: 'm2', title: 'بی‌کلام ۲', mime: 'audio/mpeg', bytes: 3_100_000, enabled: true, sortOrder: 1, createdAt: '' }
+];
+const LS_CFG = {
+  room: { capacity: 20, minUsers: 3, waitSeconds: 60, manualStartEnabled: true, startPct: 70 },
+  timings: { readySeconds: 5, questionSeconds: 15, eliminationSeconds: 5, dashboardSeconds: 5, cashoutSeconds: 10 },
+  match: { totalRounds: 12, minSurvivors: 1 },
+  features: { animations: true, chat: true },
+  economy: { rakePercent: 10, tickets: { green: { value: 12500, units: 1 }, blue: { value: 25000, units: 2 }, red: { value: 50000, units: 4 } } }
+};
 /* The topics tab reads the game config and writes it back — including the
    internal toss bank, which must survive a save it was not part of. */
 const CFG = { version: '1.2.3', categories: [
@@ -59,6 +72,17 @@ await ctx.route('**/*', (route) => {
   }
   if (p === '/admin/notifications/campaigns' || /^\/admin\/notifications/.test(p)) return send({ rows: [], types: [], policy: { types: {} }, labels: {} });
   if (p === '/admin/users' || /^\/admin\/users/.test(p)) return send({ rows: [], total: 0 });
+  if (p === '/admin/waiting-music') {
+    if (m === 'POST') { try { saved.musicUpload = JSON.parse(route.request().postData() || '{}'); } catch (e) {} return send({ id: 'm3' }); }
+    return send({ rows: MUSIC, maxBytes: 6 * 1024 * 1024 });
+  }
+  if (/^\/admin\/waiting-music\//.test(p)) {
+    if (m === 'PATCH') { try { saved.music = JSON.parse(route.request().postData() || '{}'); } catch (e) {} return send({ id: 'm1', enabled: false }); }
+    return send({ removed: true });
+  }
+  if (p === '/admin/last-survivor/config') return send(LS_CFG);
+  if (p === '/admin/last-survivor/rooms') return send({ rows: [] });
+  if (p === '/admin/last-survivor/topics') return send({ topics: [], categories: [], randomCategories: [] });
   if (p === '/admin/config') {
     if (m === 'PATCH') { try { saved.config = JSON.parse(route.request().postData() || '{}'); } catch (e) {} return send({ ok: true }); }
     return send(CFG);
@@ -237,6 +261,64 @@ await page.waitForTimeout(900);
   ok('the toss bank keeps what makes it the toss bank',
      !!sent && sent.find((c) => c.name === 'انتخاب موضوع').role === 'toss',
      JSON.stringify(sent && sent.find((c) => c.name === 'انتخاب موضوع')));
+}
+
+/* ── 5. THE WAITING-ROOM MUSIC, FROM THE OPERATOR'S SIDE ────────────────── */
+{
+  console.log('\nthe waiting-room music card:');
+  await page.evaluate(() => { (0, eval)('CUR="lastsurvivor";'); });
+  await page.evaluate(() => (0, eval)('renderLastSurvivor()'));
+  await page.waitForTimeout(900);
+
+  const card = await page.evaluate(() => {
+    const cards = [...document.querySelectorAll('#main .card')];
+    const c = cards.find((x) => /موزیک/.test(x.innerText));
+    if (!c) return null;
+    return {
+      text: c.innerText.replace(/\s+/g, ' ').slice(0, 500),
+      file: !!c.querySelector('#lsm_file'),
+      accept: (c.querySelector('#lsm_file') || {}).accept || '',
+      title: !!c.querySelector('#lsm_title'),
+      rows: c.querySelectorAll('tbody tr').length,
+      players: !!c.querySelector('audio')
+    };
+  });
+  ok('the Last Survivor screen has a music card', !!card, JSON.stringify(card));
+  ok('with a file picker for audio', card.file && /audio/.test(card.accept), card.accept);
+  ok('and a name field that is only for the operator', card.title && /فقط در همین پنل|فقط برای خودت/.test(card.text), card.text.slice(0, 120));
+  ok('the uploaded tracks are listed', card.rows === 2, String(card.rows));
+  ok('each with a way to hear it before players do', card.players === true, String(card.players));
+
+  /* A FILE TOO BIG IS REFUSED BEFORE THE WAIT, not after it. Uploading six
+     megabytes and being told no at the end of it is the operator's time spent
+     for nothing. */
+  saved.musicUpload = null;
+  await page.setInputFiles('#lsm_file', { name: 'big.mp3', mimeType: 'audio/mpeg', buffer: Buffer.alloc(7 * 1024 * 1024) });
+  await page.evaluate(() => document.getElementById('lsm_add').click());
+  await page.waitForTimeout(900);
+  ok('a file over the limit is not uploaded at all', saved.musicUpload === null, JSON.stringify(saved.musicUpload && Object.keys(saved.musicUpload)));
+  ok('and the operator is told why', await page.evaluate(() => {
+    const t = document.querySelector('.toast, #toast');
+    return /حجم/.test((t && t.textContent) || '');
+  }));
+
+  /* One inside the limit really is sent. */
+  saved.musicUpload = null;
+  await page.setInputFiles('#lsm_file', { name: 'ok.mp3', mimeType: 'audio/mpeg', buffer: Buffer.concat([Buffer.from('ID3'), Buffer.alloc(2048)]) });
+  await page.evaluate(() => { document.getElementById('lsm_title').value = 'تست'; document.getElementById('lsm_add').click(); });
+  await page.waitForTimeout(1200);
+  ok('a file inside the limit is uploaded', !!saved.musicUpload, JSON.stringify(saved.musicUpload && Object.keys(saved.musicUpload)));
+  ok('as audio data with the operator’s own name on it',
+     !!saved.musicUpload && saved.musicUpload.title === 'تست' && /^data:audio\//.test(saved.musicUpload.audio || ''),
+     JSON.stringify(saved.musicUpload && { t: saved.musicUpload.title, a: String(saved.musicUpload.audio).slice(0, 24) }));
+
+  saved.music = null;
+  await page.evaluate(async () => {
+    const btn = [...document.querySelectorAll('button')].find((b) => /خاموش کن/.test(b.textContent));
+    btn.click();
+  });
+  await page.waitForTimeout(600);
+  ok('switching one off tells the server', !!saved.music && saved.music.enabled === false, JSON.stringify(saved.music));
 }
 
 ok('no panel script errors', errs.length === 0, errs.join(' | '));
