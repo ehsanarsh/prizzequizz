@@ -52,6 +52,10 @@ export function registerInviteRoutes(router: Router, base: string): void {
         fromName: me?.displayName || me?.username || 'بازیکن',
         toUserId, mode,
         ticketTier: String(body.ticketTier ?? ''),
+        /* Friendly duels are arranged for coins instead of a ticket. The number
+           is the sender's own — they type it — so it is cleaned and capped by
+           the service, not trusted as it arrives. */
+        coinStake: Number(body.coinStake ?? 0),
         roomId, roomTopic,
         fromRoomId: String(body.fromRoomId ?? '')
       });
@@ -60,7 +64,7 @@ export function registerInviteRoutes(router: Router, base: string): void {
       await notifications.create({
         userId: toUserId, type: 'game_invite', title: 'دعوت به بازی',
         body: `${inv.fromName} تو را به بازی دعوت کرد`,
-        data: { inviteId: inv.id, mode: inv.mode, ticketTier: inv.ticketTier, roomId: inv.roomId, roomTopic: inv.roomTopic, url: '/' },
+        data: { inviteId: inv.id, mode: inv.mode, ticketTier: inv.ticketTier, coinStake: inv.coinStake, roomId: inv.roomId, roomTopic: inv.roomTopic, url: '/' },
         push: true
       }).catch(() => undefined);
       json(ctx.res, 201, publicInvite(inv));
@@ -123,7 +127,8 @@ export function registerInviteRoutes(router: Router, base: string): void {
 function publicInvite(inv: any) {
   return {
     id: inv.id, fromUserId: inv.fromUserId, fromName: inv.fromName,
-    mode: inv.mode, ticketTier: inv.ticketTier, roomId: inv.roomId, roomTopic: inv.roomTopic,
+    mode: inv.mode, ticketTier: inv.ticketTier, coinStake: inv.coinStake ?? 0,
+    roomId: inv.roomId, roomTopic: inv.roomTopic,
     status: inv.status, expiresAt: inv.expiresAt,
     secondsLeft: Math.max(0, Math.round((inv.expiresAt - Date.now()) / 1000))
   };

@@ -1094,7 +1094,11 @@ function supPaintQueue(){
   if(!rows.length){ box.innerHTML='<div class="note" style="padding:10px">چیزی در این وضعیت نیست.</div>'; return; }
   box.innerHTML=rows.map(t=>
     '<div class="sup-row'+(SUP_OPEN===t.id?' on':'')+'" onclick="supOpen(\''+jsq(t.id)+'\')">'+
-      '<div class="sup-row-top"><b>'+esc(t.title||'بدون عنوان')+'</b>'+
+      /* «جدید» beside a ticket that arrived since this operator last looked —
+         the same chase the withdrawal, report and user tables carry. The
+         console rewrite dropped it, so the queue stopped saying which rows were
+         new. */
+      '<div class="sup-row-top"><b>'+esc(t.title||'بدون عنوان')+newTag('support',t.createdAt)+'</b>'+
         '<span class="pill '+(t.status==='closed'?'ok':t.status==='escalated'?'bad':'pend')+'">'+esc(t.status||'')+'</span></div>'+
       '<div class="sup-row-sub">'+esc(t.username||String(t.userId||'').slice(0,8))+
         ' · '+esc(t.category||'—')+' · '+fmtDate(t.updatedAt||t.createdAt)+'</div>'+
@@ -1769,7 +1773,10 @@ async function renderCategories(){
   const qlist=Array.isArray(allQ)?allQ:(allQ.rows||[]);
   const cmap={}; qlist.forEach(q=>{const c=(q.category||'').trim(); if(c) cmap[c]=(cmap[c]||0)+1;});
   _CATS.sort((a,b)=>(Number(a.order)||99)-(Number(b.order)||99));
-  const GRID='grid-template-columns:64px 44px 1fr 80px 80px 118px';
+  /* One more column than before: «کوییزساز» — which topics a player may write a
+     question about. «از همان تب موضوعات پنل مدیریت بتونم مدیریت کنم که چه
+     موضوعاتی برای کوییز ساز فعال باشه.» */
+  const GRID='grid-template-columns:64px 44px 1fr 70px 74px 96px 104px';
   const art=(c)=>{
     const url=_CAT_IMG[(c.name||'').trim()];
     return '<div class="cat-art'+(url?' has':'')+'" onclick="catPickImage('+JSON.stringify(c.name||'').replace(/"/g,'&quot;')+')" title="برای انتخاب یا تعویض عکس بزن">'+
@@ -1784,6 +1791,10 @@ async function renderCategories(){
       '<input id="cat_nm_'+i+'" value="'+esc(c.name||'')+'" title="نام موضوع">'+
       '<input id="cat_or_'+i+'" type="number" value="'+(c.order||i+1)+'" title="ترتیب">'+
       '<span style="font-size:12px;color:var(--muted)">'+fa(cmap[c.name]||0)+' سوال</span>'+
+      /* The toss bank and «تصادفی» are never offered in the maker, so their box
+         is shown disabled rather than left as a tick that does nothing. */
+      '<label style="font-size:12px;display:flex;gap:5px;align-items:center" title="نمایش این موضوع در کوییزساز بازیکن‌ها">'+
+        '<input id="cat_mk_'+i+'" type="checkbox" '+(c.maker!==false?'checked':'')+(catMakerLocked(c)?' disabled':'')+'> کوییزساز</label>'+
       '<label style="font-size:12px;display:flex;gap:5px;align-items:center;justify-content:flex-end"><input id="cat_en_'+i+'" type="checkbox" '+(c.enabled!==false?'checked':'')+'> فعال '+
         '<button class="btn sm bad" onclick="catDel('+i+')">حذف</button></label>'+
     '</div>').join('');
@@ -1791,14 +1802,18 @@ async function renderCategories(){
     '<div class="note">این موضوعات مستقیم روی بازی اثر می‌گذارند: فقط موضوعاتِ <b>فعال</b> در انتخابِ موضوعِ بازی نمایش داده می‌شوند (بازی از config می‌خواند). بعد از ذخیره، در بازی Ctrl+Shift+R بزن.</div>'+
     '<div class="note">🖼️ روی مربع عکس بزن تا برای هر موضوع تصویر بگذاری. همان عکس در <b>انتخاب موضوع دوئل</b>، <b>آخرین بازمانده</b> و <b>ثبت رکورد</b> نمایش داده می‌شود. عکس بلافاصله ذخیره می‌شود (نیازی به «ذخیره» نیست) و قبل از ارسال به ۲۵۶ پیکسل کوچک می‌شود. اگر موضوعی عکس نداشته باشد، همان آیکون ایموجی نمایش داده می‌شود.</div>'+
     '<div class="card">'+
-      '<div class="cfg-row" style="'+GRID+';color:var(--muted);font-size:11px;font-weight:800"><span>عکس</span><span>آیکون</span><span>نام موضوع</span><span>ترتیب</span><span>سوالات</span><span>وضعیت</span></div>'+
+      '<div class="cfg-row" style="'+GRID+';color:var(--muted);font-size:11px;font-weight:800"><span>عکس</span><span>آیکون</span><span>نام موضوع</span><span>ترتیب</span><span>سوالات</span><span>کوییزساز</span><span>وضعیت</span></div>'+
       rows+
       '<button class="btn pri" style="margin-top:12px" onclick="catSave()">💾 ذخیرهٔ همه</button>'+
     '</div>';
 }
 function catAdd(){ catSyncFromDom(); _CATS.push({name:'موضوع جدید',icon:'❓',enabled:true,order:_CATS.length+1}); renderCatsFromMem(); }
 function catDel(i){ catSyncFromDom(); if(!confirm('این موضوع حذف شود؟ (سوالاتش پاک نمی‌شوند)'))return; _CATS.splice(i,1); renderCatsFromMem(); }
-function catSyncFromDom(){ _CATS.forEach((c,i)=>{const ic=$('#cat_ic_'+i),nm=$('#cat_nm_'+i),or=$('#cat_or_'+i),en=$('#cat_en_'+i); if(ic)c.icon=ic.value; if(nm)c.name=nm.value.trim(); if(or)c.order=Number(or.value)||i+1; if(en)c.enabled=en.checked;}); }
+/* «تصادفی» is a way of drawing from the other topics and «انتخاب موضوع» is the
+   internal toss bank; neither is a subject anybody can write a question about,
+   so the maker tick is not theirs to give. */
+function catMakerLocked(c){ const n=String((c&&c.name)||'').trim(); return n==='تصادفی'||n==='انتخاب موضوع'||c.role==='toss'; }
+function catSyncFromDom(){ _CATS.forEach((c,i)=>{const ic=$('#cat_ic_'+i),nm=$('#cat_nm_'+i),or=$('#cat_or_'+i),en=$('#cat_en_'+i),mk=$('#cat_mk_'+i); if(ic)c.icon=ic.value; if(nm)c.name=nm.value.trim(); if(or)c.order=Number(or.value)||i+1; if(en)c.enabled=en.checked; if(mk&&!mk.disabled)c.maker=mk.checked;}); }
 function renderCatsFromMem(){ CFG.categories=_CATS; renderCategories(); }
 
 /* Shrink to a 256px square before upload. Topic art renders at ~64px, so a full
@@ -1855,7 +1870,16 @@ async function catRemoveImage(name){
 async function catSave(){
   const before=_CATS.map(c=>c.name);
   catSyncFromDom();
-  const clean=_CATS.filter(c=>c.name).map(c=>({name:c.name,icon:c.icon||'❓',enabled:c.enabled!==false,order:Number(c.order)||99}));
+  /* SPREAD FIRST, THEN THE EDITED FIELDS. The old version rebuilt each row from
+     four keys, so everything else on it was dropped on every save: `role`,
+     which is what marks «انتخاب موضوع» as the internal toss bank, and `note`.
+     A category the panel had saved once was no longer the category the server
+     wrote. Whatever is on the row travels; only what this screen edits is
+     replaced. */
+  const clean=_CATS.filter(c=>c.name).map(c=>Object.assign({},c,{
+    name:c.name, icon:c.icon||'❓', enabled:c.enabled!==false,
+    order:Number(c.order)||99, maker:c.maker!==false
+  }));
   try{
     await api('PATCH','/admin/config',{categories:clean});
     /* Artwork is keyed by NAME, so a rename would orphan the picture. Carry it

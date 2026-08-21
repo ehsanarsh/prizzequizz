@@ -24,6 +24,7 @@ import { createDraft, approve as pipelineApprove, reject as pipelineReject } fro
 import { grantReward, type RewardType } from './rewardsService.js';
 import { logger } from './logger.js';
 import { randomInt } from 'node:crypto';
+import { makerCategoryList, allCategoryNames, MAKER_EXCLUDED } from './configService.js';
 
 export class UserQuestionError extends Error {
   constructor(public code: string, message: string) { super(message); this.name = 'UserQuestionError'; }
@@ -176,9 +177,27 @@ export async function submitQuestion(input: {
   }
   const correctIndex = Math.max(0, Math.min(options.length - 1, Number(input.correctIndex) || 0));
 
+  /* A TOPIC THE OPERATOR HAS CLOSED IS CLOSED HERE TOO.
+   *
+   * The panel decides which topics the quiz maker offers; a list the client
+   * merely draws from is a suggestion, not a rule, so the same answer is given
+   * again here. What is refused is precisely a topic this config KNOWS and does
+   * not allow — switched off, or one of the two that are never subjects. A name
+   * the config has never heard of is left alone: an older client, a renamed
+   * category, a question written before the topics moved, and every one of them
+   * still lands in the same review queue a person reads. */
+  const category = String(input.category ?? '').trim();
+  if (category) {
+    const known = new Set([...allCategoryNames(), ...MAKER_EXCLUDED]);
+    const allowed = new Set(makerCategoryList().map((c) => c.name));
+    if (known.has(category) && !allowed.has(category)) {
+      throw new UserQuestionError('CATEGORY_NOT_ALLOWED', 'برای این موضوع فعلاً سؤال پذیرفته نمی‌شود.');
+    }
+  }
+
   const q = await createDraft({
     text, options, correctIndex,
-    category: input.category || 'عمومی',
+    category: category || 'عمومی',
     difficulty: input.difficulty || 'medium',
     source: 'manual',
     sourceRef: 'player:' + input.userId

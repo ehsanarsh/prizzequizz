@@ -61,7 +61,16 @@ export function registerSmsRoutes(router: Router, base: string): void {
     try { await saveTemplate({ key: String(b.key || ''), title: String(b.title || ''), text: String(b.text || '') }); json(ctx.res, 200, { saved: true }); }
     catch (e) { error(ctx.res, 422, 'TEMPLATE_INVALID', (e as Error).message); }
   });
-  router.add('DELETE', `${base}/admin/sms/templates/:key`, async (ctx) => { if (!guard(ctx)) return; await removeTemplate(decodeURIComponent(ctx.params.key!)); json(ctx.res, 200, { removed: true }); });
+  router.add('DELETE', `${base}/admin/sms/templates/:key`, async (ctx) => {
+    if (!guard(ctx)) return;
+    try { await removeTemplate(decodeURIComponent(ctx.params.key!)); json(ctx.res, 200, { removed: true }); }
+    catch (e) {
+      if ((e as Error).message === 'TEMPLATE_BUILTIN') {
+        return error(ctx.res, 409, 'TEMPLATE_BUILTIN', 'این قالب از پیام‌های خود بازی است و حذف نمی‌شود — متنش را می‌توانی تغییر بدهی.');
+      }
+      throw e;
+    }
+  });
 
   router.add('GET', `${base}/admin/sms/log`, async (ctx) => { if (!guard(ctx)) return; json(ctx.res, 200, { rows: await listLog({ status: ctx.query.get('status') || undefined, recipient: ctx.query.get('q') || undefined, limit: Number(ctx.query.get('limit') ?? 100) }) }); });
   router.add('POST', `${base}/admin/sms/log/:id/resend`, async (ctx) => { if (!guard(ctx)) return; const r = await resend(ctx.params.id!); if (!r) return error(ctx.res, 404, 'LOG_NOT_FOUND', 'یافت نشد.'); json(ctx.res, 200, r); });

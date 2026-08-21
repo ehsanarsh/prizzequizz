@@ -76,6 +76,15 @@ await check('and one carrying a room topic — the column that was missing', asy
   assert.equal(back?.roomId, 'R9');
 });
 
+/* The column added for friendly duels — the same trap one release later. */
+await check('and one carrying a coin stake, the column added after that', async () => {
+  const inv = await invites.createInvite({
+    fromUserId: 'u-7', fromName: 'مینا', toUserId: 'u-8', mode: 'duel', coinStake: 33
+  });
+  const back = await invites.getInvite(inv.id);
+  assert.equal(back?.coinStake, 33, 'the coin stake did not survive the round trip');
+});
+
 await check('the invites that were already in the table are still there', async () => {
   const { rows } = await pool.query(`SELECT id, room_topic FROM game_invites WHERE id = 'old-1'`);
   assert.equal(rows.length, 1, 'the upgrade dropped a live invite');

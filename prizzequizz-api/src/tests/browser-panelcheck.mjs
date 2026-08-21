@@ -30,7 +30,14 @@ const characters = [
   { id: 'ch-a', name: 'پهلوان', description: '', image: '', kind: 'normal', enabled: true, unlockLevel: 12, viaLevel: false, viaReward: false, viaPurchase: true, viaEvent: false, viaRandom: false, price: 700, group: 'قهرمانان', sortOrder: 0, newUntil: '', createdAt: '' },
   { id: 'ch-b', name: 'روباه', description: '', image: '', kind: 'normal', enabled: true, unlockLevel: 0, viaLevel: false, viaReward: false, viaPurchase: true, viaEvent: false, viaRandom: false, price: 300, group: 'حیوانات', sortOrder: 1, newUntil: '', createdAt: '' }
 ];
-const saved = { box: null, character: null };
+const saved = { box: null, character: null, config: null };
+/* The topics tab reads the game config and writes it back — including the
+   internal toss bank, which must survive a save it was not part of. */
+const CFG = { version: '1.2.3', categories: [
+  { name: 'فوتبال', icon: '⚽', enabled: true, order: 1 },
+  { name: 'سینما و سریال', icon: '🎬', enabled: true, order: 2 },
+  { name: 'انتخاب موضوع', icon: '⚡', enabled: false, order: 99, role: 'toss', note: 'بانک جدا' }
+] };
 const broadcasts = [];
 
 const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
@@ -52,6 +59,12 @@ await ctx.route('**/*', (route) => {
   }
   if (p === '/admin/notifications/campaigns' || /^\/admin\/notifications/.test(p)) return send({ rows: [], types: [], policy: { types: {} }, labels: {} });
   if (p === '/admin/users' || /^\/admin\/users/.test(p)) return send({ rows: [], total: 0 });
+  if (p === '/admin/config') {
+    if (m === 'PATCH') { try { saved.config = JSON.parse(route.request().postData() || '{}'); } catch (e) {} return send({ ok: true }); }
+    return send(CFG);
+  }
+  if (p === '/admin/questions') return send([{ id: 'q1', category: 'فوتبال', status: 'approved' }]);
+  if (p === '/admin/categories/images') return send({ images: {}, maxBytes: 200000 });
   if (p === '/admin/characters') {
     if (m === 'POST') { try { saved.character = JSON.parse(route.request().postData() || '{}'); } catch (e) {} return send({ id: 'ch-a' }); }
     return send({ characters, hasDatabase: true, stats: [] });
@@ -188,6 +201,42 @@ await page.waitForTimeout(900);
      JSON.stringify(broadcasts[0] && broadcasts[0].segment));
   ok('with no «seg is not defined» thrown', !errs.some((e) => /seg is not defined/.test(e)), errs.join(' | '));
   void filled;
+}
+
+/* ── 4. THE TOPICS TAB, AND THE QUIZ-MAKER SWITCH ──────────────────────── */
+{
+  console.log('\nthe topics tab:');
+  await page.evaluate(() => { (0, eval)('CFG=null; CUR="categories";'); });
+  await page.evaluate(() => (0, eval)('renderCategories()'));
+  await page.waitForTimeout(900);
+
+  const head = await page.evaluate(() => (document.querySelector('#main .card .cfg-row') || {}).innerText || '');
+  ok('the topic rows have a quiz-maker column', /کوییزساز/.test(head), head.replace(/\s+/g, ' '));
+  const boxes = await page.evaluate(() => [...document.querySelectorAll('[id^=cat_mk_]')].map((b) => ({ id: b.id, on: b.checked, off: b.disabled })));
+  ok('one tick per topic', boxes.length === 3, JSON.stringify(boxes));
+  ok('and every topic starts open to the maker', boxes.slice(0, 2).every((b) => b.on === true), JSON.stringify(boxes));
+  /* «انتخاب موضوع» is the internal toss bank — not a subject anybody writes
+     about, so its tick is shown but cannot be given. */
+  ok('the toss bank cannot be ticked', boxes[2].off === true, JSON.stringify(boxes[2]));
+
+  saved.config = null;
+  await page.evaluate(async () => {
+    document.getElementById('cat_mk_1').checked = false;      // سینما و سریال
+    await (0, eval)('catSave')();
+  });
+  await page.waitForTimeout(700);
+  const sent = saved.config && saved.config.categories;
+  ok('saving sends the topics to the server', !!sent, JSON.stringify(saved.config));
+  ok('with the topic that was switched off marked so',
+     !!sent && sent.find((c) => c.name === 'سینما و سریال').maker === false,
+     JSON.stringify(sent && sent.find((c) => c.name === 'سینما و سریال')));
+  ok('and the others left open', !!sent && sent.find((c) => c.name === 'فوتبال').maker === true,
+     JSON.stringify(sent && sent.find((c) => c.name === 'فوتبال')));
+  /* THE OLD SAVE REBUILT EACH ROW FROM FOUR KEYS, so `role` — the thing that
+     marks the toss bank — was dropped on every save the panel made. */
+  ok('the toss bank keeps what makes it the toss bank',
+     !!sent && sent.find((c) => c.name === 'انتخاب موضوع').role === 'toss',
+     JSON.stringify(sent && sent.find((c) => c.name === 'انتخاب موضوع')));
 }
 
 ok('no panel script errors', errs.length === 0, errs.join(' | '));

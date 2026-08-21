@@ -18,7 +18,7 @@ import { createApiServer } from '../app.js';
 import { repositories } from '../repositories/index.js';
 import { createSession } from '../services/sessionService.js';
 import { id } from '../utils/id.js';
-import { _resetInvites, INVITE_TTL_MS, pendingFor, claimedAmong } from '../services/gameInviteService.js';
+import { _resetInvites, INVITE_TTL_MS, MAX_COIN_STAKE, pendingFor, claimedAmong } from '../services/gameInviteService.js';
 import { createMatchForPlayers, startMatch, _resetCurrentMatches } from '../services/matchEngine.js';
 
 let passed = 0, failed = 0;
@@ -235,6 +235,54 @@ async function main(): Promise<void> {
       const r = await call('POST', '/invites', sa.accessToken, { toUserId: fresh, mode: 'chess' });
       assert.equal(r.status, 400, JSON.stringify(r));
       assert.equal(r.code, 'BAD_MODE');
+    });
+
+    /* THE FRIENDLY SECTION PAYS IN COINS, NOT TICKETS.
+     * «در قسمت دوستانه فقط درخواست دوئل میتونی بدی اونم نه با بلیط بلکه با سکهٔ
+     * انتخابی کاربر که بتونه حتی تعداد سکه رو بنویسه و یک قلب.» */
+    await check('a friendly duel carries the number of coins the sender wrote', async () => {
+      const fresh = await player('Hana');
+      const r = await call('POST', '/invites', sa.accessToken, { toUserId: fresh, mode: 'duel', coinStake: 33 });
+      assert.equal(r.status, 201, JSON.stringify(r));
+      assert.equal(r.data.coinStake, 33);
+      assert.equal(r.data.ticketTier, '', 'a friendly duel must carry no ticket');
+      const inbox = await call('GET', '/invites/incoming', createSession(fresh).accessToken);
+      assert.equal(inbox.data.invites[0].coinStake, 33, 'the amount did not reach the other side');
+    });
+
+    await check('an ordinary duel still carries no coin stake at all', async () => {
+      const fresh = await player('Iman');
+      const r = await call('POST', '/invites', sa.accessToken, { toUserId: fresh, mode: 'duel', ticketTier: 'green' });
+      assert.equal(r.data.coinStake, 0, JSON.stringify(r.data));
+    });
+
+    await check('a coin stake is refused on anything but a duel', async () => {
+      const fresh = await player('Jafar');
+      const r = await call('POST', '/invites', sa.accessToken, { toUserId: fresh, mode: 'ls', coinStake: 25, roomId: 'room-9' });
+      assert.equal(r.status, 400, JSON.stringify(r));
+      assert.equal(r.code, 'COINS_DUEL_ONLY');
+      const inbox = await call('GET', '/invites/incoming', createSession(fresh).accessToken);
+      assert.equal(inbox.data.invites.length, 0, 'the refused invite was stored anyway');
+    });
+
+    await check('a nonsense amount is dropped rather than carried', async () => {
+      const fresh = await player('Kian');
+      const r = await call('POST', '/invites', sa.accessToken, { toUserId: fresh, mode: 'duel', coinStake: -5 });
+      assert.equal(r.status, 201, JSON.stringify(r));
+      assert.equal(r.data.coinStake, 0, 'a negative stake travelled');
+    });
+
+    await check('and an amount nobody could hold is capped, not sent as typed', async () => {
+      const fresh = await player('Lida');
+      const r = await call('POST', '/invites', sa.accessToken, { toUserId: fresh, mode: 'duel', coinStake: 9_999_999 });
+      assert.equal(r.status, 201, JSON.stringify(r));
+      assert.equal(r.data.coinStake, MAX_COIN_STAKE, String(r.data.coinStake));
+    });
+
+    await check('a fractional amount becomes a whole number of coins', async () => {
+      const fresh = await player('Mona');
+      const r = await call('POST', '/invites', sa.accessToken, { toUserId: fresh, mode: 'duel', coinStake: 12.7 });
+      assert.equal(r.data.coinStake, 12, String(r.data.coinStake));
     });
 
     await check('and you cannot invite yourself', async () => {

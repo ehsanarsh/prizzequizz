@@ -19,7 +19,10 @@ import {
   UserQuestionError, _resetUserQuestions, QUIZ_MAKER_DEFAULTS
 } from '../services/userQuestionService.js';
 import { repositories } from '../repositories/index.js';
+import { makerCategoryList, categoryList, patchGameConfig, allCategoryNames } from '../services/configService.js';
 import { existsSync, readFileSync } from 'node:fs';
+import { once } from 'node:events';
+import { createApiServer } from '../app.js';
 import { dirname, resolve } from 'node:path';
 
 function findClient(): string {
@@ -55,6 +58,12 @@ async function player(id: string): Promise<string> {
   } as any);
   return id;
 }
+
+/* The category list as it stands before these tests move it about, so the rest
+   of the run is not left looking at a config a test wrote. */
+const DEFAULT_CATS = JSON.parse(JSON.stringify(
+  (await import('../core/config.js')).gameConfig.categories ?? []
+));
 
 async function run(): Promise<void> {
   _resetUserQuestions();
@@ -236,6 +245,106 @@ async function run(): Promise<void> {
     await setQuizMakerConfig({ mode: 'each', n: 10 });
   });
 
+  /* ── which topics the maker is open for ───────────────────────────── */
+  /* «باید همه موضوعات فعال بازی باشه… به غیر از تصادفی و انتخاب موضوع، و از
+     همان تب موضوعات پنل مدیریت بتونم مدیریت کنم که چه موضوعاتی برای کوییز ساز
+     فعال باشه.» */
+  await check('the maker list is the game’s topics, not Last Survivor’s', async () => {
+    patchGameConfig({ categories: [
+      { name: 'فوتبال', icon: '⚽', enabled: true, order: 1 },
+      { name: 'سینما و سریال', icon: '🎬', enabled: true, order: 2 },
+      { name: 'تصادفی', icon: '🎲', enabled: true, order: 3 },
+      { name: 'انتخاب موضوع', icon: '⚡', enabled: false, order: 99, role: 'toss' }
+    ] });
+    /* `patchGameConfig` re-adds the canonical topics a saved array may have
+       dropped, so the list is longer than the fixture — what matters is which
+       names are on it and which are not. */
+    const names = makerCategoryList().map((c) => c.name);
+    assert.ok(names.includes('فوتبال') && names.includes('سینما و سریال'), names.join(','));
+    assert.ok(!names.includes('تصادفی'), 'تصادفی is on the maker list: ' + names.join(','));
+    assert.ok(!names.includes('انتخاب موضوع'), 'the toss bank is on the maker list: ' + names.join(','));
+  });
+
+  await check('«تصادفی» and «انتخاب موضوع» are never on it', async () => {
+    /* Even switched on and stripped of its toss role, neither is a subject
+       anybody writes a question about. */
+    patchGameConfig({ categories: [
+      { name: 'فوتبال', icon: '⚽', enabled: true, order: 1 },
+      { name: 'تصادفی', icon: '🎲', enabled: true, order: 2 },
+      { name: 'انتخاب موضوع', icon: '⚡', enabled: true, order: 3 }
+    ] });
+    const names = makerCategoryList().map((c) => c.name);
+    assert.ok(!names.includes('تصادفی') && !names.includes('انتخاب موضوع'), names.join(','));
+  });
+
+  await check('a topic switched off for the maker leaves the list', async () => {
+    patchGameConfig({ categories: [
+      { name: 'فوتبال', icon: '⚽', enabled: true, order: 1 },
+      { name: 'سینما و سریال', icon: '🎬', enabled: true, order: 2, maker: false }
+    ] });
+    const names = makerCategoryList().map((c) => c.name);
+    assert.ok(names.includes('فوتبال'), names.join(','));
+    assert.ok(!names.includes('سینما و سریال'), 'a topic switched off is still offered: ' + names.join(','));
+  });
+
+  await check('but stays a topic the game itself still plays', async () => {
+    const names = categoryList().map((c) => c.name);
+    assert.ok(names.includes('سینما و سریال'), 'the maker switch must not take it out of the game: ' + names.join(','));
+  });
+
+  await check('and a question for it is refused, not only hidden', async () => {
+    _resetUserQuestions();
+    const u = await player('u-maker-off');
+    await assert.rejects(() => submitQuestion({ userId: u, ...GOOD, category: 'سینما و سریال' }),
+      (e: any) => e instanceof UserQuestionError && e.code === 'CATEGORY_NOT_ALLOWED');
+    /* The one that is still open goes through. */
+    const r = await submitQuestion({ userId: u, ...GOOD, category: 'فوتبال' });
+    assert.ok(r.questionId);
+  });
+
+  await check('a topic this config never had is left alone', async () => {
+    /* An older client, or a renamed category. It lands in the same review queue
+       a person reads, rather than being refused with a message about topics. */
+    _resetUserQuestions();
+    const u = await player('u-maker-unknown');
+    const r = await submitQuestion({ userId: u, ...GOOD, category: 'موضوعی که نیست' });
+    assert.ok(r.questionId);
+  });
+
+  /* The route the client actually calls — the filter is only useful if what
+     comes back over HTTP has the shape the maker draws from. */
+  await check('the maker asks one endpoint and gets the list with its counts', async () => {
+    patchGameConfig({ categories: [
+      { name: 'فوتبال', icon: '⚽', enabled: true, order: 1 },
+      { name: 'سینما و سریال', icon: '🎬', enabled: true, order: 2, maker: false }
+    ] });
+    await repositories.questions.save({
+      id: 'q-count-1', text: 'یک سؤال فوتبالی برای شمردن؟', options: ['۱', '۲', '۳', '۴'],
+      correctIndex: 0, category: 'فوتبال', difficulty: 'easy', status: 'approved', source: 'manual'
+    } as any);
+    const server = createApiServer({ attachRealtime: false });
+    server.listen(0);
+    await once(server, 'listening');
+    const port = (server.address() as any).port as number;
+    try {
+      const res = await fetch(`http://127.0.0.1:${port}/v1/questions/maker-topics`);
+      const parsed = await res.json() as any;
+      assert.equal(res.status, 200, JSON.stringify(parsed));
+      const topics = parsed.data.topics as any[];
+      const names = topics.map((t) => t.name);
+      assert.ok(names.includes('فوتبال'), names.join(','));
+      assert.ok(!names.includes('سینما و سریال'), 'a topic switched off came over the wire: ' + names.join(','));
+      const football = topics.find((t) => t.name === 'فوتبال');
+      assert.equal(football.questionCount, 1, 'the count is not the real one: ' + JSON.stringify(football));
+      assert.equal(football.icon, '⚽');
+    } finally { server.close(); }
+  });
+
+  await check('the topics are put back for the rest of the run', async () => {
+    patchGameConfig({ categories: DEFAULT_CATS });
+    assert.ok(makerCategoryList().length >= 5, 'the config was not restored');
+  });
+
   /* ── the screen the player actually uses ──────────────────────────── */
 
   const client = readFileSync(findClient(), 'utf8');
@@ -273,13 +382,26 @@ async function run(): Promise<void> {
     }
   });
 
+  /* The list is the GAME's topics now, not Last Survivor's — that one holds
+     only the subjects running rooms today, so most of the game could not be
+     written about. The server does the filtering, so the client asks one
+     endpoint and draws what comes back. */
   await check('the topics offered are the server’s own', async () => {
-    const i = client.indexOf('async function qsLoadCats(');
+    const i = client.indexOf('async function qsLoadTopics(');
     const body = client.slice(i, client.indexOf('function qsPickCat('));
-    assert.ok(body.includes("pzApi('GET','/last-survivor/topics')"),
+    assert.ok(body.includes("pzApi('GET','/questions/maker-topics')"),
       'the list is fetched rather than typed into the page');
-    assert.ok(body.includes('!t.random') && body.includes('!t.hidden'),
-      'and «تصادفی» and anything taken off the list are not offered');
+    assert.ok(!body.includes('/last-survivor/topics'),
+      'the maker must not be reading Last Survivor’s list any more');
+  });
+
+  /* «کاربر قبل از ورود به صفحه کوییز ساز موضوع رو از لیست انتخاب کنه». */
+  await check('the topic is chosen before the maker opens', async () => {
+    assert.ok(client.includes('id="qstopics"'), 'there is a topic screen');
+    assert.match(client, /function hmQuizMaker\(\)\{ go\('qstopics'\)/, 'the home rail opens the list');
+    assert.match(client, /menuGo\('qstopics'\)/, 'and so does the More menu');
+    assert.match(client, /function qsPickCat\(name\)\{[\s\S]{0,220}go\('qsubmit'\)/,
+      'picking a topic is what opens the maker');
   });
 
   await check('the player can see what their questions earned', async () => {
@@ -287,7 +409,7 @@ async function run(): Promise<void> {
     assert.ok(client.includes('id="qsMine"'), 'and it has somewhere to go');
     /* Reached from the home rail and from the More menu; both have to load it. */
     assert.match(client, /function hmQuizMaker\(\)\{[^}]*qsLoadMine\(\)/, 'the home rail loads it');
-    assert.match(client, /if\(id==='qsubmit'\)\{[^}]*qsLoadMine\(\)/, 'and so does the menu');
+    assert.match(client, /if\(id==='qstopics'\)\{qsLoadTopics\(\);qsLoadMine\(\);\}/, 'and so does the menu');
   });
 
   await check('double-tapping «ارسال» cannot submit twice', async () => {

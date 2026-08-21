@@ -25,14 +25,22 @@ await new Promise((r) => server.listen(0, '127.0.0.1', r));
 const PORT = server.address().port;
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
 
-/* The server's own topic list — what the maker must offer, and nothing else. */
+/* THE MAKER'S OWN TOPIC LIST, which the server now serves separately.
+   «باید همه موضوعات فعال بازی باشه… به غیر از تصادفی و انتخاب موضوع» — so the
+   filtering happens on the server, and what arrives here is already the answer.
+   «سینما» has no questions yet and is still offered: a topic with an empty bank
+   is exactly where a new question is worth the most. */
+const MAKER_TOPICS = [
+  { name: 'ورزشی', icon: '⚽', image: '', questionCount: 40 },
+  { name: 'تاریخ', icon: '🏛️', image: '', questionCount: 25 },
+  { name: 'سینما', icon: '🎬', image: '', questionCount: 0 }
+];
+/* Last Survivor's list, which the maker must NOT be reading any more. */
 const TOPICS = [
   { name: 'تصادفی', random: true, playable: true, questionCount: 90, icon: '🎲' },
-  { name: 'ورزشی', random: false, playable: true, questionCount: 40, icon: '⚽' },
-  { name: 'تاریخ', random: false, playable: true, questionCount: 25, icon: '🏛️' },
-  { name: 'سینما', random: false, playable: false, questionCount: 0, icon: '🎬' },
-  { name: 'بایگانی', random: false, playable: true, hidden: true, questionCount: 5, icon: '📦' }
+  { name: 'ورزشی', random: false, playable: true, questionCount: 40, icon: '⚽' }
 ];
+let lsTopicsAsked = 0;
 const posted = [];
 
 async function makePage() {
@@ -51,7 +59,8 @@ async function makePage() {
       if (p === '/users/me') return send({ id: 'me', username: body.username, displayName: body.displayName, level: 1, coins: 0, hearts: 5 });
       return send({});
     }
-    if (p === '/last-survivor/topics') return send({ topics: TOPICS, tickets: {} });
+    if (p === '/last-survivor/topics') { lsTopicsAsked++; return send({ topics: TOPICS, tickets: {} }); }
+    if (p === '/questions/maker-topics') return send({ topics: MAKER_TOPICS });
     if (p === '/questions/mine') return send({ rows: [] });
     return send({});
   });
@@ -69,12 +78,45 @@ async function makePage() {
   console.log('writing a question:');
   await page.evaluate(async () => { (0, eval)('hmQuizMaker')(); await new Promise((r) => setTimeout(r, 800)); });
 
-  const cats = await page.evaluate(() => [...document.querySelectorAll('#qsCats .qs-chip')].map((b) => b.getAttribute('data-c')));
-  /* «موضوعات باید با موضوعات موجود در سرور یکی باشه» */
-  ok('the topics come from the server', cats.indexOf('ورزشی') >= 0 && cats.indexOf('تاریخ') >= 0, cats.join(' / '));
-  ok('«تصادفی» is not something you write a question for', cats.indexOf('تصادفی') < 0, cats.join(' / '));
-  ok('nor a topic taken off the list', cats.indexOf('بایگانی') < 0, cats.join(' / '));
-  ok('one is chosen to begin with', await page.evaluate(() => (0, eval)('QS_CAT')) === cats[0], cats[0]);
+  /* «کاربر قبل از ورود به صفحه کوییز ساز موضوع رو از لیست انتخاب کنه بعد وارد
+     همون صفحه بشه» — the maker is one screen further in than it was. */
+  ok('the maker opens on the topic list, not the form',
+    await page.evaluate(() => (document.querySelector('.screen.active') || {}).id) === 'qstopics',
+    await page.evaluate(() => (document.querySelector('.screen.active') || {}).id));
+  const cats = await page.evaluate(() => [...document.querySelectorAll('#qsTopicList .qs-topic')].map((b) => b.getAttribute('data-c')));
+  ok('every topic the maker is open for is on it', cats.join(',') === 'ورزشی,تاریخ,سینما', cats.join(' / '));
+  /* THE BUG: it used to read Last Survivor's list, which hides everything not
+     running a room, so most of the game could not be written about. */
+  ok('and Last Survivor\'s list is not what it reads', lsTopicsAsked === 0, String(lsTopicsAsked));
+  ok('a topic with no questions yet is still offered', cats.indexOf('سینما') >= 0, cats.join(' / '));
+  ok('each one says how many questions it has',
+    await page.evaluate(() => (document.querySelector('#qsTopicList .qs-topic span:last-child') || {}).textContent || '') === '۴۰ سؤال',
+    await page.evaluate(() => (document.querySelector('#qsTopicList .qs-topic span:last-child') || {}).textContent || ''));
+  /* Nothing is chosen for them: the form is not open yet. */
+  ok('no topic is assumed before one is picked', await page.evaluate(() => (0, eval)('QS_CAT')) === '', await page.evaluate(() => (0, eval)('QS_CAT')));
+
+  /* Tapping a topic IS the way in. */
+  await page.evaluate(() => document.querySelector('#qsTopicList .qs-topic[data-c="تاریخ"]').click());
+  await page.waitForTimeout(500);
+  ok('picking one opens the maker', await page.evaluate(() => (document.querySelector('.screen.active') || {}).id) === 'qsubmit');
+  ok('for that topic', await page.evaluate(() => (0, eval)('QS_CAT')) === 'تاریخ', await page.evaluate(() => (0, eval)('QS_CAT')));
+  const chosen = await page.evaluate(() => (document.getElementById('qsChosen') || {}).textContent || '');
+  ok('and the maker says which topic it is writing for', /تاریخ/.test(chosen), chosen.trim());
+  ok('with a way back to the list', await page.evaluate(() => !!document.querySelector('#qsChosen button[onclick*="qstopics"]')));
+  /* The chips are gone: the topic is not chosen twice. */
+  ok('the old chip row is gone', await page.evaluate(() => !document.getElementById('qsCats')));
+
+  /* A RELOAD, A DEEP LINK, A BACK BUTTON — anything that lands on the form with
+     no topic behind it. The form cannot be submitted without one, so the player
+     is put back on the list rather than left filling in a page that will refuse
+     them at the end. */
+  await page.evaluate(() => { (0, eval)("QS_CAT='';"); (0, eval)('go')('qsubmit'); });
+  await page.waitForTimeout(400);
+  ok('the form is not shown without a topic',
+    await page.evaluate(() => (document.querySelector('.screen.active') || {}).id) === 'qstopics',
+    await page.evaluate(() => (document.querySelector('.screen.active') || {}).id));
+  await page.evaluate(() => document.querySelector('#qsTopicList .qs-topic[data-c="تاریخ"]').click());
+  await page.waitForTimeout(400);
 
   const diffs = await page.evaluate(() => [...document.querySelectorAll('#qsDiffs .qs-chip')].map((b) => ({ d: b.getAttribute('data-d'), t: b.textContent.trim() })));
   /* «سطح سختی باید آسان متوسط سخت و خیلی سخت باشه» */
@@ -89,7 +131,6 @@ async function makePage() {
 
   posted.length = 0;
   const sent = await page.evaluate(async () => {
-    (0, eval)('qsPickCat')('تاریخ');
     (0, eval)('qsPickDiff')('veryhard');
     document.getElementById('qsText').value = 'کدام سردار در نبرد گاگامل شکست خورد؟';
     ['اسکندر', 'داریوش سوم', 'کوروش', 'خشایارشا'].forEach((t, i) => { document.getElementById('qsO' + i).value = t; });

@@ -7,6 +7,8 @@ import { createReport, REPORT_REASONS } from '../../services/questionReportServi
 import { repositories } from '../../repositories/index.js';
 import { requireAdmin } from '../../services/adminGuard.js';
 import { getQuestionCounts, getQuestionDistribution } from '../../services/questionStatsService.js';
+import { makerCategoryList } from '../../services/configService.js';
+import { categoryImageUrls } from '../../services/categoryImageService.js';
 
 export function registerQuestionRoutes(router: Router, base: string): void {
   /* A player writes a question. It goes into the same pipeline the panel
@@ -52,6 +54,31 @@ export function registerQuestionRoutes(router: Router, base: string): void {
       .map(([category, count]) => ({ category, count }))
       .sort((a, b) => b.count - a.count);
     json(ctx.res, 200, categories);
+  });
+
+  /* THE LIST THE QUIZ MAKER OPENS ON.
+   *
+   * It used to read Last Survivor's topic list, which is a different question:
+   * that one says which topics are RUNNING ROOMS today, and it hides everything
+   * else — so a player could not write a question about most of the game. This
+   * is the game's own topic list, minus «تصادفی» and the toss bank, minus
+   * anything the operator has switched off for the maker.
+   *
+   * The count is how many approved questions each topic already has. It is not
+   * a gate — a topic with none is exactly where a new question is worth most —
+   * it is only shown so the player can see where the thin subjects are. */
+  router.add('GET', `${base}/questions/maker-topics`, async (ctx) => {
+    const approved = await repositories.questions.listApproved();
+    const counts = new Map<string, number>();
+    for (const q of approved) {
+      const c = (q.category ?? '').trim();
+      if (c) counts.set(c, (counts.get(c) ?? 0) + 1);
+    }
+    const art = await categoryImageUrls().catch(() => ({} as Record<string, string>));
+    const topics = makerCategoryList().map((c) => ({
+      name: c.name, icon: c.icon, image: art[c.name] ?? '', questionCount: counts.get(c.name) ?? 0
+    }));
+    json(ctx.res, 200, { topics });
   });
 
   router.add('GET', `${base}/questions/next`, async (ctx) => {

@@ -134,7 +134,15 @@ await ctx.route('**/v1/**', (route) => {
     ] } });
   }
   /* The maker's topic list is the server's own, so the fake server has to have
-     one — a question cannot be filed under a subject the game does not have. */
+     one — a question cannot be filed under a subject the game does not have.
+     It is the GAME's topics now, served on their own endpoint; Last Survivor's
+     list below is still here for the screens that really are about rooms. */
+  if (p.startsWith('/questions/maker-topics')) {
+    return send({ ok: true, data: { topics: [
+      { name: 'جغرافیا', icon: '🌍', image: '', questionCount: 30 },
+      { name: 'تاریخ', icon: '🏛️', image: '', questionCount: 22 }
+    ] } });
+  }
   if (p.startsWith('/last-survivor/topics')) {
     return send({ ok: true, data: { tickets: {}, topics: [
       { name: 'تصادفی', random: true, playable: true, questionCount: 90, icon: '🎲' },
@@ -285,6 +293,13 @@ console.log('quiz maker:');
 {
   submitted = null;
   await page.evaluate(() => (0, eval)('hmQuizMaker()'));
+  await page.waitForTimeout(500);
+  /* The topic is chosen BEFORE the maker opens now, so the first screen is the
+     list and picking one is what opens the form. */
+  ok('the maker opens on the topic list',
+    await page.evaluate(() => (document.querySelector('.screen.active') || {}).id) === 'qstopics',
+    await page.evaluate(() => (document.querySelector('.screen.active') || {}).id));
+  await page.evaluate(() => document.querySelector('#qsTopicList .qs-topic[data-c="جغرافیا"]').click());
   await page.waitForTimeout(400);
   const mine = await page.evaluate(() => document.querySelectorAll('#qsMine .qs-mine-row').length);
   ok('opening it shows the questions already written', mine === 2, String(mine));

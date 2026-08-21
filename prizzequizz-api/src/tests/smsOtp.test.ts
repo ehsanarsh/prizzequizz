@@ -8,7 +8,8 @@
 import assert from 'node:assert/strict';
 import {
   SMS_DEFAULT_CONFIG, getSmsConfig, updateSmsConfig, smsIsLive, listLog, listTemplates,
-  renderTemplate, sendSms, sendOtp, otpAllowed, maskConfig, NIAZPARDAZ_BASE, niazpardazAccount
+  renderTemplate, sendSms, sendOtp, otpAllowed, maskConfig, NIAZPARDAZ_BASE, niazpardazAccount,
+  saveTemplate, removeTemplate, sendTemplate, _resetTemplates, SMS_DEFAULT_TEMPLATES
 } from '../services/smsService.js';
 import { MemoryOtpProvider, OtpError } from '../services/otpProvider.js';
 
@@ -243,6 +244,47 @@ async function run() {
     assert.notEqual(a.requestId, b.requestId);
     assert.ok(await p.verifyOtp(a.requestId, '1234'));
     assert.ok(await p.verifyOtp(b.requestId, '1234'));
+  });
+
+  // ---- templates a running server has never seen -------------------------
+  /* THE WITHDRAWAL CODE HAD NO TEMPLATE TO GO OUT ON.
+   * The built-in set was only ever written into a store with NOTHING in it, so
+   * a server that had already saved one template kept the set it started with.
+   * `withdraw_code` was added later, was therefore absent, and every payout
+   * request answered «ارسال پیامک ناموفق بود دوباره تلاش کن» without a single
+   * message being attempted. */
+  await check('a template added in a later build reaches a server already running', async () => {
+    _resetTemplates();
+    await saveTemplate({ key: 'operator_note', title: 'یادداشت', text: 'سلام' });
+    const keys = (await listTemplates()).map((t) => t.key);
+    assert.ok(keys.includes('withdraw_code'), 'the withdrawal code has no template: ' + keys.join(','));
+    for (const t of SMS_DEFAULT_TEMPLATES) assert.ok(keys.includes(t.key), 'missing ' + t.key);
+  });
+  await check('and what the operator wrote is left exactly as they wrote it', async () => {
+    _resetTemplates();
+    await saveTemplate({ key: 'login_code', title: 'کد ورود', text: 'متن دست‌ساز {code}' });
+    await listTemplates();                       // the re-seed runs here
+    const back = (await listTemplates()).find((t) => t.key === 'login_code');
+    assert.equal(back?.text, 'متن دست‌ساز {code}', 'the operator wording was overwritten');
+  });
+  await check('the withdrawal code really goes out on it', async () => {
+    await reset();
+    _resetTemplates();
+    await saveTemplate({ key: 'operator_note', title: 'یادداشت', text: 'سلام' });
+    await updateSmsConfig({ enabled: true, sandbox: true, provider: 'niazpardaz', apiKey: 'K', sender: '1000' });
+    const log = await sendTemplate('09121117777', 'withdraw_code', { code: '55555', expiry: 3 });
+    assert.equal(log.status, 'sent', 'status ' + log.status + ' error ' + log.error);
+    assert.match(log.body, /55555/);
+  });
+  await check('a message the game itself sends cannot be deleted from the panel', async () => {
+    await assert.rejects(() => removeTemplate('withdraw_code'), /TEMPLATE_BUILTIN/);
+    assert.ok((await listTemplates()).some((t) => t.key === 'withdraw_code'));
+  });
+  await check('but the operator can still delete one they added', async () => {
+    _resetTemplates();
+    await saveTemplate({ key: 'operator_note', title: 'یادداشت', text: 'سلام' });
+    await removeTemplate('operator_note');
+    assert.ok(!(await listTemplates()).some((t) => t.key === 'operator_note'));
   });
 
   // ---- log + templates ---------------------------------------------------

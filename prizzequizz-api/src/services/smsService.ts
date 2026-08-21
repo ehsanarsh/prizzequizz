@@ -105,12 +105,45 @@ export function maskConfig(c: SmsConfig): SmsConfig & { apiKeySet: boolean; secr
 }
 
 // ---- templates ----
+/* A TEMPLATE ADDED AFTER THE FIRST BOOT NEVER ARRIVED.
+ *
+ * The defaults were seeded only into a table with NOTHING in it. Every server
+ * that had already stored one template kept exactly the set it had on the day
+ * it started, so `withdraw_code` — added later — did not exist there. The
+ * withdrawal code is sent through that key: `sendTemplate` threw
+ * TEMPLATE_NOT_FOUND, the player was told «ارسال پیامک ناموفق بود دوباره تلاش
+ * کن», no SMS was ever attempted, and no payout could be requested at all.
+ * The login code, whose row was seeded on day one, kept working — which is
+ * exactly what makes this look like a withdrawal problem rather than an SMS one.
+ *
+ * The same trap as `CREATE TABLE IF NOT EXISTS` and a column added later, one
+ * layer up: the built-in set is a FLOOR, so anything missing from it is put
+ * back, and what the operator has edited is left exactly as they wrote it —
+ * ON CONFLICT DO NOTHING never overwrites a row that is there. */
+async function seedMissingTemplates(pool: ReturnType<typeof getPgPool>, have: Set<string>): Promise<boolean> {
+  const missing = SMS_DEFAULT_TEMPLATES.filter((t) => !have.has(t.key));
+  if (!missing.length) return false;
+  for (const t of missing) {
+    await pool.query(`INSERT INTO sms_templates(key,title,text) VALUES($1,$2,$3) ON CONFLICT DO NOTHING`, [t.key, t.title, t.text]);
+  }
+  logger.warn('sms_templates_seeded', { keys: missing.map((t) => t.key) });
+  return true;
+}
 export async function listTemplates(): Promise<SmsTemplate[]> {
   const pool = pg();
-  if (pool) { await ensureSchema(pool); let { rows } = await pool.query(`SELECT key,title,text FROM sms_templates ORDER BY key`); if (!rows.length) { for (const t of SMS_DEFAULT_TEMPLATES) await pool.query(`INSERT INTO sms_templates(key,title,text) VALUES($1,$2,$3) ON CONFLICT DO NOTHING`, [t.key, t.title, t.text]); rows = (await pool.query(`SELECT key,title,text FROM sms_templates ORDER BY key`)).rows; } return rows as SmsTemplate[]; }
-  if (!_memTpl.length) _memTpl.push(...SMS_DEFAULT_TEMPLATES.map((t) => ({ ...t })));
+  if (pool) {
+    await ensureSchema(pool);
+    let { rows } = await pool.query(`SELECT key,title,text FROM sms_templates ORDER BY key`);
+    const added = await seedMissingTemplates(pool, new Set(rows.map((r: any) => String(r.key))));
+    if (added) rows = (await pool.query(`SELECT key,title,text FROM sms_templates ORDER BY key`)).rows;
+    return rows as SmsTemplate[];
+  }
+  for (const t of SMS_DEFAULT_TEMPLATES) if (!_memTpl.some((x) => x.key === t.key)) _memTpl.push({ ...t });
   return _memTpl.slice();
 }
+/** Test seam: forget the in-memory template set, so a server that has been
+ *  running with some templates already stored can be reproduced. */
+export function _resetTemplates(): void { _memTpl.length = 0; }
 export async function saveTemplate(t: SmsTemplate): Promise<void> {
   const key = String(t.key).trim(); if (!key) throw new Error('KEY_REQUIRED');
   const pool = pg();
@@ -118,6 +151,11 @@ export async function saveTemplate(t: SmsTemplate): Promise<void> {
   else { const i = _memTpl.findIndex((x) => x.key === key); if (i >= 0) _memTpl[i] = { key, title: t.title || key, text: t.text || '' }; else _memTpl.push({ key, title: t.title || key, text: t.text || '' }); }
 }
 export async function removeTemplate(key: string): Promise<void> {
+  /* A built-in is a message the GAME sends — a login code, a withdrawal code.
+     Deleting one does not remove a feature, it breaks it silently, and since
+     the built-in set is now re-seeded the row would come back anyway. Said
+     plainly instead of half-happening. Editing the wording is untouched. */
+  if (SMS_DEFAULT_TEMPLATES.some((t) => t.key === key)) throw new Error('TEMPLATE_BUILTIN');
   const pool = pg();
   if (pool) { await ensureSchema(pool); await pool.query(`DELETE FROM sms_templates WHERE key=$1`, [key]); }
   else { const i = _memTpl.findIndex((x) => x.key === key); if (i >= 0) _memTpl.splice(i, 1); }
@@ -347,7 +385,12 @@ export async function sendSms(to: string, body: string, templateKey: string | nu
 
 export async function sendTemplate(to: string, key: string, vars: Record<string, string | number> = {}): Promise<SmsLogEntry> {
   const tpls = await listTemplates();
-  const t = tpls.find((x) => x.key === key);
+  /* THE MESSAGE GOES OUT EVEN IF THE ROW IS NOT THERE.
+   * A withdrawal code that depends on a database row existing is a payout that
+   * a missing row can stop — and one did. The stored wording wins, as it must,
+   * but the built-in text is the fallback rather than an exception. Only a key
+   * nobody ever defined is an error. */
+  const t = tpls.find((x) => x.key === key) ?? SMS_DEFAULT_TEMPLATES.find((x) => x.key === key);
   if (!t) throw new Error('TEMPLATE_NOT_FOUND');
   return sendSms(to, renderTemplate(t.text, vars), key);
 }

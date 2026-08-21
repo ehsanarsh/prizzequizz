@@ -156,6 +156,36 @@ export function categoryList(): Array<{ name: string; icon: string; order: numbe
     .sort((a: any, b: any) => a.order - b.order);
 }
 
+/* WHAT A PLAYER MAY WRITE A QUESTION ABOUT.
+ *
+ * «در قسمت کوییز ساز فقط موضوعات آخرین بازمانده نشون داده میشه — باید همه
+ * موضوعات فعال بازی باشه… همه موضوعات باشه به غیر از تصادفی و انتخاب موضوع، و
+ * از همان تب موضوعات پنل مدیریت بتونم مدیریت کنم که چه موضوعاتی برای کوییز ساز
+ * فعال باشه.»
+ *
+ * So it is the game's own topic list, not Last Survivor's — a topic that is not
+ * running a room today is still a topic somebody can write a question about.
+ * Two are never on it: «تصادفی», which is a way of drawing from the others
+ * rather than a subject, and «انتخاب موضوع», which is the internal toss bank.
+ * Beyond that the operator decides, one tick per topic in the topics tab, and a
+ * topic with no answer stored counts as open — the flag can only take a topic
+ * AWAY, so adding one never needs remembering to tick it. */
+export const MAKER_EXCLUDED = ['تصادفی', 'انتخاب موضوع'];
+/** Every topic name the operator has configured, switched on or off. Used to
+ *  tell «a topic that was taken away» from «a name this config never had». */
+export function allCategoryNames(): string[] {
+  const cats = Array.isArray((gameConfig as any).categories) ? (gameConfig as any).categories : [];
+  return cats.map((c: any) => String(c?.name ?? '').trim()).filter(Boolean);
+}
+export function makerCategoryList(): Array<{ name: string; icon: string; order: number }> {
+  const cats = Array.isArray((gameConfig as any).categories) ? (gameConfig as any).categories : [];
+  return cats
+    .filter((c: any) => c && c.enabled !== false && c.role !== 'toss' && c.maker !== false
+      && String(c.name || '').trim() && !MAKER_EXCLUDED.includes(String(c.name).trim()))
+    .map((c: any) => ({ name: String(c.name).trim(), icon: String(c.icon || '❓'), order: Number(c.order) || 99 }))
+    .sort((a: any, b: any) => a.order - b.order);
+}
+
 export async function getPublicConfig(): Promise<any> {
   const e = (gameConfig as any).economy ?? {};
   const modes = (gameConfig as any).modes ?? {};

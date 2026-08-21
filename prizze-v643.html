@@ -426,6 +426,14 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
   display:grid;place-items:center;cursor:pointer;flex-shrink:0;font-size:18px;box-shadow:var(--hard-sm);transition:transform .08s,box-shadow .08s}
 .iconbtn:active{transform:translateY(3px);box-shadow:0 1px 0 #000}
 .topbar h1{font-size:19px;font-weight:900;flex:1;color:var(--paper);text-shadow:2px 2px 0 rgba(0,0,0,.55)}
+/* A STICKY BAR OVER A TRANSPARENT GRADIENT IS A BAR YOU CAN READ THROUGH.
+   Scrolling ran the cards up behind the title and the two sets of words sat on
+   top of each other. `tb-card` gives the bar something solid of its own —
+   opaque, bordered, and above the page — so the title stays legible however far
+   the screen has scrolled. */
+.topbar.tb-card{padding:calc(12px + env(safe-area-inset-top,0px)) 12px 12px;margin:0 -4px 12px;
+  background:var(--ink-2);border:var(--stroke);border-radius:19px;box-shadow:var(--hard-sm);z-index:8}
+.topbar.tb-card h1{text-shadow:none}
 .topbar .sub{font-size:12px;color:var(--muted);font-weight:700}
 
 /* ===== BRAND STICKER BUTTONS ===== */
@@ -2779,8 +2787,8 @@ body.pz-kb-open #support.chat-mode .sup-chat{margin-bottom:0!important}
 
 
 /* ===== STATS CENTER v22 ===== */
-.stats-hero{position:relative;overflow:hidden;border:var(--stroke);border-radius:23px;padding:17px 16px;margin-bottom:12px;background:linear-gradient(135deg,#202938,#111318);box-shadow:var(--hard-sm)}.stats-hero::after{content:"📈";position:absolute;left:-8px;top:-18px;font-size:94px;opacity:.07}.stats-hero .sh-top{display:flex;align-items:center;gap:12px}.stats-hero .sh-ico{width:56px;height:56px;border-radius:18px;border:2.5px solid #000;background:linear-gradient(180deg,#7fd0fb,#3f9fd8);display:grid;place-items:center;font-size:30px;box-shadow:0 4px 0 #000}.stats-hero b{font-size:17px;font-weight:900}.stats-hero p{font-size:12px;color:var(--muted);line-height:1.7;font-weight:700;margin-top:3px}.stats-chipline{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}.stats-chip{font-size:10.5px;font-weight:900;padding:4px 8px;border-radius:999px;border:2px solid #000;background:var(--ink-3);color:var(--paper)}.stats-chip.ok{background:var(--ok-soft);color:var(--ok)}.stats-tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin:11px 0 12px}.stats-tab{border:2px solid #000;border-radius:13px;background:var(--ink-2);color:var(--muted);font-family:inherit;font-size:10.5px;font-weight:900;padding:9px 2px;box-shadow:var(--hard-sm);cursor:pointer}.stats-tab.active{background:linear-gradient(180deg,#FFE24A,var(--bolt-2));color:#141414}.stats-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin:10px 0 13px}.stats-actions .btn{padding:11px 9px;font-size:12.5px;border-radius:15px;box-shadow:var(--hard-sm)}.kpi-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}.kpi{border:var(--stroke);border-radius:18px;background:var(--ink-2);box-shadow:var(--hard-sm);padding:13px 10px;min-height:92px;position:relative;overflow:hidden}.kpi::after{content:"";position:absolute;left:-18px;top:-18px;width:70px;height:70px;border-radius:50%;background:rgba(255,210,31,.06)}.kpi .ki{font-size:24px;display:block;margin-bottom:4px}.kpi b{display:block;font-size:19px;font-weight:900;color:var(--bolt);line-height:1.2}.kpi span{font-size:10.5px;color:var(--muted);font-weight:800;line-height:1.45}.kpi.good b{color:var(--ok)}.stats-card{border:var(--stroke);border-radius:19px;background:var(--ink-2);box-shadow:var(--hard-sm);padding:14px;margin-bottom:11px}.stats-card h3{font-size:15px;font-weight:900;margin-bottom:8px}.stats-card p{font-size:12px;color:var(--muted);line-height:1.8;font-weight:700}.chart-bars{display:flex;align-items:flex-end;gap:7px;height:120px;padding-top:10px}.chart-bars i{flex:1;min-width:0;border:2px solid #000;border-bottom-width:3px;border-radius:9px 9px 0 0;background:linear-gradient(180deg,#FFE24A,#F5B90D);height:0;position:relative;transition:height .75s cubic-bezier(.2,.9,.3,1)}.chart-bars i::after{content:attr(data-l);position:absolute;bottom:-22px;left:50%;transform:translateX(-50%);font-size:9px;font-weight:900;color:var(--muted)}.mode-stat{display:flex;align-items:center;gap:11px;border:2px solid #000;border-radius:16px;background:var(--ink-3);padding:11px;margin-bottom:9px}.mode-stat .mi{width:42px;height:42px;border-radius:13px;border:2px solid #000;background:var(--ink-2);display:grid;place-items:center;font-size:22px}.mode-stat .mt{flex:1;min-width:0}.mode-stat .mt b{font-size:13.5px;font-weight:900}.mode-stat .mt span{display:block;font-size:10.5px;color:var(--muted);font-weight:800;line-height:1.6}.mode-stat .mr{text-align:left;font-size:12px;font-weight:900;color:var(--bolt)}.topic-stat{margin-bottom:12px}.topic-stat .tr{display:flex;justify-content:space-between;gap:8px;font-size:12px;font-weight:900;margin-bottom:5px}.topic-stat .tr span:last-child{color:var(--bolt)}.topic-stat .track{height:13px;border-radius:8px;background:#000;border:2px solid #000;overflow:hidden}.topic-stat .track i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--info),#9fe0ff);border-radius:5px;transition:width .75s cubic-bezier(.2,.9,.3,1)}.topic-stat.hot .track i{background:linear-gradient(90deg,var(--ok),#7dffb4)}.topic-stat.mid .track i{background:linear-gradient(90deg,var(--bolt-2),var(--bolt))}.timeline-item{display:flex;gap:10px;align-items:flex-start;border-bottom:1px solid rgba(255,255,255,.08);padding:10px 0}.timeline-item:last-child{border-bottom:none}.timeline-item .ti{width:38px;height:38px;border-radius:12px;border:2px solid #000;background:var(--ink-3);display:grid;place-items:center;font-size:18px;flex-shrink:0}.timeline-item b{font-size:13px}.timeline-item span{font-size:11px;color:var(--muted);font-weight:700}.stats-note{font-size:11px;color:var(--muted);line-height:1.7;font-weight:800;text-align:center;margin:8px 0}.stats-empty{padding:22px 14px;text-align:center;border:var(--stroke);border-radius:20px;background:var(--ink-2);box-shadow:var(--hard-sm);color:var(--muted);font-size:13px;font-weight:800;line-height:1.8}.stats-empty .big{font-size:42px;display:block;margin-bottom:6px}
-@media(max-width:370px){.stats-tabs{grid-template-columns:repeat(2,1fr)}.stats-actions{grid-template-columns:1fr}.kpi-grid{grid-template-columns:1fr}.stats-hero{padding:14px}.stats-hero .sh-ico{width:50px;height:50px}.chart-bars{height:105px;gap:5px}.mode-stat{align-items:flex-start}.mode-stat .mr{font-size:11px}}
+.stats-hero{position:relative;overflow:hidden;border:var(--stroke);border-radius:23px;padding:17px 16px;margin-bottom:12px;background:linear-gradient(135deg,#202938,#111318);box-shadow:var(--hard-sm)}.stats-hero::after{content:"📈";position:absolute;left:-8px;top:-18px;font-size:94px;opacity:.07}.stats-hero .sh-top{display:flex;align-items:center;gap:12px}.stats-hero .sh-ico{width:56px;height:56px;border-radius:18px;border:2.5px solid #000;background:linear-gradient(180deg,#7fd0fb,#3f9fd8);display:grid;place-items:center;font-size:30px;box-shadow:0 4px 0 #000}.stats-hero b{font-size:17px;font-weight:900}.stats-hero p{font-size:12px;color:var(--muted);line-height:1.7;font-weight:700;margin-top:3px}.stats-chipline{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}.stats-chip{font-size:10.5px;font-weight:900;padding:4px 8px;border-radius:999px;border:2px solid #000;background:var(--ink-3);color:var(--paper)}.stats-chip.ok{background:var(--ok-soft);color:var(--ok)}.stats-tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin:11px 0 12px}.stats-tabs.two{grid-template-columns:1fr 1fr}.stats-tabs.two .stats-tab{font-size:12.5px;padding:11px 4px}.stats-actions.one{grid-template-columns:1fr}.stats-tab{border:2px solid #000;border-radius:13px;background:var(--ink-2);color:var(--muted);font-family:inherit;font-size:10.5px;font-weight:900;padding:9px 2px;box-shadow:var(--hard-sm);cursor:pointer}.stats-tab.active{background:linear-gradient(180deg,#FFE24A,var(--bolt-2));color:#141414}.stats-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin:10px 0 13px}.stats-actions .btn{padding:11px 9px;font-size:12.5px;border-radius:15px;box-shadow:var(--hard-sm)}.kpi-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}.kpi{border:var(--stroke);border-radius:18px;background:var(--ink-2);box-shadow:var(--hard-sm);padding:13px 10px;min-height:92px;position:relative;overflow:hidden}.kpi::after{content:"";position:absolute;left:-18px;top:-18px;width:70px;height:70px;border-radius:50%;background:rgba(255,210,31,.06)}.kpi .ki{font-size:24px;display:block;margin-bottom:4px}.kpi b{display:block;font-size:19px;font-weight:900;color:var(--bolt);line-height:1.2}.kpi span{font-size:10.5px;color:var(--muted);font-weight:800;line-height:1.45}.kpi.good b{color:var(--ok)}.stats-card{border:var(--stroke);border-radius:19px;background:var(--ink-2);box-shadow:var(--hard-sm);padding:14px;margin-bottom:11px}.stats-card h3{font-size:15px;font-weight:900;margin-bottom:8px}.stats-card p{font-size:12px;color:var(--muted);line-height:1.8;font-weight:700}.chart-bars{display:flex;align-items:flex-end;gap:7px;height:120px;padding-top:10px}.chart-bars i{flex:1;min-width:0;border:2px solid #000;border-bottom-width:3px;border-radius:9px 9px 0 0;background:linear-gradient(180deg,#FFE24A,#F5B90D);height:0;position:relative;transition:height .75s cubic-bezier(.2,.9,.3,1)}.chart-bars i::after{content:attr(data-l);position:absolute;bottom:-22px;left:50%;transform:translateX(-50%);font-size:9px;font-weight:900;color:var(--muted)}.mode-stat{display:flex;align-items:center;gap:11px;border:2px solid #000;border-radius:16px;background:var(--ink-3);padding:11px;margin-bottom:9px}.mode-stat .mi{width:42px;height:42px;border-radius:13px;border:2px solid #000;background:var(--ink-2);display:grid;place-items:center;font-size:22px}.mode-stat .mt{flex:1;min-width:0}.mode-stat .mt b{font-size:13.5px;font-weight:900}.mode-stat .mt span{display:block;font-size:10.5px;color:var(--muted);font-weight:800;line-height:1.6}.mode-stat .mr{text-align:left;font-size:12px;font-weight:900;color:var(--bolt)}.topic-stat{margin-bottom:12px}.topic-stat .tr{display:flex;justify-content:space-between;gap:8px;font-size:12px;font-weight:900;margin-bottom:5px}.topic-stat .tr span:last-child{color:var(--bolt)}.topic-stat .track{height:13px;border-radius:8px;background:#000;border:2px solid #000;overflow:hidden}.topic-stat .track i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--info),#9fe0ff);border-radius:5px;transition:width .75s cubic-bezier(.2,.9,.3,1)}.topic-stat.hot .track i{background:linear-gradient(90deg,var(--ok),#7dffb4)}.topic-stat.mid .track i{background:linear-gradient(90deg,var(--bolt-2),var(--bolt))}.timeline-item{display:flex;gap:10px;align-items:flex-start;border-bottom:1px solid rgba(255,255,255,.08);padding:10px 0}.timeline-item:last-child{border-bottom:none}.timeline-item .ti{width:38px;height:38px;border-radius:12px;border:2px solid #000;background:var(--ink-3);display:grid;place-items:center;font-size:18px;flex-shrink:0}.timeline-item b{font-size:13px}.timeline-item span{font-size:11px;color:var(--muted);font-weight:700}.stats-note{font-size:11px;color:var(--muted);line-height:1.7;font-weight:800;text-align:center;margin:8px 0}.stats-empty{padding:22px 14px;text-align:center;border:var(--stroke);border-radius:20px;background:var(--ink-2);box-shadow:var(--hard-sm);color:var(--muted);font-size:13px;font-weight:800;line-height:1.8}.stats-empty .big{font-size:42px;display:block;margin-bottom:6px}
+@media(max-width:370px){.stats-tabs{grid-template-columns:repeat(2,1fr)}.stats-tabs.two{grid-template-columns:1fr 1fr}.stats-actions{grid-template-columns:1fr}.kpi-grid{grid-template-columns:1fr}.stats-hero{padding:14px}.stats-hero .sh-ico{width:50px;height:50px}.chart-bars{height:105px;gap:5px}.mode-stat{align-items:flex-start}.mode-stat .mr{font-size:11px}}
 
 
 
@@ -3611,6 +3619,26 @@ body,button,input,select,textarea,.tab,#rankTabs .tab,#rankTabs .tab small,.rank
   font-size:11px;font-weight:900;box-shadow:0 2px 0 #000}
 .qs-chips{display:flex;flex-wrap:wrap;gap:7px}
 .qs-loading{font-size:12px;color:var(--muted);font-weight:800;padding:4px 2px}
+/* The topic list the maker opens on: one tap per topic, and the tap IS the way
+   in — nothing else on the screen to press. */
+.qs-topics{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.qs-topic{display:flex;flex-direction:column;align-items:center;gap:7px;padding:14px 9px;
+  border:var(--stroke);border-radius:18px;background:var(--ink-2);box-shadow:var(--hard-sm);
+  font-family:inherit;color:var(--paper);cursor:pointer;text-align:center}
+.qs-topic:active{transform:translateY(2px);box-shadow:0 0 0 #000}
+.qs-topic .tico{width:52px;height:52px;border-radius:16px;border:2.5px solid #000;background:var(--ink-3);
+  display:grid;place-items:center;font-size:26px;overflow:hidden}
+.qs-topic .tico img{width:100%;height:100%;object-fit:cover}
+.qs-topic b{font-size:12.5px;font-weight:900;line-height:1.5}
+.qs-topic span{font-size:10.5px;color:var(--muted);font-weight:800}
+/* The topic already chosen, on the maker itself, with the way back to the list. */
+.qs-chosen{display:flex;align-items:center;gap:10px}
+.qs-chosen .tico{width:42px;height:42px;border-radius:13px;border:2px solid #000;background:var(--ink-3);
+  display:grid;place-items:center;font-size:21px;overflow:hidden;flex-shrink:0}
+.qs-chosen .tico img{width:100%;height:100%;object-fit:cover}
+.qs-chosen b{flex:1;min-width:0;font-size:13.5px;font-weight:900}
+.qs-chosen .btn{width:auto;flex-shrink:0;font-size:11.5px;padding:8px 11px;border-radius:12px;box-shadow:var(--hard-sm)}
+@media(max-width:370px){.qs-topics{grid-template-columns:1fr}}
 .qs-chip{border:2px solid #000;border-radius:999px;background:var(--ink-3);color:var(--paper);
   font-family:inherit;font-size:11.5px;font-weight:900;padding:8px 11px;box-shadow:0 2px 0 #000;cursor:pointer}
 .qs-chip.on{background:linear-gradient(180deg,#FFE24A,#F0A400);color:#141414}
@@ -5734,7 +5762,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
       </div>
       <div class="card practice-cost-card" style="gap:10px;align-items:center;margin-bottom:12px;padding:12px 14px">
         <span class="heart-big">❤️</span><div style="font-size:12px;font-weight:800;flex:1;line-height:1.6">حالت تمرینی: ورود به هر بازی با <b style="color:#ff7aa8">۱ قلب</b> انجام می‌شود، بدون پول و بدون مبلغ ورودی.</div><span class="heart-recharge" id="meHeartInfo">شارژ هر ۱ ساعت</span></div>
-      <div class="card practice-coin-card" style="margin-bottom:12px;padding:13px 14px"><div class="section-title" style="margin-top:0">ورودی تمرینی با سکه</div><div style="font-size:12px;color:var(--muted);font-weight:800;line-height:1.6">برای مسابقات تمرینی، به‌جای پول از سکه تمرینی استفاده می‌کنی.</div><div class="coin-stake-grid" id="coinStakeGrid"><button class="tab" onclick="selCoinStake(this,10)">۱۰ 🪙</button><button class="tab active" onclick="selCoinStake(this,25)">۲۵ 🪙</button><button class="tab" onclick="selCoinStake(this,50)">۵۰ 🪙</button></div></div>
+      <div class="card practice-coin-card" style="margin-bottom:12px;padding:13px 14px"><div class="section-title" style="margin-top:0">ورودی تمرینی با سکه</div><div style="font-size:12px;color:var(--muted);font-weight:800;line-height:1.6">برای مسابقات تمرینی، به‌جای پول از سکه تمرینی استفاده می‌کنی.</div><div class="coin-stake-grid" id="coinStakeGrid"><button class="tab" data-n="10" onclick="selCoinStake(this,10)">۱۰ 🪙</button><button class="tab active" data-n="25" onclick="selCoinStake(this,25)">۲۵ 🪙</button><button class="tab" data-n="50" onclick="selCoinStake(this,50)">۵۰ 🪙</button></div></div>
       <div class="grow"></div>
       <div class="card" id="ticketSelectCard" style="display:none;margin-bottom:12px"></div>
       <div id="mePlanNote" style="text-align:center;font-size:11px;font-weight:800;margin-bottom:8px"></div><button class="btn btn-primary" id="meStartBtn" onclick="startGame()">پرداخت و ورود</button>
@@ -5998,7 +6026,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
     <section class="screen" id="shop">
       <!-- The coin balance used to sit here as a hardcoded ۵۸ that never moved.
            The header already carries the real one. -->
-      <div class="topbar"><h1>فروشگاه 🛍️</h1></div>
+      <div class="topbar"><h1>فروشگاه 🛍️</h1><button class="iconbtn ib-close" onclick="go('home')">✕</button></div>
       <div class="tabs" id="shopTabs">
         <button class="tab" id="shopTabTickets" onclick="shopTab(this,'tickets')">🎫 بلیط مسابقات</button>
         <button class="tab active" onclick="shopTab(this,'util')">آیتم‌های کاربردی</button>
@@ -6012,7 +6040,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
 
     <!-- ============ RANKINGS ============ -->
     <section class="screen" id="rankings">
-      <div class="topbar"><h1>رنکینگ 🏅</h1></div>
+      <div class="topbar"><h1>رنکینگ 🏅</h1><button class="iconbtn ib-close" onclick="go('home')">✕</button></div>
       <div class="tabs" id="rankTabs">
         <button class="tab active" onclick="rankTab(this,'cup')">کاپ هفتگی<small>🏆 این هفته</small></button>
         <button class="tab" onclick="rankTab(this,'overall')">رنکینگ کلی<small>مجموع XP</small></button>
@@ -6039,7 +6067,10 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
 
     <!-- ============ FRIENDS ============ -->
     <section class="screen" id="friends">
-      <div class="topbar"><h1>دوستان 👥</h1><button class="iconbtn" onclick="openFriendTab('add')">＋</button></div>
+      <!-- «در قسمت دوستان و فروشگاه و رنکینگ دکمه ضربدر قرمز باید باشه و دکمه +
+           در دوستان باید حذف بشه چون یه دکمه افزودن داریم اونجا» — the ＋ opened
+           the same «افزودن» tab that is already a tab on this screen. -->
+      <div class="topbar"><h1>دوستان 👥</h1><button class="iconbtn ib-close" onclick="go('home')">✕</button></div>
       <div class="pad" style="padding-top:6px">
         <div class="fr-hero">
           <div class="ico">👥</div>
@@ -6200,15 +6231,26 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
     </section>
 
     <!-- ============ QSUBMIT ============ -->
-    <section class="screen pad" id="qsubmit">
-      <div class="topbar" style="padding:0 0 14px;background:none"><button class="iconbtn ib-back" onclick="menuBack('home')">→</button><h1>تولید سوال ✍️</h1></div>
-      <div class="qsubmit-hero"><div class="ico">✍️</div><div><b>سؤال بساز، سریع و راحت</b><p>موضوع و سختی را انتخاب کن، سؤال را بنویس و چهار گزینه را در چهار کادر جدا وارد کن. روی گزینهٔ درست بزن تا سبز شود.</p></div></div>
+    <!-- THE TOPIC IS CHOSEN BEFORE THE MAKER OPENS.
+         «کاربر قبل از ورود به صفحه کوییز ساز موضوع رو از لیست انتخاب کنه بعد
+         وارد همون صفحه بشه» — and the list is now the GAME's topics, not Last
+         Survivor's: that list only holds the subjects running rooms today, so
+         most of the game could not be written about at all. -->
+    <section class="screen pad" id="qstopics">
+      <div class="topbar" style="padding:0 0 14px;background:none"><button class="iconbtn ib-back" onclick="menuBack('home')">→</button><h1>موضوع سؤال 🏷️</h1></div>
+      <div class="qsubmit-hero"><div class="ico">🏷️</div><div><b>اول موضوع را انتخاب کن</b><p>سؤالت برای همین موضوع ثبت می‌شود. کنار هر موضوع تعداد سؤال‌های تأییدشدهٔ آن آمده — موضوع‌های خلوت‌تر بیشتر به سؤال احتیاج دارند.</p></div></div>
+      <div class="qs-topics" id="qsTopicList"><span class="qs-loading">در حال گرفتن موضوع‌ها…</span></div>
+    </section>
 
-      <!-- STEP 1 — the topic. The list is the SERVER's own topics, so a
-           question can never be written for a subject the game does not have. -->
+    <section class="screen pad" id="qsubmit">
+      <div class="topbar" style="padding:0 0 14px;background:none"><button class="iconbtn ib-back" onclick="qsBack()">→</button><h1>تولید سوال ✍️</h1></div>
+      <div class="qsubmit-hero"><div class="ico">✍️</div><div><b>سؤال بساز، سریع و راحت</b><p>سختی را انتخاب کن، سؤال را بنویس و چهار گزینه را در چهار کادر جدا وارد کن. روی گزینهٔ درست بزن تا سبز شود.</p></div></div>
+
+      <!-- STEP 1 — the topic that was chosen on the way in, and the way back to
+           the list if it was the wrong one. -->
       <div class="qsubmit-card">
         <h3><span class="qs-step">۱</span>موضوع سؤال</h3>
-        <div class="qs-chips" id="qsCats"><span class="qs-loading">در حال گرفتن موضوع‌ها…</span></div>
+        <div class="qs-chosen" id="qsChosen"></div>
       </div>
 
       <!-- STEP 2 — how hard. Four levels, the same four the match ladder
@@ -6252,17 +6294,21 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
 
     <!-- ============ STATS ============ -->
     <section class="screen pad" id="stats">
-      <div class="topbar" style="padding:0 0 14px;background:none"><button class="iconbtn ib-back" onclick="menuBack('home')">→</button><h1>آمار و ارقام 📈</h1><button class="iconbtn" onclick="exportStatsReport()">📄</button></div>
+      <!-- THE TITLE NEEDS SOMETHING BEHIND IT.
+           The bar is sticky over a transparent gradient, so scrolling ran the
+           cards up through the words: «پشت نوشته آمار و ارقام یه کارت باشه تا
+           وقتی این صفحه رو اسکرول میکنی کلمات روی هم نیفتند». And the download
+           button on the left is now the way out: «به جای دکمه دانلود دکمه ضربدر
+           قرمز باشه برای خروج». -->
+      <div class="topbar tb-card"><button class="iconbtn ib-back" onclick="menuBack('home')">→</button><h1>آمار و ارقام 📈</h1><button class="iconbtn ib-close" onclick="menuBack('home')">✕</button></div>
       <div class="stats-hero">
         <div class="sh-top"><div class="sh-ico">📈</div><div style="flex:1;min-width:0"><b>داشبورد عملکرد</b><p>تمرکز این بخش روی موفقیت، درآمد، دقت و رشد توست؛ هیچ آماری درباره عدم‌موفقیت نمایش داده نمی‌شود.</p></div></div>
         <div class="stats-chipline" id="statsChipline"></div>
       </div>
-      <div class="stats-actions"><button class="btn btn-primary" onclick="shareStatsReport()">اشتراک‌گذاری عملکرد</button><button class="btn btn-ghost" onclick="refreshStats()">بروزرسانی</button></div>
-      <div class="stats-tabs" id="statsTabs">
+      <div class="stats-actions one"><button class="btn btn-primary" onclick="shareStatsReport()">اشتراک‌گذاری عملکرد</button></div>
+      <div class="stats-tabs two" id="statsTabs">
         <button class="stats-tab active" data-tab="overview" onclick="openStatsTab('overview')">خلاصه</button>
-        <button class="stats-tab" data-tab="modes" onclick="openStatsTab('modes')">مودها</button>
         <button class="stats-tab" data-tab="topics" onclick="openStatsTab('topics')">موضوعات</button>
-        <button class="stats-tab" data-tab="history" onclick="openStatsTab('history')">روند</button>
       </div>
       <div id="statsContent"></div>
     </section>
@@ -6865,7 +6911,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
     <div class="row" onclick="closeMenu();plansBack='home';go('plans')"><div class="r-ico">👑</div><div class="r-txt"><b>پلن اشتراک</b></div><span class="r-arrow">‹</span></div>
     <div class="row" onclick="closeMenu();pzOpenGiftRedeem()"><div class="r-ico">🎁</div><div class="r-txt"><b>کد هدیه</b><span>کدت رو وارد کن و جایزه بگیر</span></div><span class="r-arrow">‹</span></div>
     <div class="row" onclick="menuGo('stats')"><div class="r-ico">📈</div><div class="r-txt"><b>آمار و ارقام</b></div><span class="r-arrow">‹</span></div>
-    <div class="row" onclick="menuGo('qsubmit')"><div class="r-ico">✍️</div><div class="r-txt"><b>تولید سوال</b></div><span class="r-arrow">‹</span></div>
+    <div class="row" onclick="menuGo('qstopics')"><div class="r-ico">✍️</div><div class="r-txt"><b>تولید سوال</b></div><span class="r-arrow">‹</span></div>
     <div class="row" onclick="menuGo('feedback')"><div class="r-ico">💬</div><div class="r-txt"><b>نظرات و پیشنهادات</b></div><span class="r-arrow">‹</span></div>
     <div class="row" onclick="menuGo('support')"><div class="r-ico">🎧</div><div class="r-txt"><b>پشتیبانی</b></div><span class="r-arrow">‹</span></div>
     <div class="row" onclick="menuGo('rules')"><div class="r-ico">📜</div><div class="r-txt"><b>قوانین و مقررات</b></div><span class="r-arrow">‹</span></div>
@@ -9262,7 +9308,14 @@ function go(id){
      claimable missions) and a stale badge is worse than none. */
   if(id==='home'){ try{ hmBoot(); }catch(e){} }
   if(id==='rules'){ try{ renderRules(); }catch(e){} }
-  if(id==='qsubmit'){ try{ qsLoadCats(); qsCount(); }catch(e){} }
+  if(id==='qstopics'){ try{ qsLoadTopics(); }catch(e){} }
+  /* Arriving at the maker with no topic — a deep link, a reload, a stale
+     history entry — sends the player to the list instead of a form that cannot
+     be submitted. */
+  if(id==='qsubmit'){
+    if(!QS_CAT){ try{ setTimeout(()=>go('qstopics'),0); }catch(e){} }
+    try{ qsPaintChosen(); qsCount(); }catch(e){}
+  }
   try{history.pushState({id},'');}catch(e){}
 }
 function goBack(){
@@ -9477,7 +9530,7 @@ function toast(msg,ms){
 function openMenu(){const a=document.querySelector('.screen.active');if(a&&['login','otp','register','splash','intro'].indexOf(a.id)>=0)return;try{applyMyName();}catch(e){}document.getElementById('menuBg').classList.add('show');document.getElementById('menuSheet').classList.add('show');setTimeout(()=>{const s=document.getElementById('menuSheet');if(s)s.scrollTop=0;},30);}
 function closeMenu(){document.getElementById('menuBg').classList.remove('show');document.getElementById('menuSheet').classList.remove('show');}
 let openedFromMenu=false;
-function menuGo(id){openedFromMenu=true;closeMenu();go(id);if(id==='qsubmit'){qsLoadCats();qsCount();qsLoadMine();}}
+function menuGo(id){openedFromMenu=true;closeMenu();go(id);if(id==='qstopics'){qsLoadTopics();qsLoadMine();}}
 function menuBack(fallback){if(openedFromMenu){openedFromMenu=false;go('home');setTimeout(openMenu,80);}else go(fallback||'home');}
 
 /* ============ SPLASH -> LOGIN ============ */
@@ -11991,27 +12044,58 @@ async function submitFeedback(){
 let QS_CAT='', QS_DIFFICULTY='medium', QS_CORRECT=0, QS_CATS=[];
 const QS_DIFF_FA={easy:'آسان',medium:'متوسط',hard:'سخت',veryhard:'خیلی سخت'};
 
-async function qsLoadCats(){
-  const box=document.getElementById('qsCats'); if(!box) return;
+/* THE TOPICS ARE THE GAME'S, NOT LAST SURVIVOR'S.
+   This used to read `/last-survivor/topics`, which answers a different question:
+   which subjects are running rooms today. Everything else was hidden, so most
+   of the game could not be written about at all. The maker list is the topic
+   list the operator keeps — minus «تصادفی», which is a way of drawing from the
+   others rather than a subject, minus the internal «انتخاب موضوع» bank, and
+   minus anything they have switched off for the maker. */
+async function qsLoadTopics(force){
+  const box=document.getElementById('qsTopicList');
+  if(force) QS_CATS=[];
   if(!QS_CATS.length){
     try{
-      const r=await pzApi('GET','/last-survivor/topics');
+      const r=await pzApi('GET','/questions/maker-topics');
       const rows=((r&&r.data&&r.data.topics)||[]);
-      QS_CATS=rows.filter(t=>t&&t.name&&!t.random&&!t.hidden)
-                  .map(t=>({name:String(t.name),icon:t.icon||'❓'}));
+      QS_CATS=rows.filter(t=>t&&t.name).map(t=>({
+        name:String(t.name), icon:t.icon||'❓', image:t.image||'', count:Number(t.questionCount)||0
+      }));
     }catch(e){}
   }
+  if(!box) return;
   if(!QS_CATS.length){ box.innerHTML='<span class="qs-loading">موضوعی در دسترس نیست — اتصالت را بررسی کن.</span>'; return; }
-  if(!QS_CAT||!QS_CATS.some(c=>c.name===QS_CAT)) QS_CAT=QS_CATS[0].name;
   box.innerHTML=QS_CATS.map(c=>
-    '<button type="button" class="qs-chip'+(c.name===QS_CAT?' on':'')+'" data-c="'+frEsc(c.name)+'" onclick="qsPickCat(this.getAttribute(\'data-c\'))">'+
-      frEsc(c.icon)+' '+frEsc(c.name)+'</button>').join('');
+    '<button type="button" class="qs-topic" data-c="'+frEsc(c.name)+'" onclick="qsPickCat(this.getAttribute(\'data-c\'))">'+
+      '<span class="tico">'+(c.image?'<img src="'+frEsc(c.image)+'" alt="">':frEsc(c.icon))+'</span>'+
+      '<b>'+frEsc(c.name)+'</b>'+
+      '<span>'+fa(c.count)+' سؤال</span>'+
+    '</button>').join('');
 }
+/* Picking one IS entering the maker — «موضوع رو از لیست انتخاب کنه بعد وارد
+   همون صفحه بشه». */
 function qsPickCat(name){
+  if(!name) return;
   QS_CAT=name;
-  document.querySelectorAll('#qsCats .qs-chip').forEach(b=>b.classList.toggle('on',b.getAttribute('data-c')===name));
   try{ vib(6); }catch(e){}
+  go('qsubmit');
 }
+/* The chosen topic, printed at the top of the maker with the way back to the
+   list — the only way the topic can be changed, so the two screens can never
+   disagree about what is being written for. */
+function qsPaintChosen(){
+  const el=document.getElementById('qsChosen'); if(!el) return;
+  const c=QS_CATS.find(x=>x.name===QS_CAT)||{name:QS_CAT,icon:'❓',image:'',count:0};
+  el.innerHTML=QS_CAT
+    ? '<span class="tico">'+(c.image?'<img src="'+frEsc(c.image)+'" alt="">':frEsc(c.icon||'❓'))+'</span>'+
+      '<b>'+frEsc(QS_CAT)+'</b>'+
+      '<button type="button" class="btn btn-ghost" onclick="go(\'qstopics\')">تغییر موضوع</button>'
+    : '<b style="color:var(--muted);font-weight:800">موضوعی انتخاب نشده</b>'+
+      '<button type="button" class="btn btn-primary" onclick="go(\'qstopics\')">انتخاب موضوع</button>';
+}
+/* Back from the maker goes to the list it was opened from, not out of the
+   feature — the player is one step in, not at the start. */
+function qsBack(){ if(QS_CAT&&QS_CATS.length){ go('qstopics'); return; } menuBack('home'); }
 function qsPickDiff(d){
   QS_DIFFICULTY=d;
   document.querySelectorAll('#qsDiffs .qs-chip').forEach(b=>b.classList.toggle('on',b.getAttribute('data-d')===d));
@@ -12067,7 +12151,7 @@ async function submitQuestion(){
     /* Two different reasons for having no topic, and they need different
        answers: one is «you have not chosen», the other is «the list never
        arrived» — telling somebody to pick from an empty list is no help. */
-    :(!QS_CAT)?(QS_CATS.length?'موضوع سؤال را انتخاب کن.':'فهرست موضوع‌ها نیامده — اتصالت را بررسی کن و دوباره وارد این صفحه شو.'):'';
+    :(!QS_CAT)?(QS_CATS.length?'اول موضوع سؤال را از لیست انتخاب کن.':'فهرست موضوع‌ها نیامده — اتصالت را بررسی کن و دوباره وارد این صفحه شو.'):'';
   if(bad){ showAaaModal({icon:'⚠️',title:'سؤال کامل نیست',sub:bad,primaryText:'باشه',secondaryText:''}); return; }
   const btn=document.querySelector('#qsubmit .btn-primary');
   if(btn){ if(btn.disabled) return; btn.disabled=true; btn.textContent='در حال ارسال…'; }
@@ -12430,7 +12514,7 @@ function inviteFriend(id){
      a duel, so the game comes first and the rest follows from it. */
   pzInvitePickMode(who,(mode)=>{
     if(mode==='ls'){ pzInvitePickTopic(who); return; }
-    pzInvitePickTicket(who,(tier)=>{ pzInviteSend(who,'duel',{ticketTier:tier}); });
+    pzInviteStake(who,(extra)=>{ pzInviteSend(who,'duel',extra); });
   });
   sfx('found');
 }
@@ -12512,6 +12596,32 @@ let practiceCoins=0,practiceCoinStake=25;try{const pc=localStorage.getItem('pq_p
 function savePracticeCoins(){try{localStorage.setItem('pq_practice_coins',practiceCoins);}catch(e){}}
 function showPracticeCoinInfo(){showAaaModal({icon:'🪙',title:'سکه‌های تمرینی',sub:'سکه فعلی: '+fa(practiceCoins)+'<br>در حالت دوستانه، جوایز و ورودی‌ها با سکه انجام می‌شود.',primaryText:'باشه',secondaryText:''});}
 function selCoinStake(el,v){document.querySelectorAll('#coinStakeGrid .tab').forEach(t=>t.classList.remove('active'));if(el)el.classList.add('active');practiceCoinStake=v;updateModeEntryPlan();}
+/* A FRIENDLY DUEL WAS ARRANGED FOR AN AMOUNT, AND THE SCREEN MUST SAY IT.
+   The entry screen offers three amounts; an invite can be for any number the
+   sender wrote. So the agreed figure is selected here — and when it is not one
+   of the three, it is ADDED as its own chip rather than left with nothing
+   highlighted, which would have the screen quietly showing one number while the
+   match is played for another. */
+function pzApplyCoinStake(n){
+  n=Math.floor(Number(n)); if(!Number.isFinite(n)||n<1) return;
+  practiceCoinStake=n;
+  try{
+    const g=document.getElementById('coinStakeGrid');
+    if(g){
+      let hit=null;
+      g.querySelectorAll('.tab').forEach(t=>{ t.classList.remove('active'); if(Number(t.getAttribute('data-n'))===n) hit=t; });
+      if(!hit){
+        hit=document.getElementById('coinStakeCustom');
+        if(!hit){ hit=document.createElement('button'); hit.className='tab'; hit.id='coinStakeCustom'; g.appendChild(hit); }
+        hit.setAttribute('data-n',String(n));
+        hit.textContent=fa(n)+' 🪙';
+        hit.onclick=()=>selCoinStake(hit,n);
+      }
+      hit.classList.add('active');
+    }
+  }catch(e){}
+  try{ updateModeEntryPlan(); }catch(e){}
+}
 function spendPracticeCoins(n){if(practiceCoins<n){showSmartSnackbar({icon:'🪙',title:'سکه کافی نیست',message:'برای شروع '+fa(n)+' سکه لازم داری.',cta:'ماموریت‌ها',action:()=>go('missions')});return false;}practiceCoins-=n;savePracticeCoins();updateWalletUI();return true;}
 function earnPracticeCoins(n,label){practiceCoins+=n;savePracticeCoins();updateWalletUI();return n;}
 const tickets={gold:0,silver:0,bronze:1};
@@ -15042,17 +15152,17 @@ const PLAYER_STATS={
   dailyXp:[],
   dailyPrize:[],
   last5:[],
-  modes:[],
-  topics:[],
-  history:[]
+  topics:[]
 };
 function openStatsTab(tab){statsActiveTab=tab;document.querySelectorAll('#statsTabs .stats-tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));renderStats();}
+/* TWO TABS, NOT FOUR. «تب روند با تمامی مخلفات داخلش حذف بشه، تب مودها هم حذف
+   بشه» — so «روند» and «مودها» are gone, along with everything they drew. A tab
+   name arriving from an old history entry falls back to the summary rather than
+   leaving the page blank. */
 function renderStats(){
   renderStatsHeader();
   const c=document.getElementById('statsContent');if(!c)return;
-  if(statsActiveTab==='modes')return renderStatsModes(c);
   if(statsActiveTab==='topics')return renderStatsTopics(c);
-  if(statsActiveTab==='history')return renderStatsHistory(c);
   renderStatsOverview(c);
 }
 function renderStatsHeader(){
@@ -15077,12 +15187,6 @@ function renderStatsOverview(c){
 function animateStatsCharts(){
   setTimeout(()=>{document.querySelectorAll('#xpChart i').forEach(i=>{const max=Math.max(...PLAYER_STATS.dailyXp);i.style.height=Math.max(10,Math.round((Number(i.dataset.v)/max)*100))+'%';});document.querySelectorAll('.topic-stat .track i').forEach(i=>i.style.width=i.dataset.w+'%');},70);
 }
-function renderStatsModes(c){
-  const modes=PLAYER_STATS.modes||[];
-  c.innerHTML='<div class="stats-card"><h3>عملکرد بر اساس مود بازی</h3><p>تعداد بازی، برد و نرخ موفقیتِ واقعی در هر مود.</p></div>'+
-    (modes.length? modes.map(m=>'<div class="mode-stat"><div class="mi">'+m.ico+'</div><div class="mt"><b>'+m.name+'</b><span>'+fa(m.played)+' مسابقه · '+fa(m.wins)+' برد</span></div><div class="mr">'+fa(m.rate)+'٪</div></div>').join('')+'<button class="btn btn-primary" onclick="shareStatsReport()">اشتراک‌گذاری آمار مودها</button>'
-      : '<div class="stats-empty"><span class="big">🎮</span>هنوز در هیچ مودی بازیِ ثبت‌شده‌ای نداری.</div>');
-}
 function renderStatsTopics(c){
   const topics=PLAYER_STATS.topics||[];
   c.innerHTML='<div class="stats-card"><h3>دقت پاسخ بر اساس موضوع</h3><p>موضوعات قوی و درحال رشد تو بر اساس پاسخ‌های واقعی.</p></div>'+
@@ -15090,22 +15194,10 @@ function renderStatsTopics(c){
       : '<div class="stats-empty"><span class="big">📚</span>هنوز پاسخِ کافی برای تحلیلِ موضوعات ثبت نکرده‌ای.</div>');
   animateStatsCharts();
 }
-function renderStatsHistory(c){
-  const hist=PLAYER_STATS.history||[];
-  const body=hist.length
-    ? '<div class="stats-card">'+hist.map(h=>'<div class="timeline-item"><div class="ti">'+h.ico+'</div><div style="flex:1"><b>'+h.title+'</b><br><span>'+h.time+' · '+h.meta+'</span></div></div>').join('')+'</div>'
-    : '<div class="stats-empty"><span class="big">🏁</span>هنوز بازیِ ثبت‌شده‌ای نداری.<br>اولین دوئلِ واقعی‌ات را انجام بده تا اینجا نمایش داده شود.</div>';
-  c.innerHTML='<div class="stats-card"><h3>روند بازی‌های اخیر</h3><p>نتیجهٔ واقعیِ آخرین مسابقه‌های تو، مستقیم از سرور.</p></div>'+body+'<div class="stats-actions"><button class="btn btn-primary" onclick="exportStatsReport()">خروجی گزارش</button><button class="btn btn-ghost" onclick="showStatsMilestones()">نشان‌ها</button></div>';
-}
-function refreshStats(){try{pzHydrateStats();}catch(e){renderStats();}toast('آمار بروزرسانی شد 📈');}
 function shareStatsReport(){
   const txt='آمار من در Prizze Quiz: '+fa(PLAYER_STATS.wins)+' برد، '+fa(PLAYER_STATS.winRate)+'٪ موفقیت، '+fa(PLAYER_STATS.totalPrize)+' تومان جایزه 🎮';
   try{navigator.clipboard&&navigator.clipboard.writeText(txt);}catch(e){}
   showAaaModal({icon:'📣',title:'گزارش عملکرد آماده شد',sub:txt+'<br><br>متن گزارش کپی شد و می‌تونی برای دوستانت بفرستی.',primaryText:'عالیه',secondaryText:''});
-}
-function exportStatsReport(){
-  const data=JSON.stringify({profile:(window.myName||(_usr&&_usr.username)||'player'),stats:PLAYER_STATS,exportedAt:new Date().toISOString()},null,2);
-  const blob=new Blob([data],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='prizze-quiz-stats.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);toast('خروجی آمار آماده شد 📄');
 }
 function recommendTraining(){showAaaModal({icon:'🎯',title:'پیشنهاد تمرین',sub:'برای رشد سریع‌تر، امروز ۵ سؤال موسیقی و ۵ سؤال ورزش تمرین کن. موضوع فیلم و جغرافیا نقطه قوت توست.',primaryText:'شروع تمرین',secondaryText:'بعداً',onPrimary:()=>{closeAaaModal(false);enterMode('survivor');},onSecondary:()=>closeAaaModal(false)});}
 function showStatsMilestones(){showAaaModal({icon:'🏅',title:'نشان‌های فعال',sub:'🔥 استریک ۴ روزه<br>🎯 دقت بالای ۷۰٪<br>💰 جایزه کل بالای ۱۰ میلیون<br>⚡ سرعت پاسخ کمتر از ۱۰ ثانیه',primaryText:'خوبه',secondaryText:''});}
@@ -15791,9 +15883,11 @@ async function onlineLoad(refresh){
    باید نوع بلیط رو مشخص کنی» — the tier is chosen first, then sent. */
 function onlineInvite(i){
   const p=(ONLINE_LAST||[])[i]; if(!p) return;
-  pzInvitePickTicket(p,(tier)=>{ pzInviteSend(p,'duel',{ticketTier:tier}); });
+  /* In the friendly section the same button arranges a coin duel instead — no
+     ticket exists there to choose. */
+  pzInviteStake(p,(extra)=>{ pzInviteSend(p,'duel',extra); });
 }
-function hmQuizMaker(){ go('qsubmit'); qsLoadCats(); qsCount(); qsLoadMine(); }
+function hmQuizMaker(){ go('qstopics'); qsLoadTopics(); qsLoadMine(); }
 
 function hmBoot(){ hmRails(); hmRender(); hmSwipeInit(); }
 
@@ -15839,23 +15933,17 @@ async function pzHydrateStats(){
     try{ const r=await pzApi('GET','/leaderboards/weekly'); if(r&&r.ok&&r.data&&Array.isArray(r.data.entries)){ const mine=r.data.entries.find(x=>x.highlighted); if(mine)rank=Number(mine.rank)||0; } }catch(e){}
   }
   const lg=pzLeagueFromCup(weeklyScore);
-  const modeName={duel:'⚡ دوئل ۱به‌۱',lastSurvivor:'🏆 آخرین بازمانده',allOrNothing:'🤝 همه یا هیچ',weeklyLeague:'🏅 لیگ هفتگی'};
   PLAYER_STATS.matches=s?s.matches:0; PLAYER_STATS.wins=s?s.wins:0; PLAYER_STATS.winRate=s?s.winRate:0;
   PLAYER_STATS.accuracy=s?(s.accuracy||0):0; PLAYER_STATS.level=s?s.level:pzLevelForXp((_usr&&_usr.xp)||0);
   PLAYER_STATS.league=lg.emoji+' '+lg.name; PLAYER_STATS.rank=rank; PLAYER_STATS.currentStreak=0; PLAYER_STATS.streak=0;
   PLAYER_STATS.totalPrize=s?(s.totalPrize||0):0; PLAYER_STATS.bestPrize=s?(s.bestPrize||0):0; PLAYER_STATS.weeklyPrize=s?(s.weeklyPrize||0):0;
   PLAYER_STATS.leagueTickets=(tickets.bronze+tickets.silver+tickets.gold); PLAYER_STATS.avgTime=0; PLAYER_STATS.perfectRounds=0; PLAYER_STATS.duelStageMax=0;
   PLAYER_STATS.dailyXp=[];   /* no per-day XP history in the backend → empty chart */
-  PLAYER_STATS.modes=(s&&Array.isArray(s.perMode))? s.perMode.map(m=>({ico:(modeName[m.modeId]||'🎮 ').split(' ')[0],name:(modeName[m.modeId]||m.modeId).replace(/^\S+\s/,''),played:m.played,wins:m.wins,rate:m.winRate,prize:0,best:0,avg:'—'})) : [];
   PLAYER_STATS.topics=(s&&Array.isArray(s.topTopics))? s.topTopics.map(t=>({name:t.category,acc:t.pct,answered:t.count,tag:t.pct>=80?'قوی':t.pct>=60?'پایدار':'در حال رشد'})) : [];
-  /* REAL recent-match timeline (roند tab) from the server, and the real last-5
-     W/L/D strip — no more mock history. */
+  /* The real last-5 W/L/D strip. The per-mode table and the match timeline used
+     to be read here for the «مودها» and «روند» tabs; both tabs are gone, so
+     nothing is kept for a screen that no longer exists. */
   PLAYER_STATS.last5=(s&&Array.isArray(s.last5))?s.last5:[];
-  PLAYER_STATS.history=(s&&Array.isArray(s.recentMatches)&&s.recentMatches.length)? s.recentMatches.map(r=>{
-    const mn=(modeName[r.modeId]||('🎮 '+(r.modeId||'مسابقه'))); const label=mn.replace(/^\S+\s/,'');
-    const won=r.result==='W', draw=r.result==='D';
-    return {ico:won?'🏆':draw?'🤝':'⚔️', title:(won?'برد در ':draw?'مساوی در ':'باخت در ')+label, time:pzRelTime(r.at), meta:'نتیجه: '+(won?'برد ✅':draw?'مساوی':'باخت')};
-  }) : [];
   try{ renderStats(); }catch(e){}
   try{ paintProfileStats(); }catch(e){}
 }
@@ -20547,8 +20635,8 @@ try{ setInterval(()=>{ try{ if(_tok) pzInboxBadge(); }catch(e){} }, 45000); }cat
    and closes itself the moment the answer lands. Refusing or letting it lapse
    costs nothing — no ticket has been spent by either side yet. */
 let PZ_INV_WAIT=null;
-function pzInviteWait(inv,tier){
-  PZ_INV_WAIT={id:inv.id,tier:tier,until:Date.now()+62000};
+function pzInviteWait(inv,tier,coins){
+  PZ_INV_WAIT={id:inv.id,tier:tier,coins:Number(coins)||0,until:Date.now()+62000};
   try{
     showAaaModal({icon:'⏳',title:'منتظر جواب',
       sub:'دعوت فرستاده شد. تا وقتی جواب بدهد اینجا منتظر می‌مانی — اگر قبول کند، مستقیم با هم روبه‌رو می‌شوید.',
@@ -20576,6 +20664,10 @@ async function pzInviteWaitTick(){
       /* Same key, same tier, so the queue can only pair the two of them. */
       pzPairKey=w.id;
       if(w.tier) selectedTicket=w.tier;
+      /* The friendly arrangement was for a number of coins, so that is what the
+         entry screen must be asking for when it opens — not the last amount
+         this player happened to leave selected there. */
+      if(w.coins>0) pzApplyCoinStake(w.coins);
       duelTicket=null;
       enterMode('survivor',true);
       setTimeout(()=>{ try{ updateModeEntryPlan(); }catch(e){} try{ renderTicketSelect(); }catch(e){} },250);
@@ -20672,13 +20764,26 @@ function pzInviteAsk(inv){
   if(!inv||!inv.id) return;
   if(PZ_INV_OPEN===inv.id) return;                 // already on screen
   PZ_INV_OPEN=inv.id;
-  const what={duel:'دوئل',ls:'آخرین بازمانده',wta:'همه یا هیچ'}[inv.mode]||'بازی';
-  const tk=(inv.mode==='duel'&&inv.ticketTier&&typeof tDef==='function')?tDef(inv.ticketTier):null;
-  const line=tk?('با '+tk.name+' — ورودی '+fa(tk.value||0)+' تومان'):'';
+  const coins=Number(inv.coinStake)||0;
+  const what=coins>0?'دوئل دوستانه':({duel:'دوئل',ls:'آخرین بازمانده',wta:'همه یا هیچ'}[inv.mode]||'بازی');
+  const tk=(inv.mode==='duel'&&!coins&&inv.ticketTier&&typeof tDef==='function')?tDef(inv.ticketTier):null;
+  /* A friendly duel is quoted in what it actually costs: coins and one heart.
+     No ticket is named, because none is spent. */
+  const line=coins>0?(fa(coins)+' سکه 🪙 + ۱ قلب ❤️ — بدون بلیط')
+    :(tk?('با '+tk.name+' — ورودی '+fa(tk.value||0)+' تومان'):'');
+  /* Being asked into the friendly section from the prize one is a change of
+     half, so it is said before the tap, not discovered after it. The same is
+     true the other way: a friendly player accepting a ticket game would land on
+     a ticket counter with a blue screen around them, which is exactly the fault
+     this batch is about — seen from the receiving end. */
+  const switching=(coins>0&&!pzFriendlyPlan());
+  const toPrize=(coins<=0&&pzFriendlyPlan());
   try{
     showAaaModal({
-      icon:'🎮', title:pzEsc(inv.fromName||'یک بازیکن')+' دعوتت کرد',
-      sub:'<b>'+what+'</b>'+(line?'<br>'+pzEsc(line):'')+
+      icon:coins>0?'🪙':'🎮', title:pzEsc(inv.fromName||'یک بازیکن')+' دعوتت کرد',
+      sub:'<b>'+what+'</b>'+(line?'<br>'+line:'')+
+          (switching?'<div style="margin-top:8px;font-size:12px;opacity:.85">این دعوت برای بخش دوستانه است — با پذیرفتن به حالت دوستانه می‌روی و هر وقت خواستی برمی‌گردی.</div>':'')+
+          (toPrize?'<div style="margin-top:8px;font-size:12px;opacity:.85">این بازی در بخش دوستانه نیست — با پذیرفتن به بخش جایزه می‌روی و با بلیط وارد می‌شوی.</div>':'')+
           '<div style="margin-top:8px;font-size:12px;opacity:.8">اگر بپذیری به صفحهٔ ورود می‌روی و ورودی را خودت می‌دهی.</div>',
       dismissible:false,
       primaryText:'✅ پذیرفتن', secondaryText:'❌ رد درخواست',
@@ -20707,8 +20812,23 @@ function pzInviteGo(inv){
 }
 function pzInviteGoNow(inv){
   try{
+    const coins=Number(inv.coinStake)||0;
+    /* A TICKET GAME IS PLAYED IN THE HALF THAT HAS TICKETS. Accepting one while
+       the friendly section is on means walking to a ticket counter with a blue
+       screen around you — no ticket counter belongs there. The sheet they just
+       accepted said this would happen. */
+    if(coins<=0&&pzFriendlyPlan()) pzSetPlan('premium');
     if(inv.mode==='duel'){
-      if(inv.ticketTier){ selectedTicket=inv.ticketTier; duelTicket=null; }
+      if(coins>0){
+        /* THE TWO SIDES MUST BE PLAYING THE SAME GAME. The friendly entry screen
+           is the one that asks for coins and a heart; opening the prize one for
+           somebody who accepted a coin duel would charge them a ticket for a
+           match their opponent paid coins for. They were told this on the sheet
+           they just tapped, and the way back is one line on the entry screen. */
+        if(!pzFriendlyPlan()) pzSetPlan('free');
+        pzApplyCoinStake(coins);
+      }
+      else if(inv.ticketTier){ selectedTicket=inv.ticketTier; duelTicket=null; }
       pzPairKey=inv.id;                 // meet the person who invited them, nobody else
       enterMode('survivor',true);
       setTimeout(()=>{ try{ updateModeEntryPlan(); }catch(e){} try{ renderTicketSelect(); }catch(e){} },250);
@@ -20774,10 +20894,87 @@ async function pzInvitePoll(){
 /* ── SENDING ONE ─────────────────────────────────────────────────────────
    For a duel the tier has to be chosen first: «در هنگام ارسال درخواست بازی
    باید نوع بلیط رو مشخص کنی و ارسال کنی». */
+/* THE FRIENDLY HALF OF THE GAME HAS ONE GAME AND NO TICKETS.
+   «در قسمت دوستانه فقط درخواست دوئل میتونی بدی اونم نه با بلیط بلکه با سکهٔ
+   انتخابی کاربر که بتونه حتی تعداد سکه رو بنویسه و یک قلب.»
+
+   It read as a small thing and was not: choosing «آخرین بازمانده» from a
+   friend's row opened a PRIVATE ROOM, and a private room is entered through the
+   ordinary Last Survivor door — which takes a ticket. So a player who had said
+   «دوستانه», and whose screen was blue all the way in, was standing at a ticket
+   counter. There is nothing to buy in the friendly section; there should not
+   have been a door there at all. */
+function pzFriendlyPlan(){ try{ return userPlan==='free'; }catch(e){ return false; } }
+/* Moving between the two halves. The same two lines `choosePlan` runs, without
+   its congratulation sheet — this is used mid-flow, where a second modal
+   between the tap and the screen reads as the tap not having worked. Never
+   silent: every caller says on the sheet that it is about to happen. */
+function pzSetPlan(p){
+  if(p!=='free'&&p!=='premium') return;
+  userPlan=p; planExplicitlyChosen=true;
+  try{ localStorage.setItem('pq_user_plan',p); }catch(e){}
+  try{ applyPlanTheme(); }catch(e){}
+}
+
+/* What the two of them are playing for — a ticket tier in the prize half, a
+   number of coins the sender writes in the friendly one. Both hand back the
+   piece `pzInviteSend` needs, so the callers do not have to know which half of
+   the game they are in. */
+function pzInviteStake(user,onPick){
+  if(pzFriendlyPlan()) return pzInvitePickCoins(user,(n)=>onPick({coinStake:n}));
+  return pzInvitePickTicket(user,(tier)=>onPick({ticketTier:tier}));
+}
+
+/* THE NUMBER IS TYPED, NOT PICKED FROM THREE.
+   The entry screen offers ۱۰/۲۵/۵۰ and that is fine for a stranger; between two
+   people who know each other the amount is part of the arrangement, so the box
+   takes whatever they write. The three chips stay as a shortcut into the same
+   box rather than as the only answers. */
+function pzInvitePickCoins(user,onPick){
+  const who=pzEsc(user.username||user.displayName||'بازیکن');
+  const cur=Math.max(1,Number(practiceCoinStake)||25);
+  try{
+    showAaaModal({
+      icon:'🪙', title:'دوئل دوستانه با چند سکه؟',
+      sub:'<div style="margin-bottom:8px;font-size:12.5px">دعوت برای <b>'+who+'</b></div>'+
+        '<div style="font-size:12px;color:var(--muted);font-weight:800;line-height:1.7;margin-bottom:8px">'+
+          'هر دو نفر <b>۱ قلب</b> و همین تعداد سکه می‌گذارید. بلیطی در کار نیست.</div>'+
+        '<input class="input pz-inv-coin-in" id="pzInvCoins" type="number" inputmode="numeric" min="1" max="10000" '+
+          'value="'+cur+'" style="text-align:center;font-size:20px;font-weight:900;direction:ltr">'+
+        '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:9px">'+
+          [10,25,50].map(n=>'<button class="tab pz-inv-coin" data-n="'+n+'">'+fa(n)+' 🪙</button>').join('')+
+        '</div>'+
+        '<div style="margin-top:9px;font-size:11.5px;font-weight:800;color:var(--muted)">سکه‌های تو: '+
+          '<b style="color:var(--bolt)">'+fa(practiceCoins)+'</b> · قلب‌ها: <b style="color:#ff7aa8">'+fa(hearts)+'</b></div>',
+      dismissible:true, primaryText:'ارسال دعوت', secondaryText:'بی‌خیال',
+      primaryClass:'btn-green',
+      onPrimary:()=>{
+        const el=document.getElementById('pzInvCoins');
+        const n=Math.floor(Number(el&&el.value));
+        /* Said plainly and the sheet stays open, because closing it would throw
+           away everything else they had chosen for the sake of one typo. */
+        if(!Number.isFinite(n)||n<1){ toast('تعداد سکه را بنویس'); return; }
+        if(n>10000){ toast('حداکثر ۱۰٬۰۰۰ سکه'); return; }
+        if(n>practiceCoins){ toast('این‌قدر سکه نداری — سکه‌های تو: '+fa(practiceCoins),3000); return; }
+        closeAaaModal(true); setTimeout(()=>onPick(n),150);
+      },
+      onSecondary:()=>closeAaaModal(false)
+    });
+    setTimeout(()=>{
+      document.querySelectorAll('.pz-inv-coin').forEach(b=>{
+        b.onclick=()=>{ const el=document.getElementById('pzInvCoins'); if(el) el.value=b.getAttribute('data-n'); };
+      });
+    },60);
+  }catch(e){}
+}
+
 /* WHICH GAME, BEFORE WHICH TICKET.
    Two ways to play with one person you know: a duel, which is the two of you,
-   or a Last Survivor room that belongs to you and holds everybody you ask. */
+   or a Last Survivor room that belongs to you and holds everybody you ask.
+   Only in the prize half — the friendly section never gets this far, because
+   there is only one game there to ask for. */
 function pzInvitePickMode(user,onPick){
+  if(pzFriendlyPlan()) return onPick('duel');
   const who=pzEsc(user.username||user.displayName||'بازیکن');
   try{
     showAaaModal({
@@ -20876,7 +21073,7 @@ async function pzInviteSend(user,mode,extra){
        now waits for the answer and then queues on the invite's own key, which
        is the only ticket the other one can be paired with. */
     const inv=(r&&r.data)||{};
-    if(mode==='duel'&&inv.id) pzInviteWait(inv,extra.ticketTier||'');
+    if(mode==='duel'&&inv.id) pzInviteWait(inv,extra.ticketTier||'',Number(extra.coinStake)||0);
     else toast('دعوت فرستاده شد — منتظر جواب ⏳',2600);
     return true;
   }

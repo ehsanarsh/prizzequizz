@@ -33,6 +33,16 @@ export interface GameInvite {
   mode: InviteMode;
   /** Duel only: which tier both sides play at. Empty for the other modes. */
   ticketTier: string;
+  /* THE FRIENDLY SECTION HAS NO TICKETS.
+   *
+   * «در قسمت دوستانه فقط درخواست دوئل میتونی بدی اونم نه با بلیط بلکه با سکهٔ
+   * انتخابی کاربر که بتونه حتی تعداد سکه رو بنویسه و یک قلب.» So a friendly
+   * duel is arranged for a NUMBER OF COINS, written by the person sending it,
+   * and the ticket tier stays empty. Zero means the ordinary, paid kind.
+   *
+   * Like the tier, this is carried and quoted back, never charged here — the
+   * coins and the heart are spent by the ordinary entry on the other side. */
+  coinStake: number;
   /** Last Survivor / all-or-nothing: the room being joined, when there is one. */
   roomId: string;
   /** The room's topic, carried so the invitee lands on the ticket screen FOR
@@ -70,6 +80,7 @@ async function ensureSchema(pool: ReturnType<typeof getPgPool>): Promise<void> {
     to_user_id TEXT NOT NULL,
     mode TEXT NOT NULL DEFAULT 'duel',
     ticket_tier TEXT NOT NULL DEFAULT '',
+    coin_stake INT NOT NULL DEFAULT 0,
     room_id TEXT NOT NULL DEFAULT '',
     room_topic TEXT NOT NULL DEFAULT '',
     from_room_id TEXT NOT NULL DEFAULT '',
@@ -91,6 +102,7 @@ async function ensureSchema(pool: ReturnType<typeof getPgPool>): Promise<void> {
     `from_name TEXT NOT NULL DEFAULT ''`,
     `mode TEXT NOT NULL DEFAULT 'duel'`,
     `ticket_tier TEXT NOT NULL DEFAULT ''`,
+    `coin_stake INT NOT NULL DEFAULT 0`,
     `room_id TEXT NOT NULL DEFAULT ''`,
     `room_topic TEXT NOT NULL DEFAULT ''`,
     `from_room_id TEXT NOT NULL DEFAULT ''`,
@@ -106,7 +118,8 @@ async function ensureSchema(pool: ReturnType<typeof getPgPool>): Promise<void> {
 const rowToInvite = (r: any): GameInvite => ({
   id: String(r.id), fromUserId: String(r.from_user_id), fromName: String(r.from_name || ''),
   toUserId: String(r.to_user_id), mode: String(r.mode) as InviteMode,
-  ticketTier: String(r.ticket_tier || ''), roomId: String(r.room_id || ''),
+  ticketTier: String(r.ticket_tier || ''), coinStake: Number(r.coin_stake) || 0,
+  roomId: String(r.room_id || ''),
   roomTopic: String(r.room_topic || ''),
   fromRoomId: String(r.from_room_id || ''), status: String(r.status) as InviteStatus,
   createdAt: Number(r.created_at), expiresAt: Number(r.expires_at)
@@ -117,10 +130,10 @@ async function save(inv: GameInvite): Promise<GameInvite> {
   if (!pool) { mem.set(inv.id, { ...inv }); return inv; }
   await ensureSchema(pool);
   await pool.query(
-    `INSERT INTO game_invites (id, from_user_id, from_name, to_user_id, mode, ticket_tier, room_id, room_topic, from_room_id, status, created_at, expires_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
-     ON CONFLICT (id) DO UPDATE SET status=$10, expires_at=$12`,
-    [inv.id, inv.fromUserId, inv.fromName, inv.toUserId, inv.mode, inv.ticketTier, inv.roomId, inv.roomTopic, inv.fromRoomId, inv.status, inv.createdAt, inv.expiresAt]
+    `INSERT INTO game_invites (id, from_user_id, from_name, to_user_id, mode, ticket_tier, coin_stake, room_id, room_topic, from_room_id, status, created_at, expires_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+     ON CONFLICT (id) DO UPDATE SET status=$11, expires_at=$13`,
+    [inv.id, inv.fromUserId, inv.fromName, inv.toUserId, inv.mode, inv.ticketTier, inv.coinStake, inv.roomId, inv.roomTopic, inv.fromRoomId, inv.status, inv.createdAt, inv.expiresAt]
   );
   return inv;
 }
@@ -202,9 +215,20 @@ export interface CreateInviteInput {
   toUserId: string;
   mode: InviteMode;
   ticketTier?: string;
+  coinStake?: number;
   roomId?: string;
   roomTopic?: string;
   fromRoomId?: string;
+}
+
+/** How many practice coins a friendly duel may be arranged for. A whole number
+ *  of coins, never negative, and never a figure nobody could hold — the number
+ *  is typed by hand, so a slipped key must not travel. */
+export const MAX_COIN_STAKE = 10_000;
+function coins(v: unknown): number {
+  const n = Math.floor(Number(v));
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return Math.min(n, MAX_COIN_STAKE);
 }
 
 /** Send one. Refuses when the person is already spoken for — that refusal IS
@@ -212,6 +236,15 @@ export interface CreateInviteInput {
 export async function createInvite(input: CreateInviteInput, now = Date.now()): Promise<GameInvite> {
   if (!input.fromUserId || !input.toUserId) throw new InviteError('BAD_INVITE', 'دعوت ناقص است');
   if (input.fromUserId === input.toUserId) throw new InviteError('SELF_INVITE', 'نمی‌توانی خودت را دعوت کنی');
+
+  /* A COIN STAKE IS A DUEL, AND ONLY A DUEL. The friendly section has no rooms
+     and no ladders — «در قسمت دوستانه فقط درخواست دوئل میتونی بدی» — so an
+     invite that carries coins for anything else is a bug on the way in, not a
+     room somebody ends up standing in wondering what they paid. */
+  const coinStake = coins(input.coinStake);
+  if (coinStake > 0 && input.mode !== 'duel') {
+    throw new InviteError('COINS_DUEL_ONLY', 'بازی دوستانه فقط به‌صورت دوئل است');
+  }
 
   const held = await pendingFor(input.toUserId, now);
   if (held) {
@@ -225,7 +258,8 @@ export async function createInvite(input: CreateInviteInput, now = Date.now()): 
   const inv: GameInvite = {
     id: id(), fromUserId: input.fromUserId, fromName: String(input.fromName || 'بازیکن'),
     toUserId: input.toUserId, mode: input.mode,
-    ticketTier: String(input.ticketTier || ''), roomId: String(input.roomId || ''),
+    ticketTier: String(input.ticketTier || ''), coinStake,
+    roomId: String(input.roomId || ''),
     roomTopic: String(input.roomTopic || ''),
     fromRoomId: String(input.fromRoomId || ''),
     status: 'pending', createdAt: now, expiresAt: now + INVITE_TTL_MS
