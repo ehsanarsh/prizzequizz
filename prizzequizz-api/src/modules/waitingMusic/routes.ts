@@ -93,7 +93,9 @@ export function registerWaitingMusicRoutes(router: Router, base: string): void {
       if (e instanceof MusicError) return error(ctx.res, 422, e.code, e.message);
       throw e;
     }
-  }, { maxBody: 10 * 1024 * 1024 });
+    /* Fifteen megabytes of audio is about twenty as base64, plus the JSON around
+       it. nginx in front of this is set to 32m for the same reason. */
+  }, { maxBody: 24 * 1024 * 1024 });
 
   router.add('PATCH', `${base}/admin/waiting-music/:id`, async (ctx) => {
     if (!requireAdmin(ctx)) return;

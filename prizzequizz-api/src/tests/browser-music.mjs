@@ -105,9 +105,11 @@ async function makePage() {
     localStorage.setItem('pz_usr', JSON.stringify({ id: 'me', username: 'ehsan', displayName: 'احسان', level: 5 }));
     localStorage.setItem('pq_user_plan', 'premium');
   });
+  const calls = [];
   await ctx.route('**/v1/**', (route) => {
     const u = new URL(route.request().url());
     const p = u.pathname.replace(/^.*\/v1/, '');
+    calls.push(route.request().method() + ' ' + p);
     const send = (d) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, data: d }) });
     if (p === '/waiting-music') { musicAsked++; return send({ tracks }); }
     if (p === '/users/me') return send({ id: 'me', username: 'ehsan', displayName: 'احسان', level: 5, balances: { wallet: 0 } });
@@ -126,7 +128,7 @@ async function makePage() {
   await page.evaluate(() => {
     (0, eval)("lsMusicSrc=function(t){ return t&&t.url ? (/^https?:/.test(t.url)? t.url : window.__origin+t.url) : ''; };");
   });
-  return { ctx, page, errs };
+  return { ctx, page, errs, calls };
 }
 
 /* Drop a waiting-room snapshot into the room, the way a poll would. */
@@ -380,6 +382,52 @@ for (const [policy, expect] of [['quiet', 'quieter'], ['stop', 'stopped'], ['kee
   ok('no script errors', errs.length === 0, errs.join(' | '));
   await ctx.close();
   tracks = saved;
+}
+
+/* ── 3d. TWO PEOPLE IN THE SAME ROOM ────────────────────────────────────── */
+{
+  console.log('\ntwo players waiting in the same room:');
+  const a = await makePage();
+  const b = await makePage();
+  await enterRoom(a.page);
+  await enterRoom(b.page);
+  await a.page.evaluate(() => { (0, eval)("LSM.policy='keep';"); document.getElementById('lsMusicPlay').click(); });
+  await b.page.evaluate(() => { (0, eval)("LSM.policy='keep';"); document.getElementById('lsMusicPlay').click(); });
+  await a.page.waitForTimeout(800);
+
+  const a1 = await musicState(a.page), b1 = await musicState(b.page);
+  ok('both are playing something', a1.paused === false && b1.paused === false, JSON.stringify({ a: a1.src, b: b1.src }));
+
+  /* «باید هر کاربر مجزا بتونه نکست بزنه و مستقل هر آهنگی که دلش میخواد پلی
+     کنه بدون اینکه رو آهنگ بقیه تاثیر بزاره» — one player pressing «بعدی»
+     several times must leave the other exactly where they were. */
+  a.calls.length = 0; b.calls.length = 0;
+  for (let i = 0; i < 3; i++) {
+    await a.page.evaluate(() => document.getElementById('lsMusicNext').click());
+    await a.page.waitForTimeout(250);
+  }
+  await a.page.waitForTimeout(400);
+  const a2 = await musicState(a.page), b2 = await musicState(b.page);
+  ok('the one pressing next moved on', a2.src !== a1.src || a2.paused === false, JSON.stringify({ before: a1.src, after: a2.src }));
+  ok('and the other one did not move at all', b2.src === b1.src, b2.src + ' vs ' + b1.src);
+  ok('nor was it paused, or turned down, or touched', b2.paused === false && b2.volume === b1.volume, JSON.stringify(b2));
+
+  /* One player pausing is their own business too. */
+  await a.page.evaluate(() => document.getElementById('lsMusicPlay').click());
+  await a.page.waitForTimeout(400);
+  const a3 = await musicState(a.page), b3 = await musicState(b.page);
+  ok('one player stopping the music stops only their own', a3.paused === true && b3.paused === false,
+    JSON.stringify({ a: a3.paused, b: b3.paused }));
+
+  /* «نباید منطق بازی و روم به هم بخوره» and «نباید رو سرعت بازی تاثیر منفی
+     بزاره»: none of that touched the server at all. The playlist is fetched
+     once per device and the audio is fetched by the element itself. */
+  const server = [...a.calls, ...b.calls];
+  ok('none of it went near the room', !server.some((c) => /last-survivor|\/rooms\//.test(c)), JSON.stringify(server));
+  ok('nothing was written to the server at all', !server.some((c) => /^(POST|PUT|PATCH|DELETE)/.test(c)), JSON.stringify(server));
+  ok('and the playlist was not fetched again', !server.some((c) => /waiting-music/.test(c)), JSON.stringify(server));
+  ok('no script errors', a.errs.length === 0 && b.errs.length === 0, [...a.errs, ...b.errs].join(' | '));
+  await a.ctx.close(); await b.ctx.close();
 }
 
 /* ── 4. LEAVING THE ROOM ────────────────────────────────────────────────── */

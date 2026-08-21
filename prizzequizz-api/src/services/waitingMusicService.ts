@@ -20,10 +20,11 @@ import { createHash } from 'node:crypto';
 import { getPgPool } from '../database/postgres.js';
 import { id } from '../utils/id.js';
 
-/** nginx in front of the API allows 12m; base64 costs a third on top, so this
- *  is the largest file that can actually arrive. A three-minute MP3 at 128kbps
- *  is about 3MB, so this fits ordinary music with room to spare. */
-export const MUSIC_MAX_BYTES = 6 * 1024 * 1024;
+/** «حجم فایل رو کم گذاشتی باید ۱۵ مگابایت میزاشتی، الان فایلای من حداقل ۱۰
+ *  مگابایت هستن.» A file travels as base64, which costs a third more again, so
+ *  fifteen megabytes here means about twenty on the wire — the route's own body
+ *  cap and nginx's `client_max_body_size` are both set above that. */
+export const MUSIC_MAX_BYTES = 15 * 1024 * 1024;
 
 const ALLOWED = new Set(['audio/mpeg', 'audio/mp3', 'audio/mp4', 'audio/aac', 'audio/ogg', 'audio/webm', 'audio/wav', 'audio/x-wav']);
 
@@ -138,6 +139,9 @@ export async function addTrack(input: { title?: unknown; audio?: unknown; sortOr
      VALUES ($1,$2,$3,$4,$5,$6,true,$7)`,
     [track.id, track.title, track.mime, track.bytes, buf.toString('base64'), track.etag, track.sortOrder]
   );
+  /* Already decoded and in hand — the operator's own «play» button on the panel
+     is usually the very next request for it. */
+  cachePut(track);
   return stripData(track);
 }
 
@@ -168,19 +172,68 @@ export async function playlistForPlayers(): Promise<Array<{ id: string; url: str
   return rows.map((t) => ({ id: t.id, url: musicUrl(t.id, t.etag) }));
 }
 
+/* THE MUSIC MUST NOT COST THE GAME ANYTHING.
+ *
+ * «نباید رو سرعت بازی تاثیر منفی بزاره.» A browser does not fetch an audio file
+ * once — it opens with a range, then asks for more as it plays, several requests
+ * for one track. Reading fifteen megabytes out of Postgres and decoding it from
+ * base64 on each of those, while matches are being run in the same process, is
+ * exactly the kind of background work that turns into a slow answer somewhere
+ * else.
+ *
+ * So a decoded track is kept, and the ones asked for most recently stay. The
+ * cache is bounded in BYTES rather than in entries, because the entries are
+ * enormous and a count would not bound anything: two 15MB tracks and twenty
+ * 200KB ones are very different things to hold. Nothing here is authoritative —
+ * it is dropped whenever a track is written or removed. */
+let CACHE_MAX_BYTES = 64 * 1024 * 1024;
+/** Test seam: the cap in bytes, so eviction can be exercised without moving
+ *  sixty-four megabytes of audio through a test. */
+export function _setMusicCacheCap(bytes: number): void { CACHE_MAX_BYTES = bytes; cacheDrop(); }
+const cache = new Map<string, StoredTrack>();   // insertion order = age
+let cacheBytes = 0;
+function cacheGet(id: string): StoredTrack | null {
+  const hit = cache.get(id);
+  if (!hit) return null;
+  cache.delete(id); cache.set(id, hit);         // touched → newest
+  return hit;
+}
+function cachePut(t: StoredTrack): void {
+  if (t.data.length > CACHE_MAX_BYTES) return;  // one track bigger than the cache
+  if (cache.has(t.id)) cacheBytes -= cache.get(t.id)!.data.length;
+  cache.set(t.id, t); cacheBytes += t.data.length;
+  for (const [id, held] of cache) {
+    if (cacheBytes <= CACHE_MAX_BYTES) break;
+    cache.delete(id); cacheBytes -= held.data.length;
+  }
+}
+function cacheDrop(id?: string): void {
+  if (id) { const held = cache.get(id); if (held) { cache.delete(id); cacheBytes -= held.data.length; } return; }
+  cache.clear(); cacheBytes = 0;
+}
+/** What the cache is holding — for tests and for the panel's own curiosity. */
+export function _musicCacheStats(): { tracks: number; bytes: number } {
+  return { tracks: cache.size, bytes: cacheBytes };
+}
+
 export async function getTrack(trackId: string): Promise<StoredTrack | null> {
   const key = String(trackId ?? '');
   if (!key) return null;
   const pool = pg();
   if (!pool) return mem.get(key) ?? null;
+  const hit = cacheGet(key);
+  if (hit) return hit;
   await ensureSchema(pool);
   const { rows } = await pool.query(`SELECT * FROM waiting_music WHERE id=$1`, [key]);
   const r = rows[0];
   if (!r) return null;
-  return { ...rowToTrack(r), data: Buffer.from(r.data, 'base64') };
+  const track: StoredTrack = { ...rowToTrack(r), data: Buffer.from(r.data, 'base64') };
+  cachePut(track);
+  return track;
 }
 
 export async function setTrackEnabled(trackId: string, enabled: boolean): Promise<MusicTrack> {
+  cacheDrop(trackId);            // its `enabled` is part of what the file route reads
   const pool = pg();
   if (!pool) {
     const t = mem.get(trackId);
@@ -197,6 +250,7 @@ export async function setTrackEnabled(trackId: string, enabled: boolean): Promis
 }
 
 export async function removeTrack(trackId: string): Promise<boolean> {
+  cacheDrop(trackId);
   const pool = pg();
   if (!pool) return mem.delete(trackId);
   await ensureSchema(pool);
@@ -205,4 +259,4 @@ export async function removeTrack(trackId: string): Promise<boolean> {
 }
 
 /** Test seam. */
-export function _resetMusic(): void { mem.clear(); _schemaReady = false; }
+export function _resetMusic(): void { mem.clear(); cacheDrop(); _schemaReady = false; }

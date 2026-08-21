@@ -71,6 +71,7 @@ async function main(): Promise<void> {
       assert.ok(row, 'not in the panel list');
       assert.equal(row.title, 'بی‌کلام ۱');
       assert.equal(r.data.maxBytes, MUSIC_MAX_BYTES);
+      assert.equal(r.data.maxBytes, 15 * 1024 * 1024, 'the panel is told the wrong limit');
     });
 
     /* THE PROMISE: «بدون نام و مشخصات». */
@@ -159,6 +160,28 @@ async function main(): Promise<void> {
       const r = await admin('POST', '/admin/waiting-music', { title: 'بلند', audio: mp3(2 * 1024 * 1024) });
       assert.equal(r.status, 201, JSON.stringify(r));
       assert.equal(r.data.bytes, 2 * 1024 * 1024);
+      await admin('DELETE', '/admin/waiting-music/' + r.data.id);
+    });
+
+    /* THE SIZE THE OPERATOR ACTUALLY HAS. «الان فایلای من حداقل ۱۰ مگابایت
+       هستن» — so a ten-megabyte file has to go all the way through, and the
+       limit has to be the fifteen they asked for. */
+    await check('the limit is fifteen megabytes', () => {
+      assert.equal(MUSIC_MAX_BYTES, 15 * 1024 * 1024, String(MUSIC_MAX_BYTES));
+    });
+
+    await check('a ten-megabyte track uploads and plays', async () => {
+      const r = await admin('POST', '/admin/waiting-music', { title: 'ده مگ', audio: mp3(10 * 1024 * 1024, 11) });
+      assert.equal(r.status, 201, JSON.stringify({ status: r.status, code: r.code }));
+      assert.equal(r.data.bytes, 10 * 1024 * 1024);
+      /* And it really comes back, byte for byte, in pieces a browser would ask
+         for. */
+      const head = await fetch(base + '/waiting-music/' + r.data.id, { headers: { range: 'bytes=0-1023' } });
+      assert.equal(head.status, 206);
+      assert.equal(head.headers.get('content-range'), 'bytes 0-1023/' + (10 * 1024 * 1024));
+      const tail = await fetch(base + '/waiting-music/' + r.data.id, { headers: { range: 'bytes=10485000-' } });
+      assert.equal(tail.status, 206);
+      assert.equal((await tail.arrayBuffer()).byteLength, 10 * 1024 * 1024 - 10485000);
       await admin('DELETE', '/admin/waiting-music/' + r.data.id);
     });
 

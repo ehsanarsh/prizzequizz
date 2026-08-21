@@ -160,6 +160,69 @@ await check('the players’ playlist is built from it, with no titles on it', as
   assert.deepStrictEqual(Object.keys(list[0]!).sort(), ['id', 'url']);
 });
 
+/* THE MUSIC MUST NOT COST THE GAME ANYTHING.
+   A browser asks for an audio file in pieces, several requests per track, and
+   fifteen megabytes decoded out of the database on each of those is work the
+   match engine is sharing a process with. A decoded track is therefore kept.
+   The proof: delete the ROW behind its back and ask again — an answer can only
+   have come from memory. */
+await check('a track is read from the database once, not once per range request', async () => {
+  const rows = await music.listTracks();
+  const tid = rows[0]!.id;
+  await music.getTrack(tid);                                   // fills the cache
+  assert.strictEqual(music._musicCacheStats().tracks, 1, 'nothing was kept');
+  await pool.query(`DELETE FROM waiting_music WHERE id=$1`, [tid]);
+  const again = await music.getTrack(tid);
+  assert.ok(again, 'the second read went back to the database');
+  assert.strictEqual(again!.data.length, 2048);
+  /* Put it back for the rest of the file. */
+  await pool.query(
+    `INSERT INTO waiting_music(id,title,mime,bytes,data,etag,enabled,sort_order)
+     VALUES ($1,$2,$3,$4,$5,$6,true,0)`,
+    [tid, again!.title, again!.mime, again!.bytes, again!.data.toString('base64'), again!.etag]);
+});
+
+await check('and what is kept is dropped the moment the track changes', async () => {
+  const rows = await music.listTracks();
+  const tid = rows[0]!.id;
+  await music.getTrack(tid);
+  await music.setTrackEnabled(tid, false);
+  assert.strictEqual(music._musicCacheStats().tracks, 0, 'a stale copy survived the change');
+  const back = await music.getTrack(tid);
+  assert.strictEqual(back!.enabled, false, 'the stale copy was served anyway');
+  await music.setTrackEnabled(tid, true);
+});
+
+/* AND IT IS BOUNDED. Holding every track ever played would be a slow leak in a
+   process that also runs matches — the whole point was to spend LESS on music,
+   not to spend memory instead. */
+await check('what is kept is bounded in bytes, and the oldest goes first', async () => {
+  music._setMusicCacheCap(5000);                 // room for two 2048-byte tracks
+  const ids: string[] = [];
+  for (let i = 0; i < 3; i++) ids.push((await music.addTrack({ title: 't' + i, audio: mp3(2048) })).id);
+  /* addTrack keeps what it just wrote, so all three have been through the
+     cache — and the cap must have thrown the earliest one out. */
+  const stats = music._musicCacheStats();
+  assert.ok(stats.bytes <= 5000, 'the cache grew past its cap: ' + JSON.stringify(stats));
+  assert.ok(stats.tracks <= 2, 'more tracks are held than fit: ' + JSON.stringify(stats));
+  /* The newest is still there; the oldest was dropped and has to be read again
+     — which it can be, because the cache is not the source of truth. */
+  const back = await music.getTrack(ids[0]!);
+  assert.ok(back, 'a track that fell out of the cache became unreadable');
+  assert.strictEqual(back!.data.length, 2048);
+  for (const id of ids) await music.removeTrack(id);
+  music._setMusicCacheCap(64 * 1024 * 1024);
+});
+
+await check('and when the track is deleted, so is its copy', async () => {
+  const rows = await music.listTracks();
+  const tid = rows[0]!.id;
+  await music.getTrack(tid);
+  await music.removeTrack(tid);
+  assert.strictEqual(music._musicCacheStats().tracks, 0, 'the bytes of a deleted track were still being held');
+  assert.strictEqual(await music.getTrack(tid), null, 'a deleted track still answers');
+});
+
 /* ── the rule, so the next column added does not repeat this ─────────────── */
 console.log('every column a fresh database gets, an old one gets too:');
 const fs = await import('node:fs');
