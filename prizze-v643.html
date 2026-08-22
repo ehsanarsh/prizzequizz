@@ -2668,6 +2668,40 @@ body.pz-kb-open #support.chat-mode .sup-chat{flex:1 1 auto}
 body.pz-kb-open #support.chat-mode>#supportContent{padding-bottom:10px!important}
 body.pz-kb-open #support.chat-mode .sup-chat{margin-bottom:0!important}
 
+/* ── NOTHING BETWEEN THE COMPOSER AND THE KEYS ───────────────────────────
+   «مابین کیبورد و کادر ورود متن دکمه های پایین هستند… باید کامل بچسبه.»
+
+   The rule that takes the nav away has been there all along; what was missing
+   is that on the reporter's phone the keyboard was never noticed at all. That
+   is fixed where it is measured, not here — see «SECOND WITNESS» below in the
+   script. What is added here is the screen's own title bar, which is a second
+   header stacked above the conversation's own one: «هم تایپ کنه هم ببینه پیام
+   بقیه رو». It says «دوستان» and carries an ✕; the chat header underneath it
+   already says who this is and carries the way back, so while the keyboard is
+   up those forty-odd pixels go to the messages instead. */
+body.pz-kb-open #friends.chat-mode>.topbar{display:none!important}
+
+/* ── THE ROOM'S CHAT ─────────────────────────────────────────────────────
+   «وقتی رو چت میزنی بین کیبورد و کادر ورود متن خیلی فاصله است — یه پخش کننده
+   موسیقی و خیلی فضای باز اونجا هست.»
+
+   The waiting room stacks: header, stats, the chat, then the music player and
+   the tab bar. The last two are below the composer, so with the keyboard up
+   they are exactly the gap being complained about. The only text input in this
+   room is the chat's, so the keyboard being open means the chat is open —
+   everything below the composer stands down, and the stats card above it does
+   too, which is what gives the messages the room they need. */
+body.pz-kb-open #lsGame .ls-music,
+body.pz-kb-open #lsGame .ls-tabs,
+body.pz-kb-open #lsGame .ls-vote,
+body.pz-kb-open #lsGame .ls-hd,
+body.pz-kb-open #lsGame .ls-invite-btn{display:none!important}
+body.pz-kb-open #lsGame .ls-top{padding:6px 14px 2px}
+body.pz-kb-open #lsGame .ls-top .ls-ttl p{display:none}
+/* 14px of padding under the composer is right when a tab bar follows it and is
+   dead space when the keys do. */
+body.pz-kb-open #lsGame .ls-chat-in{padding:6px 0 4px}
+
 
 
 /* ===== SPIN FORCE CLOSE HOTFIX v19 ===== */
@@ -5386,7 +5420,14 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
 .ls-music .lm-txt{display:flex;align-items:center;gap:8px;justify-content:center;
   font-size:12.5px;font-weight:800;color:var(--paper);line-height:1.8}
 .ls-music .lm-note{font-size:18px}
-.ls-music .lm-ctrls{display:flex;align-items:center;justify-content:center;gap:14px;margin-top:10px}
+/* TRANSPORT CONTROLS DO NOT MIRROR. «جای دکمه های نکست و بک اینجوری هستند ><
+   باید <> باشه» — the page is right-to-left, so a row written prev-play-next
+   came out laid the other way and the two arrows pointed away from each other:
+   ⏭ on the left, ⏮ on the right. Rewind and fast-forward are not text; they
+   mean "back along the tape" and "on along it", and that tape runs the same
+   way on every player in the world. So this one row opts out of the mirror and
+   the arrows face each other again — ⏮ ▶ ⏭. */
+.ls-music .lm-ctrls{display:flex;align-items:center;justify-content:center;gap:14px;margin-top:10px;direction:ltr}
 .ls-music .lm-btn{width:46px;height:46px;border-radius:50%;border:2.5px solid #000;background:var(--ink-3);
   color:var(--paper);font-family:inherit;font-size:17px;display:grid;place-items:center;cursor:pointer;
   box-shadow:0 3px 0 #000;transition:transform .08s,box-shadow .08s}
@@ -21417,6 +21458,17 @@ async function pzInviteSend(user,mode,extra){
 (function(){
   const vv=(typeof window!=='undefined')&&window.visualViewport;
   const root=document.documentElement;
+  /* SECOND WITNESS FOR THE KEYBOARD.
+     `kb` below is the window minus the part you can see, which is only greater
+     than zero on browsers that leave the layout viewport alone while the
+     keyboard is up. Where the whole page is resized instead — several Android
+     builds do exactly that — window.innerHeight shrinks along with it, kb stays
+     at zero, and `pz-kb-open` never turns on. That is how the bottom nav came
+     to sit between the composer and the keys on a real phone: not a wrong rule,
+     a rule that was never switched on. On a touch screen a focused text field
+     means a keyboard is up, and that needs no measuring. Either witness is
+     enough; --pz-vh is correct either way, so only the class needed help. */
+  let typing=false;
   function apply(){
     try{
       const h=Math.round(vv?vv.height:window.innerHeight);
@@ -21425,7 +21477,7 @@ async function pzInviteSend(user,mode,extra){
          lift itself by hand can read it; most things do not need to. */
       const kb=Math.max(0,Math.round(window.innerHeight-h-(vv?vv.offsetTop:0)));
       root.style.setProperty('--pz-kb',kb+'px');
-      document.body.classList.toggle('pz-kb-open',kb>90);
+      document.body.classList.toggle('pz-kb-open',kb>90||typing);
       /* An input that has just been focused must be the thing you can see. */
       if(kb>90){
         const a=document.activeElement;
@@ -21435,11 +21487,26 @@ async function pzInviteSend(user,mode,extra){
       }
     }catch(e){}
   }
+  /* A field that takes typed text, on a screen that has no mouse. Checkboxes
+     and file pickers open no keyboard, and a desktop browser with a real one
+     attached should keep its bottom nav. */
+  function readFocus(){
+    try{
+      const a=document.activeElement;
+      const touch=!window.matchMedia||window.matchMedia('(pointer:coarse)').matches;
+      const t=a?String(a.type||'').toLowerCase():'';
+      typing=!!(touch&&a&&/^(INPUT|TEXTAREA)$/.test(a.tagName||'')
+        &&!/^(checkbox|radio|file|button|submit|reset|range|color)$/.test(t));
+    }catch(e){ typing=false; }
+    apply();
+  }
   if(vv){ vv.addEventListener('resize',apply); vv.addEventListener('scroll',apply); }
   window.addEventListener('orientationchange',()=>setTimeout(apply,250));
   window.addEventListener('resize',apply);
-  document.addEventListener('focusin',(e)=>{ if(/^(INPUT|TEXTAREA)$/.test((e.target||{}).tagName||'')) setTimeout(apply,120); });
-  document.addEventListener('focusout',()=>setTimeout(apply,120));
+  /* focusout arrives BEFORE the focusin of whatever is being moved to, so both
+     ends ask again on the next tick rather than trusting the event. */
+  document.addEventListener('focusin',()=>{ readFocus(); setTimeout(readFocus,120); });
+  document.addEventListener('focusout',()=>{ setTimeout(readFocus,0); setTimeout(readFocus,120); });
   apply();
 })();
 

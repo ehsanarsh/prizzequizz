@@ -447,6 +447,129 @@ for (const [policy, expect] of [['quiet', 'quieter'], ['stop', 'stopped'], ['kee
   await ctx.close();
 }
 
+/* ── 4b. WHICH WAY THE ARROWS POINT ─────────────────────────────────────── */
+/* «جای دکمه های نکست و بک در موزیک اینجوری هستند >< باید <> باشه یعنی برعکس.»
+ *
+ * The row is written previous-play-next and the page is right-to-left, so it
+ * came out laid the other way round: ⏭ on the left and ⏮ on the right, the two
+ * arrows pointing away from each other. Reading the DOM order proves nothing
+ * here — it was already prev-play-next while it looked wrong — so this asks
+ * where on the glass each button actually is.
+ */
+{
+  const { ctx, page, errs } = await makePage();
+  console.log('\nwhich way the arrows point:');
+  await enterRoom(page);
+  const row = await page.evaluate(() => {
+    const box = (id) => { const e = document.getElementById(id); const r = e.getBoundingClientRect(); return { x: r.left + r.width / 2, t: e.textContent }; };
+    return { prev: box('lsMusicPrev'), play: box('lsMusicPlay'), next: box('lsMusicNext'),
+             rtl: getComputedStyle(document.getElementById('lsChatWrap') || document.body).direction };
+  });
+  ok('the app really is right-to-left', row.rtl === 'rtl', row.rtl);
+  ok('previous is on the left', row.prev.x < row.play.x, Math.round(row.prev.x) + ' vs ' + Math.round(row.play.x));
+  ok('next is on the right', row.next.x > row.play.x, Math.round(row.next.x) + ' vs ' + Math.round(row.play.x));
+  /* And they face each other: ⏮ ▶ ⏭, not ⏭ ▶ ⏮. */
+  ok('so left to right they read ⏮ ▶ ⏭', row.prev.t === '⏮' && row.next.t === '⏭', row.prev.t + ' ' + row.play.t + ' ' + row.next.t);
+  /* The one that is on the left must still be the one that goes BACK. */
+  await page.evaluate(() => { (0, eval)("LSM.policy='keep';"); document.getElementById('lsMusicPlay').click(); });
+  await page.waitForTimeout(800);
+  const moved = await page.evaluate(async () => {
+    const a = document.getElementById('pzMusicEl');
+    const before = a.getAttribute('src');
+    /* Pin the shuffle so «it changed» cannot be luck. */
+    document.getElementById('lsMusicNext').click();
+    await new Promise((r) => setTimeout(r, 700));
+    const afterNext = a.getAttribute('src');
+    document.getElementById('lsMusicPrev').click();
+    await new Promise((r) => setTimeout(r, 700));
+    return { before, afterNext, afterPrev: a.getAttribute('src') };
+  });
+  ok('the right-hand arrow moves the playlist on', moved.afterNext !== moved.before, JSON.stringify(moved));
+  ok('and the left-hand one goes back to what was playing', moved.afterPrev === moved.before, JSON.stringify(moved));
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
+/* ── 4c. THE ROOM'S CHAT WITH THE KEYBOARD UP ───────────────────────────── */
+/* «وقتی رو چت میزنی بین کیبورد و کادر ورود متن خیلی فاصله است — یه پخش کننده
+ *  موسیقی و خیلی فضای باز اونجا هست. باید کیبورد کامل بچسبه به کادر ورود متن،
+ *  و در قسمت بالا هم کلی جا هست.»
+ *
+ * The player and the tab bar are both BELOW the composer in this room, so with
+ * the keyboard up they are the gap being complained about. The question asked
+ * here is not «is the rule written» but «what is left in the strip between the
+ * bottom of the typing box and the top of the keyboard» — anything found there
+ * is the bug, whatever its name.
+ */
+{
+  const { ctx, page, errs } = await makePage();
+  console.log('\nthe room chat with the keyboard up:');
+  await enterRoom(page);
+  await page.evaluate(() => (0, eval)('lsSetTab')('chat'));
+  await page.waitForTimeout(400);
+
+  const before = await page.evaluate(() => {
+    const c = document.querySelector('#lsBody .ls-chat');
+    return { shown: !!c && getComputedStyle(c).display !== 'none',
+             music: !!document.querySelector('#lsBody .ls-music') && document.querySelector('#lsBody .ls-music').getBoundingClientRect().height > 10,
+             tabs: !!document.querySelector('#lsBody .ls-tabs') };
+  });
+  ok('the chat tab is open', before.shown, JSON.stringify(before));
+  ok('with the music player on screen under it', before.music === true, String(before.music));
+
+  const typing = await page.evaluate(async () => {
+    const vv = window.visualViewport;
+    Object.defineProperty(vv, 'height', { configurable: true, get: () => 470 });
+    vv.dispatchEvent(new Event('resize'));
+    document.getElementById('lsChatInput').focus();
+    await new Promise((r) => setTimeout(r, 400));
+    const inRow = document.querySelector('#lsBody .ls-chat-in');
+    const list = document.querySelector('#lsBody .ls-chat-list');
+    const rb = Math.round(inRow.getBoundingClientRect().bottom);
+    /* EVERYTHING still taking up height in the strip below the composer. Named
+       or not, if it is there the keyboard is not touching the box. */
+    const inTheGap = [...document.querySelectorAll('#lsBody *')].filter((e) => {
+      if (inRow.contains(e) || e.contains(inRow)) return false;
+      const r = e.getBoundingClientRect();
+      return r.height > 4 && r.top >= rb - 1 && r.top < 470;
+    }).map((e) => (e.className || e.tagName) + ':' + Math.round(e.getBoundingClientRect().height));
+    return {
+      open: document.body.classList.contains('pz-kb-open'),
+      inputBottom: rb,
+      gap: 470 - rb,
+      inTheGap,
+      listHeight: Math.round(list.getBoundingClientRect().height),
+      listTop: Math.round(list.getBoundingClientRect().top),
+      listScrolls: list.scrollHeight <= list.clientHeight + 4
+    };
+  });
+  ok('the page knows the keyboard is up', typing.open === true, JSON.stringify(typing).slice(0, 120));
+  /* «باید کیبورد کامل بچسبه به کادر ورود متن» */
+  ok('the typing box sits on the keyboard', typing.gap >= 0 && typing.gap <= 12, typing.gap + 'px of gap');
+  ok('with nothing at all left in between', typing.inTheGap.length === 0, typing.inTheGap.join(', '));
+  /* «در قسمت بالا هم کلی جا هست» — the room the stats card was using goes to
+     the messages, which is the whole point of asking for it. */
+  ok('the messages start near the top of what is visible', typing.listTop <= 90, typing.listTop + 'px down');
+  ok('and get most of the visible height', typing.listHeight >= 300, typing.listHeight + 'px');
+
+  /* The room is not a chat screen. Everything it hid comes back. */
+  const back = await page.evaluate(async () => {
+    document.getElementById('lsChatInput').blur();
+    const vv = window.visualViewport;
+    Object.defineProperty(vv, 'height', { configurable: true, get: () => 844 });
+    vv.dispatchEvent(new Event('resize'));
+    await new Promise((r) => setTimeout(r, 400));
+    const h = (q) => { const e = document.querySelector(q); return !!e && e.getBoundingClientRect().height > 10; };
+    return { open: document.body.classList.contains('pz-kb-open'),
+             music: h('#lsBody .ls-music'), tabs: h('#lsBody .ls-tabs'), stats: h('#lsBody .ls-hd'),
+             playing: (() => { const a = document.getElementById('pzMusicEl'); return !!a && !a.paused; })() };
+  });
+  ok('the music player comes back when the keyboard goes', back.music === true, JSON.stringify(back));
+  ok('and the tab bar and the scoreboard with it', back.tabs === true && back.stats === true, JSON.stringify(back));
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
 /* ── 5. NO MUSIC UPLOADED AT ALL ────────────────────────────────────────── */
 {
   const saved = tracks; tracks = [];

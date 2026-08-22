@@ -246,6 +246,125 @@ const room = (over = {}) => {
   await ctx.close();
 }
 
+/* ── 2d. A KEYBOARD THAT LEAVES NO MARK ON THE VIEWPORT ─────────────────── */
+/* «بازم در قسمت دوستان هم در قسمت چت مابین کیبورد و کادر ورود متن دکمه های
+   پایین هستند — فروشگاه و خانه و دوستان و رنکینگ و منو همبرگری.»
+ *
+ * The rule that hides them was already written, and section 2 above proves it
+ * works — when the browser reports the keyboard by shrinking the visual
+ * viewport. Not every browser does: where the whole page is resized instead,
+ * window.innerHeight comes down WITH visualViewport.height, the difference
+ * between them stays zero, and the flag never turns on. Nothing here is
+ * wrong-looking in a test that shrinks one and not the other, which is why it
+ * went unnoticed. So this one shrinks BOTH, exactly as such a browser does,
+ * and asks the same questions.
+ */
+{
+  friends = [{ id: 'f1', username: 'sara', displayName: 'سارا', avatar: '', character: null, level: 4, online: true, unread: 0, lastMessage: 'سلام' }];
+  friendMsgs = Array.from({ length: 12 }, (_, i) => ({ mine: i % 2 === 0, body: 'پیام ' + (i + 1), at: Date.now() - (12 - i) * 60000 }));
+  const { ctx, page, errs } = await makePage();
+  console.log('a keyboard on a browser that resizes the whole page:');
+  await page.evaluate(async () => {
+    (0, eval)("userPlan='premium'; planExplicitlyChosen=true; go('friends');");
+    await new Promise((r) => setTimeout(r, 500));
+    await (0, eval)('openFriendChat')('f1');
+    await new Promise((r) => setTimeout(r, 400));
+  });
+
+  const shrinkBoth = async () => page.evaluate(async () => {
+    const vv = window.visualViewport;
+    /* Both numbers move together — the keyboard is up and NOTHING in the
+       measurements says so. */
+    Object.defineProperty(vv, 'height', { configurable: true, get: () => 480 });
+    Object.defineProperty(window, 'innerHeight', { configurable: true, get: () => 480 });
+    vv.dispatchEvent(new Event('resize'));
+    await new Promise((r) => setTimeout(r, 250));
+    return Math.round(Number(getComputedStyle(document.documentElement).getPropertyValue('--pz-kb').replace('px', '')));
+  });
+  const kb = await shrinkBoth();
+  ok('the measurement really does say «no keyboard»', kb === 0, kb + 'px');
+
+  /* Now the second witness: the player taps the box and starts typing. */
+  const typing = await page.evaluate(async () => {
+    document.getElementById('chatInput').focus();
+    await new Promise((r) => setTimeout(r, 300));
+    const nav = document.querySelector('#friends .bottomnav');
+    const bar = document.querySelector('#friends>.topbar');
+    const send = document.querySelector('#friends .chat-send');
+    const navBox = nav ? nav.getBoundingClientRect() : null;
+    return {
+      open: document.body.classList.contains('pz-kb-open'),
+      navShown: !!navBox && navBox.height > 20,
+      navTop: navBox ? Math.round(navBox.top) : -1,
+      barShown: !!bar && bar.getBoundingClientRect().height > 8,
+      sendBottom: send ? Math.round(send.getBoundingClientRect().bottom) : -1
+    };
+  });
+  ok('the page still works out that a keyboard is up', typing.open === true, JSON.stringify(typing));
+  /* The complaint itself: those buttons, sitting in the gap. */
+  ok('the bottom nav is not between the composer and the keys', typing.navShown === false, JSON.stringify({ shown: typing.navShown, top: typing.navTop }));
+  ok('the screen title bar gives its room to the messages', typing.barShown === false, String(typing.barShown));
+  ok('and the composer sits on the keyboard', typing.sendBottom > 0 && 480 - typing.sendBottom <= 14, (480 - typing.sendBottom) + 'px of gap');
+
+  /* And it is a keyboard, not a permanent state: let go of the box and the
+     way out of the screen comes back. */
+  const done = await page.evaluate(async () => {
+    document.getElementById('chatInput').blur();
+    await new Promise((r) => setTimeout(r, 300));
+    const nav = document.querySelector('#friends .bottomnav');
+    const bar = document.querySelector('#friends>.topbar');
+    return { open: document.body.classList.contains('pz-kb-open'),
+             navShown: !!nav && nav.getBoundingClientRect().height > 20,
+             barShown: !!bar && bar.getBoundingClientRect().height > 8 };
+  });
+  ok('letting go of the box puts the navigation back', done.open === false && done.navShown === true, JSON.stringify(done));
+  ok('and the title bar with it', done.barShown === true, String(done.barShown));
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
+/* ── 2e. A REAL KEYBOARD ON A DESKTOP IS NOT A SOFT ONE ─────────────────── */
+/* The focus signal above is only trustworthy where focusing a field is what
+   summons a keyboard. On a machine with a mouse and a keyboard already
+   attached, clicking into the box covers nothing, and taking the navigation
+   away would be a bug of my own making. */
+{
+  friends = [{ id: 'f1', username: 'sara', displayName: 'سارا', avatar: '', character: null, level: 4, online: true, unread: 0, lastMessage: 'سلام' }];
+  const ctx = await browser.newContext({ viewport: { width: 1100, height: 800 } });
+  await ctx.addInitScript(() => {
+    localStorage.setItem('pz_tok', 't'); localStorage.setItem('pz_rtok', 'r');
+    localStorage.setItem('pz_usr', JSON.stringify({ id: 'me', username: 'ehsan', displayName: 'احسان', level: 3 }));
+  });
+  await ctx.route('**/v1/**', (route) => {
+    const p = new URL(route.request().url()).pathname.replace(/^.*\/v1/, '');
+    const send = (d) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, data: d }) });
+    if (p === '/friends') return send(friends);
+    if (p === '/friends/requests') return send({ incoming: [], outgoing: [] });
+    if (/^\/friends\/[^/]+\/messages$/.test(p)) return send({ messages: friendMsgs });
+    return send({});
+  });
+  const page = await ctx.newPage();
+  console.log('clicking into the box on a desktop:');
+  await page.goto('http://127.0.0.1:' + PORT + '/');
+  await page.waitForTimeout(5200);
+  const desk = await page.evaluate(async () => {
+    (0, eval)("userPlan='premium'; planExplicitlyChosen=true; go('friends');");
+    await new Promise((r) => setTimeout(r, 500));
+    await (0, eval)('openFriendChat')('f1');
+    await new Promise((r) => setTimeout(r, 400));
+    document.getElementById('chatInput').focus();
+    await new Promise((r) => setTimeout(r, 300));
+    const nav = document.querySelector('#friends .bottomnav');
+    return { coarse: matchMedia('(pointer:coarse)').matches,
+             open: document.body.classList.contains('pz-kb-open'),
+             navShown: !!nav && nav.getBoundingClientRect().height > 20 };
+  });
+  ok('the test really is running with a mouse', desk.coarse === false, String(desk.coarse));
+  ok('no keyboard is assumed from focus alone', desk.open === false, JSON.stringify(desk));
+  ok('and the navigation stays where it is', desk.navShown === true, String(desk.navShown));
+  await ctx.close();
+}
+
 /* ── 3. THE CHAT BADGE ──────────────────────────────────────────────────── */
 {
   const { ctx, page, errs } = await makePage();
