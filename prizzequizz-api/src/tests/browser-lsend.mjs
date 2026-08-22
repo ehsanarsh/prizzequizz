@@ -137,6 +137,28 @@ const modal = (page) => page.evaluate(() => {
            secondary: (document.getElementById('aaaSecondary') || {}).textContent || '' };
 });
 
+/* THE RESULT SCREEN HAS ITS OWN THINGS TO SAY. A finished match can put up a
+   notification prompt of its own, and there is one modal slot — so the music
+   question waits its turn rather than talking over it. That is deliberate, and
+   it means a test cannot simply look up 1.6 seconds later: it has to clear what
+   is in the way, exactly as a player would, and then see what arrives. */
+async function settleModals(page, ms = 9000) {
+  const t0 = Date.now();
+  while (Date.now() - t0 < ms) {
+    const m = await modal(page);
+    if (!m.open) { await page.waitForTimeout(300); continue; }
+    if (/موزیک/.test(m.title)) return m;
+    await page.evaluate(() => {
+      const s = document.getElementById('aaaSecondary');
+      const p = document.getElementById('aaaPrimary');
+      const el = (s && getComputedStyle(s).display !== 'none') ? s : p;
+      if (el) el.click();
+    });
+    await page.waitForTimeout(400);
+  }
+  return await modal(page);
+}
+
 /* Put the player through the ending they asked about: knocked out of a running
    room, which is the path lsRender takes to lsFinish. */
 async function eliminateMe(page) {
@@ -161,11 +183,11 @@ async function eliminateMe(page) {
   ok('the music is playing before the ending', (await musicState(page)).paused === false);
 
   await eliminateMe(page);
-  await page.waitForTimeout(1600);
+  await page.waitForTimeout(900);
   const screen = await page.evaluate(() => (document.querySelector('.screen.active') || {}).id);
   ok('the player is taken to their result', screen === 'result', String(screen));
 
-  const q = await modal(page);
+  const q = await settleModals(page);
   ok('and is asked about the music', q.open && /موزیک/.test(q.title), q.title);
   ok('with both answers offered', /ادامه/.test(q.primary) && /تموم/.test(q.secondary), q.primary + ' / ' + q.secondary);
   let st = await musicState(page);
@@ -186,8 +208,9 @@ async function eliminateMe(page) {
   st = await musicState(page);
   ok('pressing it pops a next button out beside it', st.next === true, JSON.stringify(st));
   const where = await page.evaluate(() => {
-    const a = document.getElementById('lsMusicFab').getBoundingClientRect();
-    const b = document.getElementById('lsMusicFabNext').getBoundingClientRect();
+    const fa = document.getElementById('lsMusicFab'), fb = document.getElementById('lsMusicFabNext');
+    if (!fa || !fb) return { gap: -999, sameRow: false };
+    const a = fa.getBoundingClientRect(), b = fb.getBoundingClientRect();
     return { gap: Math.round(b.left - a.right), sameRow: Math.abs((a.top + a.height / 2) - (b.top + b.height / 2)) < 8 };
   });
   ok('right beside it, on the same line', where.sameRow && where.gap >= 0 && where.gap < 40, JSON.stringify(where));
@@ -222,8 +245,9 @@ async function eliminateMe(page) {
   await page.evaluate(() => { (0, eval)("LSM.policy='keep';"); document.getElementById('lsMusicPlay').click(); });
   await page.waitForTimeout(800);
   await eliminateMe(page);
-  await page.waitForTimeout(1600);
-  ok('the question is up', (await modal(page)).open === true);
+  await page.waitForTimeout(900);
+  const q = await settleModals(page);
+  ok('the question is up', q.open === true && /موزیک/.test(q.title), q.title);
   await page.evaluate(() => document.getElementById('aaaSecondary').click());
   await page.waitForTimeout(500);
   const st = await musicState(page);
@@ -241,8 +265,9 @@ async function eliminateMe(page) {
   console.log('\nthe match ends with no music on:');
   await enterRoom(page);
   await eliminateMe(page);
-  await page.waitForTimeout(1600);
-  const q = await modal(page);
+  /* Long enough that a question queued behind another modal would have had
+     every chance to arrive. */
+  const q = await settleModals(page, 6000);
   ok('no music question is asked', !(q.open && /موزیک/.test(q.title)), q.title);
   const st = await musicState(page);
   ok('and nothing is playing', st.paused !== false, JSON.stringify(st));

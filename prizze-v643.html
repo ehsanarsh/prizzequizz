@@ -5444,6 +5444,31 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
   border:2.5px solid #000;background:linear-gradient(180deg,#FFE24A,var(--bolt-2));color:#141414;
   font-size:18px;display:grid;place-items:center;cursor:pointer;box-shadow:var(--hard-sm)}
 .lm-fab:active{transform:translateY(3px);box-shadow:0 0 0 #000}
+/* «از بغلش یه دکمه نکست هم میزنه بیرون» — smaller and quieter than the one that
+   summoned it, so which is which needs no reading. */
+.lm-fab-next{left:66px;width:40px;height:40px;font-size:15px;
+  background:linear-gradient(180deg,#2b3442,#1b2029);color:var(--paper);
+  animation:lmPop .18s cubic-bezier(.2,.9,.3,1) both}
+@keyframes lmPop{from{opacity:0;transform:translateX(-16px) scale(.6)}to{opacity:1;transform:none}}
+
+/* ── THE PRIZE, ANNOUNCED IN THE MIDDLE OF THE SCREEN ────────────────────
+   «اون عدد اول باید بصورت بزرگ با موشن بیاد وسط صفحه… رنگش سبز بشه سه بار
+   چشمک بزنه… و بعد بره سر جای خودش اون بالا.» Nothing here can be touched:
+   it is a announcement passing over the board, not a control. */
+.ls-pot-hero{position:absolute;inset:0;z-index:900;display:grid;place-items:center;pointer-events:none}
+.ls-pot-hero .lph-card{display:flex;flex-direction:column;align-items:center;gap:5px;
+  padding:18px 30px;border-radius:24px;background:rgba(8,7,5,.74);border:2.5px solid #000;
+  box-shadow:0 8px 0 rgba(0,0,0,.55);animation:lphIn .34s cubic-bezier(.2,.9,.3,1) both}
+.ls-pot-hero .lph-lbl{font-size:12px;font-weight:900;color:#e9e2d2;letter-spacing:.3px}
+.ls-pot-hero .lph-num{font-size:46px;font-weight:900;line-height:1;color:#FFE24A;
+  text-shadow:0 3px 0 #000,0 0 24px rgba(255,226,74,.45)}
+.ls-pot-hero .lph-add{font-style:normal;font-size:13px;font-weight:900;color:#6be08a}
+@keyframes lphIn{from{opacity:0;transform:scale(.5)}to{opacity:1;transform:none}}
+.ls-pot-hero.lph-green .lph-num{color:#6be08a;text-shadow:0 3px 0 #000,0 0 26px rgba(107,224,138,.55);
+  animation:lphBlink .52s steps(1,end) 3}
+.ls-pot-hero.lph-steady .lph-num{animation:none}
+@keyframes lphBlink{0%,49%{opacity:1}50%,99%{opacity:.12}100%{opacity:1}}
+@media(prefers-reduced-motion:reduce){.ls-pot-hero{display:none}}
 @media(max-width:370px){.ls-music .lm-ctrls{gap:10px}.ls-music .lm-btn{width:42px;height:42px}.ls-music .lm-btn.lm-play{width:52px;height:52px}}
       .ls-tab{flex:1;padding:12px 6px 13px;color:var(--muted);font-weight:900;font-size:13px;text-align:center;cursor:pointer;position:relative;display:flex;flex-direction:column;align-items:center;gap:3px;transition:color .15s}
       .ls-tab .ti{font-size:19px;line-height:1}
@@ -7686,7 +7711,7 @@ function lsStart(){ try{ _pzPreXp=(_usr&&_usr.xp)||0; _pzPreCup=weeklyScore; }ca
   try{ pzAnsTimes=[]; pzQShownAt=0; }catch(e){}   /* a new room starts a new average */
   try{ lsPotReset(); }catch(e){}                  /* and a new pot to count up */
   try{ lsChatWatchStop(); }catch(e){}
-  showRules('lastSurvivor',()=>{ lsEndShown=false; showScreen('lsTopics'); lsLoadTopics(); }); }
+  showRules('lastSurvivor',()=>{ lsEndShown=false; _lsGoneShown=false; showScreen('lsTopics'); lsLoadTopics(); }); }
 /* Leaving the room.
    The websocket message only unsubscribes this tab from updates — it never told
    the SERVER the player had gone, so the seat, the ticket and the stake all
@@ -7987,7 +8012,7 @@ async function lsDoJoin(topic,color){
   if(!r||r.ok===false){ toast((r&&r.error&&r.error.message)||'ورود ناموفق بود'); return; }
   lsInviteRoom=null;
   const snap=r.data; if(!snap||!snap.room){ toast('خطا در ورود'); return; }
-  lsRoomId=snap.room.id; lsLastKey=''; lsDeadDismissed=false; lsChatSeen=0; lsEndShown=false; lsForfeited=0; lsReadyShownRound='';
+  lsRoomId=snap.room.id; lsLastKey=''; lsDeadDismissed=false; lsChatSeen=0; lsEndShown=false; _lsGoneShown=false; lsForfeited=0; lsReadyShownRound='';
   try{ lsChatWatchStop(); lsChatWatchStart(); }catch(e){}
   try{ if(typeof mTickets!=='undefined'&&mTickets[color]!=null){mTickets[color]=Math.max(0,mTickets[color]-1);renderHeaderTickets();} }catch(e){}
   showScreen('lsGame'); lsRender(snap); lsStartPoll();
@@ -8271,6 +8296,10 @@ function lsUnlockInPlace(snap){
 
 function lsBuild(snap){
   const r=snap.room, body=document.getElementById('lsBody'); if(!body)return;
+  /* NOBODY CAME. «فعلا حریفی برای تو وجود نداره» — a room that closed
+     without ever starting has no ending to show, and showing one parked the
+     player on a finish line for a match that was never run. */
+  if(r.status==='finished'&&r.noOpponents){ lsRoomGone(true); return; }
   if(r.status==='finished'){ body.innerHTML=lsEndHtml(snap); return; }
   if(r.status==='waiting'){ body.innerHTML=lsWaitHtml(snap); lsBindChat(); try{ lsMusicMount(); }catch(e){} return; }
   /* The room is no longer waiting: whatever the player chose for «وقتی مسابقه
@@ -8490,6 +8519,14 @@ function lsPotGrow(el,from,to){
   if(el._lsPotRaf){ cancelAnimationFrame(el._lsPotRaf); el._lsPotRaf=null; }
   const start=(el._lsPotRun!=null)?el._lsPotRun:from;
   el._lsPotRun=to;
+  /* THE PRIZE IS ANNOUNCED, NOT JUST UPDATED.
+     «وقتی کسی حذف میشه و جایزه با موشن عددش بالا میره، اون عدد اول باید بصورت
+     بزرگ با موشن بیاد وسط صفحه و با موشن عددش بیشتر بشه و رنگش سبز بشه، سه بار
+     چشمک بزنه، ثابت بشه و بعد بره سر جای خودش اون بالا.»
+     The pot is the only figure that gets this — it is the one the elimination
+     was FOR. The small number holds its old value until the big one lands on
+     it, so the same total is never in two places at once. */
+  if(el.id==='lsRemain'&&lsPotHeroOn()){ lsPotHero(el.id,start,to); return; }
   const dur=2200, t0=performance.now();
   el.classList.remove('ls-pot-done'); el.classList.add('ls-pot-up');
   /* «حق حذف‌شده‌ها واریز اون صندوق بشه» — what was added, said out loud. */
@@ -8508,6 +8545,79 @@ function lsPotGrow(el,from,to){
   };
   el._lsPotRaf=requestAnimationFrame(step);
 }
+/* Only when the room's animations are on — the operator can turn them off,
+   and a player who has asked their phone for less motion is asked no more. */
+function lsPotHeroOn(){
+  try{
+    if(lsSnap&&lsSnap.room&&lsSnap.room.animationsEnabled===false) return false;
+    if(window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches) return false;
+  }catch(e){}
+  return true;
+}
+/* The big number in the middle. It opens on the OLD total, climbs to the new
+   one with the same ease-out the small one used, turns green, blinks three
+   times, holds — and only then flies into the slot it belongs in. */
+let _lsHero=null;
+function lsPotHero(id,from,to){
+  try{
+    /* A second elimination while this one is still on screen: the one being
+       looked at is settled first, and the new climb starts from where the eye
+       already is. */
+    if(_lsHero){ const prev=_lsHero; _lsHero=null; try{ prev.wrap.remove(); }catch(e){} from=prev.shown; }
+    const host=document.querySelector('.phone')||document.body;
+    const wrap=document.createElement('div');
+    wrap.className='ls-pot-hero'; wrap.id='lsPotHero';
+    wrap.innerHTML='<div class="lph-card"><span class="lph-lbl">صندوق جایزه</span>'+
+      '<b class="lph-num">'+lsFa(from)+'</b>'+
+      (to>from?'<i class="lph-add">+'+lsFa(to-from)+'</i>':'')+'</div>';
+    host.appendChild(wrap);
+    const num=wrap.querySelector('.lph-num');
+    const H={wrap:wrap,num:num,shown:from,to:to,id:id};
+    _lsHero=H;
+    const dur=2200, t0=performance.now();
+    const step=(now)=>{
+      if(_lsHero!==H) return;
+      const p=Math.min(1,(now-t0)/dur);
+      const e=1-Math.pow(1-p,3);
+      H.shown=Math.round(from+(to-from)*e);
+      num.textContent=lsFa(H.shown);
+      if(p<1){ H.raf=requestAnimationFrame(step); return; }
+      H.shown=to; num.textContent=lsFa(to);
+      try{ sfx('coin'); }catch(e){}
+      /* «رنگش سبز بشه سه بار چشمک بزنه رنگ سبز و ثابت بشه» */
+      wrap.classList.add('lph-green');
+      setTimeout(()=>{ if(_lsHero!==H) return; wrap.classList.add('lph-steady'); lsPotHeroLand(H); },1560);
+    };
+    H.raf=requestAnimationFrame(step);
+  }catch(e){ lsPotHeroSettle(id,to); }
+}
+/* «و بعد بره سر جای خودش اون بالا» — to wherever the small figure is NOW, which
+   is looked up at this moment because the room may have redrawn underneath. */
+function lsPotHeroLand(H){
+  const el=document.getElementById(H.id);
+  const card=H.wrap.querySelector('.lph-card');
+  if(!el||!card||!el.getClientRects().length){ _lsHero=null; try{ H.wrap.remove(); }catch(e){} lsPotHeroSettle(H.id,H.to); return; }
+  try{
+    const a=card.getBoundingClientRect(), b=el.getBoundingClientRect();
+    const dx=(b.left+b.width/2)-(a.left+a.width/2);
+    const dy=(b.top+b.height/2)-(a.top+a.height/2);
+    const sc=Math.max(.12,Math.min(1,b.height/Math.max(1,a.height)));
+    card.style.transition='transform .72s cubic-bezier(.5,.02,.25,1),opacity .72s ease';
+    card.style.transform='translate('+Math.round(dx)+'px,'+Math.round(dy)+'px) scale('+sc.toFixed(3)+')';
+    card.style.opacity='.05';
+  }catch(e){}
+  setTimeout(()=>{ if(_lsHero===H) _lsHero=null; try{ H.wrap.remove(); }catch(e){} lsPotHeroSettle(H.id,H.to); },740);
+}
+/* The small figure takes the number over, and flashes once so the eye follows
+   the handover. */
+function lsPotHeroSettle(id,to){
+  const el=document.getElementById(id); if(!el) return;
+  el._lsPotRun=null;
+  el.textContent=lsFa(to);
+  el.classList.remove('ls-pot-up'); el.classList.add('ls-pot-done');
+  setTimeout(()=>{ try{ el.classList.remove('ls-pot-done'); }catch(e){} },900);
+}
+
 /* The «+N» that floats up out of the number while it climbs. */
 function lsPotDelta(el,add){
   if(!(add>0)) return;
@@ -8976,7 +9086,12 @@ function lsBindChat(){ const inp=document.getElementById('lsChatInput'); if(inp)
    NOTHING IS NAMED. The list the server sends carries an id and a URL and no
    title at all, so there is no name for this screen to show even by accident. */
 const LSM={el:null,tracks:[],order:[],i:0,loaded:false,loading:null,started:false,
-  policy:null,matchApplied:false,fadeTimer:null};
+  policy:null,matchApplied:false,fadeTimer:null,
+  /* Set when the player, asked at the end of their match, said the music
+     should carry on. It is what turns the floating control from «a way to
+     stop this» into a small player, and it is cleared the moment the music
+     stops — so listening again means going back into a room. */
+  freed:false,fabOpen:false,endAsked:false,endTries:0};
 try{ LSM.policy=localStorage.getItem('pz_music_onstart')||null; }catch(e){}
 
 /* Where the audio actually is. One element, made once. */
@@ -9085,18 +9200,75 @@ function lsMusicPolicyText(){
    only while something is playing, and takes itself away when it stops. */
 function lsMusicFab(){
   let fab=document.getElementById('lsMusicFab');
+  let nx=document.getElementById('lsMusicFabNext');
   const playing=!!(LSM.el&&!LSM.el.paused&&LSM.started);
   const inWait=!!document.getElementById('lsMusicBox');
-  if(!playing||inWait){ if(fab) fab.remove(); return; }
+  if(!playing||inWait){ if(fab) fab.remove(); if(nx) nx.remove(); LSM.fabOpen=false; return; }
+  const ph=document.querySelector('.phone')||document.body;
   if(!fab){
     fab=document.createElement('button');
     fab.id='lsMusicFab'; fab.type='button'; fab.className='lm-fab';
-    fab.setAttribute('aria-label','توقف موزیک');
-    fab.onclick=()=>lsMusicToggle();
-    const ph=document.querySelector('.phone')||document.body;
     ph.appendChild(fab);
   }
+  /* AFTER THE MATCH, THE SAME BUTTON IS A PLAYER.
+     «یه دکمه کوچیک پلی در صفحه شناور میمونه که وقتی روش میزنی از بغلش یه دکمه
+     نکست هم میزنه بیرون که هم میتونی نکست کنی هم پاوس تا هر موقع خواست استوپ
+     کنه» — one button while the music is just background, two the moment the
+     player reaches for it. Stopping it here is the end of the music: «اگه
+     دوباره خواست موزیک گوش بده باید بره آخرین بازمانده». */
+  if(LSM.freed){
+    fab.className='lm-fab';
+    fab.setAttribute('aria-label',LSM.fabOpen?'توقف موزیک':'کنترل موزیک');
+    fab.innerHTML='<span>'+(LSM.fabOpen?'⏸':'🎧')+'</span>';
+    fab.onclick=()=>{ if(!LSM.fabOpen){ LSM.fabOpen=true; lsMusicFab(); } else { lsMusicStop(); } };
+    if(LSM.fabOpen){
+      if(!nx){
+        nx=document.createElement('button');
+        nx.id='lsMusicFabNext'; nx.type='button'; nx.className='lm-fab lm-fab-next';
+        nx.setAttribute('aria-label','موزیک بعدی');
+        ph.appendChild(nx);
+      }
+      nx.innerHTML='<span>⏭</span>';
+      nx.onclick=()=>lsMusicNext();
+    } else if(nx) nx.remove();
+    return;
+  }
+  /* During the match it stays one button with one job — «همیشه یه دکمه پلی و
+     پاوس باید باشه تا کاربر بتونه هر جا خواست موزیک رو قطع کنه» — because a
+     player answering questions has no attention to spare for a second tap. */
+  if(nx) nx.remove();
+  fab.setAttribute('aria-label','توقف موزیک');
+  fab.onclick=()=>lsMusicToggle();
   fab.innerHTML='<span>⏸</span>';
+}
+
+/* THE QUESTION AT THE END OF THE MATCH.
+   «وقتی کاربر مسابقه اش تمام شد، اگر موزیک برای کاربر روشن بود — چه با برداشت
+   چه با برد چه با حذف — بپرسه که میخوای موزیک ادامه پیدا کنه یا تموم بشه.»
+
+   All three endings arrive here through lsFinish, so there is one place to ask
+   from. Music that is not playing is not asked about: it is simply released,
+   which is also what happens to somebody who put a track on in the room and
+   walked out without playing a match. */
+function lsMusicMatchEnded(){
+  if(LSM.endAsked) return;
+  if(!LSM.started||!LSM.el||LSM.el.paused){ lsMusicStop(); return; }
+  /* The win has a celebration of its own and there is only one modal slot, so
+     this waits its turn rather than talking over it. */
+  try{
+    const m=document.getElementById('aaaModal');
+    if(m&&m.classList.contains('show')&&LSM.endTries<20){ LSM.endTries++; setTimeout(lsMusicMatchEnded,1000); return; }
+  }catch(e){}
+  LSM.endAsked=true;
+  try{
+    showAaaModal({
+      icon:'🎧', title:'موزیک ادامه پیدا کنه؟',
+      sub:'مسابقه‌ات تموم شد. می‌تونی موزیک رو همراه خودت ببری — یک دکمهٔ کوچک شناور می‌ماند که هم قطعهٔ بعدی را می‌زند هم قطعش می‌کند.',
+      primaryText:'ادامه بده', secondaryText:'تمومش کن', dismissible:false,
+      onPrimary:()=>{ LSM.freed=true; closeAaaModal(true); setTimeout(lsMusicPaint,60); },
+      onSecondary:()=>{ closeAaaModal(false); lsMusicStop(); }
+    });
+  }catch(e){ LSM.freed=true; lsMusicPaint(); }
 }
 
 async function lsMusicToggle(){
@@ -9205,6 +9377,9 @@ function lsMusicMatchStarted(){
 function lsMusicStop(){
   try{ if(LSM.el){ LSM.el.pause(); LSM.el.removeAttribute('src'); LSM.el.load(); } }catch(e){}
   LSM.started=false; LSM.quiet=false; LSM.matchApplied=false;
+  /* And the music is over for good: the floating player goes with it, and the
+     way back to music is the waiting room. */
+  LSM.freed=false; LSM.fabOpen=false; LSM.endAsked=false; LSM.endTries=0;
   lsMusicPaint();
 }
 /* THE BADGE ON THE CHAT TAB.
@@ -9426,12 +9601,48 @@ let lsElimOrder=null, lsWipeout=null;
 /* Set from the ls:ended push when the room finished with no survivor at all.
    Zero on every normal ending. */
 let lsForfeited=0;
+/* OUT OF A ROOM THAT IS NOT THERE ANY MORE.
+   «باید کامل برنامه رو ببندی تا بیاد بیرون… و بهش بگه فعلا حریفی برای تو وجود
+   نداره» — the polling stops, the room is let go of, the music with it, and the
+   player is put back on the home screen with the reason. The ticket was already
+   handed back by the server; the header is resynced so the number agrees. */
+let _lsGoneShown=false;
+function lsRoomGone(noOpp){
+  if(_lsGoneShown) return;
+  _lsGoneShown=true;
+  try{ lsStopPoll(); }catch(e){}
+  lsWatching=false;
+  lsRoomId=null; lsSnap=null; lsLastKey='';
+  ['lsColorPick','lsDead','lsCashPop'].forEach(id=>{const e=document.getElementById(id);if(e)e.remove();});
+  try{ lsPotReset(); }catch(e){}
+  try{ lsMusicStop(); }catch(e){}
+  try{ lsChatWatchStop(); }catch(e){}
+  try{ if(typeof pzSyncWallet==='function') pzSyncWallet(); }catch(e){}
+  go('home');
+  if(noOpp){
+    try{
+      showAaaModal({
+        icon:'🙁', title:'فعلاً حریفی برای تو وجود نداره',
+        sub:'کسی وارد این اتاق نشد، پس مسابقه‌ای برگزار نشد و بلیطت برگشت. کمی بعد دوباره امتحان کن.',
+        primaryText:'باشه', secondaryText:''
+      });
+    }catch(e){ try{ toast('فعلاً حریفی برای تو وجود نداره؛ بلیطت برگشت.'); }catch(_){} }
+  } else {
+    try{ toast('این اتاق بسته شد.'); }catch(e){}
+  }
+}
 function lsFinish(snap){
   if(lsEndShown) return;
   /* NEVER finalize from a snapshot without the personal block — payoutCash
      would read 0 and a winner would be shown the losing screen. Re-fetch the
      personalised snapshot and finalize on that. */
-  if(!snap||!snap.me){ lsPollNow(); return; }
+  if(!snap||!snap.me){
+    /* A FINISHED ROOM WE ARE NO LONGER IN. There is no personal block on the
+       way and asking again forever is exactly how a player ended up sitting
+       on «پایان مسابقه» — so this is the way out rather than another poll. */
+    if(snap&&snap.room&&snap.room.status==='finished'){ lsRoomGone(!!snap.room.noOpponents); return; }
+    lsPollNow(); return;
+  }
   lsEndShown=true;
   lsStopPoll();
   const me=snap.me||{}; const mine=Number(me.payoutCash||0);
@@ -9557,6 +9768,10 @@ function lsFinish(snap){
   }catch(e){ try{ pzResultRank(won?'۱':'—'); }catch(_){} }
 
   go('result');
+  /* «اگه مسابقه چه با برداشت چه با برد چه با حذف تموم میشه بپرسه که میخوای
+     موزیک ادامه پیدا کنه یا تموم بشه» — after the result is on screen, and
+     after the winner's celebration has had its turn. */
+  setTimeout(()=>{ try{ lsMusicMatchEnded(); }catch(e){} },won?3600:700);
   if(won){
     // VICTORY: the full-screen celebration, fired after the result screen is
     // mounted, plus the «برنده شدی» modal so the win is unmistakable.
@@ -9572,8 +9787,7 @@ function lsFinish(snap){
     }catch(e){} },1900);
   }
   // Pull the real wallet/level so the header shows the new balance immediately.
-  try{ if(typeof pzApplyServerTickets==='function')pzApplyServerTickets(); }catch(e){}
-  try{ if(typeof loadWallet==='function')loadWallet(); }catch(e){}
+  try{ if(typeof pzSyncWallet==='function')pzSyncWallet(); }catch(e){}
   /* pzSyncMe, not hydrateMe: it hydrates the same values AND turns the
      before/after readings taken in lsStart() into this match's real XP and 🏆,
      which is what the stats card shows. */
