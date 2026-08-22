@@ -257,7 +257,7 @@ Object.keys(TAB_GROUPS).forEach(g=>TAB_GROUPS[g].tabs.forEach(t=>{TAB_GROUP_OF[t
 function groupMembers(g){ return (TAB_GROUPS[g]?TAB_GROUPS[g].tabs:[]).filter(t=>canTab(t[0])); }
 
 const NAV=[
-  ['اصلی',[['dashboard','📊','داشبورد'],['g_money','💰','مالی و حسابداری'],['users','👤','کاربران'],['matches','🎮','مسابقات'],['lastsurvivor','🏆','آخرین بازمانده'],['support','🎧','پشتیبانی']]],
+  ['اصلی',[['dashboard','📊','داشبورد'],['g_money','💰','مالی و حسابداری'],['users','👤','کاربران'],['matches','🎮','مسابقات'],['duel','⚔️','دوئل'],['lastsurvivor','🏆','آخرین بازمانده'],['support','🎧','پشتیبانی']]],
   ['محتوا',[['g_qhub','❓','سوالات'],['categories','🏷️','موضوعات'],['g_chars','🎭','کاراکترها'],['lifelines','🧩','کمک‌ها'],['rewards','🎡','گردونه و جایزه روزانه'],['recordmode','🏅','ثبت رکورد'],['onboarding','👋','خوش‌آمدگویی']]],
   ['اقتصاد',[['wallet','🏆','صندوق جایزه'],['g_payout','💸','دریافت جایزه'],['tickets','🎫','بلیط‌ها'],['shop','🛒','فروشگاه'],['chatpacks','💬','پک‌های چت'],['giftcodes','🎁','کدهای هدیه'],['payments','🏦','درگاه پرداخت']]],
   ['بالانس بازی (Data-Driven)',[['g_balance','⚖️','بالانس بازی'],['leagues','🛡️','لیگ‌ها'],['missions2','🎯','مأموریت‌ها']]],
@@ -436,7 +436,7 @@ async function render(){
   try{
     if(CUR==='accounts')return renderAccounts();
     if(CONFIG_PAGES[CUR]){ await renderConfigSection(CONFIG_PAGES[CUR][0],CONFIG_PAGES[CUR][1]); groupBar(); if(tracked)void badgeLoad(); return; }
-    const fn={dashboard:renderDashboard,finance:renderFinance,accounting:renderAccounting,expenses:renderExpenses,backup:renderBackup,users:renderUsers,matches:renderMatches,support:renderSupport,questions:renderQuestions,leagues:renderLeagues,qreports:renderQReports,aistudio:renderAiStudio,pipeline:renderPipeline,categories:renderCategories,wallet:renderWallet,withdrawals:renderWithdrawals,payoutpartners:renderPayoutPartners,withdrawotp:renderWithdrawOtp,smsgroups:renderSmsGroups,rewardholds:renderRewardHolds,tickets:renderTickets,giftcodes:renderGiftCodes,shop:renderShopAdmin,chatpacks:renderChatPacks,characters:renderCharacters,charboxes:renderCharBoxes,lifelines:renderLifelines,rewards:renderRewards,missions2:renderMissions2,recordmode:renderRecordMode,onboarding:renderOnboarding,lastsurvivor:renderLastSurvivor,sms:renderSms,payments:renderPayments,leaderboard:renderLeaderboard,banners:renderBanners,notifications:renderNotifications,anticheat:renderAntiCheat,suspicious:renderSuspicious,reports:renderReports,logs:renderLogs,reset:renderReset,roles:renderRoles,rawcfg:renderRawCfg,monitoring:renderMonitoring}[CUR];
+    const fn={dashboard:renderDashboard,finance:renderFinance,accounting:renderAccounting,expenses:renderExpenses,backup:renderBackup,users:renderUsers,matches:renderMatches,support:renderSupport,questions:renderQuestions,leagues:renderLeagues,qreports:renderQReports,aistudio:renderAiStudio,pipeline:renderPipeline,categories:renderCategories,wallet:renderWallet,withdrawals:renderWithdrawals,payoutpartners:renderPayoutPartners,withdrawotp:renderWithdrawOtp,smsgroups:renderSmsGroups,rewardholds:renderRewardHolds,tickets:renderTickets,giftcodes:renderGiftCodes,shop:renderShopAdmin,chatpacks:renderChatPacks,characters:renderCharacters,charboxes:renderCharBoxes,lifelines:renderLifelines,rewards:renderRewards,missions2:renderMissions2,recordmode:renderRecordMode,onboarding:renderOnboarding,lastsurvivor:renderLastSurvivor,duel:renderDuel,sms:renderSms,payments:renderPayments,leaderboard:renderLeaderboard,banners:renderBanners,notifications:renderNotifications,anticheat:renderAntiCheat,suspicious:renderSuspicious,reports:renderReports,logs:renderLogs,reset:renderReset,roles:renderRoles,rawcfg:renderRawCfg,monitoring:renderMonitoring}[CUR];
     if(fn){ await fn(); groupBar(); if(tracked)void badgeLoad(); return; }
     /* No renderer for this tab. Six nav entries were in this state, and
        clicking one silently left the PREVIOUS screen's content on display —
@@ -623,6 +623,10 @@ async function renderAccounting(){
   const r=await api('GET','/admin/accounting/report?'+accQuery()).catch(e=>({error:e.message}));
   if(r.error){ $('#main').innerHTML=head('حسابداری')+'<div class="card empty">خطا: '+esc(r.error)+'</div>'; return; }
   const money=v=>fa(Math.round(Number(v)||0))+' ت';
+  /* An older API build has no earnings block; the panel must still draw rather
+     than print «undefined ت» across every tile. */
+  const E=Object.assign({commission:0,lsRake:0,forfeitedPot:0,shopItems:0,coins:0,
+    lifelines:0,ads:0,penalties:0,total:0,net:0,ticketsExcluded:0,prizesExcluded:0},r.earnings||{});
   const filters='<div class="card" style="margin-bottom:13px">'+
     '<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end">'+
       '<div class="field" style="margin:0"><label>از تاریخ</label><input type="date" id="acc_from" value="'+esc(r.from)+'"></div>'+
@@ -677,14 +681,40 @@ async function renderAccounting(){
   $('#main').innerHTML=head('حسابداری و گزارش مالی','هر عدد از دفترکل محاسبه می‌شود؛ فیلتر تاریخ و خروجی اکسل/PDF','<button class="btn sm" onclick="render()">↻</button>')+
     (r.hasDatabase?'':'<div class="note">⚠️ دیتابیس متصل نیست — اعداد صفر است، ساختگی نیست.</div>')+
     filters+
-    '<div class="grid g4" style="margin-bottom:13px">'+
-      stat('کارمزد مسابقات','ok',money(r.income.commission))+
-      stat('فروش بلیط','info',money(r.income.tickets))+
-      stat('فروش آیتم فروشگاه','',r.shopSalesTracked?money(r.income.shop):'—')+
-      stat('فروش کمک‌ها','',money(r.income.lifelines||0))+
-      stat('جمع درآمد','gold',money(r.income.total))+
+    /* ── سود شرکت، خط به خط ──────────────────────────────────────────────
+       «سود ما از درصد کمسیون بازی‌ها و تبلیغات و فروش آیتم‌ها در فروشگاه — به
+       غیر از بلیط مسابقات — هست… و همه این سودها باید به صورت مجزا نوشته بشه
+       تا ما بتونیم بفهمیم چی به چیه.» */
+    '<div class="card" style="margin-bottom:13px;border-color:var(--ok)"><b>💰 سود شرکت</b>'+
+      '<div class="sub" style="margin:6px 0 12px;line-height:1.9">کمیسیون بازی‌ها + تبلیغات + فروش فروشگاه + پات بدون برنده. <b>پول بلیط سود نیست</b> — وارد می‌شود، ما درصدمان را برمی‌داریم و بقیه به‌عنوان جایزه برمی‌گردد؛ آن درصد همان «کارمزد» است که اینجا شمرده شده.</div>'+
+      '<div class="grid g4" style="margin-bottom:10px">'+
+        stat('کارمزد دوئل و بقیه','ok',money(E.commission))+
+        stat('کارمزد آخرین بازمانده','ok',money(E.lsRake))+
+        stat('پات بدون برنده','ok',money(E.forfeitedPot))+
+        stat('تبلیغات','ok',money(E.ads))+
+      '</div>'+
+      '<div class="grid g4" style="margin-bottom:10px">'+
+        stat('فروش آیتم فروشگاه','',money(E.shopItems))+
+        stat('فروش پک سکه','',money(E.coins))+
+        stat('فروش کمک‌ها','',money(E.lifelines))+
+        stat('جریمه‌ها','',money(E.penalties))+
+      '</div>'+
+      '<div class="grid g2">'+
+        stat('جمع سود (قبل از هزینه)',E.total>=0?'gold':'bad',money(E.total))+
+        stat('سود خالص (بعد از هزینه‌ها)',E.net>=0?'ok':'bad',money(E.net))+
+      '</div>'+
     '</div>'+
-    (r.shopSalesTracked?'':'<div class="note">فروش آیتم هنوز اندازه‌گیری نمی‌شود: فروشگاه فعلاً فقط کاتالوگ است و مسیر خرید آیتم ساخته نشده. جدول ثبت فروش آماده است و به‌محض ساخت خرید، این عدد پر می‌شود.</div>')+
+    /* Reported beside the profit, never inside it. */
+    '<div class="card" style="margin-bottom:13px"><b>🎫 پولی که فقط از وسط رد می‌شود</b>'+
+      '<div class="sub" style="margin:6px 0 10px">این‌ها سود نیستند و در عدد بالا شمرده نشده‌اند — پول ورودیِ بازیکن‌ها و جایزه‌ای که از همان پول به آن‌ها برگشته.</div>'+
+      '<div class="grid g4">'+
+        stat('فروش بلیط','info',money(E.ticketsExcluded))+
+        stat('جوایز پرداخت‌شده از همان پول','',money(E.prizesExcluded))+
+        stat('واریز کاربران','',money(r.income.deposits||0))+
+        stat('تعدیل دستی مدیر','',money(r.adjustments||0))+
+      '</div>'+
+    '</div>'+
+    (r.shopSalesTracked?'':'<div class="note">هنوز هیچ فروشی در این بازه ثبت نشده.</div>')+
     '<div class="grid g4" style="margin-bottom:13px">'+
       /* Two different things that used to share one label. «جوایز واریزشده» is
          what landed in players' vaults — a debt, not a payment. «جایزهٔ نقدیِ
@@ -692,15 +722,13 @@ async function renderAccounting(){
       stat('جوایز واریزشده به صندوق جایزه','bad',money(r.payouts.total))+
       stat('جایزهٔ نقدیِ پرداخت‌شده','bad',money(r.payouts.cashedOut||0))+
       stat('هزینه‌های شرکت','bad',money(r.expenses.total))+
-      stat('سود ناخالص',r.grossProfit>=0?'ok':'bad',money(r.grossProfit))+
-    '</div>'+
-    '<div class="grid g4" style="margin-bottom:13px">'+
       stat('مانده نزد بازیکنان (بدهی)','',money(r.payouts.liability||0))+
-      stat('تعدیل دستی مدیر','',money(r.adjustments||0))+
-      stat('واریز کاربران','',money(r.income.deposits||0))+
-      stat('سود خالص',r.netProfit>=0?'ok':'bad',money(r.netProfit))+
     '</div>'+
-    '<div class="note"><b>این دو عدد یکی نیستند.</b> «جوایز واریزشده» یعنی چقدر به صندوق جایزه بازیکن‌ها اضافه شده — این پول هنوز نزد توست و فقط <b>بدهی</b> است. «جایزهٔ نقدیِ پرداخت‌شده» تنها عددی است که واقعاً از شرکت خارج شده. سود ناخالص بر اساس <b>تعهد</b> حساب می‌شود (جوایز واریزشده)، نه پرداخت‌ها؛ اگر هر دو کم می‌شدند، یک برد دو بار شمرده می‌شد.</div>'+
+    '<div class="note"><b>این دو عدد یکی نیستند.</b> «جوایز واریزشده» یعنی چقدر به صندوق جایزه بازیکن‌ها اضافه شده — این پول هنوز نزد توست و فقط <b>بدهی</b> است. «جایزهٔ نقدیِ پرداخت‌شده» تنها عددی است که واقعاً از شرکت خارج شده.<br><b>گردش پول ≠ سود.</b> عدد پایین («'+'گردش'+'») همهٔ پولی است که وارد شده منهای همهٔ جایزه‌ها — جواب این سؤال که «این ماه بیشتر پول آمد یا رفت». سودِ شرکت عدد بالاست.</div>'+
+    '<div class="grid g2" style="margin-bottom:13px">'+
+      stat('گردش پول (ورودی منهای جوایز)',r.grossProfit>=0?'':'bad',money(r.grossProfit))+
+      stat('گردش پول بعد از هزینه‌ها',r.netProfit>=0?'':'bad',money(r.netProfit))+
+    '</div>'+
     '<div class="card" style="margin-bottom:13px"><b>روند مالی</b><div class="sub" style="margin-bottom:6px">'+esc(r.from)+' تا '+esc(r.to)+'</div>'+accChart(r.series)+'</div>'+
     '<div class="grid g2">'+
       '<div class="card"><b>کارمزد به تفکیک بازی</b><div class="tbl-wrap" style="margin-top:8px"><table><thead><tr><th>بازی</th><th>کارمزد</th><th>مسابقه</th></tr></thead><tbody>'+modeRows+'</tbody></table></div></div>'+
@@ -715,9 +743,10 @@ async function renderAccounting(){
 /* ================= COMPANY EXPENSES ================= */
 async function renderExpenses(){
   accDefaults();
-  const [r,mon]=await Promise.all([
+  const [r,mon,ads]=await Promise.all([
     api('GET','/admin/expenses?from='+encodeURIComponent(ACC_FROM)+'&to='+encodeURIComponent(ACC_TO)).catch(()=>({rows:[]})),
-    api('GET','/admin/monitor/servers').catch(()=>({rows:[]}))
+    api('GET','/admin/monitor/servers').catch(()=>({rows:[]})),
+    api('GET','/admin/ad-revenue?from='+encodeURIComponent(ACC_FROM)+'&to='+encodeURIComponent(ACC_TO)).catch(()=>({rows:[],total:0}))
   ]);
   const rows=r.rows||[];
   const money=v=>fa(Math.round(Number(v)||0))+' ت';
@@ -736,6 +765,25 @@ async function renderExpenses(){
         '<div class="field"><label>توضیح (اختیاری)</label><input id="ex_note"></div>'+
       '</div>'+
       '<button class="btn ok" onclick="expenseSave()">ثبت هزینه</button></div>'+
+    /* ── درآمد تبلیغات ──────────────────────────────────────────────────
+       «سود ما از … تبلیغات … هست.» پول تبلیغات به حساب بانکی می‌آید، نه به کیف
+       پول کسی — پس هیچ‌جای بازی نیست که بشود از رویش خواند و باید دستی وارد
+       شود. مستقیم به «سود شرکت» در گزارش مالی اضافه می‌شود. */
+    '<div class="card" style="margin-bottom:13px;border-color:var(--ok)"><b>📣 درآمد تبلیغات</b>'+
+      '<div class="sub" style="margin:6px 0 10px">پول تبلیغات از بازی رد نمی‌شود، پس اینجا ثبتش کن تا در «سود شرکت» شمرده شود. جمع این بازه: <b>'+money(ads.total||0)+'</b></div>'+
+      '<div class="grid g3">'+
+        '<div class="field"><label>از چه کسی / بابت چه</label><input id="ad_src" placeholder="مثلاً تپسل — کمپین مرداد"></div>'+
+        '<div class="field"><label>مبلغ (تومان)</label><input id="ad_amt" type="number" min="0" value="0"></div>'+
+        '<div class="field"><label>تاریخ</label><input id="ad_date" type="date" value="'+esc(ACC_TO)+'"></div>'+
+      '</div>'+
+      '<div class="field"><label>توضیح (اختیاری)</label><input id="ad_note"></div>'+
+      '<button class="btn ok" onclick="adRevenueSave()">ثبت درآمد تبلیغات</button>'+
+      ((ads.rows||[]).length?'<div class="tbl-wrap" style="margin-top:10px"><table><thead><tr><th>تاریخ</th><th>بابت</th><th>مبلغ</th><th></th></tr></thead><tbody>'+
+        (ads.rows||[]).map(a=>'<tr><td>'+esc(String(a.refId||'').slice(0,10)||fmtDate(a.createdAt))+'</td><td>'+esc(a.description||'')+
+          ((a.metadata&&a.metadata.note)?'<div class="sub">'+esc(a.metadata.note)+'</div>':'')+'</td><td>'+money(a.amount)+
+          '</td><td><button class="btn sm bad" onclick="adRevenueDel(\''+esc(a.id)+'\')">حذف</button></td></tr>').join('')+
+        '</tbody></table></div>':'<div class="empty" style="margin-top:10px">هنوز درآمد تبلیغاتی ثبت نشده</div>')+
+    '</div>'+
     '<div class="card" style="margin-bottom:13px"><b>هزینهٔ ساعتی سرورها</b>'+
       '<div class="sub" style="margin-bottom:8px">مبلغ هر ساعت را وارد کن — هزینهٔ انباشته خودکار در گزارش مالی می‌آید.</div>'+
       (srv.length?srv.map(sv=>'<div style="display:flex;gap:10px;align-items:center;margin-bottom:8px">'+
@@ -761,6 +809,24 @@ async function expenseSave(){
 async function expenseDel(id){
   if(!confirm('این هزینه حذف شود؟'))return;
   try{ await api('DELETE','/admin/expenses/'+id); toast('حذف شد'); render(); }catch(e){ toast(e.message||'حذف نشد'); }
+}
+async function adRevenueSave(){
+  const amount=Number(document.getElementById('ad_amt').value||0);
+  if(!(amount>0)){ toast('مبلغ را وارد کن','bad'); return; }
+  try{
+    await api('POST','/admin/ad-revenue',{
+      amount,
+      source:document.getElementById('ad_src').value.trim(),
+      note:document.getElementById('ad_note').value.trim(),
+      at:document.getElementById('ad_date').value
+    });
+    toast('درآمد تبلیغات ثبت شد','ok'); render();
+  }catch(e){ toast(e.message,'bad'); }
+}
+async function adRevenueDel(rid){
+  if(!confirm('این درآمد تبلیغاتی حذف شود؟')) return;
+  try{ await api('DELETE','/admin/ad-revenue/'+encodeURIComponent(rid)); toast('حذف شد','ok'); render(); }
+  catch(e){ toast(e.message,'bad'); }
 }
 async function serverCostSave(id){
   const v=Number(document.getElementById('hc_'+id).value)||0;
@@ -1011,29 +1077,68 @@ async function setRole(uid,role){try{await api('PATCH','/admin/users/'+uid+'/rol
 async function resetUser(uid){if(!confirm('آمار (XP/Level/Cup) این کاربر صفر شود؟'))return;try{await api('POST','/admin/users/'+uid+'/reset');toast('ریست شد','ok');userDetailReopen(uid);}catch(e){toast(e.message,'bad');}}
 function userDetailReopen(uid){document.querySelectorAll('.modal-bg').forEach(m=>m.remove());userDetail(uid);}
 
-/* ================= MATCHES (running vs finished — always DB-true) ================= */
+/* ================= MATCHES — every mode, each on its own shelf =================
+   «در تب مسابقات فقط بازی‌های دوئل رو مینویسه. باید دوئل رو جدا بنویسه، آخرین
+   بازمانده رو جدا بنویسه، همه یا هیچ رو جدا بنویسه، و همه در تب مسابقات باشن.»
+
+   Only duel ever appeared because the list came from one table. Duel and «همه
+   یا هیچ» are rows in `matches`, told apart by mode_id; Last Survivor is not in
+   that table at all — it has rooms of its own — which is why it was missing
+   rather than merely unlabelled. Three shelves, three sources, one tab. */
 let M_TAB='live';
+let M_MODE='duel';
+const M_MODES={duel:'⚔️ دوئل',lastSurvivor:'🏆 آخرین بازمانده',allOrNothing:'🎲 همه یا هیچ'};
 async function renderMatches(){
+  const modeBar='<div class="subtabs">'+Object.keys(M_MODES).map(k=>
+    '<button class="'+(M_MODE===k?'active':'')+'" onclick="M_MODE=\''+k+'\';render()">'+M_MODES[k]+'</button>').join('')+'</div>';
   const tabs='<div class="subtabs"><button class="'+(M_TAB==='live'?'active':'')+'" onclick="M_TAB=\'live\';render()">🟢 در حال اجرا</button><button class="'+(M_TAB==='done'?'active':'')+'" onclick="M_TAB=\'done\';render()">🏁 پایان‌یافته (تاریخچه)</button></div>';
+  const shell=(sub,body)=>{ $('#main').innerHTML=head('مدیریت مسابقات',sub)+modeBar+tabs+body; };
+
+  /* ---- Last Survivor: its own rooms, not the matches table ---- */
+  if(M_MODE==='lastSurvivor'){
+    const d=await api('GET','/admin/last-survivor/rooms?limit=120').catch(()=>({rows:[]}));
+    const all=d.rows||[];
+    const live=all.filter(r=>r.status!=='finished');
+    const done=all.filter(r=>r.status==='finished');
+    const rows=(M_TAB==='live'?live:done);
+    const FA={waiting:'در انتظار',running:'در حال اجرا',finished:'تمام‌شده'};
+    shell(M_TAB==='live'?'اتاق‌های زندهٔ آخرین بازمانده':'اتاق‌های پایان‌یافتهٔ آخرین بازمانده',
+      (rows.length?'':'<div class="note">در این بازه اتاقی نیست.</div>')+
+      tbl(['اتاق','موضوع','وضعیت','مرحله','بازیکنان','زنده','برداشت','مجموع جوایز','زمان'],rows.map(r=>[
+        '<span class="mono">'+String(r.id).slice(0,8)+'</span>',esc(r.topic||'—'),
+        '<span class="pill '+(r.status==='running'?'info':r.status==='finished'?'ok':'pend')+'">'+(FA[r.status]||r.status)+'</span>',
+        fa(r.round||0)+'/'+fa(r.totalRounds||0),fa(r.players||0),fa(r.alive||0),fa(r.cashedOut||0),
+        fa(r.grossPool||0)+' ت',fmtDate(r.endedAt||r.startedAt||r.createdAt)
+      ]))+
+      '<div class="note">تنظیمات و موضوعات آخرین بازمانده در تب «🏆 آخرین بازمانده» است.</div>');
+    return;
+  }
+
+  /* ---- duel and «همه یا هیچ»: both live in `matches`, told apart by mode ---- */
+  const label=M_MODES[M_MODE];
   if(M_TAB==='done'){
-    const d=await api('GET','/admin/matches/history?limit=80').catch(()=>({rows:[]}));
-    $('#main').innerHTML=head('مدیریت مسابقات','مسابقاتِ پایان‌یافته — از دیتابیس (منبع حقیقت)')+tabs+
-      '<div class="note">به‌محضِ پایان، مسابقه از فهرستِ «در حال اجرا» خارج و اینجا ثبت می‌شود؛ وضعیت همیشه برابرِ وضعیتِ واقعیِ دیتابیس است. جایزهٔ برنده هم‌زمان در صندوق جایزه، تراکنش، لیدربرد و گزارشِ مالی ثبت شده است.</div>'+
-      tbl(['شناسه','مود','وضعیت','اقتصاد','برنده','نتیجه','زمان'],(d.rows||[]).map(m=>{
+    const d=await api('GET','/admin/matches/history?limit=120').catch(()=>({rows:[]}));
+    const rows=(d.rows||[]).filter(m=>String(m.modeId||'')===M_MODE);
+    shell('مسابقاتِ پایان‌یافتهٔ '+label+' — از دیتابیس (منبع حقیقت)',
+      '<div class="note">به‌محضِ پایان، مسابقه از فهرستِ «در حال اجرا» خارج و اینجا ثبت می‌شود. جایزهٔ برنده هم‌زمان در صندوق جایزه، تراکنش، لیدربرد و گزارشِ مالی ثبت شده است.</div>'+
+      (rows.length?'':'<div class="card empty">مسابقهٔ پایان‌یافته‌ای برای '+esc(label)+' نیست.</div>')+
+      tbl(['شناسه','وضعیت','اقتصاد','برنده','نتیجه','زمان'],rows.map(m=>{
         const win=(m.players||[]).find(p=>p.userId===m.winnerUserId);
-        return ['<span class="mono">'+String(m.id).slice(0,8)+'</span>',m.modeId||'—','<span class="pill ok">'+esc(m.phase||'finished')+'</span>',m.economyType||'free',
+        return ['<span class="mono">'+String(m.id).slice(0,8)+'</span>','<span class="pill ok">'+esc(m.phase||'finished')+'</span>',m.economyType||'free',
           win?('🏆 '+esc(win.username||String(win.userId).slice(0,8))):'—',
           (m.players||[]).map(p=>esc(p.username||'')+' '+fa(p.score)).join(' — '),fmtDate(m.updatedAt)];
-      }));
+      })));
     return;
   }
   const d=await api('GET','/admin/matches').catch(()=>({rows:[]}));
-  $('#main').innerHTML=head('مدیریت مسابقات','اتاق‌های زنده — فقط مسابقاتِ در حالِ اجرا')+tabs+
-    tbl(['شناسه','مود','فاز','راند','اقتصاد','بازیکنان','عملیات'],(d.rows||[]).map(m=>[
-      '<span class="mono">'+String(m.id).slice(0,8)+'</span>',m.modeId,'<span class="pill info">'+m.phase+'</span>',fa(m.round),m.economyType||'free',
+  const rows=(d.rows||[]).filter(m=>String(m.modeId||'')===M_MODE);
+  shell('اتاق‌های زندهٔ '+label+' — فقط مسابقاتِ در حالِ اجرا',
+    (rows.length?'':'<div class="card empty">مسابقهٔ در حال اجرایی برای '+esc(label)+' نیست.</div>')+
+    tbl(['شناسه','فاز','راند','اقتصاد','بازیکنان','عملیات'],rows.map(m=>[
+      '<span class="mono">'+String(m.id).slice(0,8)+'</span>','<span class="pill info">'+m.phase+'</span>',fa(m.round),m.economyType||'free',
       (m.players||[]).map(p=>esc(p.username||'')+' '+fa(p.score)).join(' vs '),
       '<button class="btn sm bad" onclick="forceEnd(\''+m.id+'\','+JSON.stringify(JSON.stringify((m.players||[]).map(p=>({id:p.userId,n:p.username})))).replace(/"/g,'&quot;')+')">پایان اجباری</button>'
-    ]));
+    ])));
 }
 function forceEnd(mid,playersJson){
   let players=[];try{players=JSON.parse(playersJson);}catch(e){}
@@ -3251,6 +3356,71 @@ async function cbDrawRun(id){
 
 /* ================= LAST SURVIVOR ================= */
 let _LS_CFG=null;
+/* ================= DUEL — gameplay and commission =================
+   «من نمیتونم درصد کمسیون دوئل رو تغییر بدم. باید دوئل هم مثل آخرین بازمانده تب
+   داشته باشه و گیم‌پلی‌اش توش باشه و بتونم از اونجا تنظیم کنم.»
+
+   Every one of these already existed in the config and could only be reached by
+   hand-editing the whole JSON in «ویرایش خام». The commission in particular is
+   the one number the operator has to be able to move without a text editor. */
+async function renderDuel(){
+  if(!CFG) await loadCfg();
+  const d=(CFG.modes&&CFG.modes.duel)||{};
+  const paid=(CFG.economy&&CFG.economy.paid)||{};
+  const entry=d.entry||{}, ef=entry.free||{}, ep=entry.paid||{};
+  const rew=d.reward||{}, rf=rew.free||{}, rp=rew.paid||{};
+  const num=(id,v,step)=>'<input id="'+id+'" type="number"'+(step?' step="'+step+'"':'')+' value="'+(v!=null?v:0)+'" style="width:100%">';
+  $('#main').innerHTML=head('دوئل ⚔️','گیم‌پلی و کمیسیون دوئل — همان تنظیماتی که تا حالا فقط از «ویرایش خام» در دسترس بود','<button class="btn sm" onclick="loadCfg().then(render)">↻</button>')+
+    '<div class="card" style="margin-bottom:13px;border-color:var(--ok)"><b>💰 کمیسیون</b>'+
+      '<div class="sub" style="margin:6px 0 12px;line-height:1.9">درصدی که از جایزهٔ نقدیِ بردِ دوئل برداشته می‌شود. برنده «جایزه منهای این درصد» را می‌گیرد و همین مبلغ به‌عنوان کارمزد در دفترکل و در «سود شرکت» ثبت می‌شود.<br><b>این عدد روی «همه یا هیچ» هم اثر دارد</b> — هر دو از یک تنظیم اقتصادی می‌خوانند. کمیسیون آخرین بازمانده جداست و در تب خودش تنظیم می‌شود.</div>'+
+      '<div class="grid g3">'+
+        '<div class="field"><label>درصد کمیسیون (۰ تا ۹۰)</label>'+num('du_rake',paid.rakePercent!=null?paid.rakePercent:5,'0.1')+'</div>'+
+        '<div class="field"><label>درصد کارمزد برداشت جایزه</label>'+num('du_wfee',paid.withdrawFeePercent!=null?paid.withdrawFeePercent:5,'0.1')+'</div>'+
+        '<div class="field"><label>واحد پول</label><input value="'+esc(paid.walletCurrency||'IRR')+'" disabled style="width:100%"></div>'+
+      '</div>'+
+    '</div>'+
+    '<div class="card" style="margin-bottom:13px"><b>🎮 گیم‌پلی</b>'+
+      '<div class="sub" style="margin:6px 0 10px">تعداد سؤال هر نیمه و مهلت پاسخ. سختی سؤال‌ها خودکار و بر اساس نتیجهٔ خود بازیکن‌ها بالا و پایین می‌رود.</div>'+
+      '<div class="grid g2">'+
+        '<div class="field"><label>تعداد سؤال</label>'+num('du_qc',d.questionCount)+'</div>'+
+        '<div class="field"><label>مهلت هر سؤال (ثانیه)</label>'+num('du_time',d.timerSeconds)+'</div>'+
+      '</div>'+
+    '</div>'+
+    '<div class="card" style="margin-bottom:13px"><b>🎟️ ورودی</b>'+
+      '<div class="grid g3">'+
+        '<div class="field"><label>بازی رایگان — قلب</label>'+num('du_ef_h',ef.hearts)+'</div>'+
+        '<div class="field"><label>بازی رایگان — سکه</label>'+num('du_ef_c',ef.coins)+'</div>'+
+        '<div class="field"><label>بازی نقدی — مبلغ (تومان)</label>'+num('du_ep_cash',ep.cash)+'</div>'+
+      '</div>'+
+    '</div>'+
+    '<div class="card" style="margin-bottom:13px"><b>🏆 جایزه</b>'+
+      '<div class="grid g3">'+
+        '<div class="field"><label>رایگان — پایه (سکه)</label>'+num('du_rf_base',rf.base)+'</div>'+
+        '<div class="field"><label>رایگان — به‌ازای هر مرحله</label>'+num('du_rf_stage',rf.perStage)+'</div>'+
+        '<div class="field"><label>نقدی — ضریب ورودی</label>'+num('du_rp_mult',rp.multiplier,'0.1')+'</div>'+
+      '</div>'+
+      '<div class="sub">جایزهٔ نقدی = مبلغ ورودی × ضریب. کمیسیون بالا از همین مبلغ کم می‌شود.</div>'+
+    '</div>'+
+    '<button class="btn pri" onclick="duelSave()">💾 ذخیرهٔ تنظیمات دوئل</button>'+
+    '<div class="note" style="margin-top:12px">فهرست مسابقات دوئل در تب «🎮 مسابقات» است.</div>';
+}
+async function duelSave(){
+  const n=(id)=>Number(document.getElementById(id).value||0);
+  const rake=n('du_rake');
+  if(!(rake>=0&&rake<=90)) return toast('درصد کمیسیون باید بین ۰ تا ۹۰ باشد','bad');
+  const patch={
+    economy:{paid:Object.assign({},(CFG.economy&&CFG.economy.paid)||{},{
+      rakePercent:rake, withdrawFeePercent:n('du_wfee')})},
+    modes:{duel:Object.assign({},(CFG.modes&&CFG.modes.duel)||{},{
+      questionCount:n('du_qc'), timerSeconds:n('du_time'),
+      entry:{free:{hearts:n('du_ef_h'),coins:n('du_ef_c')},paid:{cash:n('du_ep_cash')}},
+      reward:{free:{type:'coins',base:n('du_rf_base'),perStage:n('du_rf_stage')},
+              paid:{type:'cash',multiplier:n('du_rp_mult')}}})}
+  };
+  try{ await api('PATCH','/admin/config',patch); toast('تنظیمات دوئل ذخیره شد ✅','ok'); await loadCfg(); render(); }
+  catch(e){ toast(e.message,'bad'); }
+}
+
 async function renderLastSurvivor(){
   let cfg,rooms={rows:[]},topics={topics:[]},music={rows:[]};
   try{ [cfg,rooms,topics,music]=await Promise.all([

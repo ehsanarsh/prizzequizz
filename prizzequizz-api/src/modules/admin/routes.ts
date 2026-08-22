@@ -43,6 +43,7 @@ import { calculateUserRisk, deviceDiagnostics, listCurrentUserDevices, updateDev
 import type { DeviceTrustStatus, IntegritySeverity, IntegrityStatus, NotificationType, RewardHoldStatus } from '../../types/domain.js';
 import type { Question } from '../../types/domain.js';
 import { financeReport, listExpenses, saveExpense, deleteExpense, setServerHourlyCost, reportToCsv, reportToPdf, EXPENSE_CATEGORIES } from '../../services/accountingService.js';
+import { bookHouseRevenue, houseRevenueSummary, removeHouseRevenue } from '../../services/houseRevenueService.js';
 import { securityAlerts } from '../../services/securityAlertService.js';
 import { streamBackup, backupFilename, BACKUP_TABLES } from '../../services/backupService.js';
 import {
@@ -832,6 +833,49 @@ export function registerAdminRoutes(router: Router, base: string): void {
     if (!requireAdmin(ctx, { tab: 'expenses' })) return;
     await setServerHourlyCost(ctx.params.id!, Number((ctx.body as any)?.hourly ?? 0));
     json(ctx.res, 200, { ok: true });
+  });
+
+  /* ---------------- ADVERTISING INCOME ----------------
+   * «سود ما از … تبلیغات … هست.» An advertising payment lands in a bank
+   * account, not in anybody's wallet, so there is nothing anywhere in the game
+   * for it to be read off — it is typed in. It goes to the same place a
+   * forfeited pot goes, so the earnings breakdown can add it up with the rest
+   * instead of the operator keeping it in a spreadsheet. */
+  router.add('GET', `${base}/admin/ad-revenue`, async (ctx) => {
+    if (!requireAdmin(ctx, { tab: 'expenses' })) return;
+    const sum = await houseRevenueSummary(ctx.query.get('from') ?? undefined, ctx.query.get('to') ?? undefined, 200);
+    json(ctx.res, 200, {
+      rows: sum.recent.filter((r) => r.source === 'ads'),
+      total: sum.bySource.find((b) => b.source === 'ads')?.amount ?? 0
+    });
+  });
+  router.add('POST', `${base}/admin/ad-revenue`, async (ctx) => {
+    if (!requireAdmin(ctx, { tab: 'expenses' })) return;
+    const b = (ctx.body ?? {}) as any;
+    const amount = Math.round(Number(b.amount) || 0);
+    if (amount <= 0) return error(ctx.res, 422, 'BAD_AMOUNT', 'مبلغ باید بیشتر از صفر باشد.');
+    const source = String(b.source ?? '').trim().slice(0, 120);
+    const note = String(b.note ?? '').trim().slice(0, 400);
+    /* The key is what makes a double-tap on «ثبت» harmless. Two genuinely
+       separate payments on the same day from the same advertiser are a real
+       thing though, so the id carries a nonce rather than being derived only
+       from the fields. */
+    const key = 'ads:' + id();
+    const booked = await bookHouseRevenue({
+      key, source: 'ads', amount,
+      refType: 'manual', refId: String(b.at ?? '').slice(0, 10),
+      description: source || 'درآمد تبلیغات',
+      metadata: { note, enteredBy: ctx.userId ?? '', at: String(b.at ?? '').slice(0, 10) }
+    });
+    if (!booked) return error(ctx.res, 409, 'NOT_BOOKED', 'ثبت نشد.');
+    void recordAdmin({ adminId: ctx.userId, action: 'AD_REVENUE_ADDED', meta: { amount, source } });
+    json(ctx.res, 201, { id: key, amount });
+  });
+  router.add('DELETE', `${base}/admin/ad-revenue/:id`, async (ctx) => {
+    if (!requireAdmin(ctx, { tab: 'expenses' })) return;
+    const removed = await removeHouseRevenue(decodeURIComponent(ctx.params.id!));
+    if (removed) void recordAdmin({ adminId: ctx.userId, action: 'AD_REVENUE_REMOVED', meta: { rowId: ctx.params.id } });
+    json(ctx.res, 200, { removed });
   });
 
   /* ---------------- SECURITY ALERTS ---------------- */

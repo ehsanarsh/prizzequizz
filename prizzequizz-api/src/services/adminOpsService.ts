@@ -209,7 +209,7 @@ export async function dashboardMetrics(): Promise<Record<string, unknown>> {
   };
   const [
     registeredUsers, newUsersToday, dau, onlineUsers, matchesToday, avgMatchSec,
-    pendingW, openTickets, usersSeries, matchesSeries, revToday
+    pendingW, openTickets, usersSeries, matchesSeries, revToday, houseToday
   ] = await Promise.all([
     one(`SELECT count(*)::int c FROM users`),
     one(`SELECT count(*)::int c FROM users WHERE created_at >= current_date`),
@@ -226,16 +226,23 @@ export async function dashboardMetrics(): Promise<Record<string, unknown>> {
         LEFT JOIN (SELECT date(created_at) dt, count(*) c FROM users GROUP BY 1) u ON u.dt = d::date ORDER BY d`),
     q(`SELECT to_char(d::date,'MM-DD') AS "day", coalesce(m.c,0)::int c FROM generate_series(current_date - interval '29 days', current_date, interval '1 day') d
         LEFT JOIN (SELECT date(created_at) dt, count(*) c FROM matches GROUP BY 1) m ON m.dt = d::date ORDER BY d`),
-    // today's house revenue from the ledger (income − payout), same formula as finance
+    /* TODAY'S EARNINGS, the same definition the finance tab uses.
+     *
+     * This used to add ticket sales and stakes and then subtract the prizes
+     * paid out of them, which is neither the commission nor anything else —
+     * on a day when yesterday's tickets were played it went negative, and on a
+     * day when tomorrow's were bought it read like a windfall. Earnings are the
+     * commission, what the shop sold that was not a ticket, the helps, the
+     * fines — and, from the house's own book, Last Survivor's commission, its
+     * forfeited pots and any advertising entered by hand. */
     q(`SELECT
-         coalesce(sum(amount) FILTER (WHERE entry_type='ticket_purchase'),0)
-        +coalesce(sum(amount) FILTER (WHERE entry_type='match_stake'),0)
-        +coalesce(sum(amount) FILTER (WHERE entry_type='fee'),0)
+         coalesce(sum(amount) FILTER (WHERE entry_type='fee'),0)
+        +coalesce(sum(amount) FILTER (WHERE entry_type='lifeline_purchase'),0)
         +coalesce(sum(amount) FILTER (WHERE entry_type='penalty'),0)
-        -coalesce(sum(amount) FILTER (WHERE entry_type IN ('match_reward','league_reward','referral_reward')),0)
-        -coalesce(sum(amount) FILTER (WHERE entry_type='bonus'),0)
-        -coalesce(sum(amount) FILTER (WHERE entry_type IN ('refund','stake_refund')),0) AS net
-       FROM wallet_ledger WHERE created_at >= current_date`)
+        +coalesce(sum(amount) FILTER (WHERE entry_type='shop_purchase'
+                                        AND coalesce(metadata->>'category','') <> 'tickets'),0) AS net
+       FROM wallet_ledger WHERE created_at >= current_date`),
+    q(`SELECT coalesce(sum(amount),0) AS net FROM house_revenue WHERE created_at >= current_date`)
   ]);
   // Live feed: newest real events across signups, matches, withdrawals, security.
   const feed: any[] = [];
@@ -249,7 +256,10 @@ export async function dashboardMetrics(): Promise<Record<string, unknown>> {
   return {
     registeredUsers, newUsersToday, dau, onlineUsers,
     matchesToday, runningMatches: runningCount, avgMatchSec,
-    todayRevenue: Number(revToday[0]?.net ?? 0) || 0,
+    /* The ledger's share plus the house's own book — Last Survivor's commission
+       and forfeited pots never pass through a player's wallet, so a
+       ledger-only figure could never see them. */
+    todayRevenue: (Number(revToday[0]?.net ?? 0) || 0) + (Number(houseToday[0]?.net ?? 0) || 0),
     pendingWithdrawals: Number(pendingW[0]?.n ?? 0) || 0,
     pendingWithdrawAmount: Number(pendingW[0]?.amt ?? 0) || 0,
     openTickets,

@@ -85,7 +85,15 @@ export async function purchase(input: {
       if (Number(acct.available) < price) throw new ShopError('INSUFFICIENT_FUNDS', 'موجودی کیف پولت کافی نیست.');
       await postEntry({
         userId, entryType: 'shop_purchase', kind: 'debit', amount: price,
-        idempotencyKey: 'shop:' + key, description: 'خرید از فروشگاه: ' + item.name
+        idempotencyKey: 'shop:' + key, description: 'خرید از فروشگاه: ' + item.name,
+        /* WHAT WAS SOLD, not just that something was. «فروش آیتم‌ها در فروشگاه
+         * به غیر از بلیط مسابقات» — the company's earnings count shop sales but
+         * not ticket sales, and both come through here, so the accounting has
+         * to be able to tell them apart. The row itself is the only place that
+         * can say which: the catalogue can be re-categorised or the item
+         * deleted, and a sale that happened last month must not change its
+         * meaning because somebody edited the shop today. */
+        metadata: { itemId: item.id, category: item.category, name: item.name, qty }
       });
     } else {
       const have = Number(user.coins) || 0;

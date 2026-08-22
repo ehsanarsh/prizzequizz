@@ -490,6 +490,121 @@ function run(): void {
     assert.match(body, /خرید/, 'and say what else goes');
   });
 
+  /* ── THE PROFIT FIGURE ──────────────────────────────────────────────── */
+  /* «سود ما از درصد کمسیون بازی‌ها و تبلیغات و فروش آیتم‌ها در فروشگاه — به غیر
+     از بلیط مسابقات — هست… و همه این سودها باید به صورت مجزا نوشته بشه.» */
+  check('the finance tab has a profit card with every source on its own line', () => {
+    /* Anchored on the card, not on the function: renderAccounting builds the
+       filters, the mode table and the house-revenue card first, so a fixed
+       window from the top of it misses this entirely. */
+    const i = script.indexOf('💰 سود شرکت');
+    assert.ok(i > 0, 'there is no profit card at all');
+    const body = script.slice(i, i + 3000);
+    for (const line of ['E.commission', 'E.lsRake', 'E.forfeitedPot', 'E.ads', 'E.shopItems', 'E.coins', 'E.lifelines']) {
+      assert.ok(body.includes(line), 'the profit card is missing ' + line);
+    }
+    assert.ok(body.includes('E.total') && body.includes('E.net'), 'it must total them up');
+  });
+
+  check('ticket money is shown as passing through, never as profit', () => {
+    const start = script.indexOf('💰 سود شرکت');
+    const passing = script.indexOf('🎫 پولی که فقط از وسط رد می‌شود');
+    assert.ok(start > 0 && passing > start, 'the two cards are not both there, in order');
+    const card = script.slice(start, passing);
+    /* The one thing that must not happen: ticket money inside the profit sum. */
+    assert.ok(!card.includes('ticketsExcluded'), 'ticket money is inside the profit card');
+    assert.ok(!/income\.tickets/.test(card), 'ticket money is inside the profit card');
+    /* But it must still be reported, just not as profit. */
+    const after = script.slice(passing, passing + 1200);
+    assert.ok(after.includes('E.ticketsExcluded'), 'ticket sales stopped being shown at all');
+    assert.ok(after.includes('E.prizesExcluded'), 'the prizes paid from that money must show too');
+  });
+
+  check('a panel on an older API still draws the profit card', () => {
+    const i = script.indexOf('async function renderAccounting(');
+    const body = script.slice(i, i + 1200);
+    /* Without this every tile reads «undefined ت» against a server that has
+       not been updated yet. */
+    assert.match(body, /const E=Object\.assign\(\{/, 'the earnings block needs a default');
+    assert.match(body, /r\.earnings\|\|\{\}/, 'and it must fall back when the field is absent');
+  });
+
+  check('advertising income can be entered and taken back out', () => {
+    assert.ok(script.includes('async function adRevenueSave('), 'no way to record it');
+    assert.ok(script.includes('async function adRevenueDel('), 'a typed figure must be removable');
+    const i = script.indexOf('async function adRevenueSave(');
+    const body = script.slice(i, i + 700);
+    assert.match(body, /amount>0/, 'zero is not an advertising payment');
+    assert.match(body, /'\/admin\/ad-revenue'/, 'it must post to the ad-revenue route');
+  });
+
+  /* ── THE DUEL TAB ───────────────────────────────────────────────────── */
+  /* «باید دوئل هم مثل آخرین بازمانده تب داشته باشه و گیم‌پلی‌اش توش باشه و
+     بتونم از اونجا تنظیم کنم.» */
+  check('duel has a tab of its own', () => {
+    assert.match(html, /\['duel','⚔️','دوئل'\]/, 'no duel entry in the sidebar');
+    assert.ok(script.includes('duel:renderDuel'), 'the duel tab has no renderer wired');
+    assert.ok(script.includes('async function renderDuel('), 'the renderer is missing');
+  });
+
+  check('and its commission is editable there', () => {
+    const i = script.indexOf('async function renderDuel(');
+    const body = script.slice(i, i + 4000);
+    assert.ok(body.includes("num('du_rake'"), 'no commission field');
+    assert.ok(body.includes('rakePercent'), 'the field must be tied to the real setting');
+    const save = script.slice(script.indexOf('async function duelSave('), script.indexOf('async function duelSave(') + 1400);
+    assert.match(save, /rakePercent:rake/, 'saving must send the commission');
+    /* The service clamps to 0..90; the form should not let a number through
+       that it knows will be refused. */
+    assert.match(save, /rake>=0&&rake<=90/, 'the range is not checked before sending');
+  });
+
+  check('the duel tab says the commission is shared with «همه یا هیچ»', () => {
+    const i = script.indexOf('async function renderDuel(');
+    const body = script.slice(i, i + 4000);
+    /* economy.paid.rakePercent is one setting read by both modes. An operator
+       changing it for duel is changing it for the other one too, and finding
+       that out afterwards is the kind of surprise money is made of. */
+    assert.ok(body.includes('همه یا هیچ'), 'the shared effect is not mentioned');
+  });
+
+  check('and its gameplay settings are there too', () => {
+    const i = script.indexOf('async function renderDuel(');
+    const body = script.slice(i, i + 4000);
+    for (const f of ['du_qc', 'du_time', 'du_ep_cash', 'du_rp_mult']) {
+      assert.ok(body.includes(f), 'missing gameplay field ' + f);
+    }
+  });
+
+  /* ── THE MATCHES TAB ────────────────────────────────────────────────── */
+  /* «باید در تب مسابقات دوئل رو جدا بنویسه، آخرین بازمانده رو جدا بنویسه، همه
+     یا هیچ رو جدا بنویسه، و همه در تب مسابقات باشن.» */
+  check('the matches tab has a shelf for each mode', () => {
+    assert.ok(script.includes('const M_MODES='), 'no mode list');
+    const i = script.indexOf('const M_MODES=');
+    const modes = script.slice(i, i + 200);
+    for (const m of ['duel', 'lastSurvivor', 'allOrNothing']) {
+      assert.ok(modes.includes(m), 'the matches tab is missing ' + m);
+    }
+  });
+
+  check('duel and «همه یا هیچ» are filtered apart rather than shown together', () => {
+    const i = script.indexOf('async function renderMatches(');
+    const body = script.slice(i, i + 5000);
+    /* Both are rows in the same table; without a filter the tab shows one
+       mode's matches under the other's heading. */
+    assert.match(body, /filter\(m=>String\(m\.modeId\|\|''\)===M_MODE\)/, 'the mode filter is missing');
+  });
+
+  check('and Last Survivor is read from its own rooms, not the matches table', () => {
+    const i = script.indexOf('async function renderMatches(');
+    const body = script.slice(i, i + 5000);
+    /* This is why it was missing entirely rather than merely mislabelled: it
+       is not in `matches` at all. */
+    assert.ok(body.includes("/admin/last-survivor/rooms"), 'LS must come from its own endpoint');
+    assert.ok(body.includes("M_MODE==='lastSurvivor'"), 'LS needs its own branch');
+  });
+
   console.log(`[adminPanelHtml] ${passed} passed, ${failed} failed`);
   if (failed) process.exit(1);
 }

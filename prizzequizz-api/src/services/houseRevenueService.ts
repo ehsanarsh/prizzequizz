@@ -24,7 +24,13 @@ import { logger } from './logger.js';
 
 export type HouseRevenueSource =
   | 'ls_forfeited_pot'    // room ended with no survivor — the remaining pot stays with the house
-  | 'ls_rake';            // the configured commission on a Last Survivor pot
+  | 'ls_rake'             // the configured commission on a Last Survivor pot
+  /* MONEY THE GAME NEVER SEES. «سود ما از … تبلیغات … هست» — an advertising
+   * payment arrives in a bank account, not through anybody's wallet, so there
+   * is nothing in the ledger for it to be read off. It is typed in, and this is
+   * where it lands so it sits beside the rest of what the company earned rather
+   * than in a spreadsheet somewhere. */
+  | 'ads';
 
 export interface HouseRevenueRow {
   id: string;
@@ -98,6 +104,25 @@ export async function bookHouseRevenue(input: {
     _mem.push(row);
   }
   logger.info('house_revenue_booked', { source: row.source, amount, refId: row.refId });
+  return true;
+}
+
+/** Remove one hand-entered row. Only ever the manual kinds: a rake or a
+ *  forfeited pot is a record of something that really happened in a room, and
+ *  deleting it would make the books disagree with the game. */
+export async function removeHouseRevenue(rowId: string): Promise<boolean> {
+  const key = String(rowId || '');
+  if (!key) return false;
+  const pool = pg();
+  if (pool) {
+    await ensureSchema(pool);
+    const { rowCount } = await pool.query(
+      `DELETE FROM house_revenue WHERE id = $1 AND source = 'ads'`, [key]);
+    return (rowCount ?? 0) > 0;
+  }
+  const i = _mem.findIndex((r) => r.id === key && r.source === 'ads');
+  if (i < 0) return false;
+  _mem.splice(i, 1);
   return true;
 }
 

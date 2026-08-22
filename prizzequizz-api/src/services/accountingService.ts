@@ -32,6 +32,53 @@ export interface ExpenseRow {
 
 export interface RevenueByMode { modeId: string; commission: number; matches: number }
 
+/* WHAT THE COMPANY ACTUALLY EARNED.
+ *
+ *   «سود ما از درصد کمسیون بازی‌ها و تبلیغات و فروش آیتم‌ها در فروشگاه — به غیر
+ *    از بلیط مسابقات — هست… و پات بدون برنده در آخرین بازمانده اونم باید جزیی
+ *    از سود باشه… و همه این سودها باید به صورت مجزا نوشته بشه تا ما بتونیم
+ *    بفهمیم چی به چیه.»
+ *
+ * Ticket money is not earnings. It arrives, the house keeps its percentage, and
+ * the rest goes back out as prizes — so counting the tickets in and the prizes
+ * out is a long way round to the commission, and it is wrong whenever a ticket
+ * is bought in one month and played in the next. What the company keeps is the
+ * commission, what it is paid for advertising, what it sells in the shop that
+ * is not a ticket, and a pot that no player won.
+ *
+ * Every line stands on its own so the total can be taken apart. */
+export interface Earnings {
+  /** `fee` rows — duel, «همه یا هیچ», league. Grouped per mode in commissionByMode. */
+  commission: number;
+  /** Last Survivor's commission, which is booked to the house directly and
+   *  never passes through a player's wallet, so it is NOT in `commission`. */
+  lsRake: number;
+  /** «پات بدون برنده» — a room that ended with nobody left to pay. */
+  forfeitedPot: number;
+  /** Shop sales for cash, excluding anything sold from the tickets shelf. */
+  shopItems: number;
+  /** Coin packs. Real money in, so real earnings — and kept on its own line
+   *  because a coin later spent on a ticket earns commission a second time and
+   *  the operator should be able to see both. */
+  coins: number;
+  /** Helps («کمک‌ها») bought for cash. */
+  lifelines: number;
+  /** Hand-entered advertising income. */
+  ads: number;
+  /** Fines. */
+  penalties: number;
+  /** The sum of the lines above — the company's earnings before running costs. */
+  total: number;
+  /** …and after them. */
+  net: number;
+  /** Ticket sales, reported so the operator can see the money moving through
+   *  WITHOUT it being counted as earnings. Never part of `total`. */
+  ticketsExcluded: number;
+  /** Prizes paid out of that ticket money, likewise excluded and likewise shown
+   *  so the flow is visible rather than hidden. */
+  prizesExcluded: number;
+}
+
 export type { HouseRevenueSummary } from './houseRevenueService.js';
 
 export interface FinanceReport {
@@ -48,6 +95,12 @@ export interface FinanceReport {
    * in no line at all — 12,000,000 of this server's ledger was invisible. */
   adjustments: number;
   expenses: { manual: number; server: number; total: number; byCategory: Array<{ category: string; amount: number }> };
+  /** The company's earnings, line by line. This is «سود» — see Earnings. */
+  earnings: Earnings;
+  /** CASH-FLOW gross profit: everything that came in minus everything awarded.
+   *  Kept because it answers a different, still-useful question — did more money
+   *  arrive this month than left — but it is NOT the profit figure, because the
+   *  ticket money in it was never the company's. */
   grossProfit: number;
   netProfit: number;
   series: Array<{ bucket: string; income: number; payouts: number; expenses: number; net: number }>;
@@ -236,6 +289,7 @@ export async function financeReport(opts: { from?: string; to?: string; granular
     commissionByMode: [], payouts: { prizes: 0, bonuses: 0, refunds: 0, total: 0, cashedOut: 0, liability: 0 },
     adjustments: 0,
     expenses: { manual: 0, server: 0, total: 0, byCategory: [] },
+    earnings: { commission: 0, lsRake: 0, forfeitedPot: 0, shopItems: 0, coins: 0, lifelines: 0, ads: 0, penalties: 0, total: 0, net: 0, ticketsExcluded: 0, prizesExcluded: 0 },
     grossProfit: 0, netProfit: 0, series: [],
     serverCost: { hourlyTotal: 0, machines: [] }, hasDatabase: false, shopSalesTracked: false,
     houseRevenue: { total: 0, bySource: [], recent: [] }
@@ -271,9 +325,26 @@ export async function financeReport(opts: { from?: string; to?: string; granular
         WHERE l.entry_type='fee' AND l.ref_type='match' AND l.created_at BETWEEN $1 AND $2
         GROUP BY 1 ORDER BY commission DESC`, range);
 
-    /* In-game item sales: the shop's own purchase log PLUS lifeline purchases,
-     * which go straight through the wallet ledger. Counting only the first
-     * would leave help sales out of revenue entirely. */
+    /* IN-GAME ITEM SALES, FROM WHERE THEY ARE ACTUALLY WRITTEN.
+     *
+     * This read `shop_purchases` — a table built for a buy flow that did not
+     * exist yet and still does not write to it. The flow was built later and
+     * posts to the wallet ledger like everything else, so every real shop sale
+     * has been missing from income since the day the shop opened, and the panel
+     * reported «فروش ثبت نشده» while money was coming in. Both are read now:
+     * the ledger, which is where the sales are, and the old table, which costs
+     * nothing to keep in the sum should anything ever fill it.
+     *
+     * Grouped by the shelf the item was sold from, because tickets sold in the
+     * shop are ticket money and must not count as earnings. Rows written before
+     * the category was recorded have none, and are reported as `''` rather than
+     * quietly folded in with the rest. */
+    const shopLedgerQ = pool.query(
+      `SELECT coalesce(metadata->>'category','') AS category,
+              coalesce(sum(amount),0)::bigint AS total, count(*)::int AS n
+         FROM wallet_ledger
+        WHERE entry_type='shop_purchase' AND created_at BETWEEN $1 AND $2
+        GROUP BY 1`, range).catch(() => ({ rows: [] } as any));
     const shopQ = pool.query(
       `SELECT coalesce(sum(price),0)::bigint AS total, count(*)::int AS n FROM shop_purchases
         WHERE currency='cash' AND created_at BETWEEN $1 AND $2`, range).catch(() => ({ rows: [{ total: 0, n: 0 }] } as any));
@@ -298,15 +369,31 @@ export async function financeReport(opts: { from?: string; to?: string; granular
               coalesce(sum(amount),0)::bigint AS amount
          FROM company_expenses WHERE spent_at BETWEEN $1 AND $2 GROUP BY 1`, [from, to, granularity]);
 
-    const [totalsR, byModeR, shopR, lifelineSalesR, expR, seriesR, expSeriesR, srv, house] = await Promise.all([
-      totalsQ, byModeQ, shopQ, lifelineSalesQ, expQ, seriesQ, expSeriesQ, serverCost(from, to),
+    const [totalsR, byModeR, shopR, shopLedgerR, lifelineSalesR, expR, seriesR, expSeriesR, srv, house] = await Promise.all([
+      totalsQ, byModeQ, shopQ, shopLedgerQ, lifelineSalesQ, expQ, seriesQ, expSeriesQ, serverCost(from, to),
       houseRevenueSummary(from, to)
     ]);
 
     const t = totalsR.rows[0] || {};
     const n = (v: any) => Number(v ?? 0) || 0;
-    const shop = n(shopR.rows?.[0]?.total) + n(lifelineSalesR.rows?.[0]?.total);
-    const shopTracked = (n(shopR.rows?.[0]?.n) + n(lifelineSalesR.rows?.[0]?.n)) > 0;
+    /* Split the shop's takings by shelf. «به غیر از بلیط مسابقات» — anything
+       sold from the tickets shelf is entry money, not earnings. */
+    const shopByCat = new Map<string, { total: number; n: number }>();
+    for (const r of (shopLedgerR.rows ?? [])) {
+      shopByCat.set(String(r.category ?? ''), { total: n(r.total), n: n(r.n) });
+    }
+    const catTotal = (c: string) => shopByCat.get(c)?.total ?? 0;
+    const shopTicketSales = catTotal('tickets');
+    const shopCoinSales = catTotal('coins');
+    const shopOther = [...shopByCat.entries()]
+      .filter(([c]) => c !== 'tickets' && c !== 'coins')
+      .reduce((sum, [, v]) => sum + v.total, 0) + n(shopR.rows?.[0]?.total);
+    /* NOT including lifelines. They are their own income line and were being
+       added here as well, so every help sold was counted twice in the total —
+       the comment above this line even says so, which is how it slipped in. */
+    const shop = shopOther + shopCoinSales;
+    const shopLedgerCount = [...shopByCat.values()].reduce((sum, v) => sum + v.n, 0);
+    const shopTracked = (n(shopR.rows?.[0]?.n) + shopLedgerCount + n(lifelineSalesR.rows?.[0]?.n)) > 0;
     const income = {
       commission: n(t.commission), tickets: n(t.tickets), shop, lifelines: n(t.lifelines),
       penalties: n(t.penalties), deposits: n(t.deposits), total: 0
@@ -340,6 +427,31 @@ export async function financeReport(opts: { from?: string; to?: string; granular
     // profit is what the house keeps before running costs.
     const grossProfit = income.total - payouts.total;
 
+    /* ── WHAT THE COMPANY EARNED ──────────────────────────────────────────
+     * Built from the sources the operator named, each on its own line. Ticket
+     * money and the prizes paid out of it are reported but never added: they
+     * are the players' money passing through, and the house's share of it is
+     * the commission, which IS counted. */
+    const src = (name: string) => house.bySource.find((b) => b.source === name)?.amount ?? 0;
+    const earnings: Earnings = {
+      commission: income.commission,
+      lsRake: src('ls_rake'),
+      forfeitedPot: src('ls_forfeited_pot'),
+      shopItems: shopOther,
+      coins: shopCoinSales,
+      lifelines: n(t.lifelines),
+      ads: src('ads'),
+      penalties: n(t.penalties),
+      total: 0, net: 0,
+      /* Every route a ticket can be bought by: the dedicated one, and the
+         tickets shelf in the shop. */
+      ticketsExcluded: n(t.tickets) + shopTicketSales,
+      prizesExcluded: payouts.prizes
+    };
+    earnings.total = earnings.commission + earnings.lsRake + earnings.forfeitedPot
+      + earnings.shopItems + earnings.coins + earnings.lifelines + earnings.ads + earnings.penalties;
+    earnings.net = earnings.total - expenses.total;
+
     const expByBucket = new Map<string, number>(expSeriesR.rows.map((r: any) => [String(r.bucket), n(r.amount)]));
     const buckets = new Set<string>([...seriesR.rows.map((r: any) => String(r.bucket)), ...expByBucket.keys()]);
     const series = [...buckets].sort().map((bucket) => {
@@ -349,7 +461,7 @@ export async function financeReport(opts: { from?: string; to?: string; granular
     });
 
     return {
-      from, to, granularity, income, payouts, adjustments, expenses,
+      from, to, granularity, income, payouts, adjustments, expenses, earnings,
       commissionByMode: byModeR.rows.map((r: any) => ({ modeId: String(r.mode), commission: n(r.commission), matches: n(r.matches) })),
       grossProfit, netProfit: grossProfit - expenses.total, series,
       serverCost: srv, hasDatabase: true, shopSalesTracked: shopTracked,
