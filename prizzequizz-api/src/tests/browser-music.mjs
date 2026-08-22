@@ -510,9 +510,11 @@ for (const [policy, expect] of [['quiet', 'quieter'], ['stop', 'stopped'], ['kee
 
   const before = await page.evaluate(() => {
     const c = document.querySelector('#lsBody .ls-chat');
+    const top = document.querySelector('#lsBody .ls-top');
     return { shown: !!c && getComputedStyle(c).display !== 'none',
              music: !!document.querySelector('#lsBody .ls-music') && document.querySelector('#lsBody .ls-music').getBoundingClientRect().height > 10,
-             tabs: !!document.querySelector('#lsBody .ls-tabs') };
+             tabs: !!document.querySelector('#lsBody .ls-tabs'),
+             headerHeight: Math.round(top.getBoundingClientRect().height) };
   });
   ok('the chat tab is open', before.shown, JSON.stringify(before));
   ok('with the music player on screen under it', before.music === true, String(before.music));
@@ -525,7 +527,13 @@ for (const [policy, expect] of [['quiet', 'quieter'], ['stop', 'stopped'], ['kee
     await new Promise((r) => setTimeout(r, 400));
     const inRow = document.querySelector('#lsBody .ls-chat-in');
     const list = document.querySelector('#lsBody .ls-chat-list');
+    const box = document.getElementById('lsChatInput');
     const rb = Math.round(inRow.getBoundingClientRect().bottom);
+    /* THE BOX, NOT THE ROW IT SITS IN. The row's bottom edge is pinned to the
+       bottom of what is visible whatever padding it carries inside itself, so
+       measuring the row answers a question nobody asked: «کیبورد کامل بچسبه به
+       کادر ورود متن» is about the box you type into. */
+    const bb = Math.round(box.getBoundingClientRect().bottom);
     /* EVERYTHING still taking up height in the strip below the composer. Named
        or not, if it is there the keyboard is not touching the box. */
     const inTheGap = [...document.querySelectorAll('#lsBody *')].filter((e) => {
@@ -537,6 +545,8 @@ for (const [policy, expect] of [['quiet', 'quieter'], ['stop', 'stopped'], ['kee
       open: document.body.classList.contains('pz-kb-open'),
       inputBottom: rb,
       gap: 470 - rb,
+      boxBottom: bb,
+      boxGap: 470 - bb,
       inTheGap,
       listHeight: Math.round(list.getBoundingClientRect().height),
       listTop: Math.round(list.getBoundingClientRect().top),
@@ -545,12 +555,33 @@ for (const [policy, expect] of [['quiet', 'quieter'], ['stop', 'stopped'], ['kee
   });
   ok('the page knows the keyboard is up', typing.open === true, JSON.stringify(typing).slice(0, 120));
   /* «باید کیبورد کامل بچسبه به کادر ورود متن» */
-  ok('the typing box sits on the keyboard', typing.gap >= 0 && typing.gap <= 12, typing.gap + 'px of gap');
+  ok('the composer reaches the bottom of what is visible', typing.gap >= 0 && typing.gap <= 12, typing.gap + 'px of gap');
+  ok('and the box you type into sits on the keys', typing.boxGap >= 0 && typing.boxGap <= 8, typing.boxGap + 'px under the box');
   ok('with nothing at all left in between', typing.inTheGap.length === 0, typing.inTheGap.join(', '));
   /* «در قسمت بالا هم کلی جا هست» — the room the stats card was using goes to
      the messages, which is the whole point of asking for it. */
   ok('the messages start near the top of what is visible', typing.listTop <= 90, typing.listTop + 'px down');
   ok('and get most of the visible height', typing.listHeight >= 300, typing.listHeight + 'px');
+
+  /* AND THE HEADER ITSELF GIVES SOMETHING UP, not just the cards below it.
+     Measured piece by piece: a header that shrinks by the right total while one
+     of the two rules doing the shrinking has quietly stopped working is a green
+     test over a half-broken screen. */
+  const header = await page.evaluate(() => {
+    const top = document.querySelector('#lsBody .ls-top');
+    const sub = document.querySelector('#lsBody .ls-top .ls-ttl p');
+    const cs = getComputedStyle(top);
+    return { h: Math.round(top.getBoundingClientRect().height),
+             padTop: Math.round(parseFloat(cs.paddingTop)),
+             padBottom: Math.round(parseFloat(cs.paddingBottom)),
+             subShown: !!sub && getComputedStyle(sub).display !== 'none' };
+  });
+  ok('the room title gives its padding to the messages', header.padTop <= 8 && header.padBottom <= 4, JSON.stringify(header));
+  /* The subtitle names the room's topic, which the player picked on the way in
+     and does not need repeated at them while they type. */
+  ok('and drops the line under it', header.subShown === false, String(header.subShown));
+  ok('so the header really is smaller than it was', before.headerHeight - header.h >= 20,
+    before.headerHeight + 'px → ' + header.h + 'px');
 
   /* The room is not a chat screen. Everything it hid comes back. */
   const back = await page.evaluate(async () => {

@@ -203,7 +203,7 @@ async function eliminateMe(page) {
 
   /* «وقتی روش میزنی از بغلش یه دکمه نکست هم میزنه بیرون» */
   const before = st.src;
-  await page.evaluate(() => document.getElementById('lsMusicFab').click());
+  await page.evaluate(() => { const b = document.getElementById('lsMusicFab'); if (b) b.click(); });
   await page.waitForTimeout(350);
   st = await musicState(page);
   ok('pressing it pops a next button out beside it', st.next === true, JSON.stringify(st));
@@ -217,7 +217,7 @@ async function eliminateMe(page) {
   ok('and the music has not been interrupted by the tap', st.paused === false && st.src === before, JSON.stringify(st));
 
   /* «هم میتونی نکست کنی» */
-  await page.evaluate(() => document.getElementById('lsMusicFabNext').click());
+  await page.evaluate(() => { const b = document.getElementById('lsMusicFabNext'); if (b) b.click(); });
   await page.waitForTimeout(800);
   st = await musicState(page);
   ok('the next button really moves the playlist on', st.src !== before, before + ' → ' + st.src);
@@ -225,7 +225,7 @@ async function eliminateMe(page) {
   ok('with the controls still there', st.fab === true && st.next === true, JSON.stringify(st));
 
   /* «هم پاوس تا هر موقع خواست استوپ کنه» */
-  await page.evaluate(() => document.getElementById('lsMusicFab').click());
+  await page.evaluate(() => { const b = document.getElementById('lsMusicFab'); if (b) b.click(); });
   await page.waitForTimeout(400);
   st = await musicState(page);
   ok('pressing the main button again stops the music', st.paused === true, JSON.stringify(st));
@@ -271,6 +271,72 @@ async function eliminateMe(page) {
   ok('no music question is asked', !(q.open && /موزیک/.test(q.title)), q.title);
   const st = await musicState(page);
   ok('and nothing is playing', st.paused !== false, JSON.stringify(st));
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
+/* ── 3b. THE QUESTION WAITS ITS TURN ───────────────────────────────────── */
+/* There is one modal slot in this app, and a win puts its own celebration in
+ * it. A music question that walked straight over that would erase the one
+ * screen the player was waiting for. Rather than depend on which prompt the
+ * result screen happens to raise, this puts a known one up itself and checks
+ * it is still there afterwards.
+ */
+{
+  const { ctx, page, errs } = await makePage();
+  console.log('\nsomething else is already on screen when the match ends:');
+  await enterRoom(page);
+  await page.evaluate(() => { (0, eval)("LSM.policy='keep';"); document.getElementById('lsMusicPlay').click(); });
+  await page.waitForTimeout(800);
+  await eliminateMe(page);
+  /* Up immediately, so it is unmistakably first. */
+  await page.evaluate(() => (0, eval)('showAaaModal')({ icon: '🏆', title: 'یک پیام دیگر', sub: 'این باید سر جایش بماند', primaryText: 'باشه', secondaryText: '' }));
+  await page.waitForTimeout(2500);
+  const held = await modal(page);
+  ok('the other message is still the one on screen', held.open && /یک پیام دیگر/.test(held.title), held.title);
+  const st1 = await musicState(page);
+  ok('and the music is still playing while it waits', st1.paused === false && st1.freed === false, JSON.stringify(st1));
+
+  /* Dismissed — now the question may have its turn. */
+  await page.evaluate(() => { const b = document.getElementById('aaaPrimary'); if (b) b.click(); });
+  const q = await settleModals(page);
+  ok('once it is gone, the music question arrives', q.open && /موزیک/.test(q.title), q.title);
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
+/* ── 3c. MUSIC THAT WAS STOPPED AT KICK-OFF IS LET GO OF ───────────────── */
+/* A player who chose «با شروع مسابقه: قطع» has a paused element with a track
+ * still loaded in it when the match ends. There is nothing to ask them about,
+ * but there IS something to clean up — and a client that keeps `started` set
+ * would show the floating control again the moment anything repainted.
+ */
+{
+  const { ctx, page, errs } = await makePage();
+  console.log('\nthe match ends after the music was stopped at kick-off:');
+  await enterRoom(page);
+  await page.evaluate(() => { (0, eval)("LSM.policy='stop';"); document.getElementById('lsMusicPlay').click(); });
+  await page.waitForTimeout(800);
+  ok('it played in the room', (await musicState(page)).paused === false);
+  await page.evaluate(() => {
+    const s = JSON.parse(JSON.stringify((0, eval)('lsSnap')));
+    s.room.status = 'running'; s.room.phase = 'dashboard'; s.room.round = 1;
+    (0, eval)('lsLastKey=""');
+    (0, eval)('lsRender')(s);
+  });
+  await page.waitForTimeout(600);
+  const mid = await musicState(page);
+  ok('and stopped when the first question came', mid.paused === true && mid.started === true, JSON.stringify(mid));
+
+  await eliminateMe(page);
+  const q = await settleModals(page, 6000);
+  ok('nothing is asked, because nothing was playing', !(q.open && /موزیک/.test(q.title)), q.title);
+  const end = await musicState(page);
+  /* «فقط در صورت بازی کردن بتونه گوش بده» — the element is released, not left
+     paused with a track in it waiting to be resumed by a stray repaint. */
+  ok('and the player is let go of entirely', end.started === false, JSON.stringify(end));
+  ok('with the track unloaded', end.src === '', end.src);
+  ok('and no floating control anywhere', end.fab === false && end.next === false, JSON.stringify(end));
   ok('no script errors', errs.length === 0, errs.join(' | '));
   await ctx.close();
 }
