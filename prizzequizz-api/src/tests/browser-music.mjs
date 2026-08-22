@@ -749,6 +749,66 @@ for (const [policy, expect] of [['quiet', 'quieter'], ['stop', 'stopped'], ['kee
   await ctx.close();
 }
 
+/* ── 1f. A LIKE THAT DID NOT GET THROUGH ───────────────────────────────── */
+/* The heart fills in the moment it is pressed, because a heart that waits for
+ * the network feels broken. That optimism has to be paid for: if the server
+ * does not take it, the heart has to go back to how it was, or the player is
+ * looking at a like that does not exist.
+ */
+{
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+  await ctx.addInitScript(() => {
+    localStorage.setItem('pz_tok', 't'); localStorage.setItem('pz_rtok', 'r');
+    localStorage.setItem('pz_usr', JSON.stringify({ id: 'me', username: 'ehsan', displayName: 'احسان', level: 5 }));
+    localStorage.setItem('pq_user_plan', 'premium');
+  });
+  await ctx.route('**/v1/**', (route) => {
+    const req = route.request();
+    const p = new URL(req.url()).pathname.replace(/^.*\/v1/, '');
+    const send = (d) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, data: d }) });
+    /* Everything works except the like. */
+    if (req.method() === 'POST' && /\/waiting-music\/.+\/like$/.test(p)) {
+      return route.fulfill({ status: 500, contentType: 'application/json',
+        body: JSON.stringify({ ok: false, error: { code: 'BOOM', message: 'نشد' } }) });
+    }
+    if (p === '/waiting-music') return send({ tracks, night: { startHour: 22, endHour: 6 } });
+    if (p === '/waiting-music/likes') return send({ liked: [] });
+    if (p === '/users/me') return send({ id: 'me', username: 'ehsan', displayName: 'احسان', level: 5, balances: { wallet: 0 } });
+    return send({});
+  });
+  const page = await ctx.newPage();
+  const errs = []; page.on('pageerror', (e) => errs.push(String(e.message || e).slice(0, 200)));
+  await page.goto(ORIGIN + '/');
+  await page.waitForTimeout(5200);
+  await page.evaluate((o) => { window.__origin = o; }, ORIGIN);
+  await page.evaluate(() => {
+    (0, eval)("lsMusicSrc=function(t){ return t&&t.url ? (/^https?:/.test(t.url)? t.url : window.__origin+t.url) : ''; };");
+  });
+  console.log('\na like the server would not take:');
+  await enterRoom(page);
+  await page.evaluate(() => { (0, eval)('lsMusicDrawer')(true); (0, eval)("LSM.policy='keep';"); document.getElementById('lsMusicPlay').click(); });
+  await page.waitForTimeout(800);
+
+  const codes = () => page.evaluate(() =>
+    [...((document.getElementById('lsMusicHeart') || {}).textContent || '')].map((c) => c.codePointAt(0).toString(16)));
+
+  ok('the heart starts empty', (await codes()).join(',') === '1f90d', (await codes()).join(','));
+  const mid = await page.evaluate(async () => {
+    document.getElementById('lsMusicHeart').click();
+    /* Read before the request can have answered — the fill must be immediate. */
+    return [...document.getElementById('lsMusicHeart').textContent].map((c) => c.codePointAt(0).toString(16));
+  });
+  ok('it fills in at once, without waiting for the server', mid[0] === '2764', mid.join(','));
+
+  await page.waitForTimeout(900);
+  const back = await codes();
+  ok('and goes back when the server refuses it', back.join(',') === '1f90d', back.join(','));
+  const remembered = await page.evaluate(() => [...((0, eval)('LSM').liked || [])]);
+  ok('with nothing left remembered as liked', remembered.length === 0, JSON.stringify(remembered));
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
 /* ── 4b. WHICH WAY THE ARROWS POINT ─────────────────────────────────────── */
 /* «جای دکمه های نکست و بک در موزیک اینجوری هستند >< باید <> باشه یعنی برعکس.»
  *
