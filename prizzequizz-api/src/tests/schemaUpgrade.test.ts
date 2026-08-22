@@ -184,7 +184,9 @@ await check('and a new one is written as bytes, not as text', async () => {
 await check('the players’ playlist is built from it, with no titles on it', async () => {
   const list = await music.playlistForPlayers();
   assert.strictEqual(list.length, 1, JSON.stringify(list));
-  assert.deepStrictEqual(Object.keys(list[0]!).sort(), ['id', 'url']);
+  /* `slot` and `likes` joined it later; neither names the track. */
+  assert.deepStrictEqual(Object.keys(list[0]!).sort(), ['id', 'likes', 'slot', 'url']);
+  assert.ok(!('title' in list[0]!), 'a title reached the players');
 });
 
 /* THE MUSIC MUST NOT COST THE GAME ANYTHING.
@@ -248,6 +250,64 @@ await check('and when the track is deleted, so is its copy', async () => {
   await music.removeTrack(tid);
   assert.strictEqual(music._musicCacheStats().tracks, 0, 'the bytes of a deleted track were still being held');
   assert.strictEqual(await music.getTrack(tid), null, 'a deleted track still answers');
+});
+
+/* ── waiting_music, as it stood before day/night and hearts ──────────────── */
+/* An operator's library is already uploaded. The build that adds «روزانه و
+   شبانه» and the heart must not make those tracks disappear from the room —
+   which is exactly what a missing column does when the row cannot be read. */
+console.log('\na server booting on a music table with no slot or likes:');
+await pool.query('DROP TABLE IF EXISTS waiting_music');
+/* The settings and the hearts outlive the music table, so a previous run of
+   this file would otherwise hand the next one a window somebody already set. */
+await pool.query('DROP TABLE IF EXISTS waiting_music_settings');
+await pool.query('DROP TABLE IF EXISTS waiting_music_likes');
+await pool.query(`CREATE TABLE waiting_music (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL DEFAULT '',
+  mime VARCHAR(32) NOT NULL,
+  bytes INT NOT NULL DEFAULT 0,
+  data TEXT,
+  data_bin BYTEA,
+  etag VARCHAR(64) NOT NULL DEFAULT '',
+  enabled BOOLEAN NOT NULL DEFAULT true,
+  sort_order INT NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now())`);
+await pool.query(
+  `INSERT INTO waiting_music(id,title,mime,bytes,data_bin,etag,enabled,sort_order)
+   VALUES ('old-track','آهنگ قدیمی','audio/mpeg',4,$1,'oldetag',true,0)`,
+  [Buffer.from([0x49, 0x44, 0x33, 0x04])]);
+
+const music2 = await import('../services/waitingMusicService.js');
+music2._resetMusic();
+await check('a track uploaded before the change is still on the playlist', async () => {
+  const list = await music2.playlistForPlayers();
+  assert.ok(list.some((t) => t.id === 'old-track'), 'the existing library vanished');
+});
+await check('and reads as «either day or night» rather than as nothing', async () => {
+  const list = await music2.playlistForPlayers();
+  const t = list.find((x) => x.id === 'old-track')!;
+  assert.strictEqual(t.slot, 'any', 'an untagged track must play at any hour');
+  assert.strictEqual(t.likes, 0);
+});
+await check('it can be tagged now', async () => {
+  const t = await music2.setTrackSlot('old-track', 'night');
+  assert.strictEqual(t.slot, 'night');
+});
+await check('and hearted', async () => {
+  const n = await music2.likeTrack('old-track', 1);
+  assert.strictEqual(n, 1);
+  await music2.setLiked('someone', 'old-track', true);
+  assert.ok(await music2.hasLiked('someone', 'old-track'));
+  assert.deepEqual(await music2.likedByUser('someone'), ['old-track']);
+});
+await check('the night window has a sensible default before anyone sets one', async () => {
+  const w = await music2.getNightWindow();
+  assert.deepEqual(w, { startHour: 22, endHour: 6 });
+});
+await check('and survives being set', async () => {
+  await music2.setNightWindow(23, 5);
+  assert.deepEqual(await music2.getNightWindow(), { startHour: 23, endHour: 5 });
 });
 
 /* ── question_seen, as it would stand if it had shipped without ref_id ────── */

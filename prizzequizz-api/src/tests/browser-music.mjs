@@ -184,8 +184,9 @@ const musicState = (page) => page.evaluate(() => {
   ok('down at the bottom, under the players', box.belowGrid && box.aboveTabs, JSON.stringify({ b: box.belowGrid, a: box.aboveTabs }));
   /* «با یک متن از موسیقی لذت ببر یا هنگام انتظار حوصلت سر نره» */
   ok('with a line that says why it is there', /حوصله|موزیک/.test(box.text), box.text.slice(0, 60));
-  /* «یه دکمه پلی و پاوس و دو دکمه آهنگ بعدی و قبلی» */
-  ok('three controls: previous, play, next', box.buttons.join(',') === 'lsMusicPrev,lsMusicPlay,lsMusicNext', box.buttons.join(','));
+  /* «یه دکمه پلی و پاوس و دو دکمه آهنگ بعدی و قبلی» — plus the heart. */
+  ok('four controls: previous, play, next, heart',
+    box.buttons.join(',') === 'lsMusicPrev,lsMusicPlay,lsMusicNext,lsMusicHeart', box.buttons.join(','));
 
   /* «بدون نام و مشخصات» — nothing on this screen names a track. */
   const named = await page.evaluate(() => {
@@ -198,7 +199,7 @@ const musicState = (page) => page.evaluate(() => {
   /* ── the policy question, before the first note ── */
   let st = await musicState(page);
   ok('nothing is playing until it is asked for', st.paused !== false, JSON.stringify(st));
-  await page.evaluate(() => document.getElementById('lsMusicPlay').click());
+  await page.evaluate(() => { (0, eval)('lsMusicDrawer')(true); document.getElementById('lsMusicPlay').click(); });
   await page.waitForTimeout(500);
   const ask = await page.evaluate(() => ({
     open: !!document.getElementById('aaaModal').classList.contains('show'),
@@ -443,6 +444,269 @@ for (const [policy, expect] of [['quiet', 'quieter'], ['stop', 'stopped'], ['kee
   const st = await musicState(page);
   ok('walking out silences it', st.paused === true, JSON.stringify(st));
   ok('and leaves no floating button behind', st.fab === false, String(st.fab));
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
+/* ── 1b. THE DRAWER ────────────────────────────────────────────────────── */
+/* «باید یه دکمه باشه و وقتی میزنی اون کادر موزیک از بغل به صورت کشویی بیاد
+ * بیرون، و وقتی کاری باهاش نداری اوتوماتیک بره بغل و جا باز بشه، و وقتی بازم
+ * کار داری با یه تاچ دوباره از بغل بیاد بیرون.»
+ *
+ * Measured in pixels on the glass, not by reading a class: a control of zero
+ * width still answers .click() perfectly well, so «is it open» has to mean «can
+ * a finger reach it».
+ */
+{
+  const { ctx, page, errs } = await makePage();
+  console.log('\nthe music drawer:');
+  await enterRoom(page);
+  /* The app raises a prompt of its own on the way in («خبرها را روی گوشی‌ات
+     بگیر»), and its overlay sits across the whole screen. A player would close
+     it before touching anything; a test that does not is measuring the modal. */
+  await page.evaluate(async () => {
+    for (let i = 0; i < 4; i++) {
+      const ov = document.getElementById('aaaModal');
+      if (!ov || !ov.classList.contains('show')) break;
+      const s = document.getElementById('aaaSecondary');
+      const b = (s && getComputedStyle(s).display !== 'none') ? s : document.getElementById('aaaPrimary');
+      if (b) b.click(); else break;
+      await new Promise((r) => setTimeout(r, 300));
+    }
+  });
+  await page.waitForTimeout(200);
+
+  /* CAN A FINGER REACH IT? A control inside an overflow:hidden box keeps its
+     own width and answers .click() perfectly well even when nothing of it is on
+     screen, so measuring the button proves nothing. What is actually at that
+     point on the glass does. */
+  const reachable = (id) => page.evaluate(async (btnId) => {
+    const e = document.getElementById(btnId);
+    if (!e) return false;
+    /* Scrolled to first, because a player would. Without this the answer is
+       «no» for anything below the fold, which is a fact about the page's
+       length rather than about the drawer. */
+    try { e.scrollIntoView({ block: 'center' }); } catch (_) { /* fine */ }
+    await new Promise((r) => setTimeout(r, 120));
+    const r = e.getBoundingClientRect();
+    if (r.width < 4 || r.height < 4) return false;
+    const hit = document.elementFromPoint(Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2));
+    return { ok: !!hit && (hit === e || e.contains(hit)),
+             why: hit ? (hit.id || hit.tagName) + ' w=' + Math.round(r.width) + ' t=' + Math.round(r.top) : 'nothing at that point' };
+  }, id);
+  const canReach = async (id) => (await reachable(id)).ok;
+
+  const shut = await page.evaluate(() => {
+    const w = (id) => { const e = document.getElementById(id); return e ? Math.round(e.getBoundingClientRect().width) : -1; };
+    const dock = document.querySelector('#lsBody .lm-dock');
+    const slide = document.getElementById('lsMusicSlide');
+    return { tab: w('lsMusicTab'),
+             slideW: slide ? Math.round(slide.getBoundingClientRect().width) : -1,
+             dockH: dock ? Math.round(dock.getBoundingClientRect().height) : -1,
+             open: (0, eval)('LSM').open };
+  });
+  ok('it starts tucked away', shut.open === false, JSON.stringify(shut));
+  ok('with a button you can always see', shut.tab >= 40, shut.tab + 'px');
+  { const rr = await reachable('lsMusicTab'); ok('and it really is the tab you can reach', rr.ok === true, rr.why); }
+  /* «جا باز بشه» — closed, it must genuinely give the room its space back. */
+  { const rr = await reachable('lsMusicPlay'); ok('the controls are out of reach while it is shut', rr.ok === false, rr.why); }
+  ok('the slide itself has no width', shut.slideW === 0, shut.slideW + 'px');
+  ok('so the whole thing is one short row', shut.dockH <= 56, shut.dockH + 'px tall');
+
+  const open = await page.evaluate(async () => {
+    document.getElementById('lsMusicTab').click();
+    await new Promise((r) => setTimeout(r, 500));
+    return { open: (0, eval)('LSM').open,
+             dockH: Math.round(document.querySelector('#lsBody .lm-dock').getBoundingClientRect().height) };
+  });
+  ok('one touch slides it out', open.open === true, JSON.stringify(open));
+  { const rr = await reachable('lsMusicPlay'); ok('and now the play button can be reached', rr.ok === true, rr.why); }
+  ok('and so can next and previous', (await canReach('lsMusicNext')) && (await canReach('lsMusicPrev')));
+  ok('the row grew to make space for them', open.dockH > shut.dockH, shut.dockH + 'px → ' + open.dockH + 'px');
+
+  /* «وقتی کاری باهاش نداری اوتوماتیک بره بغل» — left alone, it puts itself
+     away again. The client waits five seconds; this waits longer. */
+  const idled = await page.evaluate(async () => {
+    await new Promise((r) => setTimeout(r, 6200));
+    return { open: (0, eval)('LSM').open,
+             dockH: Math.round(document.querySelector('#lsBody .lm-dock').getBoundingClientRect().height) };
+  });
+  ok('left alone, it tucks itself back', idled.open === false, JSON.stringify(idled));
+  ok('and gives the room its space back again', idled.dockH <= shut.dockH + 2, idled.dockH + 'px');
+  ok('with the controls out of reach once more', (await canReach('lsMusicPlay')) === false);
+
+  /* «وقتی بازم کار داری با یه تاچ دوباره بیاد بیرون» */
+  const again = await page.evaluate(async () => {
+    document.getElementById('lsMusicTab').click();
+    await new Promise((r) => setTimeout(r, 500));
+    return { open: (0, eval)('LSM').open };
+  });
+  ok('and one touch brings it back', again.open === true, JSON.stringify(again));
+  { const rr = await reachable('lsMusicPlay'); ok('reachable again', rr.ok === true, rr.why); }
+
+  /* Closing it must not stop the music — it is putting it away, not stopping. */
+  const kept = await page.evaluate(async () => {
+    (0, eval)("LSM.policy='keep';");
+    document.getElementById('lsMusicPlay').click();
+    await new Promise((r) => setTimeout(r, 800));
+    const before = !document.getElementById('pzMusicEl').paused;
+    await new Promise((r) => setTimeout(r, 6200));
+    const a = document.getElementById('pzMusicEl');
+    return { before, open: (0, eval)('LSM').open, playing: !a.paused,
+             live: !document.getElementById('lsMusicLive').hidden,
+             tabText: (document.getElementById('lsMusicTabT') || {}).textContent };
+  });
+  ok('the music was playing', kept.before === true, JSON.stringify(kept));
+  ok('and it is still playing after the drawer closed', kept.playing === true && kept.open === false, JSON.stringify(kept));
+  /* With the controls put away, the tab is the only thing on screen that can
+     stop it — so it has to look like something is happening. */
+  ok('the tab shows that music is on', kept.live === true, String(kept.live));
+  ok('and says so in words', /پخش/.test(kept.tabText || ''), kept.tabText);
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
+/* ── 1c. DAY AND NIGHT ─────────────────────────────────────────────────── */
+/* «اگه موزیک‌ها شبانه باشن باید در ساعت ۱۰ شب تا ۶ صبح فعال باشن و بعد اون
+ * موزیک‌های روزانه فعال باشن» — against the PHONE's clock, «ساعت گوشیِ خود
+ * بازیکن», which is why the decision is here and not on the server.
+ */
+{
+  const saved = tracks;
+  tracks = [
+    { id: 'd1', url: '/track/d1', slot: 'day', likes: 0 },
+    { id: 'd2', url: '/track/d2', slot: 'day', likes: 0 },
+    { id: 'n1', url: '/track/n1', slot: 'night', likes: 0 },
+    { id: 'n2', url: '/track/n2', slot: 'night', likes: 0 }
+  ];
+  const { ctx, page, errs } = await makePage();
+  console.log('\nday music and night music:');
+  await enterRoom(page);
+
+  const atHour = (h) => page.evaluate(async (hour) => {
+    /* Pin the phone's clock. The rule reads getHours(), so this is the only
+       thing that has to be pretended. */
+    const RealDate = Date;
+    // eslint-disable-next-line no-global-assign
+    Date = class extends RealDate {
+      constructor(...a) { super(...a); }
+      getHours() { return hour; }
+    };
+    Date.now = RealDate.now;
+    const night = (0, eval)('lsMusicIsNight')();
+    const fit = (0, eval)('lsMusicForNow')().map((t) => t.id).sort();
+    (0, eval)('lsMusicShuffle')();
+    const order = (0, eval)('LSM').order.map((i) => (0, eval)('LSM').tracks[i].id).sort();
+    // eslint-disable-next-line no-global-assign
+    Date = RealDate;
+    return { night, fit, order };
+  }, h);
+
+  const night = await atHour(23);
+  ok('at eleven at night it is night', night.night === true, JSON.stringify(night));
+  ok('and only the night tracks are in play', night.fit.join(',') === 'n1,n2', night.fit.join(','));
+  ok('the shuffled order is built from those', night.order.join(',') === 'n1,n2', night.order.join(','));
+
+  const small = await atHour(3);
+  ok('three in the morning is still night', small.night === true && small.fit.join(',') === 'n1,n2', JSON.stringify(small));
+
+  const day = await atHour(14);
+  ok('two in the afternoon is day', day.night === false, JSON.stringify(day));
+  ok('and only the day tracks are in play', day.fit.join(',') === 'd1,d2', day.fit.join(','));
+
+  const dawn = await atHour(6);
+  ok('six in the morning has already turned to day', dawn.night === false, JSON.stringify(dawn));
+  const dusk = await atHour(22);
+  ok('and ten at night has already turned to night', dusk.night === true, JSON.stringify(dusk));
+
+  /* The operator can move the window, and the phone follows it. */
+  const moved = await page.evaluate(async () => {
+    (0, eval)("LSM.night={startHour:1,endHour:5};");
+    const RealDate = Date;
+    // eslint-disable-next-line no-global-assign
+    Date = class extends RealDate { getHours() { return 23; } };
+    Date.now = RealDate.now;
+    const at23 = (0, eval)('lsMusicIsNight')();
+    // eslint-disable-next-line no-global-assign
+    Date = class extends RealDate { getHours() { return 3; } };
+    Date.now = RealDate.now;
+    const at3 = (0, eval)('lsMusicIsNight')();
+    // eslint-disable-next-line no-global-assign
+    Date = RealDate;
+    return { at23, at3 };
+  });
+  ok('a window the operator moved is obeyed', moved.at23 === false && moved.at3 === true, JSON.stringify(moved));
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+  tracks = saved;
+}
+
+/* ── 1d. EVERYTHING TAGGED FOR THE OTHER HALF OF THE DAY ───────────────── */
+/* A library where the operator has marked every track «شبانه», at two in the
+ * afternoon. Silence would be the literal reading and the wrong one — a room
+ * with music uploaded must play music. */
+{
+  const saved = tracks;
+  tracks = [{ id: 'n1', url: '/track/n1', slot: 'night', likes: 0 }, { id: 'n2', url: '/track/n2', slot: 'night', likes: 0 }];
+  const { ctx, page, errs } = await makePage();
+  console.log('\nevery track tagged for the other half of the day:');
+  await enterRoom(page);
+  const out = await page.evaluate(async () => {
+    const RealDate = Date;
+    // eslint-disable-next-line no-global-assign
+    Date = class extends RealDate { getHours() { return 14; } };
+    Date.now = RealDate.now;
+    const fit = (0, eval)('lsMusicForNow')().map((t) => t.id);
+    // eslint-disable-next-line no-global-assign
+    Date = RealDate;
+    return { fit, shown: !!document.getElementById('lsMusicTab') };
+  });
+  ok('the room still has a player', out.shown === true, String(out.shown));
+  ok('and it plays what there is rather than nothing', out.fit.length === 2, out.fit.join(','));
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+  tracks = saved;
+}
+
+/* ── 1e. THE HEART ─────────────────────────────────────────────────────── */
+/* «در قسمت کارت موسیقی یه علامت قلب باشه تا کاربر بتونه لایک کنه و بنویسه از
+ * این موزیک خوشت اومده؟» */
+{
+  const { ctx, page, errs, calls } = await makePage();
+  console.log('\nliking a track from the room:');
+  await enterRoom(page);
+  await page.evaluate(() => { (0, eval)('lsMusicDrawer')(true); (0, eval)("LSM.policy='keep';"); document.getElementById('lsMusicPlay').click(); });
+  await page.waitForTimeout(800);
+
+  const heartCodes = () => page.evaluate(() =>
+    [...((document.getElementById('lsMusicHeart') || {}).textContent || '')].map((c) => c.codePointAt(0).toString(16)));
+  const before = await page.evaluate(() => ({
+    foot: (document.getElementById('lsMusicFoot') || {}).textContent || ''
+  }));
+  /* By code point: ❤️ is U+2764 plus an invisible variation selector, and a
+     literal comparison across a file, a browser and a terminal is one transit
+     too many for that to stay intact. */
+  ok('the heart starts empty', (await heartCodes()).join(',') === '1f90d', (await heartCodes()).join(','));
+  /* «و بنویسه از این موزیک خوشت اومده؟» */
+  ok('and it asks the question in words', /خوشت اومده/.test(before.foot), before.foot.slice(0, 60));
+
+  calls.length = 0;
+  await page.evaluate(() => document.getElementById('lsMusicHeart').click());
+  await page.waitForTimeout(500);
+  const after = await page.evaluate(() => ({
+    on: document.getElementById('lsMusicHeart').classList.contains('on'),
+    foot: (document.getElementById('lsMusicFoot') || {}).textContent || ''
+  }));
+  const filled = await heartCodes();
+  ok('pressing it fills the heart in', filled[0] === '2764' && after.on === true, filled.join(',') + ' on=' + after.on);
+  ok('and the line stops asking', !/خوشت اومده\?/.test(after.foot), after.foot.slice(0, 60));
+  ok('the like reached the server', calls.some((c) => /POST \/waiting-music\/.+\/like/.test(c)), JSON.stringify(calls));
+
+  /* Pressing it again takes it back. */
+  await page.evaluate(() => document.getElementById('lsMusicHeart').click());
+  await page.waitForTimeout(500);
+  const undone = await heartCodes();
+  ok('pressing it again takes the like back', undone.join(',') === '1f90d', undone.join(','));
   ok('no script errors', errs.length === 0, errs.join(' | '));
   await ctx.close();
 }

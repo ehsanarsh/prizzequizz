@@ -28,6 +28,14 @@ export const MUSIC_MAX_BYTES = 15 * 1024 * 1024;
 
 const ALLOWED = new Set(['audio/mpeg', 'audio/mp3', 'audio/mp4', 'audio/aac', 'audio/ogg', 'audio/webm', 'audio/wav', 'audio/x-wav']);
 
+/** «باید بتونم موزیک‌ها رو با عنوان روزانه و شبانه انتخاب کنم.» `any` is a
+ *  track that suits either, which is also what everything uploaded before this
+ *  existed becomes — an upgrade must not silence a library. */
+export type MusicSlot = 'any' | 'day' | 'night';
+export const MUSIC_SLOTS: MusicSlot[] = ['any', 'day', 'night'];
+export const asSlot = (v: unknown): MusicSlot =>
+  (MUSIC_SLOTS as string[]).includes(String(v)) ? (String(v) as MusicSlot) : 'any';
+
 export interface MusicTrack {
   id: string;
   /** The operator's own label. Never sent to the game. */
@@ -37,6 +45,10 @@ export interface MusicTrack {
   etag: string;
   enabled: boolean;
   sortOrder: number;
+  /** Whether this one belongs to the day, the night, or either. */
+  slot: MusicSlot;
+  /** «یه علامت قلب باشه تا کاربر بتونه لایک کنه» — how many people have. */
+  likes: number;
   createdAt: string;
 }
 export interface StoredTrack extends MusicTrack { data: Buffer }
@@ -63,6 +75,8 @@ async function ensureSchema(pool: ReturnType<typeof getPgPool>): Promise<void> {
     etag VARCHAR(64) NOT NULL DEFAULT '',
     enabled BOOLEAN NOT NULL DEFAULT true,
     sort_order INT NOT NULL DEFAULT 0,
+    slot VARCHAR(8) NOT NULL DEFAULT 'any',
+    likes INT NOT NULL DEFAULT 0,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now())`);
   /* The same rule as everywhere else here: CREATE TABLE IF NOT EXISTS does
      nothing to a table that already exists, so every column that could be added
@@ -74,6 +88,8 @@ async function ensureSchema(pool: ReturnType<typeof getPgPool>): Promise<void> {
     `etag VARCHAR(64) NOT NULL DEFAULT ''`,
     `enabled BOOLEAN NOT NULL DEFAULT true`,
     `sort_order INT NOT NULL DEFAULT 0`,
+    `slot VARCHAR(8) NOT NULL DEFAULT 'any'`,
+    `likes INT NOT NULL DEFAULT 0`,
     `created_at TIMESTAMPTZ NOT NULL DEFAULT now()`
   ]) {
     await pool.query(`ALTER TABLE waiting_music ADD COLUMN IF NOT EXISTS ${col}`);
@@ -93,6 +109,9 @@ const rowToTrack = (r: any): MusicTrack => ({
   id: String(r.id), title: String(r.title || ''), mime: String(r.mime || 'audio/mpeg'),
   bytes: Number(r.bytes) || 0, etag: String(r.etag || ''),
   enabled: r.enabled !== false, sortOrder: Number(r.sort_order) || 0,
+  /* A row from before these columns existed reads as «either», never as
+     nothing — an upgrade must not empty the player's playlist. */
+  slot: asSlot(r.slot), likes: Number(r.likes) || 0,
   createdAt: new Date(r.created_at).toISOString()
 });
 
@@ -148,23 +167,23 @@ export function checkAudio(mime: string, buf: Buffer): { mime: string; buf: Buff
   return { mime: type, buf };
 }
 
-export async function addTrackBytes(input: { title?: unknown; mime: string; buf: Buffer }): Promise<MusicTrack> {
+export async function addTrackBytes(input: { title?: unknown; mime: string; buf: Buffer; slot?: unknown }): Promise<MusicTrack> {
   const { mime, buf } = checkAudio(input.mime, input.buf);
-  return storeTrack(String(input.title ?? ''), mime, buf);
+  return storeTrack(String(input.title ?? ''), mime, buf, 0, asSlot(input.slot));
 }
 
-export async function addTrack(input: { title?: unknown; audio?: unknown; sortOrder?: unknown }): Promise<MusicTrack> {
+export async function addTrack(input: { title?: unknown; audio?: unknown; sortOrder?: unknown; slot?: unknown }): Promise<MusicTrack> {
   const { mime, buf } = parseAudioDataUri(String(input.audio ?? ''));
-  return storeTrack(String(input.title ?? ''), mime, buf, Number(input.sortOrder) || 0);
+  return storeTrack(String(input.title ?? ''), mime, buf, Number(input.sortOrder) || 0, asSlot(input.slot));
 }
 
-async function storeTrack(rawTitle: string, mime: string, buf: Buffer, sortOrder = 0): Promise<MusicTrack> {
+async function storeTrack(rawTitle: string, mime: string, buf: Buffer, sortOrder = 0, slot: MusicSlot = 'any'): Promise<MusicTrack> {
   const track: StoredTrack = {
     id: id(),
     title: String(rawTitle ?? '').trim().slice(0, 80) || 'قطعهٔ بدون نام',
     mime, bytes: buf.length,
     etag: createHash('sha1').update(buf).digest('hex').slice(0, 32),
-    enabled: true, sortOrder,
+    enabled: true, sortOrder, slot, likes: 0,
     createdAt: new Date().toISOString(),
     data: buf
   };
@@ -172,9 +191,9 @@ async function storeTrack(rawTitle: string, mime: string, buf: Buffer, sortOrder
   if (!pool) { mem.set(track.id, track); return stripData(track); }
   await ensureSchema(pool);
   await pool.query(
-    `INSERT INTO waiting_music(id,title,mime,bytes,data_bin,etag,enabled,sort_order)
-     VALUES ($1,$2,$3,$4,$5,$6,true,$7)`,
-    [track.id, track.title, track.mime, track.bytes, buf, track.etag, track.sortOrder]
+    `INSERT INTO waiting_music(id,title,mime,bytes,data_bin,etag,enabled,sort_order,slot,likes)
+     VALUES ($1,$2,$3,$4,$5,$6,true,$7,$8,0)`,
+    [track.id, track.title, track.mime, track.bytes, buf, track.etag, track.sortOrder, track.slot]
   );
   /* Already decoded and in hand — the operator's own «play» button on the panel
      is usually the very next request for it. */
@@ -204,9 +223,193 @@ export async function listTracks(): Promise<MusicTrack[]> {
 /* WHAT THE GAME GETS: a URL and nothing else.
  * «بدون نام و مشخصات» — so the player's list carries no title, and cannot,
  * because the title is not in the payload at all. */
-export async function playlistForPlayers(): Promise<Array<{ id: string; url: string }>> {
+/**
+ * The list the game gets: ids and URLs, no titles, and — new — which part of
+ * the day each one belongs to.
+ *
+ * The CHOOSING is left to the client on purpose. «ساعت گوشیِ خود بازیکن»: the
+ * server runs on UTC and has no idea what time it is where the player is, so a
+ * server-side «is it night» would put half the world on the wrong playlist.
+ * The client knows its own clock, so it is told what each track is for and
+ * decides. Anything marked `any` plays at any hour, which is also what every
+ * track uploaded before this existed is.
+ */
+export async function playlistForPlayers(): Promise<Array<{ id: string; url: string; slot: MusicSlot; likes: number }>> {
   const rows = (await listTracks()).filter((t) => t.enabled);
-  return rows.map((t) => ({ id: t.id, url: musicUrl(t.id, t.etag) }));
+  return rows.map((t) => ({ id: t.id, url: musicUrl(t.id, t.etag), slot: t.slot, likes: t.likes }));
+}
+
+/** «از این موزیک خوشت اومده؟» — one more heart on a track. */
+export async function likeTrack(trackId: string, delta = 1): Promise<number> {
+  const key = String(trackId || '');
+  const step = delta >= 0 ? 1 : -1;
+  const pool = pg();
+  if (pool) {
+    await ensureSchema(pool);
+    const { rows } = await pool.query(
+      `UPDATE waiting_music SET likes = GREATEST(0, coalesce(likes,0) + $2) WHERE id = $1 RETURNING likes`,
+      [key, step]);
+    if (!rows.length) throw new MusicError('TRACK_NOT_FOUND', 'این قطعه پیدا نشد.');
+    return Number(rows[0].likes) || 0;
+  }
+  const t = mem.get(key);
+  if (!t) throw new MusicError('TRACK_NOT_FOUND', 'این قطعه پیدا نشد.');
+  t.likes = Math.max(0, (Number(t.likes) || 0) + step);
+  return t.likes;
+}
+
+/* ── WHO HAS HEARTED WHAT ────────────────────────────────────────────────
+ * One row per player per track, so pressing the heart twice is a person
+ * changing their mind rather than two likes, and so the room can draw the
+ * heart already filled in when they come back. */
+const memLikes = new Set<string>();
+const likeKey = (u: string, t: string) => u + '\u0000' + t;
+
+async function ensureLikeSchema(pool: ReturnType<typeof getPgPool>): Promise<void> {
+  await ensureSchema(pool);
+  await pool.query(`CREATE TABLE IF NOT EXISTS waiting_music_likes (
+    user_id TEXT NOT NULL,
+    track_id TEXT NOT NULL,
+    created_at BIGINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (user_id, track_id))`);
+  for (const col of [`created_at BIGINT NOT NULL DEFAULT 0`]) {
+    await pool.query(`ALTER TABLE waiting_music_likes ADD COLUMN IF NOT EXISTS ${col}`).catch(() => undefined);
+  }
+}
+
+export async function hasLiked(userId: string, trackId: string): Promise<boolean> {
+  const u = String(userId || ''), t = String(trackId || '');
+  if (!u || !t) return false;
+  const pool = pg();
+  if (pool) {
+    await ensureLikeSchema(pool);
+    const { rows } = await pool.query(
+      `SELECT 1 FROM waiting_music_likes WHERE user_id=$1 AND track_id=$2`, [u, t]);
+    return rows.length > 0;
+  }
+  return memLikes.has(likeKey(u, t));
+}
+
+export async function setLiked(userId: string, trackId: string, on: boolean): Promise<void> {
+  const u = String(userId || ''), t = String(trackId || '');
+  if (!u || !t) return;
+  const pool = pg();
+  if (pool) {
+    await ensureLikeSchema(pool);
+    if (on) {
+      await pool.query(
+        `INSERT INTO waiting_music_likes(user_id,track_id,created_at) VALUES ($1,$2,$3)
+         ON CONFLICT (user_id,track_id) DO NOTHING`, [u, t, Date.now()]);
+    } else {
+      await pool.query(`DELETE FROM waiting_music_likes WHERE user_id=$1 AND track_id=$2`, [u, t]);
+    }
+    return;
+  }
+  if (on) memLikes.add(likeKey(u, t)); else memLikes.delete(likeKey(u, t));
+}
+
+export async function likedByUser(userId: string): Promise<string[]> {
+  const u = String(userId || '');
+  if (!u) return [];
+  const pool = pg();
+  if (pool) {
+    await ensureLikeSchema(pool);
+    const { rows } = await pool.query(`SELECT track_id FROM waiting_music_likes WHERE user_id=$1`, [u]);
+    return rows.map((r: any) => String(r.track_id));
+  }
+  const out: string[] = [];
+  for (const k of memLikes) { const [uu, tt] = k.split('\u0000'); if (uu === u && tt) out.push(tt); }
+  return out;
+}
+
+/** The count as stored, without changing it. */
+export async function trackLikes(trackId: string): Promise<number> {
+  const t = (await listTracks()).find((x) => x.id === String(trackId || ''));
+  return t ? t.likes : 0;
+}
+
+/* ── WHEN NIGHT IS ──────────────────────────────────────────────────────
+ * «اگه موزیک‌ها شبانه باشن باید در ساعت ۱۰ شب تا ۶ صبح فعال باشن… ساعت پخش
+ * موزیک شبانه رو هم خودم بتونم تنظیم کنم.»
+ *
+ * Two whole hours, stored as numbers and sent to the client, which compares
+ * them against ITS OWN clock. The window is allowed to wrap midnight — in fact
+ * it normally does — so «start after end» is the ordinary case, not an error. */
+export interface NightWindow { startHour: number; endHour: number }
+const NIGHT_DEFAULT: NightWindow = { startHour: 22, endHour: 6 };
+let _memNight: NightWindow | null = null;
+
+export async function getNightWindow(): Promise<NightWindow> {
+  const pool = pg();
+  if (pool) {
+    try {
+      await ensureSchema(pool);
+      await pool.query(`CREATE TABLE IF NOT EXISTS waiting_music_settings (
+        key TEXT PRIMARY KEY, value TEXT NOT NULL DEFAULT '')`);
+      const { rows } = await pool.query(`SELECT value FROM waiting_music_settings WHERE key='night'`);
+      if (!rows.length) return { ...NIGHT_DEFAULT };
+      const parsed = JSON.parse(String(rows[0].value || '{}'));
+      return normaliseNight(parsed.startHour, parsed.endHour);
+    } catch { return { ...NIGHT_DEFAULT }; }
+  }
+  return _memNight ? { ..._memNight } : { ...NIGHT_DEFAULT };
+}
+
+function normaliseNight(startRaw: unknown, endRaw: unknown): NightWindow {
+  const h = (v: unknown, fallback: number) => {
+    const n = Math.floor(Number(v));
+    return Number.isFinite(n) && n >= 0 && n <= 23 ? n : fallback;
+  };
+  return { startHour: h(startRaw, NIGHT_DEFAULT.startHour), endHour: h(endRaw, NIGHT_DEFAULT.endHour) };
+}
+
+export async function setNightWindow(startHour: number, endHour: number): Promise<NightWindow> {
+  const w = normaliseNight(startHour, endHour);
+  /* A window of zero length would mean «night never happens», which is a way of
+     silently switching the night library off — say so instead. */
+  if (w.startHour === w.endHour) {
+    throw new MusicError('NIGHT_WINDOW_EMPTY', 'ساعت شروع و پایان شب نمی‌تواند یکی باشد.');
+  }
+  const pool = pg();
+  if (pool) {
+    await ensureSchema(pool);
+    await pool.query(`CREATE TABLE IF NOT EXISTS waiting_music_settings (
+      key TEXT PRIMARY KEY, value TEXT NOT NULL DEFAULT '')`);
+    await pool.query(
+      `INSERT INTO waiting_music_settings(key,value) VALUES ('night',$1)
+       ON CONFLICT (key) DO UPDATE SET value=$1`, [JSON.stringify(w)]);
+    return w;
+  }
+  _memNight = { ...w };
+  return w;
+}
+
+/** Is `hour` inside the window? Exported because the rule — a window that wraps
+ *  midnight — is the sort of thing that is easy to get backwards, and the
+ *  client implements the same one. */
+export function isNightHour(hour: number, w: NightWindow): boolean {
+  const h = ((Math.floor(Number(hour)) % 24) + 24) % 24;
+  if (w.startHour === w.endHour) return false;
+  return w.startHour < w.endHour
+    ? (h >= w.startHour && h < w.endHour)          // e.g. 01:00 → 06:00
+    : (h >= w.startHour || h < w.endHour);         // e.g. 22:00 → 06:00, over midnight
+}
+
+/** Move a track between «روزانه» / «شبانه» / «هر ساعت». */
+export async function setTrackSlot(trackId: string, slot: MusicSlot): Promise<MusicTrack> {
+  const key = String(trackId || '');
+  const want = asSlot(slot);
+  const pool = pg();
+  if (pool) {
+    await ensureSchema(pool);
+    const { rows } = await pool.query(`UPDATE waiting_music SET slot = $2 WHERE id = $1 RETURNING *`, [key, want]);
+    if (!rows.length) throw new MusicError('TRACK_NOT_FOUND', 'این قطعه پیدا نشد.');
+    return rowToTrack(rows[0]);
+  }
+  const t = mem.get(key);
+  if (!t) throw new MusicError('TRACK_NOT_FOUND', 'این قطعه پیدا نشد.');
+  t.slot = want;
+  return { ...t };
 }
 
 /* THE MUSIC MUST NOT COST THE GAME ANYTHING.
@@ -300,4 +503,4 @@ export async function removeTrack(trackId: string): Promise<boolean> {
 }
 
 /** Test seam. */
-export function _resetMusic(): void { mem.clear(); cacheDrop(); _schemaReady = false; }
+export function _resetMusic(): void { mem.clear(); cacheDrop(); memLikes.clear(); _memNight = null; _schemaReady = false; }

@@ -3563,6 +3563,7 @@ function lsRndAll(on){ document.querySelectorAll('.ls_rnd').forEach(b=>{b.checke
 let _LSM_MAX=6*1024*1024;
 function lsMusicCard(music){
   const rows=(music&&music.rows)||[];
+  const nw=(music&&music.night)||{startHour:22,endHour:6};
   _LSM_MAX=Number(music&&music.maxBytes)||_LSM_MAX;
   const mb=(n)=>fa(Math.max(1,Math.round((Number(n)||0)/1024/102.4)/10));
   const on=rows.filter(r=>r.enabled!==false).length;
@@ -3571,17 +3572,38 @@ function lsMusicCard(music){
       'بدون نام و مشخصات، فقط دکمهٔ پخش/توقف و بعدی/قبلی. نامی که برای هر قطعه می‌نویسی فقط در همین پنل دیده می‌شود. '+
       'حداکثر حجم هر فایل '+fa(Math.round(_LSM_MAX/1024/1024))+' مگابایت (MP3، M4A، OGG یا WAV). '+
       'الان <b>'+fa(on)+'</b> قطعه برای بازیکن‌ها پخش می‌شود.</div>'+
-    '<div class="grid g3" style="margin:10px 0 4px">'+
+    /* ── ساعت شب ────────────────────────────────────────────────────────
+       «اگه موزیک‌ها شبانه باشن باید در ساعت ۱۰ شب تا ۶ صبح فعال باشن… ساعت پخش
+       موزیک شبانه رو هم خودم بتونم تنظیم کنم.» مقایسه با ساعتِ گوشیِ خودِ
+       بازیکن انجام می‌شود، نه ساعت سرور. */
+    '<div class="card" style="margin:10px 0;background:rgba(0,0,0,.16)"><b>🌙 ساعت شب</b>'+
+      '<div class="sub" style="margin:6px 0 10px">قطعه‌های «شبانه» فقط در این بازه پخش می‌شوند و بقیهٔ ساعت‌ها «روزانه»‌ها. مقایسه با <b>ساعت گوشیِ خود بازیکن</b> انجام می‌شود، پس برای کاربر خارج از ایران هم درست کار می‌کند.</div>'+
+      '<div class="grid g3">'+
+        '<div class="field"><label>شب از ساعت</label><input id="lsm_nstart" type="number" min="0" max="23" value="'+(nw.startHour!=null?nw.startHour:22)+'"></div>'+
+        '<div class="field"><label>تا ساعت</label><input id="lsm_nend" type="number" min="0" max="23" value="'+(nw.endHour!=null?nw.endHour:6)+'"></div>'+
+        '<div class="field"><label>&nbsp;</label><button class="btn ok" onclick="lsMusicSaveNight()">💾 ذخیرهٔ ساعت شب</button></div>'+
+      '</div>'+
+    '</div>'+
+    '<div class="grid g4" style="margin:10px 0 4px">'+
       '<div class="field"><label>نام قطعه (فقط برای خودت)</label><input id="lsm_title" placeholder="مثلاً بی‌کلام ۱"></div>'+
+      '<div class="field"><label>روز یا شب</label><select id="lsm_slot">'+
+        '<option value="any">هر ساعت</option><option value="day">☀️ روزانه</option><option value="night">🌙 شبانه</option></select></div>'+
       '<div class="field"><label>فایل صوتی</label><input id="lsm_file" type="file" accept="audio/*"></div>'+
       '<div class="field"><label>&nbsp;</label><button class="btn pri" id="lsm_add" onclick="lsMusicUpload()">⬆️ آپلود</button></div>'+
     '</div>'+
     (rows.length
-      ? '<div class="tbl-wrap"><table><thead><tr><th>نام</th><th>حجم</th><th>وضعیت</th><th>عملیات</th></tr></thead><tbody>'+
+      ? '<div class="tbl-wrap"><table><thead><tr><th>نام</th><th>حجم</th><th>روز/شب</th><th>❤️ لایک</th><th>وضعیت</th><th>عملیات</th></tr></thead><tbody>'+
         rows.map(r=>{const q="'"+jsq(r.id)+"'";
+          const slot=r.slot||'any';
           return '<tr'+(r.enabled===false?' style="opacity:.6"':'')+'>'+
             '<td><b>'+esc(r.title||'—')+'</b> <span class="mono" style="opacity:.55;font-size:11px">'+esc(String(r.mime||'').replace('audio/',''))+'</span></td>'+
             '<td>'+mb(r.bytes)+' مگابایت</td>'+
+            '<td><select onchange="lsMusicSetSlot('+q+',this.value)">'+
+              ['any','day','night'].map(v=>'<option value="'+v+'"'+(slot===v?' selected':'')+'>'+({any:'هر ساعت',day:'☀️ روزانه',night:'🌙 شبانه'}[v])+'</option>').join('')+
+            '</select></td>'+
+            /* «تا کاربر بتونه لایک کنه» — و این عدد همان چیزی است که می‌گوید
+               کدام آپلود واقعاً گرفته است. */
+            '<td><b style="color:#ff8a8a">'+fa(Number(r.likes)||0)+'</b></td>'+
             '<td><span class="pill '+(r.enabled===false?'bad':'ok')+'">'+(r.enabled===false?'خاموش':'پخش می‌شود')+'</span></td>'+
             '<td><audio controls preload="none" style="height:30px;vertical-align:middle;max-width:190px" src="'+esc(API+'/waiting-music/'+encodeURIComponent(r.id))+'"></audio> '+
               '<button class="btn sm" onclick="lsMusicToggleTrack('+q+','+(r.enabled===false?'true':'false')+')">'+(r.enabled===false?'روشن کن':'خاموش کن')+'</button> '+
@@ -3608,7 +3630,11 @@ function lsMusicUpload(){
   const done=(msg,kind)=>{ if(btn){ btn.disabled=false; btn.textContent='⬆️ آپلود'; } toast(msg,kind); };
   if(btn){ btn.disabled=true; btn.textContent='در حال آپلود… ۰٪'; }
   const xhr=new XMLHttpRequest();
-  xhr.open('POST',API+'/admin/waiting-music/raw?title='+encodeURIComponent(name));
+  /* The day/night choice rides on the query string because the body is the
+     file itself — there is nowhere else to put it on a raw upload. */
+  const slotSel=document.getElementById('lsm_slot');
+  const slot=slotSel?slotSel.value:'any';
+  xhr.open('POST',API+'/admin/waiting-music/raw?title='+encodeURIComponent(name)+'&slot='+encodeURIComponent(slot));
   xhr.setRequestHeader('x-admin-key',KEY);
   xhr.setRequestHeader('Content-Type',file.type||'audio/mpeg');
   /* «در حال آپلود» with a number on it: a ten-megabyte file over a home line
@@ -3644,12 +3670,24 @@ async function lsMusicUploadLegacy(file,name,btn,done){
       fr.onload=()=>res(String(fr.result));
       fr.readAsDataURL(file);
     });
-    await api('POST','/admin/waiting-music',{title:name,audio:dataUri});
+    const slotSel=document.getElementById('lsm_slot');
+    await api('POST','/admin/waiting-music',{title:name,audio:dataUri,slot:slotSel?slotSel.value:'any'});
     done('موزیک اضافه شد ✅','ok');
     renderLastSurvivor();
   }catch(e){ done((e&&e.message)||'آپلود نشد','bad'); }
 }
 
+async function lsMusicSetSlot(tid,slot){
+  try{ await api('PUT','/admin/waiting-music/'+encodeURIComponent(tid)+'/slot',{slot}); toast('ذخیره شد','ok'); render(); }
+  catch(e){ toast(e.message,'bad'); render(); }
+}
+async function lsMusicSaveNight(){
+  const startHour=Number(document.getElementById('lsm_nstart').value);
+  const endHour=Number(document.getElementById('lsm_nend').value);
+  if(startHour===endHour){ toast('ساعت شروع و پایان نمی‌تواند یکی باشد','bad'); return; }
+  try{ await api('PUT','/admin/waiting-music/night',{startHour,endHour}); toast('ساعت شب ذخیره شد ✅','ok'); render(); }
+  catch(e){ toast(e.message,'bad'); }
+}
 async function lsMusicToggleTrack(id,enabled){
   try{ await api('PATCH','/admin/waiting-music/'+encodeURIComponent(id),{enabled:!!enabled}); renderLastSurvivor(); }
   catch(e){ toast(e.message||'انجام نشد','bad'); }

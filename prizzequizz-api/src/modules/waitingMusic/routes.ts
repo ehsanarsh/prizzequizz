@@ -14,6 +14,8 @@ import { requireAdmin } from '../../services/adminGuard.js';
 import { recordAdmin } from '../../services/adminAuditService.js';
 import {
   addTrack, addTrackBytes, listTracks, playlistForPlayers, getTrack, setTrackEnabled, removeTrack,
+  likeTrack, setTrackSlot, getNightWindow, setNightWindow,
+  hasLiked, setLiked, likedByUser, trackLikes,
   MusicError, MUSIC_MAX_BYTES
 } from '../../services/waitingMusicService.js';
 
@@ -22,7 +24,39 @@ export function registerWaitingMusicRoutes(router: Router, base: string): void {
      میشه بدون نام و مشخصات» — the player is offered music, not a library, and
      the name is not withheld in the client but simply never sent. */
   router.add('GET', `${base}/waiting-music`, async (ctx) => {
-    json(ctx.res, 200, { tracks: await playlistForPlayers() });
+    /* The night window travels WITH the list because the client is the one that
+       decides. «ساعت گوشیِ خود بازیکن»: this server runs on UTC and cannot know
+       what time it is where the player is, so it says when night begins and
+       ends and lets the phone compare it to its own clock. */
+    json(ctx.res, 200, { tracks: await playlistForPlayers(), night: await getNightWindow() });
+  });
+
+  /* «یه علامت قلب باشه تا کاربر بتونه لایک کنه.» Signed in, so one player is
+     one heart per track — and the count is what tells the operator which of
+     their uploads is actually landing. */
+  router.add('POST', `${base}/waiting-music/:id/like`, async (ctx) => {
+    if (!ctx.userId) return error(ctx.res, 401, 'AUTH_REQUIRED', 'برای لایک باید وارد شده باشی.');
+    const trackId = decodeURIComponent(ctx.params.id ?? '');
+    const on = (ctx.body as any)?.liked !== false;
+    try {
+      const already = await hasLiked(ctx.userId, trackId);
+      /* Pressing the heart twice is a person changing their mind, not two
+         likes; pressing it again when it is already off is nothing at all. */
+      if (already === on) return json(ctx.res, 200, { liked: on, likes: await trackLikes(trackId) });
+      const likes = await likeTrack(trackId, on ? 1 : -1);
+      await setLiked(ctx.userId, trackId, on);
+      json(ctx.res, 200, { liked: on, likes });
+    } catch (e) {
+      if (e instanceof MusicError) return error(ctx.res, 404, e.code, e.message);
+      throw e;
+    }
+  });
+
+  /* Which tracks THIS player has already hearted, so the room can draw the
+     heart filled in rather than asking them to remember. */
+  router.add('GET', `${base}/waiting-music/likes`, async (ctx) => {
+    if (!ctx.userId) return json(ctx.res, 200, { liked: [] });
+    json(ctx.res, 200, { liked: await likedByUser(ctx.userId) });
   });
 
   /* The audio itself. Public — the URL is unguessable-ish and the content is
@@ -77,7 +111,34 @@ export function registerWaitingMusicRoutes(router: Router, base: string): void {
   // ---------------- the operator ----------------
   router.add('GET', `${base}/admin/waiting-music`, async (ctx) => {
     if (!requireAdmin(ctx)) return;
-    json(ctx.res, 200, { rows: await listTracks(), maxBytes: MUSIC_MAX_BYTES });
+    json(ctx.res, 200, { rows: await listTracks(), maxBytes: MUSIC_MAX_BYTES, night: await getNightWindow() });
+  });
+
+  /* «ساعت پخش موزیک شبانه رو هم خودم بتونم تنظیم کنم.» */
+  router.add('PUT', `${base}/admin/waiting-music/night`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    const b = (ctx.body ?? {}) as any;
+    try {
+      const w = await setNightWindow(Number(b.startHour), Number(b.endHour));
+      void recordAdmin({ adminId: ctx.userId, action: 'MUSIC_NIGHT_WINDOW_SET', meta: { startHour: w.startHour, endHour: w.endHour } });
+      json(ctx.res, 200, w);
+    } catch (e) {
+      if (e instanceof MusicError) return error(ctx.res, 422, e.code, e.message);
+      throw e;
+    }
+  });
+
+  /* «روزانه و شبانه» for one track. */
+  router.add('PUT', `${base}/admin/waiting-music/:id/slot`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    try {
+      const t = await setTrackSlot(decodeURIComponent(ctx.params.id ?? ''), (ctx.body as any)?.slot);
+      void recordAdmin({ adminId: ctx.userId, action: 'MUSIC_SLOT_SET', meta: { trackId: t.id, slot: t.slot } });
+      json(ctx.res, 200, t);
+    } catch (e) {
+      if (e instanceof MusicError) return error(ctx.res, 404, e.code, e.message);
+      throw e;
+    }
   });
 
   /* The one route in the API that carries a file, so the one route with a body
@@ -86,7 +147,7 @@ export function registerWaitingMusicRoutes(router: Router, base: string): void {
     if (!requireAdmin(ctx)) return;
     const b = (ctx.body ?? {}) as any;
     try {
-      const t = await addTrack({ title: b.title, audio: b.audio, sortOrder: b.sortOrder });
+      const t = await addTrack({ title: b.title, audio: b.audio, sortOrder: b.sortOrder, slot: b.slot });
       void recordAdmin({ adminId: ctx.userId, action: 'WAITING_MUSIC_ADDED', meta: { trackId: t.id, bytes: t.bytes, mime: t.mime } });
       json(ctx.res, 201, t);
     } catch (e) {
@@ -145,7 +206,7 @@ export function registerWaitingMusicRoutes(router: Router, base: string): void {
         `حجم فایل باید کمتر از ${Math.round(MUSIC_MAX_BYTES / (1024 * 1024))} مگابایت باشد.`);
     }
     try {
-      const t = await addTrackBytes({ title, mime, buf });
+      const t = await addTrackBytes({ title, mime, buf, slot: ctx.query.get('slot') });
       void recordAdmin({ adminId: ctx.userId, action: 'WAITING_MUSIC_ADDED', meta: { trackId: t.id, bytes: t.bytes, mime: t.mime } });
       json(ctx.res, 201, t);
     } catch (e) {

@@ -5415,11 +5415,35 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
    to do while you wait rather than part of the match. Three controls, big
    enough for a thumb, with the play button obviously the main one. */
 .ls-music:empty{display:none}
-.ls-music{margin:10px 14px 12px;padding:12px 14px 13px;border:var(--stroke);border-radius:18px;
-  background:linear-gradient(180deg,#1d2530,#141a22);box-shadow:var(--hard-sm);text-align:center}
-.ls-music .lm-txt{display:flex;align-items:center;gap:8px;justify-content:center;
-  font-size:12.5px;font-weight:800;color:var(--paper);line-height:1.8}
-.ls-music .lm-note{font-size:18px}
+/* ── THE DRAWER ──────────────────────────────────────────────────────────
+   «یه دکمه باشه و وقتی میزنی اون کادر موزیک از بغل به صورت کشویی بیاد بیرون، و
+   وقتی کاری باهاش نداری اوتوماتیک بره بغل و جا باز بشه.»
+
+   The room is short of height and the music is the one thing in it nobody is
+   there for. So the whole player is a tab at the edge, and the controls slide
+   out beside it only while they are in use. Closed, it costs one row. */
+.ls-music{margin:6px 14px 8px;text-align:start}
+.ls-music .lm-dock{display:flex;align-items:stretch;gap:0;
+  border:var(--stroke);border-radius:16px;overflow:hidden;
+  background:linear-gradient(180deg,#1d2530,#141a22);box-shadow:var(--hard-sm)}
+.ls-music .lm-tab{flex:0 0 auto;display:flex;align-items:center;gap:7px;
+  padding:9px 13px;background:transparent;border:0;border-inline-end:2px solid rgba(0,0,0,.55);
+  color:var(--paper);font-family:inherit;font-size:12.5px;font-weight:800;cursor:pointer}
+.ls-music .lm-tab-t{white-space:nowrap}
+.ls-music .lm-note{font-size:17px}
+.ls-music .lm-dock.on .lm-tab{background:rgba(255,210,31,.12);color:var(--bolt)}
+/* A quiet pulse while it is playing and put away. */
+.ls-music .lm-live{width:7px;height:7px;border-radius:50%;background:#6be08a;flex:none;
+  box-shadow:0 0 8px rgba(107,224,138,.9);animation:lmLive 1.6s ease-in-out infinite}
+@keyframes lmLive{0%,100%{opacity:1}50%{opacity:.25}}
+@media(prefers-reduced-motion:reduce){.ls-music .lm-live{animation:none}}
+/* The slide itself. Width, not display — a display swap cannot be animated, and
+   «کشویی» is the request. */
+.ls-music .lm-slide{flex:1 1 auto;min-width:0;max-width:0;max-height:0;opacity:0;
+  overflow:hidden;transition:max-width .28s cubic-bezier(.2,.9,.3,1),max-height .28s cubic-bezier(.2,.9,.3,1),opacity .2s ease;
+  display:flex;flex-direction:column;justify-content:center;gap:2px;padding:0}
+.ls-music .lm-dock.on .lm-slide{max-width:100%;max-height:120px;opacity:1;padding:7px 10px 8px}
+@media(prefers-reduced-motion:reduce){.ls-music .lm-slide{transition:none}}
 /* TRANSPORT CONTROLS DO NOT MIRROR. «جای دکمه های نکست و بک اینجوری هستند ><
    باید <> باشه» — the page is right-to-left, so a row written prev-play-next
    came out laid the other way and the two arrows pointed away from each other:
@@ -5427,7 +5451,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
    mean "back along the tape" and "on along it", and that tape runs the same
    way on every player in the world. So this one row opts out of the mirror and
    the arrows face each other again — ⏮ ▶ ⏭. */
-.ls-music .lm-ctrls{display:flex;align-items:center;justify-content:center;gap:14px;margin-top:10px;direction:ltr}
+.ls-music .lm-ctrls{display:flex;align-items:center;justify-content:center;gap:11px;direction:ltr}
 .ls-music .lm-btn{width:46px;height:46px;border-radius:50%;border:2.5px solid #000;background:var(--ink-3);
   color:var(--paper);font-family:inherit;font-size:17px;display:grid;place-items:center;cursor:pointer;
   box-shadow:0 3px 0 #000;transition:transform .08s,box-shadow .08s}
@@ -5435,7 +5459,13 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
 .ls-music .lm-btn.lm-play{width:58px;height:58px;font-size:22px;
   background:linear-gradient(180deg,#FFE24A,var(--bolt-2));color:#141414}
 .ls-music .lm-btn.lm-play.on{background:linear-gradient(180deg,#7fe0a8,#1eaf5f);color:#06210f}
-.ls-music .lm-foot{margin-top:9px;font-size:11px;font-weight:800;color:var(--muted);line-height:1.8}
+.ls-music .lm-foot{margin-top:5px;font-size:10.5px;font-weight:800;color:var(--muted);line-height:1.7;text-align:center}
+/* «یه علامت قلب» — quieter than the transport buttons, because it is an aside
+   and not a control the player came for. */
+.ls-music .lm-btn.lm-heart{width:38px;height:38px;font-size:16px;background:var(--ink-2)}
+.ls-music .lm-btn.lm-heart.on{background:rgba(255,120,140,.16);border-color:#000}
+@keyframes lmHeart{0%{transform:scale(1)}45%{transform:scale(1.35)}100%{transform:scale(1)}}
+.ls-music .lm-btn.lm-heart.on{animation:lmHeart .34s cubic-bezier(.2,1.6,.4,1)}
 .ls-music .lm-link{color:var(--bolt);cursor:pointer;text-decoration:underline}
 .lm-pol.on{border-color:var(--bolt)!important;background:rgba(255,210,31,.14)!important}
 /* The control that outlives the waiting room: while music is playing anywhere
@@ -5469,7 +5499,8 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
 .ls-pot-hero.lph-steady .lph-num{animation:none}
 @keyframes lphBlink{0%,49%{opacity:1}50%,99%{opacity:.12}100%{opacity:1}}
 @media(prefers-reduced-motion:reduce){.ls-pot-hero{display:none}}
-@media(max-width:370px){.ls-music .lm-ctrls{gap:10px}.ls-music .lm-btn{width:42px;height:42px}.ls-music .lm-btn.lm-play{width:52px;height:52px}}
+@media(max-width:370px){.ls-music .lm-ctrls{gap:8px}.ls-music .lm-btn{width:38px;height:38px}.ls-music .lm-btn.lm-play{width:46px;height:46px}
+  .ls-music .lm-btn.lm-heart{width:34px;height:34px}.ls-music .lm-tab-t{display:none}}
       .ls-tab{flex:1;padding:12px 6px 13px;color:var(--muted);font-weight:900;font-size:13px;text-align:center;cursor:pointer;position:relative;display:flex;flex-direction:column;align-items:center;gap:3px;transition:color .15s}
       .ls-tab .ti{font-size:19px;line-height:1}
       .ls-tab.on{color:var(--bolt)}
@@ -9091,7 +9122,13 @@ const LSM={el:null,tracks:[],order:[],i:0,loaded:false,loading:null,started:fals
      should carry on. It is what turns the floating control from «a way to
      stop this» into a small player, and it is cleared the moment the music
      stops — so listening again means going back into a room. */
-  freed:false,fabOpen:false,endAsked:false,endTries:0};
+  freed:false,fabOpen:false,endAsked:false,endTries:0,
+  /* «ساعت گوشیِ خود بازیکن» — the server states when night is and this device
+     compares it with its own clock, because the server runs on UTC and has no
+     idea what time it is where the player is. */
+  night:{startHour:22,endHour:6}, liked:null,
+  /* The drawer: «وقتی کاری باهاش نداری اوتوماتیک بره بغل و جا باز بشه». */
+  open:false, shutTimer:null};
 try{ LSM.policy=localStorage.getItem('pz_music_onstart')||null; }catch(e){}
 
 /* Where the audio actually is. One element, made once. */
@@ -9110,6 +9147,30 @@ function lsMusicEl(){
   LSM.el=a; return a;
 }
 
+/* IS IT NIGHT, HERE, NOW? The window normally crosses midnight — «۱۰ شب تا ۶
+   صبح» — so «start after end» is the ordinary case and not an error. The server
+   implements the same rule for its own purposes; this one runs on the phone's
+   clock, which is the whole point. */
+function lsMusicIsNight(now){
+  const w=LSM.night||{startHour:22,endHour:6};
+  const s=Number(w.startHour), e=Number(w.endHour);
+  if(!(s>=0&&s<=23)||!(e>=0&&e<=23)||s===e) return false;
+  const h=(now||new Date()).getHours();
+  return s<e ? (h>=s&&h<e) : (h>=s||h<e);
+}
+/* The tracks that belong to this hour: the ones tagged for it, plus everything
+   tagged «any». If the operator has tagged everything for the OTHER half of the
+   day, the whole library is used rather than leaving the room silent — a
+   playlist that plays nothing is worse than one playing a daytime track at
+   night. */
+function lsMusicForNow(){
+  const all=LSM.tracks||[];
+  if(!all.length) return all;
+  const want=lsMusicIsNight()?'night':'day';
+  const fit=all.filter(t=>t.slot===want||t.slot==='any');
+  return fit.length?fit:all;
+}
+
 function lsMusicShuffle(avoidFirst){
   /* «به صورت تصادفی پخش میشه» — a shuffled ORDER rather than a random pick each
      time, so «قبلی» has something to go back to and no track repeats until the
@@ -9117,13 +9178,46 @@ function lsMusicShuffle(avoidFirst){
      `avoidFirst` is the track that has just finished: a fresh order that opens
      with it would play the same thing twice in a row, which is the one thing a
      shuffle is not allowed to do. */
-  const idx=LSM.tracks.map((_,i)=>i);
+  /* Over the tracks that suit this hour, not the whole library — the order IS
+     the playlist, so filtering here is what makes «شبانه» mean anything. */
+  const fit=new Set(lsMusicForNow().map(t=>t.id));
+  const idx=LSM.tracks.map((_,i)=>i).filter(i=>fit.has(LSM.tracks[i].id));
   for(let i=idx.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); const t=idx[i]; idx[i]=idx[j]; idx[j]=t; }
   if(idx.length>1&&avoidFirst!=null&&idx[0]===avoidFirst){
     const j=1+Math.floor(Math.random()*(idx.length-1));
     const t=idx[0]; idx[0]=idx[j]; idx[j]=t;
   }
   LSM.order=idx; LSM.i=0;
+}
+
+/* ── THE HEART ───────────────────────────────────────────────────────────
+   «یه علامت قلب باشه تا کاربر بتونه لایک کنه و بنویسه از این موزیک خوشت
+   اومده؟» Painted from what the player has already hearted, so it is filled in
+   when they come back to a track they liked last week. */
+function lsMusicLikedNow(){
+  const t=LSM.tracks[LSM.order[LSM.i]];
+  return !!(t&&LSM.liked&&LSM.liked.has(t.id));
+}
+async function lsMusicLike(){
+  const t=LSM.tracks[LSM.order[LSM.i]]; if(!t) return;
+  if(!LSM.liked) LSM.liked=new Set();
+  const on=!LSM.liked.has(t.id);
+  /* Filled in at once — a heart that waits for the network to answer feels
+     broken — and put back if the server disagrees. */
+  if(on) LSM.liked.add(t.id); else LSM.liked.delete(t.id);
+  lsMusicPaint();
+  try{ vib(on?[18]:[8]); }catch(e){}
+  try{
+    const r=await pzApi('POST','/waiting-music/'+encodeURIComponent(t.id)+'/like',{liked:on});
+    if(r&&r.ok===false) throw new Error((r.error&&r.error.message)||'');
+    const likes=r&&r.data&&r.data.likes;
+    if(typeof likes==='number') t.likes=likes;
+    lsMusicPaint();
+  }catch(e){
+    if(on) LSM.liked.delete(t.id); else LSM.liked.add(t.id);
+    lsMusicPaint();
+    try{ toast('ثبت نشد؛ دوباره امتحان کن'); }catch(_){}
+  }
 }
 
 async function lsMusicLoad(){
@@ -9133,7 +9227,21 @@ async function lsMusicLoad(){
     try{
       const r=await pzApi('GET','/waiting-music',null,false);
       const rows=(r&&r.data&&r.data.tracks)||[];
-      LSM.tracks=rows.filter(t=>t&&t.url).map(t=>({id:String(t.id||''),url:String(t.url)}));
+      LSM.tracks=rows.filter(t=>t&&t.url).map(t=>({
+        id:String(t.id||''), url:String(t.url),
+        /* «روزانه و شبانه». Anything from before this existed is `any`, which
+           plays at every hour — an upgrade must not empty the playlist. */
+        slot:(t.slot==='day'||t.slot==='night')?t.slot:'any',
+        likes:Number(t.likes)||0
+      }));
+      const nw=(r&&r.data&&r.data.night)||null;
+      if(nw){ LSM.night={startHour:Number(nw.startHour),endHour:Number(nw.endHour)}; }
+      /* Which ones this player has already hearted, so the heart comes back
+         filled in rather than asking them to remember. */
+      try{
+        const l=await pzApi('GET','/waiting-music/likes',null,false);
+        LSM.liked=new Set(((l&&l.data&&l.data.liked)||[]).map(String));
+      }catch(e){ LSM.liked=new Set(); }
     }catch(e){ LSM.tracks=[]; }
     LSM.loaded=true; LSM.loading=null; lsMusicShuffle();
     return LSM.tracks;
@@ -9159,16 +9267,71 @@ function lsMusicMount(){
   /* No music uploaded → no player. An empty set of controls that cannot play
      anything is worse than nothing at all. */
   if(!LSM.tracks.length){ box.innerHTML=''; return; }
+  /* ── A DRAWER, NOT A PANEL ────────────────────────────────────────────
+     «باید یه دکمه باشه و وقتی میزنی اون کادر موزیک از بغل به صورت کشویی بیاد
+     بیرون، و وقتی کاری باهاش نداری اوتوماتیک بره بغل و جا باز بشه، و وقتی بازم
+     کار داری با یه تاچ دوباره از بغل بیاد بیرون.»
+
+     The room is short of height — the chat, the players and the scoreboard all
+     want it — and a player who is not reaching for the music does not need it
+     taking up space. So it lives at the edge: a tab you can always see, and the
+     controls slide out beside it only while they are being used. */
   box.innerHTML=
-    '<div class="lm-txt"><span class="lm-note">🎧</span>'+
-      '<span>تا شروع مسابقه حوصله‌ات سر نره — یک موزیک بگذار</span></div>'+
-    '<div class="lm-ctrls">'+
-      '<button type="button" class="lm-btn" id="lsMusicPrev" onclick="lsMusicPrev()" aria-label="موزیک قبلی">⏮</button>'+
-      '<button type="button" class="lm-btn lm-play" id="lsMusicPlay" onclick="lsMusicToggle()" aria-label="پخش یا توقف">▶</button>'+
-      '<button type="button" class="lm-btn" id="lsMusicNext" onclick="lsMusicNext()" aria-label="موزیک بعدی">⏭</button>'+
-    '</div>'+
-    '<div class="lm-foot" id="lsMusicFoot"></div>';
+    /* `data-noart` — the game swaps ❤️ for its own heart artwork everywhere,
+       which is the LIVES heart. A like is not a life, and the two must not look
+       like the same thing sitting in a music player. The transport glyphs are
+       not in that map at all, so opting the whole dock out costs nothing. */
+    '<div class="lm-dock'+(LSM.open?' on':'')+'" id="lsMusicDock" data-noart>'+
+      '<button type="button" class="lm-tab" id="lsMusicTab" onclick="lsMusicDrawer()" aria-label="پخش موزیک" aria-expanded="'+(LSM.open?'true':'false')+'">'+
+        '<span class="lm-note">🎧</span><span class="lm-tab-t" id="lsMusicTabT">موزیک</span>'+
+        /* WHEN IT IS TUCKED AWAY AND STILL PLAYING, the tab has to say so —
+           otherwise the one control «تا کاربر هر جا خواست موزیک رو قطع کنه» is
+           hidden behind a button that looks like it does nothing. */
+        '<span class="lm-live" id="lsMusicLive" hidden></span>'+
+      '</button>'+
+      '<div class="lm-slide" id="lsMusicSlide" aria-hidden="'+(LSM.open?'false':'true')+'">'+
+        '<div class="lm-ctrls">'+
+          '<button type="button" class="lm-btn" id="lsMusicPrev" onclick="lsMusicPrev()" aria-label="موزیک قبلی">⏮</button>'+
+          '<button type="button" class="lm-btn lm-play" id="lsMusicPlay" onclick="lsMusicToggle()" aria-label="پخش یا توقف">▶</button>'+
+          '<button type="button" class="lm-btn" id="lsMusicNext" onclick="lsMusicNext()" aria-label="موزیک بعدی">⏭</button>'+
+          '<button type="button" class="lm-btn lm-heart" id="lsMusicHeart" onclick="lsMusicLike()" aria-label="از این موزیک خوشم آمد">🤍</button>'+
+        '</div>'+
+        '<div class="lm-foot" id="lsMusicFoot"></div>'+
+      '</div>'+
+    '</div>';
   lsMusicPaint();
+}
+
+/* Open it, or close it. Every touch inside also restarts the idle countdown,
+   so it only tucks itself away once it really is not being used. */
+function lsMusicDrawer(open){
+  LSM.open = (open===undefined) ? !LSM.open : !!open;
+  const dock=document.getElementById('lsMusicDock');
+  if(dock){
+    dock.classList.toggle('on',LSM.open);
+    const slide=document.getElementById('lsMusicSlide');
+    if(slide) slide.setAttribute('aria-hidden',LSM.open?'false':'true');
+    const tab=document.getElementById('lsMusicTab');
+    if(tab) tab.setAttribute('aria-expanded',LSM.open?'true':'false');
+  }
+  lsMusicIdle();
+  try{ vib(6); }catch(e){}
+}
+/* «وقتی کاری باهاش نداری اوتوماتیک بره بغل و جا باز بشه.» */
+const LS_MUSIC_IDLE_MS=5000;
+function lsMusicIdle(){
+  try{ clearTimeout(LSM.shutTimer); }catch(e){}
+  LSM.shutTimer=null;
+  if(!LSM.open) return;
+  LSM.shutTimer=setTimeout(()=>{
+    /* Only the drawer closes. Whatever is playing keeps playing — closing the
+       drawer is putting it away, not stopping it. */
+    LSM.open=false;
+    const d=document.getElementById('lsMusicDock');
+    if(d){ d.classList.remove('on');
+      const sl=document.getElementById('lsMusicSlide'); if(sl) sl.setAttribute('aria-hidden','true');
+      const tb=document.getElementById('lsMusicTab'); if(tb) tb.setAttribute('aria-expanded','false'); }
+  },LS_MUSIC_IDLE_MS);
 }
 
 /* Every control on screen says the same thing about what is happening: the
@@ -9177,13 +9340,32 @@ function lsMusicPaint(){
   const playing=!!(LSM.el&&!LSM.el.paused&&LSM.started);
   const b=document.getElementById('lsMusicPlay');
   if(b){ b.textContent=playing?'⏸':'▶'; b.classList.toggle('on',playing); }
+  /* «یه علامت قلب… و بنویسه از این موزیک خوشت اومده؟» A filled heart is one
+     this player has already given; the question is asked on the line below so
+     the symbol does not have to carry it alone. */
+  const h=document.getElementById('lsMusicHeart');
+  const liked=lsMusicLikedNow();
+  if(h){
+    h.textContent=liked?'❤️':'🤍';
+    h.classList.toggle('on',liked);
+    h.setAttribute('aria-pressed',liked?'true':'false');
+    h.style.display=LSM.started?'':'none';
+  }
   const foot=document.getElementById('lsMusicFoot');
   if(foot){
     foot.innerHTML=playing
-      ? 'در حال پخش — هر وقت خواستی همین‌جا قطعش کن'+
+      ? (liked?'از این موزیک خوشت اومده ❤️':'از این موزیک خوشت اومده؟ قلب رو بزن')+
         (LSM.policy?' · <span class="lm-link" onclick="lsMusicAskPolicy(true)">'+lsMusicPolicyText()+'</span>':'')
-      : 'قطعه‌ها تصادفی پخش می‌شوند';
+      : (LSM.started?'متوقف شده — دوباره پخش کن':'قطعه‌ها تصادفی پخش می‌شوند'+(lsMusicIsNight()?' · 🌙 موزیک شب':''));
   }
+  const live=document.getElementById('lsMusicLive');
+  if(live) live.hidden=!playing;
+  const tabT=document.getElementById('lsMusicTabT');
+  if(tabT) tabT.textContent=playing?'در حال پخش':'موزیک';
+  const tab=document.getElementById('lsMusicTab');
+  if(tab) tab.setAttribute('aria-label',playing?'موزیک در حال پخش — برای کنترل بزن':'پخش موزیک');
+  /* Anything the player just did with it counts as using it. */
+  if(LSM.open) lsMusicIdle();
   lsMusicFab();
 }
 
@@ -9380,6 +9562,9 @@ function lsMusicStop(){
   /* And the music is over for good: the floating player goes with it, and the
      way back to music is the waiting room. */
   LSM.freed=false; LSM.fabOpen=false; LSM.endAsked=false; LSM.endTries=0;
+  LSM.open=false;
+  try{ clearTimeout(LSM.shutTimer); }catch(e){}
+  LSM.shutTimer=null;
   lsMusicPaint();
 }
 /* THE BADGE ON THE CHAT TAB.
