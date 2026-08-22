@@ -475,19 +475,33 @@ async function eliminateMe(page) {
   await page.waitForTimeout(600);
   const started = await page.evaluate(() => ({
     remain: (document.getElementById('lsRemain') || {}).textContent || '',
+    share: (document.getElementById('lsMyShare') || {}).textContent || '',
     hero: !!document.getElementById('lsPotHero')
   }));
   ok('the prize is on the board', started.remain !== '', started.remain);
+  ok('and the player’s own share beside it', started.share !== '', started.share);
   ok('with nothing announced yet', started.hero === false, String(started.hero));
 
-  /* Somebody goes out: the pot grows. */
+  /* Somebody goes out: the pot grows — AND SO DOES THE PLAYER'S OWN SHARE,
+     because that is what an elimination does to both figures. Only one of them
+     was asked to be announced: «جایزه». Two of these thrown at the middle of
+     the screen would fight over it, and the second would replace the first. */
   await page.evaluate(() => {
     const s = JSON.parse(JSON.stringify((0, eval)('lsSnap')));
     s.players[1].status = 'eliminated';
+    s.me.currentShare = 30000;
     s.stats = { alive: 1, eliminated: 1, cashedOut: 0, totalPlayers: 2, grossPot: 60000, remainingPot: 60000, paidOut: 0 };
     (0, eval)('lsRender')(s);
   });
   await page.waitForTimeout(400);
+
+  /* THE ROOM KEEPS POLLING WHILE THE ANNOUNCEMENT CLIMBS. Once a second, a
+     snapshot arrives carrying the new total and repaints the board — and if
+     that repaint writes the figure straight into its slot, the big number is
+     still on its way to a place that already has it. Same total in two places
+     at once, and the flight lands on nothing. */
+  await page.evaluate(() => { (0, eval)('lsRender')(JSON.parse(JSON.stringify((0, eval)('lsSnap')))); });
+  await page.waitForTimeout(150);
 
   const mid = await page.evaluate(() => {
     const h = document.getElementById('lsPotHero');
@@ -504,10 +518,12 @@ async function eliminateMe(page) {
       cx: Math.round(r.left + r.width / 2), cy: Math.round(r.top + r.height / 2),
       vw: window.innerWidth, vh: window.innerHeight,
       green: h.classList.contains('lph-green'),
-      smallText: small ? small.textContent : ''
+      smallText: small ? small.textContent : '',
+      heroes: document.querySelectorAll('.ls-pot-hero').length
     };
   });
   ok('the number comes to the middle of the screen', !!mid, JSON.stringify(mid));
+  ok('and there is exactly one of them', mid.heroes === 1, String(mid.heroes));
   ok('horizontally centred', Math.abs(mid.cx - mid.vw / 2) < 30, mid.cx + ' of ' + mid.vw);
   ok('vertically centred', Math.abs(mid.cy - mid.vh / 2) < 60, mid.cy + ' of ' + mid.vh);
   /* «بصورت بزرگ» */
@@ -560,6 +576,11 @@ async function eliminateMe(page) {
   });
   ok('then it goes away', landed.gone === true, JSON.stringify(landed));
   ok('and the board is holding the new total', en(landed.smallText) === 60000, landed.smallText);
+  /* «جایزه» — the pot, not the player's share. The share grew at the same
+     moment and takes the ordinary climb in its own corner. */
+  ok('it was the prize that was announced, not the share', en(green.text) === 60000, green.text);
+  const share = await page.evaluate(() => (document.getElementById('lsMyShare') || {}).textContent || '');
+  ok('and the share arrived quietly at its own new figure', en(share) === 30000, share);
   ok('no script errors', errs.length === 0, errs.join(' | '));
   await ctx.close();
 }
@@ -594,6 +615,40 @@ async function eliminateMe(page) {
     return (document.getElementById('lsRemain') || {}).textContent || '';
   });
   ok('and the board still reaches the new total', en(end) === 60000, end);
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
+/* ── 6c. IT OPENS ON THE OLD NUMBER ────────────────────────────────────── */
+/* «اون عدد اول… با موشن عددش بیشتر بشه» — it has to START where the board was
+ * and climb from there. Written into the markup as the final total instead, the
+ * first animation frame overwrites it about sixteen milliseconds later, so
+ * every measurement taken afterwards looks identical and only a one-frame flash
+ * of the wrong number gives it away. Read in the same task that creates it,
+ * before any frame has run, which is the one moment the difference exists.
+ */
+{
+  const { ctx, page, errs } = await makePage();
+  console.log('\nthe first frame of the announcement:');
+  await enterRoom(page);
+  await page.evaluate(() => {
+    const s = JSON.parse(JSON.stringify((0, eval)('lsSnap')));
+    s.room.status = 'running'; s.room.phase = 'dashboard'; s.room.round = 1;
+    s.me.status = 'alive'; s.me.currentShare = 20000;
+    s.stats = { alive: 2, eliminated: 0, cashedOut: 0, totalPlayers: 2, grossPot: 60000, remainingPot: 40000, paidOut: 0 };
+    (0, eval)('lsLastKey=""');
+    (0, eval)('lsRender')(s);
+  });
+  await page.waitForTimeout(500);
+  const opened = await page.evaluate(() => {
+    (0, eval)('lsPotHero')('lsRemain', 11111, 99999);
+    /* No await, no timeout: requestAnimationFrame cannot have run yet. */
+    const n = document.querySelector('#lsPotHero .lph-num');
+    const add = document.querySelector('#lsPotHero .lph-add');
+    return { first: n ? n.textContent : '', add: add ? add.textContent : '' };
+  });
+  ok('it opens on the number the board was showing', en(opened.first) === 11111, opened.first);
+  ok('and says what is being added', en(opened.add) === 88888, opened.add);
   ok('no script errors', errs.length === 0, errs.join(' | '));
   await ctx.close();
 }
