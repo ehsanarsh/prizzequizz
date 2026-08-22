@@ -166,8 +166,15 @@ async function run(): Promise<void> {
 
     await advanceRoom((await getRoom(roomId))!);
     const after = (await getRoom(roomId))!;
-    assert.equal(after.status, 'waiting', 'one real player is below the floor — keep waiting');
-    assert.deepEqual((await listPlayers(roomId)).map((p) => p.userId), [b]);
+    assert.notEqual(after.status, 'running', 'a ghost must never make up the numbers');
+    /* And the one real player is not left waiting alone either: «هر موقع وقت
+     * تموم شد و فقط یه کاربر داخل روم بود باید اونو بندازه بیرون». The sweep
+     * put this room one short with the clock already run out, which is exactly
+     * the case that used to strand somebody — so b goes out through the same
+     * door, ticket and all, and the room closes. */
+    assert.equal(after.status, 'finished');
+    assert.deepEqual((await listPlayers(roomId)).map((p) => p.userId), []);
+    assert.equal((await getTickets(b)).green, 1, 'and the last one out is refunded');
   });
 
   await check('the sweep leaves a running match alone', async () => {

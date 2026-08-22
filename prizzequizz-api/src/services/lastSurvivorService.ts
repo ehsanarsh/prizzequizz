@@ -599,6 +599,14 @@ export async function snapshot(roomId: string, forUserId?: string): Promise<any>
        * that is polling rather than on the socket, can still explain the ending
        * instead of showing an empty podium. */
       forfeited: room.status === 'finished' && stats.alive === 0 ? netRemaining : 0,
+      /* THE ROOM THAT CLOSED WITHOUT EVER BEING A MATCH. «فعلا حریفی برای تو
+       * وجود نداره» — a room that ended having never started is one nobody else
+       * came to, and the person still polling it is owed that sentence and the
+       * way out, not a finish line for a race that was never run. Read off what
+       * is already stored rather than a new column: a room that closed without
+       * ever being started is one nobody else came to, whether the last player
+       * was shown the door by the clock or walked out on their own. */
+      noOpponents: room.status === 'finished' && room.startedAt == null,
       /* WIPED OUT. When the whole room goes out on one question there is no
        * winner, and the pot is split among the players who were still standing
        * at the start of that round — but only the LAST one out is paid. A

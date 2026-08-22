@@ -112,6 +112,28 @@ async function maybeStart(room: RoomRow, now: number): Promise<void> {
   let start = false;
   if (capacityFull) start = true;                                   // full → start instantly (new joiners open a fresh room)
   else if (count >= room.minUsers && (deadlineHit || votePassed)) start = true;
+  /* NOBODY CAME. «وقتی کاربر تنها در روم میمونه و وقت تموم میشه… باید اونو
+   * بندازه بیرون و بهش بگه فعلا حریفی برای تو وجود نداره.»
+   *
+   * The room used to answer a passed deadline by winding the clock back up, so
+   * one player alone waited through countdown after countdown with nothing to
+   * tell them it was never going to start. Their ticket was spent, the way out
+   * was to guess there was one, and if they sat long enough the idle sweep took
+   * them out and closed the room under them — which is how they ended up
+   * looking at «پایان مسابقه» for a match that had not been played.
+   *
+   * One person is not a room. When the clock runs out on a lone player they go
+   * back out through the ordinary door — leaveRoom refunds the ticket, takes
+   * the stake back out of the pot, and closes the room behind them — and the
+   * snapshot they are already polling says why. Two or more is a room that has
+   * not filled yet, and that still gets another window. */
+  else if (deadlineHit && count === 1) {
+    const alone = players[0]!;
+    const { leaveRoom } = await import('./lastSurvivorService.js');
+    await leaveRoom(room.id, alone.userId).catch(() => undefined);
+    logger.info('ls_room_closed_no_opponents', { roomId: room.id, userId: alone.userId, private: room.isPrivate });
+    return;
+  }
   else if (deadlineHit && count < room.minUsers) { room.startsAt = now + room.waitSeconds * 1000; await saveRoom(room); return; } // below floor → keep waiting
 
   if (!start) return;
