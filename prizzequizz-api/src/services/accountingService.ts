@@ -395,7 +395,11 @@ export async function financeReport(opts: { from?: string; to?: string; granular
     const shopLedgerCount = [...shopByCat.values()].reduce((sum, v) => sum + v.n, 0);
     const shopTracked = (n(shopR.rows?.[0]?.n) + shopLedgerCount + n(lifelineSalesR.rows?.[0]?.n)) > 0;
     const income = {
-      commission: n(t.commission), tickets: n(t.tickets), shop, lifelines: n(t.lifelines),
+      /* Tickets from BOTH doors: the dedicated purchase and the tickets shelf in
+         the shop. The shelf's takings are kept out of `shop` because they are
+         not earnings, and until now that left them in no line at all — visible
+         nowhere in the cash-flow figure even though the money really arrived. */
+      commission: n(t.commission), tickets: n(t.tickets) + shopTicketSales, shop, lifelines: n(t.lifelines),
       penalties: n(t.penalties), deposits: n(t.deposits), total: 0
     };
     // Deposits are the player's own money arriving — not revenue. Stakes are

@@ -179,11 +179,27 @@ await check('deposits are nobody’s earnings', () => {
   assert.ok(e.total < 4_000_000 + 4_450_000, 'a deposit reached the profit');
 });
 
-/* The old cash-flow figure still exists and still answers its own question —
-   it just is not the profit, and the two must not be equal here or the change
-   would be doing nothing. */
+/* ── THE CASH-FLOW FIGURE IS STILL SHOWN, SO IT STILL HAS TO BE RIGHT ────
+   «گردش پول» answers a different question — did more arrive this month than
+   left — and the panel prints it under the profit. */
 await check('the cash-flow figure is a different number', () => {
   assert.notStrictEqual(r.grossProfit, e.total);
+});
+await check('helps are counted ONCE in the cash-flow income too', () => {
+  /* They used to be added into the shop line AND kept as their own, so every
+     help sold was counted twice in the total. */
+  assert.strictEqual(r.income.shop, 300_000 + 200_000, 'the shop line has helps folded into it: ' + r.income.shop);
+  assert.strictEqual(r.income.lifelines, 150_000);
+});
+await check('and a ticket sold from the shop is still counted as money in', () => {
+  /* Kept out of the SHOP line because it is not earnings — but it did arrive,
+     so leaving it in no line at all would make the cash-flow figure short. */
+  assert.strictEqual(r.income.tickets, 9_000_000 + 700_000);
+});
+await check('the cash-flow income adds its own lines up', () => {
+  assert.strictEqual(r.income.total,
+    r.income.commission + r.income.tickets + r.income.shop + r.income.lifelines + r.income.penalties);
+  assert.strictEqual(r.income.total, 1_000_000 + 9_700_000 + 500_000 + 150_000 + 50_000);
 });
 
 await check('net is the total less what the company spent', () => {

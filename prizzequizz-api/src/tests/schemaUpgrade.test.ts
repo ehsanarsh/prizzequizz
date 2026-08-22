@@ -301,6 +301,22 @@ await check('and hearted', async () => {
   assert.ok(await music2.hasLiked('someone', 'old-track'));
   assert.deepEqual(await music2.likedByUser('someone'), ['old-track']);
 });
+/* THE COUNT CANNOT GO BELOW ZERO. The floor is in the SQL, so an in-memory run
+   cannot see it — the memory path has its own Math.max and would pass either
+   way. «بی‌خیال» on a track nobody liked, or two devices un-liking at once,
+   must not leave a track owing likes. */
+await check('un-liking past zero leaves the count at zero', async () => {
+  await music2.setTrackSlot('old-track', 'any');            // make sure the row is there
+  const start = (await music2.listTracks()).find((t) => t.id === 'old-track')!.likes;
+  for (let i = 0; i < start + 3; i++) await music2.likeTrack('old-track', -1);
+  const end = (await music2.listTracks()).find((t) => t.id === 'old-track')!.likes;
+  assert.strictEqual(end, 0, 'the like count went negative: ' + end);
+});
+await check('and it counts up again from there', async () => {
+  const n = await music2.likeTrack('old-track', 1);
+  assert.strictEqual(n, 1);
+});
+
 await check('the night window has a sensible default before anyone sets one', async () => {
   const w = await music2.getNightWindow();
   assert.deepEqual(w, { startHour: 22, endHour: 6 });

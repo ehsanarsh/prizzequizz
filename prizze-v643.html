@@ -13332,15 +13332,14 @@ async function frSendBody(id,txt){
     f.failed.push({id:'fm'+Date.now()+Math.floor(Math.random()*1000),text:txt,html:frMsgHTML(txt)});
   }
   await frLoadMessages(id);
-  if(frActiveChat===id){
-    renderChatMessages(id);
-    /* AND THE BOX IS READY FOR THE NEXT LINE. Reloading the conversation
-       repaints badges and counters on the way through, which can take the
-       composer with it — so the focus is put back rather than assumed to have
-       survived. Only on the send path: doing it on every poll would snatch the
-       cursor back while somebody was tapping something else. */
-    try{ const box=document.getElementById('chatInput'); if(box) box.focus(); }catch(e){}
-  }
+  /* The cursor stays in the box because sendChatMsg put it there before this
+     started, and nothing on the success path takes it away — renderChatMessages
+     only ever touches #chatBody, and the badge repaint below it touches the nav.
+     A second focus() after the reload was here for a while «in case»; deleting
+     it changed no test and no behaviour, which is all a line like that is worth.
+     (On a FAILED send the app's own error prompt takes the focus, which is what
+     a modal is for.) */
+  if(frActiveChat===id) renderChatMessages(id);
 }
 /* «در قسمت دوستان هم دعوت به بازی داشته باشیم».
    This button used to say «دعوت بازی ارسال شد» and do nothing else — no
