@@ -307,18 +307,77 @@ const room = (over = {}) => {
   ok('and the composer sits on the keyboard', typing.sendBottom > 0 && 480 - typing.sendBottom <= 14, (480 - typing.sendBottom) + 'px of gap');
 
   /* And it is a keyboard, not a permanent state: let go of the box and the
-     way out of the screen comes back. */
+     way out of the screen comes back.
+
+     WITH FOCUS GOING NOWHERE, which is the whole point. Tapping away from the
+     box on a phone leaves nothing focused — and that is the case only focusout
+     can report, since no focusin follows. If something else on the page grabs
+     focus on the way out (a modal button, say) the flag clears through THAT
+     instead and this stops testing anything, so any modal is closed first and
+     where the focus landed is checked rather than assumed. */
   const done = await page.evaluate(async () => {
+    const ov = document.getElementById('aaaModal');
+    if (ov && ov.classList.contains('show')) {
+      const s = document.getElementById('aaaSecondary');
+      const p = document.getElementById('aaaPrimary');
+      const el = (s && getComputedStyle(s).display !== 'none') ? s : p;
+      if (el) el.click();
+      await new Promise((r) => setTimeout(r, 350));
+    }
+    document.getElementById('chatInput').focus();
+    await new Promise((r) => setTimeout(r, 250));
+    const wasOpen = document.body.classList.contains('pz-kb-open');
     document.getElementById('chatInput').blur();
     await new Promise((r) => setTimeout(r, 300));
     const nav = document.querySelector('#friends .bottomnav');
     const bar = document.querySelector('#friends>.topbar');
-    return { open: document.body.classList.contains('pz-kb-open'),
+    return { wasOpen,
+             landed: document.activeElement ? (document.activeElement.id || document.activeElement.tagName) : '-',
+             open: document.body.classList.contains('pz-kb-open'),
              navShown: !!nav && nav.getBoundingClientRect().height > 20,
              barShown: !!bar && bar.getBoundingClientRect().height > 8 };
   });
+  ok('the keyboard is up again before letting go', done.wasOpen === true, String(done.wasOpen));
+  ok('and letting go really leaves nothing focused', done.landed === 'BODY', done.landed);
   ok('letting go of the box puts the navigation back', done.open === false && done.navShown === true, JSON.stringify(done));
   ok('and the title bar with it', done.barShown === true, String(done.barShown));
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
+/* ── 2d-ii. NOT EVERY FIELD SUMMONS A KEYBOARD ─────────────────────────── */
+/* A tick-box, a file picker and a button are all focusable and none of them
+   opens a keyboard. Counting them would take the navigation away from a player
+   who merely ticked «دیگر نشان نده», so the second witness is limited to fields
+   that actually take typed text. */
+{
+  const { ctx, page, errs } = await makePage();
+  console.log('focusing something that opens no keyboard:');
+  const got = await page.evaluate(async () => {
+    /* Built here rather than hunted for, so this tests the rule and not one
+       particular screen's furniture. */
+    const box = document.createElement('div');
+    box.innerHTML = '<input id="tCheck" type="checkbox"><input id="tFile" type="file">' +
+                    '<button id="tBtn">x</button><input id="tText" type="text">';
+    document.body.appendChild(box);
+    const read = async (id) => {
+      document.getElementById(id).focus();
+      await new Promise((r) => setTimeout(r, 250));
+      const on = document.body.classList.contains('pz-kb-open');
+      document.getElementById(id).blur();
+      await new Promise((r) => setTimeout(r, 250));
+      return on;
+    };
+    return { coarse: matchMedia('(pointer:coarse)').matches,
+             check: await read('tCheck'), file: await read('tFile'),
+             btn: await read('tBtn'), text: await read('tText') };
+  });
+  ok('the test is running on a touch screen', got.coarse === true, String(got.coarse));
+  ok('a tick-box is not a keyboard', got.check === false, String(got.check));
+  ok('nor is a file picker', got.file === false, String(got.file));
+  ok('nor is a button', got.btn === false, String(got.btn));
+  /* And the rule still lets through the thing it is for. */
+  ok('but a text field still is', got.text === true, String(got.text));
   ok('no script errors', errs.length === 0, errs.join(' | '));
   await ctx.close();
 }
