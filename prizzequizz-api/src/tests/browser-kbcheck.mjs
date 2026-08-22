@@ -424,6 +424,179 @@ const room = (over = {}) => {
   await ctx.close();
 }
 
+/* ── 2f. CHATTING LIKE A CHAT APP ──────────────────────────────────────── */
+/* «کاربر بتونه راحت مثل یه پلتفرم شبکه اجتماعی راحت چت کنه.» Three things a
+ * messaging app does that this one did not. */
+{
+  friends = [{ id: 'f1', username: 'sara', displayName: 'سارا', avatar: '', character: null, level: 4, online: true, unread: 0, lastMessage: 'س' }];
+  friendMsgs = Array.from({ length: 40 }, (_, i) => ({ mine: i % 2 === 0, body: 'پیام قدیمی ' + (i + 1), at: Date.now() - (40 - i) * 60000 }));
+  const { ctx, page, errs } = await makePage();
+  console.log('chatting:');
+  await page.evaluate(async () => {
+    (0, eval)("userPlan='premium'; planExplicitlyChosen=true; go('friends');");
+    await new Promise((r) => setTimeout(r, 500));
+    await (0, eval)('openFriendChat')('f1');
+    await new Promise((r) => setTimeout(r, 400));
+  });
+
+  /* THE BUBBLE'S CORNER IS ON THE SIDE IT SITS ON. Squared on the anchored
+     side is how every messaging app draws the tail; this had them crossed, so
+     each bubble pointed away from its own speaker. */
+  const bubbles = await page.evaluate(() => {
+    const view = document.querySelector('#friends .chat-view').getBoundingClientRect();
+    const read = (sel) => {
+      const e = document.querySelector(sel); if (!e) return null;
+      const r = e.getBoundingClientRect(), cs = getComputedStyle(e);
+      return { fromLeft: Math.round(r.left - view.left), fromRight: Math.round(view.right - r.right),
+               bl: parseInt(cs.borderBottomLeftRadius, 10), br: parseInt(cs.borderBottomRightRadius, 10) };
+    };
+    return { rtl: getComputedStyle(document.body).direction, me: read('.msg.me'), them: read('.msg.them') };
+  });
+  ok('the app is right-to-left', bubbles.rtl === 'rtl', bubbles.rtl);
+  ok('my messages sit on one side', bubbles.me.fromRight < bubbles.me.fromLeft, JSON.stringify(bubbles.me));
+  ok('and theirs on the other', bubbles.them.fromLeft < bubbles.them.fromRight, JSON.stringify(bubbles.them));
+  /* The squared corner must be the one nearest the edge the bubble hugs. */
+  ok('my bubble is squared off on the side it hugs', bubbles.me.br < bubbles.me.bl, JSON.stringify(bubbles.me));
+  ok('and so is theirs', bubbles.them.bl < bubbles.them.br, JSON.stringify(bubbles.them));
+
+  /* READING HISTORY IS NOT INTERRUPTED. */
+  const scrolled = await page.evaluate(async () => {
+    const b = document.getElementById('chatBody');
+    b.scrollTop = 0;                                  // right back to the start
+    await new Promise((r) => setTimeout(r, 100));
+    const at = b.scrollTop;
+    /* A message arrives while they are up there. */
+    const f = (0, eval)('FRIENDS_DATA').find((x) => x.id === 'f1');
+    f.m.push(['them', 'پیام تازه', 'الان']);
+    (0, eval)('renderChatMessages')('f1');
+    await new Promise((r) => setTimeout(r, 150));
+    return { before: at, after: b.scrollTop, jump: !!document.querySelector('#friends .chat-jump') };
+  });
+  ok('a new message does not yank the reader to the bottom', scrolled.after <= scrolled.before + 10,
+    scrolled.before + ' → ' + scrolled.after);
+  ok('but it does offer to take them there', scrolled.jump === true, String(scrolled.jump));
+
+  const jumped = await page.evaluate(async () => {
+    document.querySelector('#friends .chat-jump').click();
+    await new Promise((r) => setTimeout(r, 150));
+    const b = document.getElementById('chatBody');
+    return { atEnd: (b.scrollHeight - b.scrollTop - b.clientHeight) < 60,
+             jump: !!document.querySelector('#friends .chat-jump') };
+  });
+  ok('and taking it goes to the newest', jumped.atEnd === true, JSON.stringify(jumped));
+  ok('after which the offer goes away', jumped.jump === false, String(jumped.jump));
+
+  /* …but when they ARE at the bottom, a new message follows as it should. */
+  const followed = await page.evaluate(async () => {
+    const b = document.getElementById('chatBody');
+    b.scrollTop = b.scrollHeight;
+    const f = (0, eval)('FRIENDS_DATA').find((x) => x.id === 'f1');
+    f.m.push(['them', 'یکی دیگر', 'الان']);
+    (0, eval)('renderChatMessages')('f1');
+    await new Promise((r) => setTimeout(r, 150));
+    return (b.scrollHeight - b.scrollTop - b.clientHeight) < 60;
+  });
+  ok('at the bottom, it still follows the conversation', followed === true, String(followed));
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
+/* ── 2g. A MESSAGE THAT DID NOT GET THROUGH ────────────────────────────── */
+/* It used to vanish: added optimistically, the request failed, and the next
+ * reload from the server — which never had it — wiped it out, leaving a toast
+ * that had already gone. Whatever was typed must survive. */
+{
+  friends = [{ id: 'f1', username: 'sara', displayName: 'سارا', avatar: '', character: null, level: 4, online: true, unread: 0, lastMessage: 'س' }];
+  friendMsgs = [{ mine: false, body: 'سلام', at: Date.now() - 60000 }];
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+  await ctx.addInitScript(() => {
+    localStorage.setItem('pz_tok', 't'); localStorage.setItem('pz_rtok', 'r');
+    localStorage.setItem('pz_usr', JSON.stringify({ id: 'me', username: 'ehsan', displayName: 'احسان', level: 3 }));
+  });
+  let failSend = true;
+  await ctx.route('**/v1/**', (route) => {
+    const req = route.request();
+    const p = new URL(req.url()).pathname.replace(/^.*\/v1/, '');
+    const send = (d) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, data: d }) });
+    if (req.method() === 'POST' && /^\/friends\/[^/]+\/messages$/.test(p)) {
+      if (failSend) return route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ ok: false, error: { code: 'BOOM', message: 'نشد' } }) });
+      friendMsgs.push({ mine: true, body: JSON.parse(req.postData() || '{}').body, at: Date.now() });
+      return send({});
+    }
+    if (p === '/friends') return send(friends);
+    if (p === '/friends/requests') return send({ incoming: [], outgoing: [] });
+    if (/^\/friends\/[^/]+\/messages$/.test(p)) return send({ messages: friendMsgs });
+    return send({});
+  });
+  const page = await ctx.newPage();
+  const errs = []; page.on('pageerror', (e) => errs.push(String(e.message || e).slice(0, 200)));
+  await page.goto('http://127.0.0.1:' + PORT + '/');
+  await page.waitForTimeout(5200);
+  console.log('a message that could not be sent:');
+  await page.evaluate(async () => {
+    (0, eval)("userPlan='premium'; planExplicitlyChosen=true; go('friends');");
+    await new Promise((r) => setTimeout(r, 500));
+    await (0, eval)('openFriendChat')('f1');
+    await new Promise((r) => setTimeout(r, 400));
+  });
+
+  const sent = await page.evaluate(async () => {
+    const i = document.getElementById('chatInput');
+    i.value = 'این پیام باید بماند';
+    await (0, eval)('sendChatMsg')();
+    await new Promise((r) => setTimeout(r, 700));
+    const bad = document.querySelector('#friends .msg.failed');
+    return { still: !!bad, text: bad ? bad.textContent : '',
+             body: document.getElementById('chatBody').textContent,
+             boxEmpty: document.getElementById('chatInput').value === '',
+             focused: document.activeElement === document.getElementById('chatInput') };
+  });
+  ok('what was typed is still on screen', sent.still === true, sent.body.slice(-60));
+  ok('and it says it did not go', /ارسال نشد/.test(sent.text), sent.text.slice(0, 40));
+  ok('with a way to try again', /دوباره بفرست/.test(sent.text), sent.text.slice(0, 60));
+  ok('the box was cleared, as it always was', sent.boxEmpty === true, String(sent.boxEmpty));
+  /* Focus is NOT asserted here: a failed send raises the app's own error
+     prompt, and a modal taking the focus is what a modal is for. Where it does
+     belong is the ordinary path, checked below once the send succeeds. */
+
+  /* Trying again, with the network back. */
+  await page.evaluate(() => { window.__ok = true; });
+  failSend = false;
+  const retried = await page.evaluate(async () => {
+    /* Clear whatever the failure put on screen, the way a player would. */
+    for (let i = 0; i < 3; i++) {
+      const ov = document.getElementById('aaaModal');
+      if (!ov || !ov.classList.contains('show')) break;
+      const s2 = document.getElementById('aaaSecondary');
+      const btn = (s2 && getComputedStyle(s2).display !== 'none') ? s2 : document.getElementById('aaaPrimary');
+      if (btn) btn.click(); else break;
+      await new Promise((r) => setTimeout(r, 250));
+    }
+    document.querySelector('#friends .msg-retry').click();
+    await new Promise((r) => setTimeout(r, 900));
+    return { failedLeft: document.querySelectorAll('#friends .msg.failed').length,
+             body: document.getElementById('chatBody').textContent };
+  });
+  ok('retrying sends it', retried.failedLeft === 0, String(retried.failedLeft));
+  ok('and it is a normal message now', /این پیام باید بماند/.test(retried.body), retried.body.slice(-60));
+
+  /* «راحت چت کنه» — after an ordinary, successful send the cursor stays in the
+     box so the next line can be typed without reaching for it again. */
+  const kept = await page.evaluate(async () => {
+    const i = document.getElementById('chatInput');
+    i.focus();
+    i.value = 'خط بعدی';
+    await (0, eval)('sendChatMsg')();
+    await new Promise((r) => setTimeout(r, 800));
+    return { active: document.activeElement ? (document.activeElement.id || document.activeElement.tagName) : 'none',
+             body: document.getElementById('chatBody').textContent };
+  });
+  ok('a normal send leaves the cursor in the box', kept.active === 'chatInput', kept.active);
+  ok('and the message went', /خط بعدی/.test(kept.body), kept.body.slice(-40));
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
 /* ── 3. THE CHAT BADGE ──────────────────────────────────────────────────── */
 {
   const { ctx, page, errs } = await makePage();
