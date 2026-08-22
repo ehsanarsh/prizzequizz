@@ -641,6 +641,44 @@ for (const [policy, expect] of [['quiet', 'quieter'], ['stop', 'stopped'], ['kee
   tracks = saved;
 }
 
+/* ── 1c-ii. A MIXED LIBRARY ────────────────────────────────────────────── */
+/* «هر ساعت» is not «only when nothing else fits» — an untagged track belongs to
+ * every hour and plays ALONGSIDE whatever is tagged for it. A library where
+ * everything is untagged cannot show this, because the «rather than silence»
+ * fallback produces the same answer either way; a mixed one can.
+ */
+{
+  const saved = tracks;
+  tracks = [
+    { id: 'n1', url: '/track/n1', slot: 'night', likes: 0 },
+    { id: 'a1', url: '/track/a1', slot: 'any', likes: 0 },
+    { id: 'd1', url: '/track/d1', slot: 'day', likes: 0 }
+  ];
+  const { ctx, page, errs } = await makePage();
+  console.log('\na library with some tracks tagged and some not:');
+  await enterRoom(page);
+  const at = (h) => page.evaluate(async (hour) => {
+    const RealDate = Date;
+    // eslint-disable-next-line no-global-assign
+    Date = class extends RealDate { getHours() { return hour; } };
+    Date.now = RealDate.now;
+    const fit = (0, eval)('lsMusicForNow')().map((t) => t.id).sort();
+    // eslint-disable-next-line no-global-assign
+    Date = RealDate;
+    return fit;
+  }, h);
+
+  const night = await at(23);
+  ok('at night, the night track AND the untagged one play', night.join(',') === 'a1,n1', night.join(','));
+  const day = await at(14);
+  ok('in the day, the day track AND the untagged one play', day.join(',') === 'a1,d1', day.join(','));
+  ok('and the other half of the day is left out', !night.includes('d1') && !day.includes('n1'),
+    'night=' + night.join(',') + ' day=' + day.join(','));
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+  tracks = saved;
+}
+
 /* ── 1d. EVERYTHING TAGGED FOR THE OTHER HALF OF THE DAY ───────────────── */
 /* A library where the operator has marked every track «شبانه», at two in the
  * afternoon. Silence would be the literal reading and the wrong one — a room
