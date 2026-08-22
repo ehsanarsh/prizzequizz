@@ -11,6 +11,7 @@ import { settleRunToWallet } from '../../services/duelRunPayout.js';
 import { netPrize } from '../../services/prizeService.js';
 import { withAuthor } from '../../services/questionAuthorService.js';
 import { selectQuestionForRound, pickDeterministic, DIFF_LEVELS, TOPIC_SELECT_CATEGORY } from '../../services/adaptiveDifficultyService.js';
+import { seenElsewhere, markSeen } from '../../services/questionSeenService.js';
 import type { GameModeId, Match, PlanType } from '../../types/domain.js';
 
 // Persist a mutated match to BOTH the repository AND the in-memory active-match
@@ -195,9 +196,27 @@ export function registerMatchRoutes(router: Router, base: string): void {
     // round 0 is always easy and it climbs/drops with the pair's results. Without
     // a resolvable match (edge cases) fall back to a stable easy-first pick so the
     // endpoint never 500s. The «انتخاب موضوع» bank is never served here.
+    /* WHAT THESE TWO HAVE ALREADY BEEN ASKED, in matches that are not this one.
+     *
+     * «نباید سوال تکراری پخش بشه.» The exclusion has to be the SAME for both
+     * players and the same on every request, because this endpoint re-derives
+     * every round from round zero each time it is called — a set that grew
+     * during the match would change what round 2 was halfway through it.
+     * «Seen somewhere other than this match» is fixed for the match's whole
+     * life while still being written the moment a question is served, so there
+     * is no cutoff time to get wrong and nothing to keep across a restart.
+     *
+     * Both players' histories together, never one player's: they must be shown
+     * the identical question, so a question either of them has seen is the one
+     * to avoid. */
     let q: any = null;
     if (match) {
-      q = selectQuestionForRound(match, all, round).q;
+      const pids = (match.players ?? []).map((p: any) => String(p.userId)).filter(Boolean);
+      let seen: Set<string> | undefined;
+      try { seen = await seenElsewhere(pids, String(match.id)); } catch { seen = undefined; }
+      q = selectQuestionForRound(match, all, round, seen).q;
+      /* Written for both, because both are about to see it. */
+      if (q && pids.length) void markSeen(pids, String(q.id), String(match.id));
     }
     if (!q) {
       // Fallback: deterministic easy-first pick over the whole (non-toss) bank.

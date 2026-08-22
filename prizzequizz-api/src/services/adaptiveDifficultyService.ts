@@ -67,7 +67,7 @@ export function roundOutcome(match: AdaptiveMatch, round: number): { both: boole
 // STEP AT A TIME (so a veryhard target with no veryhard questions falls to hard,
 // NOT to easy), preferring the same topic before crossing topics. Always avoids
 // repeats, so a thin level never causes a repeat or an empty question.
-export function pickDeterministic<T extends AdaptiveQuestion>(all: T[], topic: string, level: string, used: Set<string>, seed: number): T | null {
+export function pickDeterministic<T extends AdaptiveQuestion>(all: T[], topic: string, level: string, used: Set<string>, seed: number, seen?: Set<string>): T | null {
   const norm = (topic || '').trim();
   const topicOk = (q: T) => !norm || norm === '__popular__' || q.category === norm;
   const notUsed = (q: T) => !used.has(q.id);
@@ -81,6 +81,16 @@ export function pickDeterministic<T extends AdaptiveQuestion>(all: T[], topic: s
     const cands = stable(all.filter((q) => notSelectCat(q) && notUsed(q) && q.difficulty === lvl && (!inTopic || topicOk(q))));
     return cands.length ? cands[seed % cands.length]! : null;
   };
+  /* Same again, but skipping what these two have already been asked in some
+     OTHER match. A preference, never a requirement: `used` is the hard rule
+     (nothing twice in one match) and this sits in front of it, so a topic the
+     pair have played to death still yields a question instead of stalling. */
+  const notSeen = (q: T) => !seen || !seen.has(q.id);
+  const pickFresh = (lvl: string): T | null => {
+    if (!seen || !seen.size) return null;
+    const cands = stable(all.filter((q) => notSelectCat(q) && notUsed(q) && notSeen(q) && q.difficulty === lvl && topicOk(q)));
+    return cands.length ? cands[seed % cands.length]! : null;
+  };
   // Same as pickAt but ALLOWS already-used questions (repeat) — used only when the
   // chosen topic has no fresh question left, so we repeat WITHIN the topic instead
   // of switching topics (topic-switch mid-match is the bug we must never cause).
@@ -88,8 +98,21 @@ export function pickDeterministic<T extends AdaptiveQuestion>(all: T[], topic: s
     const cands = stable(all.filter((q) => notSelectCat(q) && q.difficulty === lvl && topicOk(q)));
     return cands.length ? cands[seed % cands.length]! : null;
   };
-  // 1) same topic, nearest level, NOT yet used (closest first, one level at a time)
-  for (const lvl of nearest) { const q = pickAt(true, lvl); if (q) return q; }
+  /* 1) same topic, nearest level, NOT yet used (closest first, one level at a
+   *    time) — and WITHIN each level, one this pair has not been asked before.
+   *
+   *    The freshness preference is interleaved rather than run first, and that
+   *    ordering is the whole point: asked for round one when every easy
+   *    question has already been seen, running it first would answer with an
+   *    unseen MEDIUM one — a harder opening round to avoid a repeat. Repetition
+   *    is a nuisance; the difficulty ladder is the game. So the level decides,
+   *    and freshness only chooses between questions of that level. With no
+   *    history to go on `pickFresh` returns nothing and this loop is exactly
+   *    what it always was. */
+  for (const lvl of nearest) {
+    const fresh = pickFresh(lvl); if (fresh) return fresh;
+    const q = pickAt(true, lvl); if (q) return q;
+  }
   // 2) same topic, nearest level, ALLOWING repeats — a thin topic must repeat a
   //    question rather than cross into another topic. Since `nearest` covers every
   //    level, this returns a question whenever the topic has ANY question at all,
@@ -121,7 +144,7 @@ export function ladderForRound(round: number): 'A' | 'B' {
 //     level the last regular round (9) ended on and keeps adapting from the
 //     PREVIOUS question — both answered the previous correctly ⇒ one step harder,
 //     and so on. The golden TOPIC still alternates between the two halves.
-export function selectQuestionForRound<T extends AdaptiveQuestion>(match: AdaptiveMatch, all: T[], round: number): { q: T | null; level: string } {
+export function selectQuestionForRound<T extends AdaptiveQuestion>(match: AdaptiveMatch, all: T[], round: number, seen?: Set<string>): { q: T | null; level: string } {
   const used = new Set<string>();
   let idxA = 0, idxB = 0;          // per-half ladders, each starts easy
   let idxG: number | null = null;  // golden ladder, seeded from round 9's end
@@ -135,7 +158,7 @@ export function selectQuestionForRound<T extends AdaptiveQuestion>(match: Adapti
     const level = DIFF_LEVELS[idx]!;
     const topic = topicForRound(match, r);
     const seed = hashString(`${match.id}|${r}|${topic}|${level}`);
-    const q = pickDeterministic(all, topic, level, used, seed);
+    const q = pickDeterministic(all, topic, level, used, seed, seen);
     if (q) used.add(q.id);
     if (r === round) { chosen = q; chosenLevel = q ? q.difficulty : level; }
     // Advance from THIS round's outcome (both-correct harder, both-wrong easier,

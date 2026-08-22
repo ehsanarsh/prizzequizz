@@ -250,15 +250,76 @@ await check('and when the track is deleted, so is its copy', async () => {
   assert.strictEqual(await music.getTrack(tid), null, 'a deleted track still answers');
 });
 
+/* ── question_seen, as it would stand if it had shipped without ref_id ────── */
+/* The column that makes the duel work is the one most likely to have been added
+   later, so this is the exact shape the bug takes: a server that already has the
+   table, upgrading into a build that reads a column it has never had. */
+console.log('\na server booting on a question_seen table with no ref_id:');
+await pool.query('DROP TABLE IF EXISTS question_seen');
+await pool.query(`CREATE TABLE question_seen (
+  user_id TEXT NOT NULL,
+  question_id TEXT NOT NULL,
+  PRIMARY KEY (user_id, question_id))`);
+/* A player's history from before the upgrade must survive it. */
+await pool.query(`INSERT INTO question_seen(user_id, question_id) VALUES ('old-u','old-q')`);
+
+const seenSvc = await import('../services/questionSeenService.js');
+await check('an old row is still remembered after the upgrade', async () => {
+  const s = await seenSvc.seenElsewhere(['old-u'], 'some-match');
+  assert.ok(s.has('old-q'), 'the row that was already there was lost');
+});
+await check('and new sightings can still be written', async () => {
+  await seenSvc.markSeen(['old-u'], 'new-q', 'match-1');
+  const s = await seenSvc.seenElsewhere(['old-u'], '');
+  assert.ok(s.has('new-q'), 'nothing was written');
+});
+await check('the game it was seen in is remembered too', async () => {
+  const during = await seenSvc.seenElsewhere(['old-u'], 'match-1');
+  assert.ok(!during.has('new-q'), 'ref_id is not being read');
+  assert.ok(during.has('old-q'), 'the pre-upgrade row should still count');
+});
+await check('and counting across players works on the upgraded table', async () => {
+  await seenSvc.markSeen(['other-u'], 'old-q', 'match-2');
+  const counts = await seenSvc.seenCounts(['old-u', 'other-u'], '');
+  assert.strictEqual(counts.get('old-q'), 2);
+});
+/* THE TWO PROPERTIES THE DUEL RESTS ON, against a real database. Both live in
+   SQL, so an in-memory run cannot see them at all: the exclusion of the current
+   match, and the fact that seeing a question again does not move it into the
+   match that re-served it. Get either wrong and the two players stop being
+   asked the same question. */
+await check('a question served in this match is not «already seen»', async () => {
+  await seenSvc.markSeen(['dp1', 'dp2'], 'q-live', 'match-live');
+  const s = await seenSvc.seenElsewhere(['dp1', 'dp2'], 'match-live');
+  assert.ok(!s.has('q-live'), 'the running match is counting its own questions as history');
+});
+await check('and re-serving an old question keeps it in the match it came from', async () => {
+  await seenSvc.markSeen(['dp1'], 'q-old', 'match-earlier');
+  await seenSvc.markSeen(['dp1'], 'q-old', 'match-live');     // served again, later
+  const s = await seenSvc.seenElsewhere(['dp1'], 'match-live');
+  assert.ok(s.has('q-old'), 'a re-served question was moved into the current match and stopped counting');
+});
+await check('pruning does not fall over on rows that predate seen_at', async () => {
+  const gone = await seenSvc.prune('old-u');
+  assert.ok(gone >= 0);
+  const s = await seenSvc.seenElsewhere(['old-u'], '');
+  assert.ok(s.has('old-q') && s.has('new-q'), 'pruning under the cap must delete nothing');
+});
+
 /* ── the rule, so the next column added does not repeat this ─────────────── */
 console.log('every column a fresh database gets, an old one gets too:');
 const fs = await import('node:fs');
 const url = await import('node:url');
 const here = url.fileURLToPath(new URL('.', import.meta.url));
-for (const [file, table] of [
-  ['../services/gameInviteService.ts', 'game_invites'],
-  ['../services/duelRunService.ts', 'duel_runs'],
-  ['../services/waitingMusicService.ts', 'waiting_music']
+/* The third number is how many migratable columns the table is expected to
+   have — a guard on the PARSER, not on the table, so a regex that quietly
+   matched nothing cannot pass as «no missing columns». It belongs per table
+   because a four-column table legitimately has fewer than a fifteen-column one. */
+for (const [file, table, atLeast] of [
+  ['../services/gameInviteService.ts', 'game_invites', 5],
+  ['../services/duelRunService.ts', 'duel_runs', 5],
+  ['../services/waitingMusicService.ts', 'waiting_music', 5],
+  ['../services/questionSeenService.ts', 'question_seen', 2]
 ] as const) {
   await check(table + ' says every optional column twice', async () => {
     const src = fs.readFileSync(here + file, 'utf8');
@@ -275,7 +336,7 @@ for (const [file, table] of [
       .filter((l) => /DEFAULT/i.test(l) || !/NOT NULL/i.test(l))
       .map((l) => l.split(/\s+/)[0] ?? '')
       .filter((c) => /^[a-z_]+$/.test(c) && c !== 'id');
-    assert.ok(migratable.length >= 5, 'parsed too few columns to be believable: ' + migratable.join(','));
+    assert.ok(migratable.length >= atLeast, 'parsed too few columns to be believable: ' + migratable.join(','));
     const alters = [...src.matchAll(/ADD COLUMN IF NOT EXISTS \$\{col\}|`([a-z_]+) [A-Z]/g)].map((m) => m[1]).filter(Boolean);
     const missing = migratable.filter((c) => !alters.includes(c));
     assert.deepEqual(missing, [], 'added to the table but never migrated: ' + missing.join(', '));

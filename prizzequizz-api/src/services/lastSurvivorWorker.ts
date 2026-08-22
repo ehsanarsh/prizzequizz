@@ -15,6 +15,7 @@ import {
   toPrizePlayers, payout, type RoomRow, type PlayerRow, sweepIdlePlayers,
   recordRound, recordAnswerAudit} from './lastSurvivorService.js';
 import { buildPool, activeUnits, finalSplit } from './lastSurvivorPrize.js';
+import { seenCounts, leastSeen, markSeen } from './questionSeenService.js';
 import { awardScoring } from './matchEngine.js';
 import { PZ_SCORING } from './scoringConfig.js';
 import { getQuestionDistribution, recordQuestionAnswer } from './questionStatsService.js';
@@ -184,7 +185,7 @@ export function eliminationOrder(roomId: string, round: number, userIds: string[
 /* Exported as a test seam. Which questions a topic is allowed to draw is the
  * whole point of the random pool, and driving a full room to find out would
  * test the room rather than the rule. */
-export async function pickQuestion(topic: string, roomId: string, round = 1, totalRounds = 12): Promise<{ id: string; correctIndex: number; text: string; options: string[]; difficulty?: string } | null> {
+export async function pickQuestion(topic: string, roomId: string, round = 1, totalRounds = 12, playerIds: string[] = []): Promise<{ id: string; correctIndex: number; text: string; options: string[]; difficulty?: string } | null> {
   const all = await repositories.questions.listApproved();
   /* «تصادفی» is not a category — it is every category. Filtering by name would
    * match nothing and the room would stall on an empty bank, so the whole
@@ -225,8 +226,38 @@ export async function pickQuestion(topic: string, roomId: string, round = 1, tot
   }
   if (!candidates.length) candidates = available;
 
-  const q = candidates[Math.floor(Math.random() * candidates.length)]!;
+  /* AND OF THOSE, THE ONES THIS ROOM HAS SEEN LEAST.
+   *
+   * «نباید سوال تکراری پخش بشه، اگه چاره‌ای نبود تکراری باشه.» The set above is
+   * already correct for the round — right topic, right difficulty, not used in
+   * this room — and this only decides which of them to take. One question goes
+   * to everybody in the room at once, so «unseen by anyone» is often impossible
+   * in a full room; asking for the least-seen gives exactly that when it can be
+   * had and degrades a step at a time when it cannot, instead of giving up.
+   *
+   * Deliberately last: narrowing by memory BEFORE the difficulty walk would let
+   * a well-played topic push a round into the wrong tier, and the ladder is
+   * game logic. Repetition is a nuisance; a hard question in round one is a
+   * different game. */
+  let ranked = candidates;
+  if (playerIds.length) {
+    try {
+      /* Counting THIS room's own questions too, not excluding them. While the
+         bank still has fresh questions it makes no difference — anything this
+         room has asked is already in `used` and never reaches this list. It
+         matters at the far end, when a long match wraps the bank around and
+         `used` is cleared: at that point the room must not rate a question it
+         showed ten minutes ago as one the player has never seen. */
+      const counts = await seenCounts(playerIds, '');
+      ranked = leastSeen(candidates, counts);
+    } catch { /* no memory available — the old behaviour, not a broken round */ }
+  }
+
+  const q = ranked[Math.floor(Math.random() * ranked.length)]!;
   used.add(q.id);
+  /* Written now, not at the end of the match: a player who walks out after
+   * round three has still seen those three. */
+  if (playerIds.length) void markSeen(playerIds, q.id, roomId);
   return { id: q.id, correctIndex: q.correctIndex, text: q.text, options: q.options, difficulty: q.difficulty };
 }
 
@@ -235,7 +266,10 @@ export async function pickQuestion(topic: string, roomId: string, round = 1, tot
  * difficulty badge, but the answer window only starts when the gate ends — so
  * the countdown never eats into answering time. */
 async function beginRound(room: RoomRow, roundNo: number, now: number): Promise<void> {
-  const q = await pickQuestion(room.topic, room.id, roundNo, room.totalRounds);
+  /* Who is actually going to be shown this. Anyone already out is not asked
+     again, so their history must not narrow what the survivors get. */
+  const seated = (await listPlayers(room.id)).filter((p) => p.status === 'alive' || p.status === 'waiting').map((p) => p.userId);
+  const q = await pickQuestion(room.topic, room.id, roundNo, room.totalRounds, seated);
   room.round = roundNo;
   room.phase = 'ready';
   room.questionId = q?.id ?? null;
