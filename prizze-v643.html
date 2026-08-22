@@ -886,6 +886,18 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
   transition:transform .12s,box-shadow .12s}
 .tk-opt:active{transform:translateY(2px);box-shadow:0 1px 0 #000}
 .tk-opt.on{color:#fff;box-shadow:0 3px 0 #000,0 0 0 3px rgba(255,255,255,.22);transform:translateY(-1px)}
+/* «دکمه هر بلیط به رنگ خودش باشه» — its own colour on the border and the count,
+   whether or not it is the one chosen, so the three are told apart at a glance
+   instead of only when selected. */
+.tk-opt{border-color:var(--tkc,#000)}
+.tk-opt .tk-opt-n{color:var(--tkc,var(--muted))}
+.tk-opt.on .tk-opt-n{color:#fff}
+/* A tier nobody is waiting in. Dimmed and unpressable rather than hidden: a
+   button that disappears looks like a bug, one with a padlock explains itself. */
+.tk-opt.shut{opacity:.42;filter:grayscale(.75);cursor:not-allowed}
+.tk-opt.shut:active{transform:none;box-shadow:0 3px 0 #000}
+.tk-note{margin-top:9px;font-size:11px;font-weight:800;line-height:1.75;color:var(--muted);
+  background:rgba(255,255,255,.05);border:2px solid rgba(255,255,255,.10);border-radius:13px;padding:9px 11px}
 .tk-opt-art{display:flex;align-items:center;justify-content:center;height:34px;font-size:24px;line-height:1}
 .tk-opt-art img{height:34px;width:auto;max-width:100%;object-fit:contain;display:block;filter:drop-shadow(0 2px 3px rgba(0,0,0,.45))}
 .tk-opt b{font-size:12.5px;line-height:1.2}
@@ -14443,12 +14455,58 @@ function pzHomeBannerFit(host){
 const PZ_BANNER_SCREENS=['home','rankings','friends','wallet','missions','profile','support'];
 
 /* Ticket-tier selector on the paid-duel entry screen. */
+/* ── WHICH TICKETS ARE WORTH OFFERING ────────────────────────────────────
+   «بلیط سبز همیشه فعال، بلیط آبی زمانی فعال که یک نفر از بلیط سبز دکمه ادامه
+   میدهم را میزند و منتظر حریف با بلیط آبی است، و بلیط قرمز هم زمانی که یک نفر
+   دنبال حریف با بلیط قرمز هست. اینجوری همه میتونن با هم بازی کنن — الان یکی با
+   بلیط سبز دنبال حریفه یکی با بلیط قرمز و هیچ وقت همدیگرو پیدا نمیکنن.»
+
+   Two players must stake the same amount, so a green player can only ever meet
+   another green player — that part was never wrong. What was wrong is that the
+   game offered all three tiers to everybody, so three players would pick three
+   different tiers and all three wait alone.
+
+   Green is the door everyone comes in by, so it is always open. The other two
+   open only while somebody is actually standing in them, which is exactly when
+   entering one can lead to a match. */
+/* Set while an invitation is being answered: that invite's tier is the only one
+   playable, because the person who sent it already staked theirs. Read together
+   with pzPairKey, which is what actually bounds its life. */
+let _pzInviteTier=null;
+let PZ_TIER_WAITING={};
+let _pzTierPoll=null;
+async function pzLoadTierWaiting(){
+  try{
+    const r=await pzApi('GET','/matchmaking/stats',null,false);
+    const w=(r&&r.data&&r.data.waitingByTier)||{};
+    PZ_TIER_WAITING=w;
+  }catch(e){ /* unreachable → leave the last answer standing */ }
+}
+function pzTierOpen(tier){
+  /* AN INVITATION DECIDES FIRST, green included. «باید همون بلیطی که دعوت کرده
+     فعال باشه و اون دوتای دیگه غیر فعال» — the person who invited has already
+     staked their tier, so entering on any other one, green or not, would put
+     two different stakes into the same match. The lock lives exactly as long
+     as the pairing does, so it cannot outlive the invite. */
+  if(pzPairKey&&_pzInviteTier) return tier===_pzInviteTier;
+  /* «بلیط سبز همیشه فعال» — the door everyone comes in by. */
+  if(tier==='green') return true;
+  return (Number(PZ_TIER_WAITING[tier])||0)>0;
+}
+function pzTierWhyShut(tier){
+  return tier==='blue'
+    ? 'وقتی کسی با بلیط آبی منتظر حریف باشد باز می‌شود'
+    : 'وقتی کسی با بلیط قرمز منتظر حریف باشد باز می‌شود';
+}
+
 function renderTicketSelect(){
   const card=document.getElementById('ticketSelectCard'), stake=document.getElementById('modeStakeCard');
   const isDuelPaid=(curMode==='survivor'&&userPlan==='premium');
   if(card) card.style.display=isDuelPaid?'block':'none';
   if(stake&&isDuelPaid) stake.style.display='none';
   if(!isDuelPaid||!card) return;
+  /* A tier that closed while this screen was open must not stay selected. */
+  if(!pzTierOpen(selectedTicket)) selectedTicket='green';
   const prize=pzPrizeFor(selectedTicket);
   pzPromoRender('duel','promoDuel');
   card.innerHTML=
@@ -14458,18 +14516,38 @@ function renderTicketSelect(){
     '<div class="tk-pick" id="tkSelGrid"></div>';
   const g=document.getElementById('tkSelGrid');
   TICKET_DEFS.forEach(t=>{
-    const b=document.createElement('button'); b.className='tk-opt'+(selectedTicket===t.key?' on':'');
+    const open=pzTierOpen(t.key);
+    const b=document.createElement('button');
+    b.className='tk-opt'+(selectedTicket===t.key?' on':'')+(open?'':' shut');
     b.style.setProperty('--tkc',t.color);
-    if(selectedTicket===t.key) b.style.backgroundImage=t.grad;
+    /* «دکمه هر بلیط به رنگ خودش باشه و آیکون خودش» — its own colour, on the
+       button, whether or not it is the chosen one. */
+    b.style.backgroundImage=(selectedTicket===t.key)?t.grad:'none';
+    b.disabled=!open;
+    b.setAttribute('aria-disabled',open?'false':'true');
     /* Only the count — the tier price is not shown on the ticket itself. The
        SAME component Last Survivor uses, so a ticket looks like itself in both
        modes and gains its real picture in both at once. */
     b.innerHTML='<span class="tk-opt-art">'+pzTicketArt(t.key,t.icon)+'</span>'+
       '<b>'+t.name.replace('بلیط ','')+'</b>'+
-      '<span class="tk-opt-n">'+fa(mTickets[t.key]||0)+' عدد</span><span class="tk-opt-meta"></span>';
-    b.onclick=()=>{ selectedTicket=t.key; renderTicketSelect(); };
+      '<span class="tk-opt-n">'+fa(mTickets[t.key]||0)+' عدد</span>'+
+      '<span class="tk-opt-meta">'+(open?'':'🔒')+'</span>';
+    b.onclick=()=>{
+      if(!pzTierOpen(t.key)){ toast(pzTierWhyShut(t.key),3000); return; }
+      selectedTicket=t.key; renderTicketSelect();
+    };
     g.appendChild(b);
   });
+  /* Say why, rather than leaving two dead buttons on the screen. */
+  const shut=TICKET_DEFS.filter(t=>!pzTierOpen(t.key));
+  if(shut.length){
+    const n=document.createElement('div');
+    n.className='tk-note';
+    n.textContent=(pzPairKey&&_pzInviteTier)
+      ? 'این دعوت با '+tDef(_pzInviteTier).name+' فرستاده شده — با همان بازی می‌کنی.'
+      : 'بلیط‌های قفل‌شده وقتی باز می‌شوند که کسی با همان بلیط منتظر حریف باشد. با بلیط سبز شروع کن؛ اگر بردی و ادامه دادی، نوبت بلیط بعدی است.';
+    card.appendChild(n);
+  }
   const btn=document.getElementById('meStartBtn');
   if(btn) btn.textContent=(mTickets[selectedTicket]||0)>0?('ورود با '+tDef(selectedTicket).name+' 🎫'):('خرید '+tDef(selectedTicket).name+' 🎫');
   /* First paint may land before the server figure does — fill it in on arrival. */
@@ -17092,6 +17170,18 @@ go=function(id){_origGo(id);
   if(id==='home')setTimeout(()=>{try{if(_tok&&_usr)showOnboardingIfNeeded();}catch(e){}},500);
   if(id==='profile'){setTimeout(animateProfile,120);try{populateProfileEdit();}catch(e){}try{applyMyName();}catch(e){}try{pzHydrateStats();}catch(e){}}
   if(id==='mode-entry')setTimeout(()=>{updateModeEntryPlan();try{renderTicketSelect();}catch(e){}},20);
+  /* WHO IS WAITING CHANGES WHILE YOU LOOK AT IT. A tier that opens two seconds
+     after the screen was drawn is a match this player would otherwise miss, so
+     the counts are refreshed while the picker is up — and the polling stops the
+     moment they leave, because it is only worth asking while it can change what
+     is on screen. */
+  try{ clearInterval(_pzTierPoll); }catch(e){}
+  _pzTierPoll=null;
+  if(id==='mode-entry'){
+    const tick=()=>{ pzLoadTierWaiting().then(()=>{ try{ if(document.querySelector('.screen.active')&&document.querySelector('.screen.active').id==='mode-entry') renderTicketSelect(); }catch(e){} }); };
+    tick();
+    _pzTierPoll=setInterval(tick,4000);
+  }
   if(id==='character')setTimeout(ccInit,80);
   if(id==='plans')setTimeout(function(){try{planPaintChars();}catch(e){}},40);
   if(id==='missions'){markBadgeViewed('missions');showTutorialOnce('missions','🎯','ماموریت‌ها','ماموریت‌ها را کامل کن و جایزه آماده را دریافت کن.');setTimeout(renderMissions,80);}
@@ -21682,7 +21772,12 @@ function pzInviteGoNow(inv){
         if(!pzFriendlyPlan()) pzSetPlan('free');
         pzApplyCoinStake(coins);
       }
-      else if(inv.ticketTier){ selectedTicket=inv.ticketTier; duelTicket=null; }
+      else if(inv.ticketTier){
+        /* «باید همون بلیطی که دعوت کرده فعال باشه و اون دوتای دیگه غیر فعال.»
+           The person who invited has already staked that tier; entering on a
+           different one would put two different stakes in one match. */
+        selectedTicket=inv.ticketTier; duelTicket=null; _pzInviteTier=inv.ticketTier;
+      }
       pzPairKey=inv.id;                 // meet the person who invited them, nobody else
       enterMode('survivor',true);
       setTimeout(()=>{ try{ updateModeEntryPlan(); }catch(e){} try{ renderTicketSelect(); }catch(e){} },250);

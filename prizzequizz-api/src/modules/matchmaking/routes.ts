@@ -76,7 +76,12 @@ export function registerMatchmakingRoutes(router: Router, base: string): void {
          with the invite's own id as their pair key, so they meet each other and
          nobody else — and the key is only trusted when this player really is on
          that invite, or anyone could jump into somebody else's game. */
-      ticket = await matchmakingQueue.enqueue({ userId: ctx.userId, modeId, economyType, coinStake, skill, pairKey });
+      /* The tier travels with the ticket so the queue can report how many are
+         waiting in each — the game then offers only the tiers somebody is
+         actually in, instead of letting three players pick three tiers and all
+         wait alone. It does NOT change who meets whom: economyType already
+         keeps stakes equal. */
+      ticket = await matchmakingQueue.enqueue({ userId: ctx.userId, modeId, economyType, coinStake, ticketTier: ticketTier || undefined, skill, pairKey });
     } catch (e) {
       if (holdId) { try { await refundHoldById(holdId, 'enqueue_failed'); } catch { /* best-effort */ } }
       throw e;
