@@ -82,6 +82,7 @@ async function makePage() {
        winner's next enqueue quotes it back to keep their seat. */
     if (p === '/duel-calls' && route.request().method() === 'POST') return send({ called: true, call: { id: 'c-new', toUserId: 'them', tier: 'blue', stage: 2, secondsLeft: 170 } });
     if (p === '/invites/incoming') return send({ invites: [] });
+    if (p === '/invites' && route.request().method() === 'POST') return send({ id: 'inv-s', status: 'pending', secondsLeft: 55 });
     if (/^\/invites\/[^/]+$/.test(p) && route.request().method() === 'GET') return send(inviteStatus);
     if (p === '/users/me') return send({ id: 'me', username: 'ehsan', displayName: 'احسان', level: 5, balances: { wallet: 0 } });
     if (p === '/wallet') return send({ available: 0, locked: 0, tickets: { green: 3, blue: 2, red: 2 } });
@@ -884,6 +885,50 @@ const readTiers = (page) => page.evaluate(() =>
   ok('pressing it closes the sheet', closed.open === false, String(closed.open));
   ok('but the answer is still being waited for', closed.waiting === true, String(closed.waiting));
   ok('and the invitation is NOT called off', !posted.some((x) => /\/invites\/inv-w\/cancel/.test(x.path)), JSON.stringify(posted.map((x) => x.path)));
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
+/* ── SENDING IT, THE WHOLE WAY THROUGH ─────────────────────────────────── */
+/* The cases below drive pzInviteWait() by hand, which is how they can be
+   precise about what each ending says — but it leaves the one line that
+   connects the two untested, and dropping the invited player's name there
+   turns every notice back into «حریف» with nothing to notice it. So this one
+   starts where the sender starts: at the button. */
+{
+  waitingByTier = {}; posted = []; duelCalls = [];
+  inviteStatus = { id: 'inv-s', status: 'pending', secondsLeft: 50 };
+  const { ctx, page, errs } = await makePage();
+  console.log('\nsending an invitation, from the button:');
+  const sent = await page.evaluate(async () => {
+    await (0, eval)('pzInviteSend')({ userId: 'them', username: 'نگار' }, 'duel', { ticketTier: 'blue', coinStake: 0 });
+    await new Promise((r) => setTimeout(r, 400));
+    const w = (0, eval)('PZ_INV_WAIT');
+    return { id: w ? w.id : null, name: w ? w.name : null, tier: w ? w.tier : null,
+             shown: document.getElementById('aaaModal').classList.contains('show') };
+  });
+  ok('the invitation really went out', posted.some((x) => x.method === 'POST' && x.path === '/invites'),
+     JSON.stringify(posted.map((x) => x.method + ' ' + x.path)));
+  ok('and the sheet waits on that one', sent.id === 'inv-s', String(sent.id));
+  ok('with the ticket it was sent on', sent.tier === 'blue', String(sent.tier));
+  ok('and it knows who was invited', sent.name === 'نگار', String(sent.name));
+  ok('the sheet is up', sent.shown === true, String(sent.shown));
+
+  /* And the name survives all the way to the answer. */
+  const refused = await page.evaluate(async () => {
+    document.getElementById('aaaSecondary').click();
+    await new Promise((r) => setTimeout(r, 300));
+  });
+  void refused;
+  inviteStatus = { id: 'inv-s', status: 'rejected', secondsLeft: 40 };
+  const notice = await page.evaluate(async () => {
+    await new Promise((r) => setTimeout(r, 3200));
+    return { title: (document.getElementById('aaaTitle') || {}).textContent || '',
+             sub: (document.getElementById('aaaSub') || {}).textContent || '' };
+  });
+  ok('the refusal names the player who was invited', /نگار/.test(notice.sub), notice.sub.slice(0, 90));
+  ok('and does not fall back to «حریف»', !/^\s*حریف\s/.test(notice.sub), notice.sub.slice(0, 60));
+  ok('it is called a refusal', /رد شد/.test(notice.title), notice.title);
   ok('no script errors', errs.length === 0, errs.join(' | '));
   await ctx.close();
 }
