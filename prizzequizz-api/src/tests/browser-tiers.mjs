@@ -26,23 +26,29 @@ const ok = (n, c, extra = '') => { if (c) { pass++; console.log('  ok   ' + n + 
    bare emoji passes every test, because every test would be looking at the
    fallback either way. One gold pixel is enough — the size comes from CSS. */
 const ONE_PIXEL = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4f0n+PwAHtALwCdbNDwAAAABJRU5ErkJggg==', 'base64');
-/* Where the site-admin panel puts what it is given. The game has to look here
-   FIRST — asking for a bare name was asking in the one place an uploaded file
-   never is, which is why the medals kept coming back as emoji. */
-const MEDIA = '/media/mt6bmqa0-gu24xve1';
-/* '' = nothing uploaded · 'media' = uploaded through the panel, so only the
-   media folder answers · 'root' = sitting beside index.html instead. */
+/* WHAT THE SITE-ADMIN PANEL HANDS BACK. Not a folder and not a filename:
+   every upload gets an address of its own, a code with no name in it and no
+   extension — so a picture's address has to be LOOKED UP, never guessed. The
+   medals that are in the game's table are here; the ones that are not fall
+   back to its own folder, which is what «uploaded=root» stands for. */
+const MEDIA_URL = { 'medal-bronze': '/media/mt69rmlc-jwpizbiq', logo: '/media/msi929ll-52a9mhwm' };
+const MEDIA_OWNER = Object.fromEntries(Object.entries(MEDIA_URL).map(([k, v]) => [v, k]));
+/* '' = nothing uploaded · 'media' = uploaded through the panel · 'root' =
+   sitting beside index.html instead. */
 let artUploaded = '';
 let artAsked = [];
 
 const server = http.createServer((q, r) => {
   const rel = decodeURIComponent(q.url.split('?')[0]);
-  const art = /^(?:(\/media\/[^/]+))?\/([a-z0-9-]+)\.(webp|png)$/.exec(rel);
-  if (art && /^(medal-[a-z]+|logo)$/.test(art[2])) {
+  if (MEDIA_OWNER[rel]) {
     artAsked.push(rel);
-    const inMedia = art[1] === MEDIA;
-    const serve = (artUploaded === 'media' && inMedia) || (artUploaded === 'root' && !art[1]);
-    if (!serve) { r.writeHead(404); return r.end('no'); }
+    if (artUploaded !== 'media') { r.writeHead(404); return r.end('no'); }
+    r.writeHead(200, { 'content-type': 'image/png' }); return r.end(ONE_PIXEL);
+  }
+  const art = /^\/([a-z0-9-]+)\.(webp|png|jpg)$/.exec(rel);
+  if (art && /^(medal-[a-z]+|logo)$/.test(art[1])) {
+    artAsked.push(rel);
+    if (artUploaded !== 'root') { r.writeHead(404); return r.end('no'); }
     r.writeHead(200, { 'content-type': 'image/png' }); return r.end(ONE_PIXEL);
   }
   const f = path.join(ROOT, q.url === '/' ? 'prizze-v643.html' : rel);
@@ -1364,11 +1370,11 @@ const openRank = async (page, tab) => page.evaluate(async (t) => {
   }));
   ok('each place asks for a picture, not a glyph', /<img /.test(asked.gold) && /<img /.test(asked.silver) && /<img /.test(asked.bronze),
      JSON.stringify(asked).slice(0, 140));
-  /* «هر عکسی رو باید اول از اینجا سرچ کنه» — the media folder, and «فقط به
-     صورت webp» — WebP before PNG inside it. */
-  ok('and asks the media folder first', asked.gold.includes('src="' + MEDIA + '/medal-gold.webp"'), asked.gold.slice(0, 120));
-  ok('silver by its own name', asked.silver.includes('src="' + MEDIA + '/medal-silver.webp"'), asked.silver.slice(0, 120));
-  ok('and bronze by its own', asked.bronze.includes('src="' + MEDIA + '/medal-bronze.webp"'), asked.bronze.slice(0, 120));
+  /* A medal that has been uploaded is asked for by the address the panel gave
+     it; one that has not is asked for by name, «فقط به صورت webp» first. */
+  ok('an uploaded medal is asked for by its own address', asked.bronze.includes('src="' + MEDIA_URL['medal-bronze'] + '"'), asked.bronze.slice(0, 120));
+  ok('one that is not uploaded is asked for by name', asked.gold.includes('src="./medal-gold.webp"'), asked.gold.slice(0, 120));
+  ok('silver too', asked.silver.includes('src="./medal-silver.webp"'), asked.silver.slice(0, 120));
   /* A place with no artwork name of its own is not left with a broken tag. */
   ok('anything else is just the glyph', !/<img /.test(asked.unknown) && /🎖️/.test(asked.unknown), asked.unknown);
 
@@ -1398,13 +1404,10 @@ const openRank = async (page, tab) => page.evaluate(async (t) => {
     host.remove();
     return out;
   });
-  ok('it starts in the media folder', fell.seen[0] === MEDIA + '/medal-gold.webp', String(fell.seen[0]));
-  ok('and works through the formats there first', fell.seen[1] === MEDIA + '/medal-gold.png' && fell.seen[2] === MEDIA + '/medal-gold.jpg',
-     JSON.stringify(fell.seen.slice(0, 3)));
-  ok('only then beside the game itself', fell.seen[3] === './medal-gold.webp', String(fell.seen[3]));
-  ok('and its other formats after that', fell.seen[4] === './medal-gold.png' && fell.seen[5] === './medal-gold.jpg',
-     JSON.stringify(fell.seen.slice(3)));
-  ok('six addresses, no more', fell.seen.length === 6, JSON.stringify(fell.seen));
+  ok('a name with no upload starts beside the game', fell.seen[0] === './medal-gold.webp', String(fell.seen[0]));
+  ok('and works through the formats', fell.seen[1] === './medal-gold.png' && fell.seen[2] === './medal-gold.jpg',
+     JSON.stringify(fell.seen));
+  ok('three addresses, no more', fell.seen.length === 3, JSON.stringify(fell.seen));
   ok('and with none of them, the emoji comes back', fell.text === '🥇' && fell.stillImg === false, JSON.stringify(fell));
   ok('no script errors', errs.length === 0, errs.join(' | '));
   await ctx.close();
@@ -1416,7 +1419,7 @@ const openRank = async (page, tab) => page.evaluate(async (t) => {
    way to notice if the podium ever stops calling the builder at all. */
 {
   waitingByTier = {}; posted = []; duelCalls = [];
-  artUploaded = 'media'; artAsked = [];
+  artUploaded = 'root'; artAsked = [];
   const { ctx, page, errs } = await makePage();
   console.log('\nonce the medal files are on the server:');
   await openRank(page, 'cup');

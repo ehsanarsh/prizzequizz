@@ -10465,35 +10465,43 @@ function pzArtLegacy(el, tries, onDone){
  *
  * So a player never waits for artwork, and an operator's new file still appears
  * without anybody clearing anything. */
-/* ── WHERE THE PICTURES ACTUALLY ARE ─────────────────────────────────────
-   «من عکسا رو از site-admin آپلود می‌کنم، می‌ره به این آدرس /media/… پس هر
-    عکسی رو باید اول از اینجا سرچ کنه، نبود بره جاهای دیگه رو سرچ کنه.»
+/* ══ WHERE EVERY PICTURE IN THE GAME LIVES ═══════════════════════════════
+   «برای هر عکس یه آدرس هست ولی در همه‌اش media مشترکه … هر کدوم بعد مدیا یه کد
+    منحصر به فرد داره، مثلا /media/msi929ll-52a9mhwm این برای لوگو و
+    /media/mt69rmlc-jwpizbiq این برای مدال برنز — هر عکس یه کد.»
 
-   Artwork uploaded from the site-admin panel does not land beside index.html;
-   it lands under the media folder. Asking for it by bare name was asking in
-   the one place an uploaded file is never going to be — which is why the
-   medals came back as emoji however many times they were uploaded, and why
-   every other picture the game names would have done the same.
+   The site-admin panel does not keep the name it was given. Every upload comes
+   back as an address of its own: a code, no filename in it and no extension.
+   So there is NOTHING TO GUESS — asking for `logo.webp` in any folder is
+   asking for a file that does not exist under that name anywhere, which is why
+   the medals kept coming back as emoji however many times they were uploaded.
 
-   So a name is a LIST of addresses now, tried in order: the media folder
-   first, the game's own folder second, and the formats in the order they are
-   worth having. One list, used by BOTH loaders — the `data-pzsrc` pictures and
-   the podium's medals — because two lists is how one of them ends up right and
-   the other one wrong. If the media folder is ever renamed, the first string
-   here is the whole change.
+   A name has to be LOOKED UP, and this table is the lookup. To put a picture
+   into the game: upload it, press «کپی نشانی», and paste the address here
+   beside the name the game knows it by. That name is then live everywhere the
+   game draws it — the podium, the home cards, the wheel — with nothing else to
+   change.
 
-   Names with a slash or a scheme in them are left exactly as they are: those
-   are already addresses, not names to look up. */
-const PZ_IMG_BASES=['/media/mt6bmqa0-gu24xve1','.'];
+   A name that is NOT in the table falls back to the game's own folder, exactly
+   as everything worked before. So the table can be filled in one line at a
+   time, and a name nobody has uploaded yet still behaves itself. */
+const PZ_IMG_URLS={
+  'logo':         '/media/msi929ll-52a9mhwm',
+  'medal-bronze': '/media/mt69rmlc-jwpizbiq'
+  /* 'medal-gold':   '…',  ← paste the «کپی نشانی» of each upload here
+     'medal-silver': '…',  */
+};
 const PZ_IMG_EXTS=['webp','png','jpg'];
 function pzImgCandidates(name){
   const n=String(name||'');
   if(!n) return [];
+  /* Already an address rather than a name — used exactly as it is. */
   if(/[:/]/.test(n)) return PZ_IMG_EXTS.map((e)=>n+'.'+e);
   const out=[];
-  for(let i=0;i<PZ_IMG_BASES.length;i++)
-    for(let j=0;j<PZ_IMG_EXTS.length;j++)
-      out.push(String(PZ_IMG_BASES[i]).replace(/\/+$/,'')+'/'+n+'.'+PZ_IMG_EXTS[j]);
+  /* The uploaded address is COMPLETE. The panel's code is the file itself;
+     there is no extension to bolt onto the end of it. */
+  if(PZ_IMG_URLS[n]) out.push(PZ_IMG_URLS[n]);
+  for(let j=0;j<PZ_IMG_EXTS.length;j++) out.push('./'+n+'.'+PZ_IMG_EXTS[j]);
   return out;
 }
 const _pzArtUrls={};       /* base → object URL of the freshest bytes we hold */

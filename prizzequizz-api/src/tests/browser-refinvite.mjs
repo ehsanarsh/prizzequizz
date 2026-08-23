@@ -23,21 +23,34 @@ const ROOT = '/home/user/prizzequizz';
 let pass = 0, fail = 0;
 const ok = (n, c, extra = '') => { if (c) { pass++; console.log('  ok   ' + n + (extra ? '  [' + extra + ']' : '')); } else { fail++; console.log('  FAIL ' + n + (extra ? '  [' + extra + ']' : '')); } };
 
-/* Where the site-admin panel puts what it is given. */
-const MEDIA = '/media/mt6bmqa0-gu24xve1';
+/* WHAT THE SITE-ADMIN PANEL HANDS BACK.
+   Not a folder and not a filename: every upload gets an address of its own,
+   a code with no name in it and no extension. Nothing about a picture can be
+   worked out from what it is called, which is the whole reason the game has to
+   look names up rather than guess at them. */
+const MEDIA_URL = {
+  logo: '/media/msi929ll-52a9mhwm',
+  'medal-bronze': '/media/mt69rmlc-jwpizbiq'
+};
 const ONE_PIXEL = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4f0n+PwAHtALwCdbNDwAAAABJRU5ErkJggg==', 'base64');
-/* '' = nothing uploaded · 'media' = uploaded through the panel · 'root' =
-   sitting beside index.html instead. */
+/* '' = nothing uploaded · 'media' = uploaded through the panel, so only the
+   panel's own addresses answer · 'root' = sitting beside index.html instead. */
 let artUploaded = '';
 let artAsked = [];
+const MEDIA_OWNER = Object.fromEntries(Object.entries(MEDIA_URL).map(([k, v]) => [v, k]));
 
 const server = http.createServer((q, r) => {
   const rel = decodeURIComponent(q.url.split('?')[0]);
-  const art = /^(?:(\/media\/[^/]+))?\/([a-z0-9-]+)\.(webp|png|jpg)$/.exec(rel);
-  if (art && /^(medal-[a-z]+|logo)$/.test(art[2])) {
+  /* An uploaded picture, asked for by the address the panel gave it. */
+  if (MEDIA_OWNER[rel]) {
     artAsked.push(rel);
-    const serve = (artUploaded === 'media' && art[1] === MEDIA) || (artUploaded === 'root' && !art[1]);
-    if (!serve) { r.writeHead(404); return r.end('no'); }
+    if (artUploaded !== 'media') { r.writeHead(404); return r.end('no'); }
+    r.writeHead(200, { 'content-type': 'image/png' }); return r.end(ONE_PIXEL);
+  }
+  const art = /^\.?\/([a-z0-9-]+)\.(webp|png|jpg)$/.exec(rel);
+  if (art && /^(medal-[a-z]+|logo|cup-crown|mode-[a-z]+|wheel[a-z]+|winchar|losechar)$/.test(art[1])) {
+    artAsked.push(rel);
+    if (artUploaded !== 'root') { r.writeHead(404); return r.end('no'); }
     r.writeHead(200, { 'content-type': 'image/png' }); return r.end(ONE_PIXEL);
   }
   /* Compare the PATH, not the raw url — `/?ref=…` is still the index, and
@@ -249,7 +262,10 @@ async function makePage(query = '') {
   /* «روی سکوی یک بچسبه» — first place only. */
   ok('second place has none', pod.second === null, JSON.stringify(pod.second));
   ok('and neither has third', pod.third === null, JSON.stringify(pod.third));
-  ok('the media folder was asked first', /^\/media\//.test(artAsked[0] || ''), String(artAsked[0]));
+  ok('and by the address the panel gave it, not by its name',
+     ((pod.first || {}).src || '') === MEDIA_URL.logo, String((pod.first || {}).src));
+  ok('nothing tried to guess a filename for it',
+     !artAsked.some((a) => /logo\.(webp|png|jpg)$/.test(a)), JSON.stringify(artAsked.filter((a) => /logo/.test(a))));
   ok('no script errors', errs.length === 0, errs.join(' | '));
   await ctx.close();
   artUploaded = '';
@@ -274,10 +290,91 @@ async function makePage(query = '') {
      broken-image icon, and not a gap where the rank digit used to be. */
   ok('nothing is left on the plinth', pod.logo === false && pod.imgs === 0, JSON.stringify(pod));
   ok('and the rank is exactly where it was', pod.rank.trim() === '۱', pod.rank);
-  ok('the media folder was still tried first', /^\/media\//.test(artAsked[0] || ''), String(artAsked[0]));
-  ok('and the game’s own folder after it', artAsked.some((a) => !/^\/media\//.test(a)), JSON.stringify(artAsked.slice(0, 8)));
+  /* `artAsked` is what the SERVER was asked for — the browser has already
+     resolved './logo.webp' against the page, so it arrives as '/logo.webp'. */
+  ok('its uploaded address was tried first',
+     artAsked.indexOf(MEDIA_URL.logo) >= 0 && artAsked.indexOf(MEDIA_URL.logo) < artAsked.indexOf('/logo.webp'),
+     JSON.stringify(artAsked.filter((a) => /logo/.test(a))));
+  ok('and the game’s own folder only after that', artAsked.includes('/logo.webp'),
+     JSON.stringify(artAsked.filter((a) => /logo/.test(a))));
   ok('no script errors', errs.length === 0, errs.join(' | '));
   await ctx.close();
+}
+
+/* ── 8. AND IT IS EVERY PICTURE, NOT JUST THE MEDALS ────────────────────── */
+/* «هر عکسی» — every picture. The game already had its own loader for the
+   `data-pzsrc` artwork (the mode cards, the cup, the wheel characters), and
+   fixing only the podium would have left every one of those asking for a
+   filename the panel never kept. Both loaders read the same lookup, and this
+   is the half that is not the podium — driven directly, because no home-screen
+   picture has been uploaded yet and inventing an address for one here would be
+   putting made-up production data in a test. */
+{
+  artUploaded = 'media'; artAsked = [];
+  const { ctx, page, errs } = await makePage();
+  console.log('\nthe game’s own image loader:');
+
+  const mapped = await page.evaluate(async () => {
+    const im = document.createElement('img');
+    document.body.appendChild(im);
+    await new Promise((done) => { (0, eval)('pzTryArt')(im, 'logo', () => done()); setTimeout(done, 2500); });
+    const out = { src: im.getAttribute('src'), art: im.getAttribute('data-pzart'), loaded: im.naturalWidth > 0 };
+    im.remove();
+    return out;
+  });
+  ok('a name in the table is fetched by its uploaded address', mapped.src === MEDIA_URL.logo, String(mapped.src));
+  ok('and it loads', mapped.loaded === true, JSON.stringify(mapped));
+  ok('it is still tracked under its name', mapped.art === 'logo', String(mapped.art));
+  ok('no filename was ever guessed for it', !artAsked.some((a) => /logo\.(webp|png|jpg)$/.test(a)),
+     JSON.stringify(artAsked.filter((a) => /logo/.test(a))));
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+  artUploaded = '';
+}
+
+/* ── 9. A NAME NOBODY HAS UPLOADED STILL WORKS THE OLD WAY ──────────────── */
+/* The table is filled in one line at a time, so most names are not in it yet.
+   Those have to keep behaving exactly as they did before any of this. */
+{
+  artUploaded = 'root'; artAsked = [];
+  const { ctx, page, errs } = await makePage();
+  console.log('\na name that is not in the table:');
+
+  const home = await page.evaluate(async () => {
+    (0, eval)("go('home')");
+    await new Promise((r) => setTimeout(r, 1500));
+    return [...document.querySelectorAll('img[data-pzsrc]')].map((im) => ({
+      name: im.getAttribute('data-pzsrc'), loaded: im.naturalWidth > 0,
+      hidden: getComputedStyle(im).display === 'none'
+    })).filter((x) => x.name);
+  });
+  ok('the home screen names pictures of its own', home.length >= 1, JSON.stringify(home.map((x) => x.name)));
+  ok('and they still load from the game’s own folder', home.some((x) => x.loaded && !x.hidden),
+     JSON.stringify(home));
+  ok('asked for by name, as they always were', artAsked.some((a) => /^\/mode-[a-z]+\.webp$/.test(a)),
+     JSON.stringify(artAsked.slice(0, 6)));
+
+  /* The lookup itself, for the rules that have no picture to look at. */
+  const lists = await page.evaluate(() => ({
+    mapped: (0, eval)('pzImgCandidates')('logo'),
+    plain: (0, eval)('pzImgCandidates')('mode-duel'),
+    path: (0, eval)('pzImgCandidates')('/some/where/thing'),
+    url: (0, eval)('pzImgCandidates')('https://cdn.example.com/thing'),
+    empty: (0, eval)('pzImgCandidates')('')
+  }));
+  ok('a name in the table starts at its uploaded address', lists.mapped[0] === MEDIA_URL.logo, JSON.stringify(lists.mapped));
+  /* The panel's address IS the file — bolting .webp onto the end of it asks
+     for something that does not exist. */
+  ok('and that address is used whole, with nothing added', !/\.(webp|png|jpg)$/.test(lists.mapped[0]), lists.mapped[0]);
+  ok('with the game’s own folder still behind it', lists.mapped.includes('./logo.webp'), JSON.stringify(lists.mapped));
+  ok('a name not in the table goes straight to that folder', lists.plain[0] === './mode-duel.webp', JSON.stringify(lists.plain));
+  ok('WebP before the rest', lists.plain.indexOf('./mode-duel.webp') < lists.plain.indexOf('./mode-duel.png'), JSON.stringify(lists.plain));
+  ok('a path is left exactly as it is', lists.path.length === 3 && lists.path.every((u) => u.startsWith('/some/where/thing.')), JSON.stringify(lists.path));
+  ok('and so is a full URL', lists.url.length === 3 && lists.url.every((u) => u.startsWith('https://cdn.example.com/thing.')), JSON.stringify(lists.url));
+  ok('no name at all asks for nothing', lists.empty.length === 0, JSON.stringify(lists.empty));
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+  artUploaded = '';
 }
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
