@@ -102,6 +102,13 @@ const readTiers = (page) => page.evaluate(() =>
   ok('the locked ones say why on the tile', /🔒/.test(meta[1]) && /منتظر/.test(meta[1]), JSON.stringify(meta));
   ok('and the open one says nothing', meta[0].trim() === '', JSON.stringify(meta));
   ok('no paragraph is spent on it', (await page.evaluate(() => !document.querySelector('#ticketSelectCard .tk-note'))) === true);
+  /* AND THE REASON COSTS NOTHING. The padlock rides in the row already
+     reserved for it — left free to grow, it took three pixels off every ticket
+     tile, and on this screen every pixel a tile takes comes out of the banner.
+     Measured against the OPEN tile, which carries no padlock at all. */
+  const heights = await page.evaluate(() =>
+    [...document.querySelectorAll('#tkSelGrid .tk-opt')].map((b) => Math.round(b.getBoundingClientRect().height)));
+  ok('a locked tile is no taller than an open one', heights[1] === heights[0] && heights[2] === heights[0], JSON.stringify(heights));
   /* Tapping one says the whole sentence, where it costs no room at all. */
   const why = await page.evaluate(async () => {
     [...document.querySelectorAll('#tkSelGrid .tk-opt')][1].click();
@@ -296,7 +303,12 @@ const readTiers = (page) => page.evaluate(() =>
   });
   ok('a sheet opens', sheet.shown === true, JSON.stringify(sheet));
   ok('it names the person who carried on', /رضا/.test(sheet.title) && /ادامه داد/.test(sheet.title), sheet.title);
-  ok('and the ticket that reaches them', /بلیط آبی/.test(sheet.sub), sheet.sub.slice(0, 90));
+  /* BOTH HALVES. The sheet says two things — where they are standing now, and
+     what it would take to reach them — and each needs the ticket in it. One
+     of them alone lets the other go missing without anything noticing. */
+  ok('it says which tier they are standing in', /حالا با بلیط آبی/.test(sheet.sub), sheet.sub.slice(0, 60));
+  ok('and what it takes to reach them', /با بلیط آبی حقتو/.test(sheet.sub), sheet.sub.slice(0, 120));
+  ok('the ticket named is the one the call carried', !/بلیط سبز|بلیط قرمز/.test(sheet.sub), sheet.sub.slice(0, 120));
   ok('«پیداش کن» is the first button', /پیداش کن/.test(sheet.primary), sheet.primary);
   ok('«بی‌خیال» is the second, and really there', /بی.?خیال/.test(sheet.secondary) && sheet.secondaryShown, JSON.stringify([sheet.secondary, sheet.secondaryShown]));
   /* Read the moment it is shown, or the same sheet reopens every twelve
