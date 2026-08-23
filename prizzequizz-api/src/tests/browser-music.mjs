@@ -1075,13 +1075,19 @@ for (const [policy, expect] of [['quiet', 'quieter'], ['stop', 'stopped'], ['kee
     const h = document.getElementById('lsMusicHint');
     const tab = document.getElementById('lsMusicTab');
     if (!h) return null;
-    const hr = h.getBoundingClientRect(), tr = tab.getBoundingClientRect();
+    const dock = document.querySelector('#lsBody .lm-dock');
+    const hr = h.getBoundingClientRect(), tr = tab.getBoundingClientRect(), dr = dock.getBoundingClientRect();
     return { text: h.textContent, hidden: !!h.hidden, w: Math.round(hr.width), tabW: Math.round(tr.width),
+             dockW: Math.round(dr.width), covered: Math.round(hr.width + tr.width),
              tag: h.tagName, sameRow: Math.abs(hr.top - tr.top) < 6 };
   });
   ok('there is something written in the strip', !!idle && !idle.hidden && idle.text.trim().length > 8, JSON.stringify(idle));
   ok('and it says the music is there to enjoy', /لذت/.test((idle && idle.text) || ''), idle && idle.text);
-  ok('it fills the rest of the row', idle.w > idle.tabW, idle.w + 'px vs tab ' + idle.tabW + 'px');
+  /* THE REST OF THE ROW, not merely more than the tab. Left to size itself to
+     its own text it would still be the wider of the two and leave a dead strip
+     at the end — which is the blank space this is about. */
+  ok('it fills the rest of the row', Math.abs(idle.covered - idle.dockW) <= 6,
+     'tab ' + idle.tabW + ' + hint ' + idle.w + ' = ' + idle.covered + ' vs dock ' + idle.dockW);
   ok('sitting on the same line as the tab', idle.sameRow === true, String(idle.sameRow));
 
   /* «قسمت خالی که تاچ میکنی و کشویی باز میشه» — the strip is what opens it. */

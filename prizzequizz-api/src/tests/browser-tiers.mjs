@@ -596,6 +596,35 @@ const readTiers = (page) => page.evaluate(() =>
   await ctx.close();
 }
 
+/* ── THE FRIENDLY HALF STILL CHOOSES ON A SCREEN ───────────────────────── */
+/* A friendly duel is arranged for a number of coins and a heart, and BOTH of
+ * those are chosen on the entry screen — so that half keeps its screen. Sending
+ * a coin duel straight to the radar would skip the two things it is played
+ * for, and would go looking for a ticket nobody agreed to spend. */
+{
+  waitingByTier = {}; posted = []; duelCalls = [];
+  const { ctx, page, errs } = await makePage();
+  console.log('\naccepting a friendly duel arranged for coins:');
+  const after = await page.evaluate(async () => {
+    (0, eval)('pzInviteGoNow')({ id: 'inv-c', mode: 'duel', ticketTier: '', coinStake: 300 });
+    await new Promise((r) => setTimeout(r, 1200));
+    return {
+      screen: (document.querySelector('.screen.active') || {}).id || '',
+      plan: (0, eval)('userPlan'),
+      stake: (0, eval)('practiceCoinStake'),
+      held: (0, eval)('duelTicket')
+    };
+  });
+  ok('the entry screen opens, because there is still something to choose', after.screen === 'mode-entry', after.screen);
+  ok('not the radar', after.screen !== 'matchmaking', after.screen);
+  ok('in the friendly half', after.plan === 'free', String(after.plan));
+  ok('asking for the coins that were agreed', Number(after.stake) === 300, String(after.stake));
+  ok('and no ticket is held for it', !after.held, String(after.held));
+  ok('no enqueue was started', posted.every((x) => x.path !== '/matchmaking/enqueue'), JSON.stringify(posted.map((x) => x.path)));
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
 /* ── THE SHEET THAT ASKS WHICH TICKET TO INVITE WITH ───────────────────── */
 /* «در مودال دعوت به دوئل رنگ دکمه انتخاب بلیط باید با بلیط ها ست باشه و آیکون
  * بلیط ها هم باید رو دکمه باشه، و تعداد بلیط های موجود رو روی دکمه ها ببینه، و
@@ -734,6 +763,43 @@ const readTiers = (page) => page.evaluate(() =>
   ok('and so is the secondary', r.secondary === 'none', r.secondary);
   ok('the backdrop stays the way out', r.flag === '1', String(r.flag));
   ok('and it works', r.gone === true, String(r.gone));
+
+  /* A SHEET THAT NEVER MENTIONS ITS PRIMARY STILL HAS ONE. Only an EXPLICIT
+     empty label means «no primary action» — undefined means «use the default»,
+     and a sheet that has always had a button must not lose it. */
+  const dflt = await page.evaluate(async () => {
+    (0, eval)('showAaaModal')({ icon: '✅', title: 'خبر', sub: 'یک خبر' });
+    await new Promise((res) => setTimeout(res, 300));
+    const p = document.getElementById('aaaPrimary');
+    const ov = document.getElementById('aaaModal');
+    const out = { display: getComputedStyle(p).display, label: p.textContent, flag: ov.dataset.dismissible };
+    p.click();
+    await new Promise((res) => setTimeout(res, 300));
+    out.closed = !ov.classList.contains('show');
+    return out;
+  });
+  ok('a sheet that never mentioned a primary keeps one', dflt.display !== 'none', dflt.display);
+  ok('with the default label on it', /متوجه شدم/.test(dflt.label), dflt.label);
+  ok('so it counts as having its own way out', dflt.flag === '0', String(dflt.flag));
+  ok('and that button closes it', dflt.closed === true, String(dflt.closed));
+
+  /* A COUNTDOWN IS A WAY OUT TOO — it closes the sheet itself when it runs
+     down, so the backdrop is not needed and must not be offered. */
+  const timed = await page.evaluate(async () => {
+    (0, eval)('showAaaModal')({ icon: '⏳', title: 'آماده‌ای؟', sub: 'شروع…', seconds: 3, hideActions: true });
+    await new Promise((res) => setTimeout(res, 300));
+    const ov = document.getElementById('aaaModal');
+    const out = { flag: ov.dataset.dismissible, timed: ov.dataset.timed, actions: getComputedStyle(document.getElementById('aaaActions')).display };
+    const box = ov.getBoundingClientRect();
+    ov.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: box.left + 3, clientY: box.top + 3 }));
+    await new Promise((res) => setTimeout(res, 400));
+    out.stillOpen = ov.classList.contains('show');
+    return out;
+  });
+  ok('a countdown sheet shows no buttons at all', timed.actions === 'none', timed.actions);
+  ok('yet it is marked as having its own way out', timed.flag === '0', String(timed.flag));
+  ok('and is marked as timed', timed.timed === '1', String(timed.timed));
+  ok('so tapping beside it does nothing', timed.stillOpen === true, String(timed.stillOpen));
   ok('no script errors', errs.length === 0, errs.join(' | '));
   await ctx.close();
 }
