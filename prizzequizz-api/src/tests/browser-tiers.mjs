@@ -17,8 +17,24 @@ const ROOT = '/home/user/prizzequizz';
 let pass = 0, fail = 0;
 const ok = (n, c, extra = '') => { if (c) { pass++; console.log('  ok   ' + n + (extra ? '  [' + extra + ']' : '')); } else { fail++; console.log('  FAIL ' + n + (extra ? '  [' + extra + ']' : '')); } };
 
+/* THE MEDAL ARTWORK, WHEN IT IS THERE.
+   The repository carries no medal files — they are uploaded to the server
+   beside index.html — so by default every request for one 404s and the podium
+   falls all the way down its ladder to the emoji. That is worth testing, and
+   so is the other half: with the files in place the podium must actually SHOW
+   them. Without this, deleting the call to pzMedalHTML() and going back to
+   bare emoji passes every test, because every test would be looking at the
+   fallback either way. One gold pixel is enough — the size comes from CSS. */
+const ONE_PIXEL = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4f0n+PwAHtALwCdbNDwAAAABJRU5ErkJggg==', 'base64');
+let medalsUploaded = false;
+
 const server = http.createServer((q, r) => {
-  const f = path.join(ROOT, q.url === '/' ? 'prizze-v643.html' : decodeURIComponent(q.url.split('?')[0]));
+  const rel = decodeURIComponent(q.url.split('?')[0]);
+  if (/^\/medal-[a-z]+\.(webp|png)$/.test(rel)) {
+    if (!medalsUploaded) { r.writeHead(404); return r.end('no'); }
+    r.writeHead(200, { 'content-type': 'image/png' }); return r.end(ONE_PIXEL);
+  }
+  const f = path.join(ROOT, q.url === '/' ? 'prizze-v643.html' : rel);
   if (!f.startsWith(ROOT) || !fs.existsSync(f) || fs.statSync(f).isDirectory()) { r.writeHead(404); return r.end('no'); }
   r.writeHead(200); fs.createReadStream(f).pipe(r);
 });
@@ -1272,6 +1288,42 @@ const openRank = async (page, tab) => page.evaluate(async (t) => {
   ok('and with neither, the emoji comes back', fell.text === '🥇' && fell.stillImg === false, JSON.stringify(fell));
   ok('no script errors', errs.length === 0, errs.join(' | '));
   await ctx.close();
+}
+
+/* ── AND WITH THE FILES UPLOADED, THE PODIUM WEARS THEM ────────────────── */
+/* The tests above ask the BUILDER what markup it wants. This one asks the
+   podium what it actually put on the page, with the files answering — the only
+   way to notice if the podium ever stops calling the builder at all. */
+{
+  waitingByTier = {}; posted = []; duelCalls = [];
+  medalsUploaded = true;
+  const { ctx, page, errs } = await makePage();
+  console.log('\nonce the medal files are on the server:');
+  await openRank(page, 'cup');
+  const worn = await page.evaluate(async () => {
+    await new Promise((r) => setTimeout(r, 400));
+    return [...document.querySelectorAll('.podium .pod')].map((p) => {
+      const m = p.querySelector('.pod-medal');
+      const img = m ? m.querySelector('img') : null;
+      const box = m ? m.getBoundingClientRect() : null;
+      return {
+        cls: p.className,
+        src: img ? (img.getAttribute('src') || '') : null,
+        loaded: img ? img.naturalWidth > 0 : false,
+        w: box ? Math.round(box.width) : 0,
+        text: m ? m.textContent : ''
+      };
+    });
+  });
+  ok('the podium shows the artwork, not the glyph', worn.every((p) => p.src && p.loaded), JSON.stringify(worn));
+  ok('gold in the middle', /medal-gold\./.test(worn[1].src || ''), String(worn[1].src));
+  ok('silver to one side of it', /medal-silver\./.test(worn[0].src || ''), String(worn[0].src));
+  ok('bronze to the other', /medal-bronze\./.test(worn[2].src || ''), String(worn[2].src));
+  ok('and no glyph left sitting behind it', worn.every((p) => p.text.trim() === ''), JSON.stringify(worn.map((p) => p.text)));
+  ok('each keeps the space the CSS reserved', worn.every((p) => p.w >= 24), JSON.stringify(worn.map((p) => p.w)));
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+  medalsUploaded = false;
 }
 
 {
