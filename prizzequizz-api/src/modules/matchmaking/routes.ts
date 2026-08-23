@@ -32,6 +32,15 @@ export function registerMatchmakingRoutes(router: Router, base: string): void {
     const coinStake = entry.coinStake === undefined ? undefined : Number(entry.coinStake);
     const skill = body.skill === undefined ? undefined : Number(body.skill);
     const ticketTier = optionalString(body, 'ticketTier');
+    /* WHERE A CHAINED WINNER IS STANDING. They spend no new ticket — their
+       doubled winnings ARE the next tier's stake — so `ticketTier` is empty and
+       nothing here holds, takes or refunds anything for `waitTier`. It exists
+       only so `stats()` can report the tier as occupied, which is what opens
+       the blue door for the person they just beat. Whitelisted, because it is
+       a label the client chooses and it must never become a way to hold a
+       ticket by another name. */
+    const waitTierRaw = (optionalString(body, 'waitTier') || '').toLowerCase();
+    const waitTier = (['green', 'blue', 'red'].includes(waitTierRaw) && !ticketTier) ? waitTierRaw : undefined;
 
     /* Paid entry is TICKET-based. The ticket is HELD, not spent: it is only
      * really gone once the match starts, and any ending before that gives it
@@ -81,7 +90,7 @@ export function registerMatchmakingRoutes(router: Router, base: string): void {
          actually in, instead of letting three players pick three tiers and all
          wait alone. It does NOT change who meets whom: economyType already
          keeps stakes equal. */
-      ticket = await matchmakingQueue.enqueue({ userId: ctx.userId, modeId, economyType, coinStake, ticketTier: ticketTier || undefined, skill, pairKey });
+      ticket = await matchmakingQueue.enqueue({ userId: ctx.userId, modeId, economyType, coinStake, ticketTier: ticketTier || undefined, waitTier, skill, pairKey });
     } catch (e) {
       if (holdId) { try { await refundHoldById(holdId, 'enqueue_failed'); } catch { /* best-effort */ } }
       throw e;

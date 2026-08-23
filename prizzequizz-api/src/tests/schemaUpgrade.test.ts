@@ -382,6 +382,73 @@ await check('pruning does not fall over on rows that predate seen_at', async () 
   assert.ok(s.has('old-q') && s.has('new-q'), 'pruning under the cap must delete nothing');
 });
 
+/* ── duel_calls, as it would stand if it had shipped without seen_at ─────── */
+/* «حریفت ادامه داد» is shown ONCE — `seen_at` is what stops the same modal
+   opening on every twelve-second poll for the next three minutes. A server that
+   created the table before that column existed would answer every read with
+   «column seen_at does not exist», and the loser would be told nothing at all. */
+console.log('\na server booting on a duel_calls table with no seen_at:');
+await pool.query('DROP TABLE IF EXISTS duel_calls');
+await pool.query(`CREATE TABLE duel_calls (
+  id TEXT PRIMARY KEY,
+  to_user_id TEXT NOT NULL,
+  from_user_id TEXT NOT NULL,
+  created_at BIGINT NOT NULL)`);
+await pool.query(`INSERT INTO duel_calls(id, to_user_id, from_user_id, created_at) VALUES ('old-c','old-loser','old-winner',1)`);
+
+await check('an old duel_calls table gains the columns it is missing', async () => {
+  const callSvc = await import('../services/duelCallService.js');
+  callSvc._resetDuelCalls();
+  const c = await callSvc.callAfterWin({
+    toUserId: 'new-loser', fromUserId: 'new-winner', fromName: 'برنده',
+    tier: 'blue', matchId: 'm-upgrade', stage: 2
+  });
+  assert.equal(c.tier, 'blue');
+  const list = await callSvc.pendingFor('new-loser');
+  assert.equal(list.length, 1, 'the upgraded table could not be read back');
+  assert.equal(list[0]!.matchId, 'm-upgrade');
+  assert.equal(await callSvc.markSeen(c.id, 'new-loser'), true);
+  assert.deepEqual(await callSvc.pendingFor('new-loser'), [], 'seen_at did not silence the call');
+});
+
+/* The row that predates `expires_at` gets the default, 0, which reads as «its
+   window closed long ago» — and that is the right answer for it. A call is only
+   worth showing while the person it names is still standing in that tier, and
+   nothing on a row written before the column existed can say whether they are.
+   So it is swept, not delivered: the alternative is a modal sending somebody
+   after a player who left months ago. */
+await check('a call left over from before the window existed is not delivered', async () => {
+  const callSvc = await import('../services/duelCallService.js');
+  assert.deepEqual(await callSvc.pendingFor('old-loser'), []);
+  const { rows } = await pool.query(`SELECT id FROM duel_calls WHERE id = 'old-c'`);
+  assert.equal(rows.length, 0, 'a call that can never be shown was kept forever');
+});
+
+/* The one-knock rule, on the driver that enforces it with an index rather than
+   a loop. Pressing «ادامه میدهم» twice — or a retried request — must not open
+   two modals on the same person about the same match. */
+await check('on Postgres too, a second press is the same call', async () => {
+  const callSvc = await import('../services/duelCallService.js');
+  const a = await callSvc.callAfterWin({ toUserId: 'dbl-loser', fromUserId: 'dbl-winner', fromName: 'برنده', tier: 'red', matchId: 'm-dbl-db', stage: 3 });
+  const b = await callSvc.callAfterWin({ toUserId: 'dbl-loser', fromUserId: 'dbl-winner', fromName: 'برنده', tier: 'red', matchId: 'm-dbl-db', stage: 3 });
+  assert.equal(a.id, b.id, 'a second press wrote a second call');
+  const list = await callSvc.pendingFor('dbl-loser');
+  assert.equal(list.length, 1, 'two modals are waiting: ' + list.length);
+  assert.equal(list[0]!.tier, 'red');
+});
+
+/* The same match ends for two different people in two different tiers only in
+   a test — but the index is on (match_id, to_user_id), not match_id alone, and
+   that difference is what keeps a busy server from silently dropping one
+   player's call because another player's arrived first. */
+await check('and two people can each be called about their own match', async () => {
+  const callSvc = await import('../services/duelCallService.js');
+  await callSvc.callAfterWin({ toUserId: 'pair-a', fromUserId: 'w1', fromName: 'w1', tier: 'blue', matchId: 'm-shared', stage: 2 });
+  await callSvc.callAfterWin({ toUserId: 'pair-b', fromUserId: 'w2', fromName: 'w2', tier: 'blue', matchId: 'm-shared', stage: 2 });
+  assert.equal((await callSvc.pendingFor('pair-a')).length, 1);
+  assert.equal((await callSvc.pendingFor('pair-b')).length, 1, 'the second player was never told');
+});
+
 /* ── the rule, so the next column added does not repeat this ─────────────── */
 console.log('every column a fresh database gets, an old one gets too:');
 const fs = await import('node:fs');
@@ -395,7 +462,8 @@ for (const [file, table, atLeast] of [
   ['../services/gameInviteService.ts', 'game_invites', 5],
   ['../services/duelRunService.ts', 'duel_runs', 5],
   ['../services/waitingMusicService.ts', 'waiting_music', 5],
-  ['../services/questionSeenService.ts', 'question_seen', 2]
+  ['../services/questionSeenService.ts', 'question_seen', 2],
+  ['../services/duelCallService.ts', 'duel_calls', 5]
 ] as const) {
   await check(table + ' says every optional column twice', async () => {
     const src = fs.readFileSync(here + file, 'utf8');

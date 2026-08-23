@@ -27,6 +27,17 @@ export interface MatchmakingTicket {
    * Recorded here so the queue can say how many are waiting in each, and the
    * game can stop offering a tier with nobody in it. */
   ticketTier?: string;
+  /* THE TIER SOMEBODY IS STANDING IN WITHOUT HOLDING A TICKET FOR IT.
+   *
+   * A duel winner who presses «ادامه میدهم» plays on at double the stake, and a
+   * doubled stake is the next tier's value — but they spend no new ticket, so
+   * `ticketTier` is empty and the queue counted them in no tier at all. That is
+   * exactly the case the whole rule was written around: «بلیط آبی زمانی فعال که
+   * یک نفر از بلیط سبز دکمه ادامه میدهم را میزند و منتظر حریف با بلیط آبی است».
+   * Without this the blue door stayed shut over a queue with somebody in it.
+   *
+   * It counts and nothing else — no ticket is held, taken or refunded for it. */
+  waitTier?: string;
   skill: number;
   /** PRIVATE PAIRING. Two people who agreed to play each other queue with the
    *  same key and meet ONLY each other; a ticket without a key never meets one
@@ -60,7 +71,7 @@ export interface MatchmakingStats {
 }
 
 export interface MatchmakingQueue {
-  enqueue(input: { userId: string; modeId: GameModeId; economyType: PlanType; coinStake?: number; ticketTier?: string; skill?: number; pairKey?: string }): Promise<MatchmakingTicket>;
+  enqueue(input: { userId: string; modeId: GameModeId; economyType: PlanType; coinStake?: number; ticketTier?: string; waitTier?: string; skill?: number; pairKey?: string }): Promise<MatchmakingTicket>;
   get(ticketId: string): Promise<MatchmakingTicket | null>;
   cancel(ticketId: string, userId: string): Promise<MatchmakingTicket | null>;
   forceBot(ticketId: string, userId: string): Promise<MatchmakingTicket | null>;
@@ -83,7 +94,7 @@ function isFresh(ticket: MatchmakingTicket): boolean {
 abstract class BaseMatchmakingQueue implements MatchmakingQueue {
   protected analytics = { enqueued: 0, matched: 0, botFallbacks: 0, cancelled: 0, expired: 0 };
 
-  abstract enqueue(input: { userId: string; modeId: GameModeId; economyType: PlanType; coinStake?: number; ticketTier?: string; skill?: number; pairKey?: string }): Promise<MatchmakingTicket>;
+  abstract enqueue(input: { userId: string; modeId: GameModeId; economyType: PlanType; coinStake?: number; ticketTier?: string; waitTier?: string; skill?: number; pairKey?: string }): Promise<MatchmakingTicket>;
   abstract get(ticketId: string): Promise<MatchmakingTicket | null>;
   abstract cancel(ticketId: string, userId: string): Promise<MatchmakingTicket | null>;
   abstract forceBot(ticketId: string, userId: string): Promise<MatchmakingTicket | null>;
@@ -111,7 +122,7 @@ abstract class BaseMatchmakingQueue implements MatchmakingQueue {
 export class MemoryMatchmakingQueue extends BaseMatchmakingQueue {
   private tickets = new Map<string, MatchmakingTicket>();
 
-  async enqueue(input: { userId: string; modeId: GameModeId; economyType: PlanType; coinStake?: number; ticketTier?: string; skill?: number; pairKey?: string }): Promise<MatchmakingTicket> {
+  async enqueue(input: { userId: string; modeId: GameModeId; economyType: PlanType; coinStake?: number; ticketTier?: string; waitTier?: string; skill?: number; pairKey?: string }): Promise<MatchmakingTicket> {
     await this.expireOldTickets();
     const now = new Date().toISOString();
     const skill = input.skill ?? 1000;
@@ -127,7 +138,7 @@ export class MemoryMatchmakingQueue extends BaseMatchmakingQueue {
          they already chose. */
       && (pairKey ? true : Math.abs(t.skill - skill) <= wideningWindow(t.createdAt))
     );
-    const ticket: MatchmakingTicket = { id: id(), userId: input.userId, modeId: input.modeId, economyType: input.economyType, coinStake: input.coinStake, ticketTier: input.ticketTier || undefined, skill, pairKey: pairKey || undefined, status: 'queued', createdAt: now, updatedAt: now };
+    const ticket: MatchmakingTicket = { id: id(), userId: input.userId, modeId: input.modeId, economyType: input.economyType, coinStake: input.coinStake, ticketTier: input.ticketTier || undefined, waitTier: input.waitTier || undefined, skill, pairKey: pairKey || undefined, status: 'queued', createdAt: now, updatedAt: now };
     if (compatible) return this.matchTickets(ticket, compatible, skill);
     this.tickets.set(ticket.id, ticket);
     /* economyType and skill are what pairing is actually done on, so a player
@@ -195,7 +206,7 @@ export class MemoryMatchmakingQueue extends BaseMatchmakingQueue {
       /* A private pairing is two people who already found each other; counting
          them would tell everyone else a tier is busy when its queue is empty. */
       if (t.pairKey) continue;
-      const tier = String(t.ticketTier || '');
+      const tier = String(t.ticketTier || t.waitTier || '');
       if (tier) waitingByTier[tier] = (waitingByTier[tier] ?? 0) + 1;
     }
     return { queued: all.filter((t) => t.status === 'queued').length, matched: all.filter((t) => t.status === 'matched').length, waitingByTier, analytics: { ...this.analytics } };
@@ -217,7 +228,7 @@ export class RedisMatchmakingQueue extends BaseMatchmakingQueue {
   private client: ReturnType<typeof createClient> | null = null;
   constructor(private readonly url = process.env.REDIS_URL ?? 'redis://localhost:6379') { super(); }
 
-  async enqueue(input: { userId: string; modeId: GameModeId; economyType: PlanType; coinStake?: number; ticketTier?: string; skill?: number; pairKey?: string }): Promise<MatchmakingTicket> {
+  async enqueue(input: { userId: string; modeId: GameModeId; economyType: PlanType; coinStake?: number; ticketTier?: string; waitTier?: string; skill?: number; pairKey?: string }): Promise<MatchmakingTicket> {
     await this.expireOldTickets();
     const client = await this.getClient(); const now = new Date().toISOString(); const skill = input.skill ?? 1000;
     const pairKey = input.pairKey || '';
@@ -233,10 +244,10 @@ export class RedisMatchmakingQueue extends BaseMatchmakingQueue {
       if ((candidate.pairKey || '') !== pairKey) continue;
       if (!pairKey && Math.abs(candidate.skill - skill) > wideningWindow(candidate.createdAt)) continue;
       await client.zRem(queueKey, candidate.id);
-      const ticket: MatchmakingTicket = { id: id(), userId: input.userId, modeId: input.modeId, economyType: input.economyType, coinStake: input.coinStake, ticketTier: input.ticketTier || undefined, skill, pairKey: pairKey || undefined, status: 'queued', createdAt: now, updatedAt: now };
+      const ticket: MatchmakingTicket = { id: id(), userId: input.userId, modeId: input.modeId, economyType: input.economyType, coinStake: input.coinStake, ticketTier: input.ticketTier || undefined, waitTier: input.waitTier || undefined, skill, pairKey: pairKey || undefined, status: 'queued', createdAt: now, updatedAt: now };
       return this.matchTickets(ticket, candidate, skill);
     }
-    const ticket: MatchmakingTicket = { id: id(), userId: input.userId, modeId: input.modeId, economyType: input.economyType, coinStake: input.coinStake, ticketTier: input.ticketTier || undefined, skill, pairKey: pairKey || undefined, status: 'queued', createdAt: now, updatedAt: now };
+    const ticket: MatchmakingTicket = { id: id(), userId: input.userId, modeId: input.modeId, economyType: input.economyType, coinStake: input.coinStake, ticketTier: input.ticketTier || undefined, waitTier: input.waitTier || undefined, skill, pairKey: pairKey || undefined, status: 'queued', createdAt: now, updatedAt: now };
     await this.saveTicket(ticket); await client.zAdd(queueKey, { score: skill, value: ticket.id });
     logger.info('redis_matchmaking_queued', { ticketId: ticket.id, userId: ticket.userId, modeId: ticket.modeId, economyType: ticket.economyType, coinStake: ticket.coinStake, skill });
     return ticket;
@@ -290,7 +301,7 @@ export class RedisMatchmakingQueue extends BaseMatchmakingQueue {
       if (t.status==='queued') queued++;
       if (t.status==='matched') matched++;
       if (t.status === 'queued' && isFresh(t) && !t.pairKey) {
-        const tier = String(t.ticketTier || '');
+        const tier = String(t.ticketTier || t.waitTier || '');
         if (tier) waitingByTier[tier] = (waitingByTier[tier] ?? 0) + 1;
       }
     }

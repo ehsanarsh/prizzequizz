@@ -4054,7 +4054,20 @@ button,input,textarea,select{font-family:'Vazirmatn',system-ui,sans-serif}
    went back was a guess. Back takes the brand colour (blue on the friendly
    side, because --bolt is), and closing is red everywhere. */
 .iconbtn.ib-back{background:linear-gradient(180deg,var(--bolt),var(--bolt-2))!important;color:#141414!important}
-.iconbtn.ib-close{background:linear-gradient(180deg,#FF7A6B,var(--bad-d))!important;color:#fff!important}.menu-sheet-section{font-size:11px;color:var(--muted);font-weight:900;margin:14px 2px 8px}
+.iconbtn.ib-close{background:linear-gradient(180deg,#FF7A6B,var(--bad-d))!important;color:#fff!important}
+/* «هر دکمه ضربدر برای خروج هست باید قرمز بشه و هر دکمه بک زرد بشه.»
+   ib-close and ib-back already said this; what was missing is every way OUT
+   that never carried those classes — the sheets, the quick-chat panel, the
+   photo viewer, the wheel. Named here rather than edited into fifteen call
+   sites, so the next sheet that gets a ✕ is red without anyone remembering to
+   ask for it. The one ✕ deliberately left alone is the search box's: it empties
+   a field, it is not a way out of anywhere. */
+.sheet-x,.qcp-x,.pz-lb-x,.pzm-quit{
+  background:linear-gradient(180deg,#FF7A6B,var(--bad-d))!important;color:#fff!important;
+  border-color:#000!important}
+/* And the yellow one, for anything that goes BACK rather than out. */
+.iconbtn.ib-back,.pz-back{
+  background:linear-gradient(180deg,var(--bolt),var(--bolt-2))!important;color:#141414!important}.menu-sheet-section{font-size:11px;color:var(--muted);font-weight:900;margin:14px 2px 8px}
 
 /* A WAY OUT OF EVERY BOTTOM SHEET.
    «وقتی نقدی یا کد هدیه رو انتخاب میکنی باتم‌شیت بالا میاد و راه خروجی نداره.»
@@ -5508,15 +5521,35 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
    چشمک بزنه… و بعد بره سر جای خودش اون بالا.» Nothing here can be touched:
    it is a announcement passing over the board, not a control. */
 .ls-pot-hero{position:absolute;inset:0;z-index:900;display:grid;place-items:center;pointer-events:none}
-.ls-pot-hero .lph-card{display:flex;flex-direction:column;align-items:center;gap:5px;
-  padding:18px 30px;border-radius:24px;background:rgba(8,7,5,.74);border:2.5px solid #000;
-  box-shadow:0 8px 0 rgba(0,0,0,.55);animation:lphIn .34s cubic-bezier(.2,.9,.3,1) both}
-.ls-pot-hero .lph-lbl{font-size:12px;font-weight:900;color:#e9e2d2;letter-spacing:.3px}
-.ls-pot-hero .lph-num{font-size:46px;font-weight:900;line-height:1;color:#FFE24A;
-  text-shadow:0 3px 0 #000,0 0 24px rgba(255,226,74,.45)}
-.ls-pot-hero .lph-add{font-style:normal;font-size:13px;font-weight:900;color:#6be08a}
-@keyframes lphIn{from{opacity:0;transform:scale(.5)}to{opacity:1;transform:none}}
-.ls-pot-hero.lph-green .lph-num{color:#6be08a;text-shadow:0 3px 0 #000,0 0 26px rgba(107,224,138,.55);
+/* NO CARD. The number is the announcement — a box around it turns the prize
+   growing into a notice to be read. It is only ever on screen for a few
+   seconds and nothing else is competing with it, so it needs no frame; what it
+   needs is to be enormous. */
+.ls-pot-hero .lph-card{display:flex;flex-direction:column;align-items:center;gap:2px;
+  animation:lphIn .38s cubic-bezier(.2,1.35,.35,1) both}
+.ls-pot-hero .lph-lbl{font-size:12.5px;font-weight:900;color:#e9e2d2;letter-spacing:.4px;
+  text-shadow:0 2px 6px rgba(0,0,0,.9);opacity:.9}
+.ls-pot-hero .lph-num{font-size:64px;font-weight:900;line-height:1.02;color:#FFE24A;
+  letter-spacing:-1px;
+  /* Readable over whatever the room is showing behind it, without a panel. */
+  text-shadow:0 4px 0 #000,0 0 10px rgba(0,0,0,.95),0 0 34px rgba(255,226,74,.55)}
+.ls-pot-hero .lph-add{font-style:normal;font-size:22px;font-weight:900;color:#6be08a;
+  line-height:1.2;text-shadow:0 3px 0 #000,0 0 16px rgba(107,224,138,.6);
+  /* Rises and fades as the number below it climbs — the money arriving. */
+  animation:lphAdd 1.5s cubic-bezier(.2,.7,.3,1) both}
+@keyframes lphIn{from{opacity:0;transform:scale(.35)}to{opacity:1;transform:none}}
+@keyframes lphAdd{0%{opacity:0;transform:translateY(16px) scale(.8)}
+  22%{opacity:1;transform:translateY(0) scale(1)}
+  70%{opacity:1;transform:translateY(-4px)}
+  100%{opacity:0;transform:translateY(-22px)}}
+/* A glow behind it so a big number stays legible on a bright room without
+   putting a panel back. */
+.ls-pot-hero::before{content:"";position:absolute;left:50%;top:50%;width:min(78vw,340px);height:200px;
+  transform:translate(-50%,-50%);border-radius:50%;pointer-events:none;
+  background:radial-gradient(closest-side,rgba(0,0,0,.72),rgba(0,0,0,0))}
+@media(max-width:370px){.ls-pot-hero .lph-num{font-size:52px}}
+.ls-pot-hero.lph-green .lph-num{color:#6be08a;
+  text-shadow:0 4px 0 #000,0 0 10px rgba(0,0,0,.95),0 0 38px rgba(107,224,138,.7);
   animation:lphBlink .52s steps(1,end) 3}
 .ls-pot-hero.lph-steady .lph-num{animation:none}
 @keyframes lphBlink{0%,49%{opacity:1}50%,99%{opacity:.12}100%{opacity:1}}
@@ -5738,7 +5771,14 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
       .ls-watchend .lwe-cup{font-size:54px;line-height:1;animation:pzPop .5s cubic-bezier(.2,1.5,.4,1)}
       .ls-watchend h2{font-size:20px;font-weight:900;margin:8px 0 10px;color:#FFE24A}
       .ls-watchend .lwe-line{font-size:13px;font-weight:800;color:var(--muted);line-height:1.9}
-      .ls-watchend .lwe-win{font-size:15px;font-weight:900;color:#4BE38C;line-height:2}
+      /* Name over amount, each in its own box, so a username of any script
+         cannot drag the number to the wrong end of the line. */
+      .ls-watchend .lwe-win{display:flex;flex-direction:column;align-items:center;gap:2px;
+        margin:8px auto 0;max-width:280px;padding:10px 14px;border-radius:16px;
+        background:rgba(75,227,140,.10);border:2px solid rgba(75,227,140,.35)}
+      .ls-watchend .lwe-who{font-size:15px;font-weight:900;color:#4BE38C;line-height:1.7;
+        max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      .ls-watchend .lwe-amt{font-size:17px;font-weight:900;color:#FFE24A;line-height:1.5}
       .ls-elim-hd{text-align:center;padding:16px 14px 4px}
       .ls-elim-hd h2{color:#ff4d4d;font-size:20px;font-weight:900;margin:0;letter-spacing:1px}
       .ls-elim-hd p{color:#c9c2b3;font-size:12px;margin:4px 0 0}
@@ -6080,7 +6120,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
     <!-- ============ QUESTION (arena/consensus) ============ -->
     <section class="screen" id="q-screen">
       <div class="q-head">
-        <button class="iconbtn" onclick="quitGame()">✕</button>
+        <button class="iconbtn ib-close" onclick="quitGame()">✕</button>
         <div style="text-align:center"><div style="font-size:12px;color:var(--muted);font-weight:700" id="q-mode">میدان</div><div style="font-size:11px;color:var(--gold);font-weight:800"><span id="q-alive">۱۰</span> نفر در بازی</div></div>
         <div class="timer-ring" id="qRing"><svg width="54" height="54"><circle cx="27" cy="27" r="23" fill="none" stroke="rgba(255,255,255,.14)" stroke-width="5"/><circle id="timerArc" cx="27" cy="27" r="23" fill="none" stroke="#FFD23F" stroke-width="5" stroke-linecap="round" stroke-dasharray="145" stroke-dashoffset="0"/></svg><div class="timer-num" id="timerNum">۱۵</div></div>
       </div>
@@ -6603,7 +6643,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
     <!-- ============ WTA (از کی بپرسم؟) ============ -->
     <section class="screen" id="wta">
       <div class="q-head">
-        <button class="iconbtn" onclick="quitGame()">✕</button>
+        <button class="iconbtn ib-close" onclick="quitGame()">✕</button>
         <div style="text-align:center"><div style="font-size:12px;color:var(--muted);font-weight:700">از کی بپرسم؟ 🎯</div><div style="font-size:11px;color:var(--bolt);font-weight:800"><span id="wtaAlive">۱۵</span> نفر در استودیو</div></div>
         <div class="timer-ring" id="wtaRing"><svg width="54" height="54"><circle cx="27" cy="27" r="23" fill="none" stroke="rgba(255,255,255,.14)" stroke-width="5"/><circle id="wtaArc" cx="27" cy="27" r="23" fill="none" stroke="#FFD23F" stroke-width="5" stroke-linecap="round" stroke-dasharray="145"/></svg><div class="timer-num" id="wtaNum">۱۵</div></div>
       </div>
@@ -6684,7 +6724,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
     <!-- ============ RECORD PLAY ============ -->
     <section class="screen" id="recordPlay">
       <div class="rmp-bar">
-        <button class="iconbtn" onclick="rmQuit()">✕</button>
+        <button class="iconbtn ib-close" onclick="rmQuit()">✕</button>
         <div class="rmp-hearts" id="rmHearts"></div><span class="rmp-hlabel">قلبِ این بازی</span>
         <div class="rmp-scorepill"><small>رکورد</small><b id="rmScore">۰</b></div>
       </div>
@@ -6923,7 +6963,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
   <!-- Post-match review overlay -->
   <div class="pz-reviewov" id="pzReviewOverlay">
     <div class="pzrv-head">
-      <button class="iconbtn" onclick="pzCloseReview()">✕</button>
+      <button class="iconbtn ib-close" onclick="pzCloseReview()">✕</button>
       <h2>🔍 مرور مسابقه</h2>
     </div>
     <div class="pzrv-body" id="pzReviewBody"></div>
@@ -6932,7 +6972,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
   <!-- Notification inbox (صندوق پیام‌ها) -->
   <div class="pz-reviewov" id="pzInboxOverlay">
     <div class="pzrv-head">
-      <button class="iconbtn" onclick="pzCloseInbox()">✕</button>
+      <button class="iconbtn ib-close" onclick="pzCloseInbox()">✕</button>
       <h2>📬 صندوق پیام‌ها</h2>
       <button class="btn-link" onclick="pzInboxReadAll()" style="background:none;border:none;color:var(--bolt,#FFD21F);font-weight:900;font-family:inherit;font-size:12.5px;cursor:pointer">خواندن همه</button>
     </div>
@@ -6965,7 +7005,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
   <div class="sheet" id="spinSheet">
     <div class="grab"></div>
     <button class="sheet-x" onclick="forceCloseSpin()" aria-label="بستن">✕</button>
-    <button class="iconbtn spin-close" onclick="forceCloseSpin()">✕</button>
+    <button class="iconbtn ib-close spin-close" onclick="forceCloseSpin()">✕</button>
     <div class="mw-banner"><b id="mwTitle">چرخونهٔ شانس هیولاها</b><small>MONSTER PRIZE WHEEL</small></div>
     <div class="mw-stage" id="mwStage">
       <div class="mw-frame" id="mwFrame"></div>
@@ -7038,7 +7078,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
   <div class="sheet" id="topupSheet">
     <div class="grab"></div>
     <button class="sheet-x" onclick="closeTopup()" aria-label="بستن">✕</button>
-    <h1 style="font-size:19px;font-weight:900">شارژ کیف پول ＋</h1>
+    <h1 style="font-size:19px;font-weight:900">شارژ صندوق جایزه ＋</h1>
     <p style="color:var(--muted);font-size:13px;margin:4px 0 12px">مبلغ شارژ را انتخاب کن یا دستی وارد کن</p>
     <div class="amount-grid" id="topupAmounts">
       <button class="amount-chip" onclick="selectTopupAmount(50000)">۵۰٬۰۰۰</button>
@@ -7051,7 +7091,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
     <div class="field"><label>مبلغ دلخواه (تومان)</label><input class="input mono" id="topupAmount" inputmode="numeric" value="200000" dir="ltr"></div>
     <div class="fee-row"><span>کارمزد شارژ</span><b>۰ تومان</b></div>
     <div class="fee-row"><span>درگاه پرداخت</span><b>پرداخت امن شاپرک</b></div>
-    <button class="btn btn-primary" onclick="submitTopup()">پرداخت و شارژ کیف پول</button>
+    <button class="btn btn-primary" onclick="submitTopup()">پرداخت و شارژ صندوق جایزه</button>
   </div>
 
   <!-- Bank card sheet -->
@@ -7079,7 +7119,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
     <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px" onclick="menuGo('profile')">
       <div class="prof-av" style="width:52px;height:52px;border-radius:16px;border-width:2px"><div class="mascot" id="mascotMenu" style="width:38px;height:38px;border-radius:50%;overflow:hidden"></div></div>
       <div style="flex:1"><b style="font-size:15px" id="menuProfName">بازیکن</b><div style="color:var(--muted);font-size:12px"><span id="menuProfLvl">سطح ۱</span> · مشاهده پروفایل</div></div><span style="color:var(--muted)">‹</span></div>
-    <div class="row" onclick="menuGo('wallet')"><div class="r-ico"><i class="pzi" data-pzicon="wallet">💳</i></div><div class="r-txt"><b>کیف پول</b></div><span class="r-arrow">‹</span></div>
+    <div class="row" onclick="menuGo('wallet')"><div class="r-ico"><i class="pzi" data-pzicon="wallet">💳</i></div><div class="r-txt"><b>صندوق جایزه</b></div><span class="r-arrow">‹</span></div>
     <div class="row" onclick="closeMenu();plansBack='home';go('plans')"><div class="r-ico">👑</div><div class="r-txt"><b>پلن اشتراک</b></div><span class="r-arrow">‹</span></div>
     <div class="row" onclick="closeMenu();pzOpenGiftRedeem()"><div class="r-ico">🎁</div><div class="r-txt"><b>کد هدیه</b><span>کدت رو وارد کن و جایزه بگیر</span></div><span class="r-arrow">‹</span></div>
     <div class="row" onclick="menuGo('stats')"><div class="r-ico">📈</div><div class="r-txt"><b>آمار و ارقام</b></div><span class="r-arrow">‹</span></div>
@@ -8620,9 +8660,18 @@ function lsPotHero(id,from,to){
     const host=document.querySelector('.phone')||document.body;
     const wrap=document.createElement('div');
     wrap.className='ls-pot-hero'; wrap.id='lsPotHero';
-    wrap.innerHTML='<div class="lph-card"><span class="lph-lbl">صندوق جایزه</span>'+
+    /* «اصلا حس هیجان به کاربر نمیده — الان داخل یه کادر فقط نوشته میشه. باید
+       فقط اون عدد بیاد جلو وسط بزرگ، با موشن اضافه بشه، بعد ثابت بشه، بعد با
+       موشن بره سر جای خودش.»
+       So there is no card any more: the number itself is the thing that
+       arrives. A box around it made it a notice — something to read — and the
+       point is to watch the prize grow. The «+N» rides just above it and fades
+       out as the number catches up, which is what makes the growth feel like
+       money landing rather than a figure being replaced. */
+    wrap.innerHTML='<div class="lph-card">'+
+      (to>from?'<i class="lph-add">+'+lsFa(to-from)+'</i>':'')+
       '<b class="lph-num">'+lsFa(from)+'</b>'+
-      (to>from?'<i class="lph-add">+'+lsFa(to-from)+'</i>':'')+'</div>';
+      '<span class="lph-lbl">صندوق جایزه</span></div>';
     host.appendChild(wrap);
     const num=wrap.querySelector('.lph-num');
     const H={wrap:wrap,num:num,shown:from,to:to,id:id};
@@ -9734,14 +9783,29 @@ function lsShowWatchEnding(snap){
   const wipe=(snap.room&&snap.room.wipeout)||null;
   const paid=players.filter(p=>Number(p.payoutCash||0)>0)
     .sort((a,b)=>Number(b.payoutCash||0)-Number(a.payoutCash||0));
+  /* A NAME, A NUMBER AND A PERSIAN SENTENCE ON ONE LINE.
+     «متن برنده مسابقه فلانی شد و مبلغ فلان قدر برنده شد خیلی به هم ریخته نشون
+     داده میشه» — and it was: a username of unknown direction, an em-dash and a
+     run of digits, all in one right-to-left line, is exactly the shape the
+     bidirectional algorithm reorders into nonsense. A Latin username would jump
+     to the wrong end of the sentence and take the dash with it.
+     So the pieces stop sharing a line: the name is isolated in its own <bdi>,
+     the amount is its own element under it, and nothing has to be reordered
+     because nothing is mixed. */
+  const winner=(name,amount)=>
+    '<div class="lwe-win">'+
+      '<bdi class="lwe-who">'+frEsc(name||'بازیکن')+'</bdi>'+
+      (amount!=null?'<span class="lwe-amt">'+lsFa(amount)+' تومان</span>':'')+
+    '</div>';
   let who;
   if(wipe&&wipe.lastUserId){
     const w=players.find(p=>p.userId===wipe.lastUserId);
-    who='<div class="lwe-line">همه در مرحلهٔ آخر اشتباه جواب دادند — برنده‌ای نبود.</div>'+
-        '<div class="lwe-win"><b>'+frEsc((w&&w.username)||'یک بازیکن')+'</b> آخرین نفری بود که حذف شد و سهمش پرداخت شد</div>';
+    who='<div class="lwe-line">همه در مرحلهٔ آخر اشتباه جواب دادند و برنده‌ای نداشت.</div>'+
+        '<div class="lwe-line">آخرین نفری که حذف شد و سهمش پرداخت شد:</div>'+
+        winner((w&&w.username)||'یک بازیکن',(w&&w.payoutCash)||null);
   } else if(paid.length){
-    who='<div class="lwe-line">برندهٔ این اتاق:</div>'+
-        paid.slice(0,3).map(p=>'<div class="lwe-win"><b>'+frEsc(p.username||'بازیکن')+'</b> — '+lsFa(p.payoutCash)+' تومان</div>').join('');
+    who='<div class="lwe-line">'+(paid.length>1?'برندگان این اتاق:':'برندهٔ این اتاق:')+'</div>'+
+        paid.slice(0,3).map(p=>winner(p.username,p.payoutCash)).join('');
   } else {
     who='<div class="lwe-line">این اتاق بدون برنده تمام شد.</div>';
   }
@@ -9852,6 +9916,14 @@ function lsFinish(snap){
   }
   lsEndShown=true;
   lsStopPoll();
+  /* WHICH GAME THIS RESULT IS FOR.
+     «در بازی ۲۰ نفره چرا باید عکس ۲ نفر بیاد؟» — because nothing ever told the
+     result screen it was not a duel. `gameType` is set by each mode as it
+     starts and Last Survivor never set it, so after one duel it stayed 'duel'
+     for the rest of the session: the board drew two faces and a «۵ - ۳», and
+     the «ادامه» button would have run duelContinue on a room that has no
+     rungs. There is one winner in a room of twenty and one face to show. */
+  try{ gameType='lastSurvivor'; }catch(e){}
   const me=snap.me||{}; const mine=Number(me.payoutCash||0);
   const won=mine>0;                       // cashed out OR survived with a payout
   const cashedOut=me.status==='cashed_out';
@@ -9886,7 +9958,7 @@ function lsFinish(snap){
     sub.textContent = iAmLastOut
       ? ('چون همه اشتباه جواب دادند، جایزه بین '+lsFa(wipe.splitAmong)+' نفرِ باقی‌ماندهٔ مرحلهٔ قبل تقسیم شد و سهم تو پرداخت شد.')
       : (won
-        ? (cashedOut?'سهمت پرداخت و به کیف پولت واریز شد':pzWinLine())
+        ? (cashedOut?'سهمت پرداخت و به صندوق جایزه‌ات واریز شد':pzWinLine())
         : (noWinner?'همهٔ بازیکنان باقی‌مانده جواب را غلط دادند، پس این دور برنده‌ای نداشت و جایزه به کسی تعلق نگرفت.'
                   :pzLoseLine()));
     sub.style.display='';
@@ -9988,7 +10060,7 @@ function lsFinish(snap){
       if(typeof showAaaModal==='function') showAaaModal({
         icon:cashedOut?'💰':'🏆',
         title:'برنده شدی! 🎉',
-        sub:lsFa(mine)+' تومان به کیف پولت اضافه شد',
+        sub:lsFa(mine)+' تومان به صندوق جایزه‌ات اضافه شد',
         primaryText:'عالیه',secondaryText:''
       });
     }catch(e){} },1900);
@@ -11008,12 +11080,36 @@ function pzDuelStageBar(){
 }
 function duelContinue(){
   if(duelStage>=10){endGame(true,prize,false,'هر ۱۰ مرحله رو بردی! قهرمان مطلق 👑');return;}
+  /* The match that has just been won, read BEFORE anything moves on: the person
+     who lost it is about to be told about it, and a moment later pzRt belongs
+     to the next match. */
+  /* `pzRt` is script-scope, not a property of window — reaching for it through
+     window (as a few older lines here do) always reads undefined, and this
+     whole feature would have gone quietly missing. */
+  let _wonMid=null; try{ _wonMid=(typeof pzRt!=='undefined'&&pzRt&&pzRt.matchId)||null; }catch(e){}
   duelStage++;duelStakeVal*=2;prize=pzDuelPrizeNow();
   /* Ascension: compete at the NEW value tier (winnings), no new ticket needed.
      e.g. green winner now at 25,000 meets fresh blue entrants (also 25,000). */
   window.matchValue=duelStakeVal; duelTicket=null;
   duelChain=true;
+  /* «اگه در دوئل بازیکنی باخت و برنده دکمه ادامه میدهم رو زد، به بازنده اطلاع
+     بده.» Until now the whole chain happened on this device and the person who
+     lost was told nothing at all. Best-effort and fire-and-forget: the winner's
+     own search must not wait on it, and must not fail with it. */
+  try{ pzTellOpponentIContinued(_wonMid); }catch(e){}
   setTimeout(startMatchmaking,700);
+}
+/* Told to the SERVER, not to the opponent's screen: by now their socket for the
+   finished match is closing and they may be anywhere in the game. The server
+   checks who really won before it passes anything on — this device only names
+   the match. */
+function pzTellOpponentIContinued(matchId){
+  if(!matchId||!_tok||userPlan!=='premium') return;
+  const tier=pzTierForValue(duelStakeVal);
+  /* Above red the ladder leaves the ticket shop behind — 100,000 is not sold —
+     so there is no «با بلیط … حقتو ازش بگیری» to offer and nothing is sent. */
+  if(!tier) return;
+  try{ pzApi('POST','/duel-calls',{matchId:matchId,tier:tier,stage:duelStage}); }catch(e){}
 }
 function rematch(){
   // درخواست بازی مجدد به حریف (شبیه‌سازی پاسخ حریف)
@@ -12114,7 +12210,7 @@ function renderSettingDetail(type){
     html+=settingSwitch('notifications','اعلان‌ها','فعال یا غیرفعال کردن همه اعلان‌های بازی');
     html+=settingSwitch('notifMatch','یادآوری مسابقه','دعوت به دوئل، شروع روم و نوبت بازی');
     html+=settingSwitch('notifLeague','لیگ هفتگی','صعود، بلیت جدید و پایان هفته لیگ');
-    html+=settingSwitch('notifRewards','جوایز و کیف پول','واریز جایزه، برداشت و گردونه شانس');
+    html+=settingSwitch('notifRewards','جوایز و صندوق جایزه','واریز جایزه، برداشت و گردونه شانس');
     html+=settingSwitch('notifFriends','پیام دوستان','وقتی دوستی در چت پیام می‌دهد، روی گوشی خبر بده');
     html+='<div class="set-group-title">ساعت سکوت</div><div class="choice-grid">'+choiceBtn('quietHours','off','خاموش')+choiceBtn('quietHours','night','۲۳ تا ۸')+choiceBtn('quietHours','work','۹ تا ۱۷')+choiceBtn('quietHours','custom','سفارشی')+'</div>';
     html+=settingAction('🔔','تست اعلان','یک اعلان آزمایشی نمایش بده','testNotification()');
@@ -12138,7 +12234,7 @@ function renderSettingDetail(type){
     html+=settingSwitch('onlineStatus','نمایش آنلاین بودن','دوستان وضعیت آنلاین تو را ببینند');
     html+=settingSwitch('publicProfile','پروفایل عمومی','آمار و کاراکتر تو در رنکینگ دیده شود');
     html+=settingSwitch('friendInvites','اجازه دعوت به بازی','دوستان بتوانند تو را به مسابقه دعوت کنند');
-    html+=settingSwitch('showWallet','نمایش موجودی در هدر','موجودی کیف پول در صفحه خانه نمایش داده شود');
+    html+=settingSwitch('showWallet','نمایش موجودی در هدر','موجودی صندوق جایزه در صفحه خانه نمایش داده شود');
     html+=settingAction('👁️','پیش‌نمایش پروفایل عمومی','چیزی که دیگران از پروفایل تو می‌بینند','previewPublicProfile()');
   }else if(type==='gameplay'){
     html+=settingSwitch('quickChat','چت سریع داخل بازی','نمایش دکمهٔ «چت» زیر عکس تو در مسابقه');
@@ -12210,7 +12306,7 @@ function testCountdownModal(){showCountdownModal({icon:'🎯',title:'تست شم
 function testAppearanceModal(){showAaaModal({icon:'✨',title:'ظاهر فعلی اعمال شد',sub:'کنتراست، تراکم و انیمیشن‌ها طبق تنظیمات فعلی نمایش داده می‌شوند.',primaryText:'عالیه',secondaryText:''});}
 function exportSettings(){const data=JSON.stringify({settings:appSettings,exportedAt:new Date().toISOString()},null,2);const blob=new Blob([data],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='prizze-quiz-settings.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);toast('فایل تنظیمات آماده شد 📦');}
 function clearGuideCache(){try{['pq_league_guide_seen'].forEach(k=>localStorage.removeItem(k));}catch(e){}toast('کش راهنماها پاک شد 🧹');}
-function resetAllSettings(){showAaaModal({icon:'🔄',title:'بازنشانی تنظیمات؟',sub:'همه گزینه‌ها به حالت پیش‌فرض برمی‌گردند. پیشرفت بازی و کیف پول پاک نمی‌شود.',primaryText:'بازنشانی',secondaryText:'انصراف',primaryClass:'btn-red',onPrimary:()=>{window.appSettings={...DEFAULT_SETTINGS};saveSettings();closeAaaModal(false);renderSettingDetail('data');toast('تنظیمات بازنشانی شد ✅');},onSecondary:()=>closeAaaModal(false)});}
+function resetAllSettings(){showAaaModal({icon:'🔄',title:'بازنشانی تنظیمات؟',sub:'همه گزینه‌ها به حالت پیش‌فرض برمی‌گردند. پیشرفت بازی و صندوق جایزه پاک نمی‌شود.',primaryText:'بازنشانی',secondaryText:'انصراف',primaryClass:'btn-red',onPrimary:()=>{window.appSettings={...DEFAULT_SETTINGS};saveSettings();closeAaaModal(false);renderSettingDetail('data');toast('تنظیمات بازنشانی شد ✅');},onSecondary:()=>closeAaaModal(false)});}
 function confirmLogout(){showAaaModal({icon:'🚪',title:'خروج از حساب؟',sub:'از این دستگاه خارج می‌شی. اطلاعات پروتوتایپ و تنظیمات ذخیره‌شده باقی می‌مانند.',primaryText:'خروج',secondaryText:'انصراف',primaryClass:'btn-red',onPrimary:()=>{closeAaaModal(false);toast('با موفقیت خارج شدی');setTimeout(()=>go('login'),450);},onSecondary:()=>closeAaaModal(false)});}
 loadSettings();applySettings();renderSettingsSummary();
 
@@ -12436,7 +12532,7 @@ function showPromotion(){
   sfx('found');vib([40,60,40,60,160]);
   setTimeout(()=>document.getElementById('promoOverlay').classList.remove('show'),3600);
 }
-/* پرواز سکه‌ها به کیف پول هدر */
+/* پرواز سکه‌ها به صندوق جایزه هدر */
 function microSparkAt(target,icons){
   const ph=document.querySelector('.phone');if(!ph||!target)return;
   const pr=ph.getBoundingClientRect(),r=target.getBoundingClientRect();
@@ -12983,7 +13079,7 @@ async function supLoad(){
   try{const r=await pzApi('GET','/support/tickets');const arr=(r&&r.ok!==false)?(r.data||r):[];supportTickets=(Array.isArray(arr)?arr:[]).map(mapTicket);_supLoaded=true;}catch(e){}
 }
 const SUPPORT_FAQ=[
-  ['چطور جایزه را برداشت کنم؟','از کیف پول روی «درخواست برداشت» بزن، مبلغ را وارد کن و پس از تأیید، وضعیت تراکنش در همان صفحه قابل پیگیری است.'],
+  ['چطور جایزه را برداشت کنم؟','از صندوق جایزه روی «درخواست برداشت» بزن، مبلغ را وارد کن و پس از تأیید، وضعیت تراکنش در همان صفحه قابل پیگیری است.'],
   ['اگر وسط بازی خارج شوم چه می‌شود؟','در مسابقه‌های جایزه‌دار خروج باعث حذف از همان دور و از دست رفتن جایزه‌ی احتمالی می‌شود.'],
   ['لیگ هفتگی چطور کار می‌کند؟','با بلیت وارد لیگ می‌شوی، در «از کی بپرسم؟» بازی می‌کنی و اگر به دو نفر آخر برسی وارد فینال دوئل می‌شوی.'],
   ['چرا پرداخت یا برداشت در انتظار است؟','در پروتوتایپ وضعیت‌ها شبیه‌سازی شده‌اند. در نسخه واقعی، بررسی بانکی و KYC ممکن است کمی زمان ببرد.'],
@@ -13067,7 +13163,7 @@ function renderSupportFAQ(c){
 }
 function toggleFAQ(i){const el=document.getElementById('faq'+i);if(el)el.classList.toggle('open');}
 function renderSupportStatus(c){
-  const rows=[['ok','سرور مسابقات','فعال و پایدار'],['ok','پرداخت و کیف پول','فعال'],['ok','لیگ هفتگی','فعال'],['warn','برداشت بانکی','ممکن است تا ۲۴ ساعت زمان ببرد'],['ok','چت و پشتیبانی','آنلاین']];
+  const rows=[['ok','سرور مسابقات','فعال و پایدار'],['ok','پرداخت و صندوق جایزه','فعال'],['ok','لیگ هفتگی','فعال'],['warn','برداشت بانکی','ممکن است تا ۲۴ ساعت زمان ببرد'],['ok','چت و پشتیبانی','آنلاین']];
   c.innerHTML='<div class="sup-card"><h3>وضعیت سرویس‌ها</h3><p>آخرین بروزرسانی: همین حالا. اگر اختلال دیدی، از همین صفحه گزارش بده.</p></div>'+rows.map(r=>'<div class="status-row"><span class="status-dot '+(r[0]==='warn'?'warn':'')+'"></span><div style="flex:1"><b>'+r[1]+'</b><br><span>'+r[2]+'</span></div></div>').join('')+'<div class="sup-actions"><button class="btn btn-orange" onclick="openSupportTab(\'tickets\')">گزارش اختلال</button><button class="btn btn-ghost" onclick="toast(\'وضعیت بروزرسانی شد ✅\')">بروزرسانی</button></div>';
 }
 function copySupportInfo(type){const val=type==='email'?'support@prizequiz.ir':'021-9100-0000';try{navigator.clipboard&&navigator.clipboard.writeText(val);}catch(e){}toast('اطلاعات تماس کپی شد');}
@@ -13498,7 +13594,7 @@ let TXNS=[
   {id:1,i:'🏆',n:'برد دوئل ۱به‌۱',t:'امروز ۱۴:۳۰',amt:180000,pos:true,st:'ok',type:'win',ref:'PQ-WIN-1001'},
   {id:2,i:'⚔️',n:'ورودی مسابقه آخرین بازمانده',t:'امروز ۱۳:۱۰',amt:60000,pos:false,st:'ok',type:'game',ref:'PQ-GAME-8821'},
   {id:3,i:'↑',n:'برداشت به کارت بانکی',t:'دیروز ۱۹:۴۵',amt:250000,pos:false,st:'paid',type:'withdraw',ref:'WD-7742'},
-  {id:4,i:'＋',n:'شارژ کیف پول',t:'۲ روز پیش',amt:500000,pos:true,st:'ok',type:'topup',ref:'PAY-2209'},
+  {id:4,i:'＋',n:'شارژ صندوق جایزه',t:'۲ روز پیش',amt:500000,pos:true,st:'ok',type:'topup',ref:'PAY-2209'},
   {id:5,i:'🎡',n:'جایزه گردونه شانس',t:'۲ روز پیش',amt:50000,pos:true,st:'ok',type:'reward',ref:'SPIN-5601'}
 ];
 function updateWalletUI(){
@@ -13566,7 +13662,7 @@ function renderTxns(){
 function bankCardHTML(c){const mask=c.mask||pzMaskCard(c.num||'');return '<div class="bank-card"><div class="bank-top"><b>'+esc0(c.bank||'کارت بانکی')+'</b>'+(c.def?'<span class="ticket-badge answered">پیش‌فرض</span>':'')+'</div><div class="num" dir="ltr">'+esc0(mask)+'</div>'+(c.holder?'<div class="iban">'+esc0(c.holder)+'</div>':'')+(c.iban?'<div class="iban" dir="ltr">'+esc0(c.iban)+'</div>':'')+'<div class="bank-actions"><button class="btn '+(c.def?'btn-green':'btn-ghost')+' btn-sm" onclick="setDefaultCard(\''+c.id+'\')">'+(c.def?'پیش‌فرض ✓':'پیش‌فرض کن')+'</button><button class="btn btn-red btn-sm" onclick="removeBankCard(\''+c.id+'\')">حذف</button></div></div>';}
 function esc0(s){return String(s==null?'':s).replace(/[&<>"']/g,x=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[x]));}
 function renderWalletSecurity(c){
-  c.innerHTML='<div class="kyc-status"><div class="ks">✓</div><div><b>سطح احراز: تأیید اولیه</b><br><span>برداشت، شارژ و بازی‌های جایزه‌دار فعال هستند.</span></div></div><div class="wallet-card"><h3>محدودیت‌ها و کارمزد</h3><div class="fee-row"><span>حداقل برداشت</span><b>'+fa(50000)+' تومان</b></div><div class="fee-row"><span>حداکثر برداشت روزانه</span><b>'+fa(5000000)+' تومان</b></div></div><div class="wallet-card"><h3>عملیات امنیتی</h3><div class="sup-actions"><button class="btn btn-primary" onclick="openKyc()">به‌روزرسانی اطلاعات مالی</button><button class="btn btn-ghost" onclick="exportWalletStatement()">خروجی گردش حساب</button><button class="btn btn-orange" onclick="showAaaModal({icon:\'🛡️\',title:\'گزارش امنیتی\',sub:\'هیچ ورود مشکوکی برای کیف پول ثبت نشده است.\',primaryText:\'باشه\',secondaryText:\'\'})">گزارش امنیتی</button></div></div>';
+  c.innerHTML='<div class="kyc-status"><div class="ks">✓</div><div><b>سطح احراز: تأیید اولیه</b><br><span>برداشت، شارژ و بازی‌های جایزه‌دار فعال هستند.</span></div></div><div class="wallet-card"><h3>محدودیت‌ها و کارمزد</h3><div class="fee-row"><span>حداقل برداشت</span><b>'+fa(50000)+' تومان</b></div><div class="fee-row"><span>حداکثر برداشت روزانه</span><b>'+fa(5000000)+' تومان</b></div></div><div class="wallet-card"><h3>عملیات امنیتی</h3><div class="sup-actions"><button class="btn btn-primary" onclick="openKyc()">به‌روزرسانی اطلاعات مالی</button><button class="btn btn-ghost" onclick="exportWalletStatement()">خروجی گردش حساب</button><button class="btn btn-orange" onclick="showAaaModal({icon:\'🛡️\',title:\'گزارش امنیتی\',sub:\'هیچ ورود مشکوکی برای صندوق جایزه ثبت نشده است.\',primaryText:\'باشه\',secondaryText:\'\'})">گزارش امنیتی</button></div></div>';
 }
 function addTxn(i,n,amt,pos,st,type){TXNS.unshift({id:Date.now(),i,n,t:'همین حالا',amt,pos,st:st||'ok',type:type||(pos?'reward':'game'),ref:'PQ-'+Math.floor(Math.random()*90000+10000)});renderTxns();renderWalletStats();}
 renderWallet();updateWalletUI();
@@ -13583,7 +13679,7 @@ function selectTopupAmount(v){selectedTopup=v;const i=document.getElementById('t
 function submitTopup(){
   const amount=parseInt((document.getElementById('topupAmount').value||'').replace(/[^\d]/g,''))||0;
   if(amount<10000){toast('حداقل شارژ ۱۰٬۰۰۰ تومان است');return;}
-  closeTopup();showAaaModal({icon:'💳',title:'انتقال به درگاه پرداخت',sub:'پرداخت امن شاپرک برای مبلغ '+fa(amount)+' تومان شبیه‌سازی شد.',seconds:2,primaryText:'پرداخت سریع',secondaryText:'',onPrimary:()=>closeAaaModal(true),onDone:()=>{wallet+=amount;addTxn('＋','شارژ کیف پول',amount,true,'ok','topup');updateWalletUI();flyCoinsToWallet(8);toast('کیف پول با '+fa(amount)+' تومان شارژ شد ✅');}});
+  closeTopup();showAaaModal({icon:'💳',title:'انتقال به درگاه پرداخت',sub:'پرداخت امن شاپرک برای مبلغ '+fa(amount)+' تومان شبیه‌سازی شد.',seconds:2,primaryText:'پرداخت سریع',secondaryText:'',onPrimary:()=>closeAaaModal(true),onDone:()=>{wallet+=amount;addTxn('＋','شارژ صندوق جایزه',amount,true,'ok','topup');updateWalletUI();flyCoinsToWallet(8);toast('صندوق جایزه با '+fa(amount)+' تومان شارژ شد ✅');}});
 }
 function openKyc(){document.getElementById('kycBg').classList.add('show');document.getElementById('kycSheet').classList.add('show');const a=document.getElementById('wdAmount');if(a&&!a.value)a.value=Math.min(wallet,200000);}
 function closeKyc(){document.getElementById('kycBg').classList.remove('show');document.getElementById('kycSheet').classList.remove('show');}
@@ -13620,7 +13716,7 @@ function setDefaultCard(id){BANK_CARDS.forEach(c=>c.def=c.id===id);pzSaveCards()
 function removeBankCard(id){BANK_CARDS=BANK_CARDS.filter(c=>c.id!==id);if(BANK_CARDS.length&&!BANK_CARDS.some(c=>c.def))BANK_CARDS[0].def=true;pzSaveCards();renderWallet();toast('کارت حذف شد');}
 function copyIban(id){const c=BANK_CARDS.find(x=>x.id===id);try{navigator.clipboard&&navigator.clipboard.writeText(c.iban);}catch(e){}toast('شبا کپی شد');}
 function showTxnDetail(id){const t=TXNS.find(x=>x.id===id);if(!t)return;showAaaModal({icon:t.i,title:t.n,sub:'مبلغ: '+(t.pos?'+':'−')+fa(t.amt)+' تومان<br>زمان: '+t.t+'<br>وضعیت: '+(t.st==='pend'?'در حال بررسی':t.st==='paid'?'واریز شد':'موفق')+'<br>کد پیگیری: '+t.ref,primaryText:'کپی کد پیگیری',secondaryText:'بستن',onPrimary:()=>{try{navigator.clipboard&&navigator.clipboard.writeText(t.ref);}catch(e){}closeAaaModal(false);toast('کد پیگیری کپی شد');},onSecondary:()=>closeAaaModal(false)});}
-function exportWalletStatement(){const data=JSON.stringify({wallet, walletReserved,walletCashback,bankCards:BANK_CARDS,transactions:TXNS},null,2);const blob=new Blob([data],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='wallet-statement.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);toast('خروجی کیف پول آماده شد 📄');}
+function exportWalletStatement(){const data=JSON.stringify({wallet, walletReserved,walletCashback,bankCards:BANK_CARDS,transactions:TXNS},null,2);const blob=new Blob([data],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='wallet-statement.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);toast('خروجی صندوق جایزه آماده شد 📄');}
 
 /* ============ SHOP (functional) ============ */
 const SHOP={
@@ -14006,6 +14102,17 @@ const LEAGUE_TICKET_DEFS=[
 function tDef(k){
   return TICKET_DEFS.find(t=>t.key===k)||LEAGUE_TICKET_DEFS.find(t=>t.key===k)||TICKET_DEFS[0];
 }
+/* WHICH TIER A GIVEN STAKE IS. The ladder doubles the stake on every win and a
+   doubled stake lands exactly on the next tier's value — green 12,500 becomes
+   25,000, which is blue; blue's 25,000 becomes 50,000, which is red. Above red
+   it lands on 100,000, and no ticket is sold at 100,000: that rung is reachable
+   only by winning your way up to it, so this returns '' and every caller that
+   needs a ticket to name simply stays quiet. */
+function pzTierForValue(v){
+  const n=Number(v)||0;
+  const t=TICKET_DEFS.find(x=>Number(x.value)===n);
+  return t?t.key:'';
+}
 function isLeagueTicket(k){ return LEAGUE_TICKET_DEFS.some(t=>t.key===k); }
 /* Tickets are a SERVER asset (users.tickets in the DB). mTickets/tickets are
    just the last snapshot the server sent — never persisted locally, never the
@@ -14194,7 +14301,7 @@ async function buyTicket(t,el){
   const r=null;
   if(!r||!r.ok){
     const msg=(r&&r.error&&r.error.message)||'خرید ناموفق بود';
-    if(r&&r.error&&r.error.code==='INSUFFICIENT_FUNDS'){ showAaaModal({icon:'💰',title:'موجودی کافی نیست',sub:'برای خرید '+t.name+' ('+fa(t.value)+' تومان) کیف پولت را شارژ کن.',primaryText:'شارژ کیف پول',secondaryText:'بعداً',onPrimary:()=>{closeAaaModal(true);go('wallet');setTimeout(openTopup,300);}}); }
+    if(r&&r.error&&r.error.code==='INSUFFICIENT_FUNDS'){ showAaaModal({icon:'💰',title:'موجودی کافی نیست',sub:'برای خرید '+t.name+' ('+fa(t.value)+' تومان) صندوق جایزه‌ات را شارژ کن.',primaryText:'شارژ صندوق جایزه',secondaryText:'بعداً',onPrimary:()=>{closeAaaModal(true);go('wallet');setTimeout(openTopup,300);}}); }
     else toast(msg);
     return;
   }
@@ -14203,7 +14310,7 @@ async function buyTicket(t,el){
   pzApplyServerTickets(r.data.tickets);
   updateWalletUI();
   sfx('correct');vib([30]); if(el)el.classList.add('pop');
-  toast(t.name+' خریداری شد ✅ (از کیف پول کسر شد)');
+  toast(t.name+' خریداری شد ✅ (از صندوق جایزه کسر شد)');
   try{ pzSyncWallet(); }catch(e){}   /* reconcile with the ledger */
 }
 /* Entry gate: paid duel needs a ticket; otherwise message + go to shop. */
@@ -14707,8 +14814,8 @@ function sendTaunt(text){
    be out of date and still look official. */
 const PZ_RULES=[
   ['💰','پول و جایزه',[
-    'هر مبلغی که پیش از شروع مسابقه می‌بینی، همان مبلغی است که در صورت برد به کیف پولت می‌نشیند. هیچ کسری بعد از آن اعمال نمی‌شود.',
-    'حساب هر مسابقه در پایان همان مسابقه بسته می‌شود و در «تراکنش‌ها»ی کیف پول با همان مبلغ ثبت می‌شود.',
+    'هر مبلغی که پیش از شروع مسابقه می‌بینی، همان مبلغی است که در صورت برد به صندوق جایزه‌ات می‌نشیند. هیچ کسری بعد از آن اعمال نمی‌شود.',
+    'حساب هر مسابقه در پایان همان مسابقه بسته می‌شود و در «تراکنش‌ها»ی صندوق جایزه با همان مبلغ ثبت می‌شود.',
     'بازی در حالت «دوستانه» با سکه انجام می‌شود و جایزهٔ نقدی ندارد؛ مسابقه‌های جایزه‌دار با بلیط انجام می‌شوند.'
   ]],
   ['🎟️','بلیط‌ها',[
@@ -16240,7 +16347,7 @@ function choosePlan(p){
     title:'حالت جایزه فعال شد',
     sub:'<div style="margin-bottom:10px">از این‌جا به بعد بازی‌ها واقعی‌اند.</div>'+bullets([
       ['🎟️','با <b>بلیط</b> وارد مسابقه می‌شوی'],
-      ['💰','جایزه‌ها <b>به کیف پول</b> واریز می‌شوند'],
+      ['💰','جایزه‌ها <b>به صندوق جایزه</b> واریز می‌شوند'],
       ['🏆','بردهایت در <b>رتبه‌بندی و لیگ</b> ثبت می‌شود']]),
     primaryText:'ورود به خانه', secondaryText:'',
     onPrimary:()=>{closeAaaModal(false);go('home');}});
@@ -18694,11 +18801,18 @@ startMatchmaking = async function(){
   /* ticketTier → the SERVER consumes exactly one ticket of this tier here
      (atomic, no wallet charge) and refunds it on cancel if no opponent. */
   const _tkTier=(userPlan==='premium'&&duelTicket)?duelTicket:undefined;
+  /* A CHAINED WINNER IS IN A TIER WITHOUT HOLDING A TICKET FOR IT. «ادامه
+     میدهم» plays on at double the stake and spends no new ticket, so nothing
+     above names a tier — and the queue counted this player in no tier at all,
+     which left the blue door shut over a queue with somebody standing in it.
+     This is a LABEL and only a label: the server holds, takes and refunds
+     nothing for it, and ignores it outright whenever a real ticket is named. */
+  const _waitTier=(userPlan==='premium'&&!_tkTier)?(pzTierForValue(window.matchValue||curStake||0)||undefined):undefined;
   /* An arranged game queues on its own key, so the pair meet each other and no
      passer-by can take the seat. Spent on use: a key left lying about would
      quietly capture the NEXT ordinary search too. */
   const _pair=pzPairKey||undefined; pzPairKey=null;
-  const r=await pzApi('POST','/matchmaking/enqueue',{modeId:'duel',economyType:_eco,skill:800,ticketTier:_tkTier,pairKey:_pair});
+  const r=await pzApi('POST','/matchmaking/enqueue',{modeId:'duel',economyType:_eco,skill:800,ticketTier:_tkTier,waitTier:_waitTier,pairKey:_pair});
   if(r&&!r.ok&&r.error&&(r.error.code==='NO_TICKET'||r.error.code==='TICKET_TIER_INVALID')){ clearInterval(mmTimer);clearInterval(mmPingT); toast('بلیط لازم را نداری؛ از فروشگاه تهیه کن',3500); try{pzSyncWallet();}catch(e){} go('home'); return; }
   if(!r.ok){clearInterval(mmTimer);clearInterval(mmPingT);_pzRefundEntry();toast((r&&r.error&&r.error.message)||'خطای سرور در شروع جستجو',3500);go('home');return;}
   
@@ -20621,7 +20735,7 @@ try{ setInterval(pzSyncWallet,60000); document.addEventListener('visibilitychang
 renderWalletOverview=async function(c){
   c.innerHTML=pzSkel(4,64);
   const d=await pzSyncWallet();
-  if(!d){ c.innerHTML='<div class="wallet-empty"><span class="big">📡</span>ارتباط با سرور کیف پول برقرار نشد.<br><button class="btn btn-ghost btn-sm" style="margin-top:10px" onclick="renderWallet()">تلاش دوباره</button></div>'; return; }
+  if(!d){ c.innerHTML='<div class="wallet-empty"><span class="big">📡</span>ارتباط با سرور صندوق جایزه برقرار نشد.<br><button class="btn btn-ghost btn-sm" style="margin-top:10px" onclick="renderWallet()">تلاش دوباره</button></div>'; return; }
   let wds={rows:[]};
   try{ const r=await pzApi('GET','/wallet/withdrawals?pageSize=3'); if(r&&r.ok&&r.data) wds=r.data; }catch(e){}
   const fr=(l,v,suf)=>'<div class="fee-row"><span>'+l+'</span><b>'+fa(Number(v)||0)+(suf===false?'':' تومان')+'</b></div>';
@@ -21835,9 +21949,80 @@ async function pzInvitePoll(){
       if(PZ_INV_SEEN[inv.id]) continue;
       PZ_INV_SEEN[inv.id]=1;
       pzInviteAsk(inv);
-      break;                                        // one at a time
+      return;                                       // one at a time
     }
+    /* Nothing was waiting to be answered, so the same tick can carry the other
+       thing somebody might be waiting to hear. Never both at once: two sheets
+       stacked on each other is one sheet nobody reads. */
+    await pzDuelCallPoll();
   }catch(e){}
+}
+
+/* ── «حریفت ادامه داد» ───────────────────────────────────────────────────
+   «اگه در دوئل بازیکنی باخت و برنده دکمه ادامه میدهم رو زد و ادامه داد، به
+   بازنده اطلاع بده — البته نه پیام به صندوق اعلان، یه مودال بیاد و بنویسه
+   حریفت ادامه داد میتونی با بلیط آبی حقتو ازش بگیری، و دو دکمه بیخیال و
+   پیداش کن.»
+
+   A modal and not an inbox line, because this is only worth reading while it is
+   still true: the person is standing in that tier NOW. The server throws the
+   call away after three minutes for the same reason. */
+let PZ_CALL_OPEN=null;
+async function pzDuelCallPoll(){
+  if(PZ_CALL_OPEN||PZ_INV_OPEN) return;
+  let r=null;
+  try{ r=await pzApi('GET','/duel-calls'); }catch(e){ return; }
+  const calls=(r&&r.data&&r.data.calls)||[];
+  if(!calls.length) return;
+  pzDuelCallAsk(calls[0]);
+}
+function pzDuelCallAsk(call){
+  if(!call||!call.id||PZ_CALL_OPEN) return;
+  PZ_CALL_OPEN=call.id;
+  /* Marked read the moment it goes on screen, so it cannot come back on the
+     next tick while the player is still looking at this one. */
+  try{ pzApi('POST','/duel-calls/'+encodeURIComponent(call.id)+'/seen',{}); }catch(e){}
+  const tk=(typeof tDef==='function')?tDef(call.tier||'blue'):null;
+  const tkName=(tk&&tk.name)||'بلیط آبی';
+  const done=()=>{ PZ_CALL_OPEN=null; };
+  try{
+    showAaaModal({
+      icon:(tk&&tk.icon)||'🔵',
+      title:pzEsc(call.fromName||'حریفت')+' ادامه داد',
+      sub:'حالا با <b>'+pzEsc(tkName)+'</b> دنبال حریف است.'+
+          '<div style="margin-top:8px">می‌تونی با '+pzEsc(tkName)+' حقتو ازش بگیری.</div>'+
+          '<div style="margin-top:8px;font-size:12px;opacity:.8">ورودی را خودت می‌دهی، مثل هر بازی دیگر.</div>',
+      dismissible:true,
+      primaryText:'🎯 پیداش کن', secondaryText:'بی‌خیال',
+      primaryClass:'btn-blue', secondaryClass:'btn-ghost',
+      onPrimary:()=>{ closeAaaModal(true); done(); pzDuelCallGo(call); },
+      onSecondary:()=>{ closeAaaModal(false); done(); },
+      /* Tapping the backdrop is «بی‌خیال» too — without this the flag stayed
+         set and no later call could ever open. */
+      onDone:done, onDismiss:done
+    });
+  }catch(e){ done(); }
+}
+/* «پیداش کن»: the ordinary ticket door, with their tier already chosen. No
+   private pairing — the person is in the OPEN queue at that value, which is
+   where everyone else at that value is too. */
+function pzDuelCallGo(call){
+  setTimeout(async()=>{
+    try{
+      const tier=String((call&&call.tier)||'blue');
+      if(pzFriendlyPlan()) pzSetPlan('premium');
+      /* Ask the queue before promising: they may have been matched, or their
+         sixty seconds may have run out, in the time it took to read the sheet.
+         Sending somebody to a tier that is shut, with no word why, is the fault
+         this whole batch started from. */
+      try{ await pzLoadTierWaiting(); }catch(e){}
+      _pzInviteTier=null; pzPairKey=null;
+      if(!pzTierOpen(tier)){ toast('حریفت دیگر منتظر نیست — کمی بعد امتحان کن',3200); return; }
+      selectedTicket=tier; duelTicket=null;
+      enterMode('survivor',true);
+      setTimeout(()=>{ try{ updateModeEntryPlan(); }catch(e){} try{ renderTicketSelect(); }catch(e){} },250);
+    }catch(e){ try{ toast('از خانه با '+((typeof tDef==='function'&&tDef(call&&call.tier).name)||'بلیط')+' وارد شو',3000); }catch(_){} }
+  },260);
 }
 
 /* ── SENDING ONE ─────────────────────────────────────────────────────────

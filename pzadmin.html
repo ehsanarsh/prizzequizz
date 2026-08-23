@@ -3386,20 +3386,26 @@ async function renderDuel(){
         '<div class="field"><label>مهلت هر سؤال (ثانیه)</label>'+num('du_time',d.timerSeconds)+'</div>'+
       '</div>'+
     '</div>'+
+    /* دوئل دو نوع ورودی دارد و اسم‌هایشان اینجا اشتباه نوشته شده بود:
+       «باید در دوستانه با قلب و سکه باشه، در رقابت اصلی با بلیط.» خود بازی
+       درست کار می‌کند — رقابت اصلی با بلیط است و دوستانه با قلب و سکه — فقط
+       برچسب‌های این صفحه گمراه‌کننده بودند. */
     '<div class="card" style="margin-bottom:13px"><b>🎟️ ورودی</b>'+
-      '<div class="grid g3">'+
-        '<div class="field"><label>بازی رایگان — قلب</label>'+num('du_ef_h',ef.hearts)+'</div>'+
-        '<div class="field"><label>بازی رایگان — سکه</label>'+num('du_ef_c',ef.coins)+'</div>'+
-        '<div class="field"><label>بازی نقدی — مبلغ (تومان)</label>'+num('du_ep_cash',ep.cash)+'</div>'+
+      '<div class="sub" style="margin:6px 0 12px;line-height:1.9">دوئل <b>دوستانه</b> با قلب و سکه بازی می‌شود و جایزه‌اش سکه است. دوئل <b>رقابت اصلی</b> با <b>بلیط</b> بازی می‌شود — قیمت و ارزش هر بلیط در تب «🎫 بلیط‌ها» تنظیم می‌شود، نه اینجا.</div>'+
+      '<div class="grid g2">'+
+        '<div class="field"><label>دوستانه — قلب</label>'+num('du_ef_h',ef.hearts)+'</div>'+
+        '<div class="field"><label>دوستانه — سکه</label>'+num('du_ef_c',ef.coins)+'</div>'+
       '</div>'+
+      '<div class="field"><label>ارزش پایهٔ رقابت اصلی (تومان)</label>'+num('du_ep_cash',ep.cash)+
+        '<div class="sub" style="margin-top:4px">مبلغی که وقتی بازیکن بدون بلیط وارد رقابت نقدی می‌شود مبنا قرار می‌گیرد. در حالت عادی بازیکن با بلیط وارد می‌شود و ارزش از خود بلیط می‌آید.</div></div>'+
     '</div>'+
     '<div class="card" style="margin-bottom:13px"><b>🏆 جایزه</b>'+
       '<div class="grid g3">'+
-        '<div class="field"><label>رایگان — پایه (سکه)</label>'+num('du_rf_base',rf.base)+'</div>'+
-        '<div class="field"><label>رایگان — به‌ازای هر مرحله</label>'+num('du_rf_stage',rf.perStage)+'</div>'+
-        '<div class="field"><label>نقدی — ضریب ورودی</label>'+num('du_rp_mult',rp.multiplier,'0.1')+'</div>'+
+        '<div class="field"><label>دوستانه — پایه (سکه)</label>'+num('du_rf_base',rf.base)+'</div>'+
+        '<div class="field"><label>دوستانه — به‌ازای هر مرحله (سکه)</label>'+num('du_rf_stage',rf.perStage)+'</div>'+
+        '<div class="field"><label>رقابت اصلی — ضریب</label>'+num('du_rp_mult',rp.multiplier,'0.1')+'</div>'+
       '</div>'+
-      '<div class="sub">جایزهٔ نقدی = مبلغ ورودی × ضریب. کمیسیون بالا از همین مبلغ کم می‌شود.</div>'+
+      '<div class="sub">جایزهٔ رقابت اصلی = ارزش بلیط × ضریب. کمیسیون بالا از همین مبلغ کم می‌شود.</div>'+
     '</div>'+
     '<button class="btn pri" onclick="duelSave()">💾 ذخیرهٔ تنظیمات دوئل</button>'+
     '<div class="note" style="margin-top:12px">فهرست مسابقات دوئل در تب «🎮 مسابقات» است.</div>';

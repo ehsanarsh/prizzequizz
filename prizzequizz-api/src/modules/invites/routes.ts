@@ -15,6 +15,8 @@ import {
 } from '../../services/gameInviteService.js';
 import { notifications } from '../../services/notificationService.js';
 import { getRoom } from '../../services/lastSurvivorService.js';
+import { callAfterWin, pendingFor, markSeen, isTier } from '../../services/duelCallService.js';
+import { getMatch } from '../../services/matchEngine.js';
 
 const MODES: InviteMode[] = ['duel', 'ls', 'wta'];
 
@@ -122,6 +124,62 @@ export function registerInviteRoutes(router: Router, base: string): void {
     await cancelInvite(ctx.params.id!, ctx.userId);
     json(ctx.res, 200, { cancelled: true });
   });
+
+  /* ── «حریفت ادامه داد» ──────────────────────────────────────────────────
+     The winner's client says it has gone on to the next stage; the loser is
+     told, once, while it is still true. The caller supplies only the match id —
+     WHO won it and WHO lost it are read from the match itself, so a client
+     cannot summon a stranger or nominate itself the winner of a game it lost. */
+  router.add('POST', `${base}/duel-calls`, async (ctx) => {
+    if (!ctx.userId) return error(ctx.res, 401, 'UNAUTHORIZED', 'ابتدا وارد شو.');
+    const body = (ctx.body ?? {}) as Record<string, unknown>;
+    const matchId = String(body.matchId ?? '').trim();
+    if (!matchId) return error(ctx.res, 400, 'BAD_MATCH', 'مسابقه مشخص نیست');
+    /* The tier is the whole point of the call — «میتونی با بلیط آبی حقتو
+       ازش بگیری» — so a call that cannot name one is not sent. */
+    const tier = String(body.tier ?? '').toLowerCase();
+    if (!isTier(tier)) return error(ctx.res, 400, 'BAD_TIER', 'بلیطی برای این مرحله وجود ندارد');
+
+    let match;
+    try { match = await getMatch(matchId); } catch { return error(ctx.res, 404, 'MATCH_NOT_FOUND', 'این مسابقه پیدا نشد'); }
+    /* Only the real winner of a real, finished duel gets to knock. */
+    if (match.phase !== 'finished' && match.phase !== 'result') return error(ctx.res, 409, 'MATCH_NOT_FINISHED', 'این مسابقه هنوز تمام نشده');
+    if (!match.winnerUserId || String(match.winnerUserId) !== ctx.userId) return error(ctx.res, 403, 'NOT_THE_WINNER', 'این مسابقه را تو نبردی');
+    const loser = (match.players ?? []).map((p: any) => String(p.userId)).find((uid: string) => uid !== ctx.userId);
+    /* A duel against a bot has nobody on the other side to tell. */
+    if (!loser) return json(ctx.res, 200, { called: false, reason: 'NO_OPPONENT' });
+
+    const me = await repositories.users.findById(ctx.userId);
+    const call = await callAfterWin({
+      toUserId: loser, fromUserId: ctx.userId,
+      fromName: me?.displayName || me?.username || 'حریف',
+      tier,
+      matchId, stage: Number(body.stage ?? 2)
+    });
+    json(ctx.res, 201, { called: true, call: publicCall(call) });
+  });
+
+  /* What the loser's ordinary poll picks up. */
+  router.add('GET', `${base}/duel-calls`, async (ctx) => {
+    if (!ctx.userId) return error(ctx.res, 401, 'UNAUTHORIZED', 'ابتدا وارد شو.');
+    const list = await pendingFor(ctx.userId);
+    json(ctx.res, 200, { calls: list.map(publicCall) });
+  });
+
+  /* Shown — so it is not shown again on the next tick. */
+  router.add('POST', `${base}/duel-calls/:id/seen`, async (ctx) => {
+    if (!ctx.userId) return error(ctx.res, 401, 'UNAUTHORIZED', 'ابتدا وارد شو.');
+    const ok = await markSeen(ctx.params.id!, ctx.userId);
+    json(ctx.res, 200, { seen: ok });
+  });
+}
+
+function publicCall(c: any) {
+  return {
+    id: c.id, fromUserId: c.fromUserId, fromName: c.fromName,
+    tier: c.tier || 'blue', matchId: c.matchId, stage: c.stage,
+    secondsLeft: Math.max(0, Math.round((c.expiresAt - Date.now()) / 1000))
+  };
 }
 
 function publicInvite(inv: any) {
