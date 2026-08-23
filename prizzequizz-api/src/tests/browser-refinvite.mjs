@@ -28,7 +28,7 @@ const ok = (n, c, extra = '') => { if (c) { pass++; console.log('  ok   ' + n + 
    a code with no name in it and no extension. Nothing about a picture can be
    worked out from what it is called, which is the whole reason the game has to
    look names up rather than guess at them. */
-const MEDIA_URL = { logo: '/media/msi929ll-52a9mhwm',
+const MEDIA_URL = { logo: '/media/mt6bmqa0-gu24xve1',
   'medal-gold': '/media/mt69rmlc-jwpizbiq',
   'medal-silver': '/media/mt69rmwy-r9kfd8cc',
   'medal-bronze': '/media/mt69rloa-nb98jwyc' };
@@ -271,10 +271,18 @@ async function makePage(query = '') {
     const read = (p) => {
       const img = p.querySelector('.base .pod-logo');
       if (!img) return null;
-      const b = img.getBoundingClientRect(), base = p.querySelector('.base').getBoundingClientRect();
+      const baseEl = p.querySelector('.base'), rkEl = baseEl.querySelector('.rk');
+      const b = img.getBoundingClientRect(), base = baseEl.getBoundingClientRect();
+      const rk = rkEl ? rkEl.getBoundingClientRect() : null;
       return { src: img.getAttribute('src'), loaded: img.naturalWidth > 0,
                w: Math.round(b.width),
-               insideThePlinth: b.top >= base.top - 1 && b.bottom <= base.bottom + 1 };
+               insideThePlinth: b.top >= base.top - 1 && b.bottom <= base.bottom + 1,
+               /* «زیر نفر اول» — under the rank digit, not beside it. */
+               belowTheDigit: !!rk && b.top >= rk.bottom - 1,
+               /* And the digit must not have been shoved off centre to make
+                  room for it: the logo is placed OVER the plinth, not laid out
+                  in a row with the number. */
+               digitOffCentre: !!rk && Math.abs(((rk.left + rk.right) / 2) - ((base.left + base.right) / 2)) > 3 };
     };
     return { first: read(pods[1]), second: read(pods[0]), third: read(pods[2]) };
   });
@@ -282,6 +290,8 @@ async function makePage(query = '') {
   ok('and it came from the media folder', /^\/media\//.test((pod.first || {}).src || ''), String((pod.first || {}).src));
   ok('it actually loaded', (pod.first || {}).loaded === true, JSON.stringify(pod.first));
   ok('it sits on the plinth, not off it', (pod.first || {}).insideThePlinth === true, JSON.stringify(pod.first));
+  ok('under the rank digit, not beside it', (pod.first || {}).belowTheDigit === true, JSON.stringify(pod.first));
+  ok('and the digit is still centred on its plinth', (pod.first || {}).digitOffCentre === false, JSON.stringify(pod.first));
   ok('it is big enough to be seen', ((pod.first || {}).w || 0) >= 40, String((pod.first || {}).w));
   /* «روی سکوی یک بچسبه» — first place only. */
   ok('second place has none', pod.second === null, JSON.stringify(pod.second));

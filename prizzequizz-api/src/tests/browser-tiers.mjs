@@ -31,7 +31,7 @@ const ONE_PIXEL = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAD
    extension — so a picture's address has to be LOOKED UP, never guessed. The
    medals that are in the game's table are here; the ones that are not fall
    back to its own folder, which is what «uploaded=root» stands for. */
-const MEDIA_URL = { logo: '/media/msi929ll-52a9mhwm',
+const MEDIA_URL = { logo: '/media/mt6bmqa0-gu24xve1',
   'medal-gold': '/media/mt69rmlc-jwpizbiq',
   'medal-silver': '/media/mt69rmwy-r9kfd8cc',
   'medal-bronze': '/media/mt69rloa-nb98jwyc' };

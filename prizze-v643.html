@@ -1386,8 +1386,11 @@ input,textarea,select,[contenteditable="true"],.pz-selectable,.pz-selectable *{
    یک بچسبه.» Below the rank digit, on the gold itself — and absolutely
    positioned so the digit does not move whether the picture arrives or not.
    If it never arrives the tag removes itself and the plinth is what it was. */
-.pod.p1 .base .pod-logo{position:absolute;left:50%;bottom:7px;transform:translateX(-50%);
-  width:56px;max-height:46px;object-fit:contain;pointer-events:none;z-index:2;
+/* Sized to CLEAR the digit rather than land on it. The plinth is 88px, the
+   26px rank number ends about 41px down, so anything taller than this reaches
+   up behind it — which reads as a mistake even when the picture is right. */
+.pod.p1 .base .pod-logo{position:absolute;left:50%;bottom:6px;transform:translateX(-50%);
+  width:58px;max-height:40px;object-fit:contain;pointer-events:none;z-index:2;
   filter:drop-shadow(0 2px 3px rgba(0,0,0,.45))}
 .pod.p2 .base{height:64px;background:linear-gradient(180deg,#F2F5F9,#B9C3CE 55%,#7F8B98)}
 .pod.p3 .base{height:50px;background:linear-gradient(180deg,#F3B07A,#D0763A 55%,#8A4A1D)}
@@ -1402,7 +1405,11 @@ input,textarea,select,[contenteditable="true"],.pz-selectable,.pz-selectable *{
   animation:podShine 3.4s ease-in-out infinite}
 @keyframes podShine{0%{inset-inline-start:-45%}55%,100%{inset-inline-start:115%}}
 @media(prefers-reduced-motion:reduce){.pod.p1 .base::after{display:none}}
-.pod .rk{position:relative;z-index:1;font-size:22px;font-weight:900;color:#141414;
+/* `line-height:1` because this is one digit and nothing else: the inherited
+   line box was half again as tall as the number inside it, which is invisible
+   until something has to be placed underneath and finds the space already
+   claimed by empty space. */
+.pod .rk{position:relative;z-index:1;font-size:22px;line-height:1;font-weight:900;color:#141414;
   text-shadow:0 1px 0 rgba(255,255,255,.5)}
 .pod.p1 .rk{font-size:26px}
 /* «متن هر هفته ریست میشود و نفرات برتر به لیگ هفتگی راه پیدا می‌کنند» — under
@@ -10486,7 +10493,7 @@ function pzArtLegacy(el, tries, onDone){
    as everything worked before. So the table can be filled in one line at a
    time, and a name nobody has uploaded yet still behaves itself. */
 const PZ_IMG_URLS={
-  'logo':         '/media/msi929ll-52a9mhwm',
+  'logo':         '/media/mt6bmqa0-gu24xve1',
   'medal-gold':   '/media/mt69rmlc-jwpizbiq',
   'medal-silver': '/media/mt69rmwy-r9kfd8cc',
   'medal-bronze': '/media/mt69rloa-nb98jwyc'
