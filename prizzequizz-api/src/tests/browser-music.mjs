@@ -1044,6 +1044,92 @@ for (const [policy, expect] of [['quiet', 'quieter'], ['stop', 'stopped'], ['kee
   await ctx.close();
 }
 
+/* ── THE BLANK HALF OF THE CLOSED ROW ──────────────────────────────────── */
+/* «در قسمت خالی که تاچ میکنی و کشویی باز میشه بنویسه میتونی از موزیک لذت ببری،
+ * و وقتی موزیک در حال پخش هست در اون قسمت بنویسه اگه به اسپیکر وصل بشی بیشتر
+ * لذت میبری.»
+ *
+ * Closed, the dock was a small tab and a wide empty strip — and the strip is
+ * the part a thumb actually lands on. */
+{
+  console.log('\nthe strip beside the tab:');
+  const { ctx, page, errs } = await makePage();
+  await enterRoom(page);
+  /* The app raises a prompt of its own on the way in and its overlay covers the
+     screen. A player closes it before touching anything; a test that does not
+     is measuring the modal. */
+  await page.evaluate(async () => {
+    for (let i = 0; i < 4; i++) {
+      const ov = document.getElementById('aaaModal');
+      if (!ov || !ov.classList.contains('show')) break;
+      const sec = document.getElementById('aaaSecondary');
+      const b = (sec && getComputedStyle(sec).display !== 'none') ? sec : document.getElementById('aaaPrimary');
+      if (b) b.click(); else break;
+      await new Promise((r) => setTimeout(r, 300));
+    }
+    (0, eval)('lsMusicDrawer')(false);
+  });
+  await page.waitForTimeout(500);
+
+  const idle = await page.evaluate(() => {
+    const h = document.getElementById('lsMusicHint');
+    const tab = document.getElementById('lsMusicTab');
+    if (!h) return null;
+    const hr = h.getBoundingClientRect(), tr = tab.getBoundingClientRect();
+    return { text: h.textContent, hidden: !!h.hidden, w: Math.round(hr.width), tabW: Math.round(tr.width),
+             tag: h.tagName, sameRow: Math.abs(hr.top - tr.top) < 6 };
+  });
+  ok('there is something written in the strip', !!idle && !idle.hidden && idle.text.trim().length > 8, JSON.stringify(idle));
+  ok('and it says the music is there to enjoy', /لذت/.test((idle && idle.text) || ''), idle && idle.text);
+  ok('it fills the rest of the row', idle.w > idle.tabW, idle.w + 'px vs tab ' + idle.tabW + 'px');
+  ok('sitting on the same line as the tab', idle.sameRow === true, String(idle.sameRow));
+
+  /* «قسمت خالی که تاچ میکنی و کشویی باز میشه» — the strip is what opens it. */
+  const tapped = await page.evaluate(async () => {
+    const h = document.getElementById('lsMusicHint');
+    const r = h.getBoundingClientRect();
+    const hit = document.elementFromPoint(Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2));
+    const reachable = !!hit && (hit === h || h.contains(hit));
+    const why = hit ? ((hit.id || hit.className || hit.tagName) + ' @' + Math.round(r.top)) : 'nothing there';
+    h.click();
+    await new Promise((res) => setTimeout(res, 500));
+    return { reachable, why, open: (0, eval)('LSM').open, hidden: !!document.getElementById('lsMusicHint').hidden };
+  });
+  ok('a finger really lands on it', tapped.reachable === true, tapped.why);
+  ok('and touching it opens the drawer', tapped.open === true, String(tapped.open));
+  /* Open, the controls are what belongs in that space. */
+  ok('it stands aside once the drawer is out', tapped.hidden === true, String(tapped.hidden));
+
+  /* «وقتی موزیک در حال پخش هست… اگه به اسپیکر وصل بشی بیشتر لذت میبری» */
+  /* Started the way every other case here starts it, and waited on from
+     OUTSIDE the page: the play promise settles after an evaluate returns, so a
+     wait inside one reads the element before it has begun. */
+  await page.evaluate(() => {
+    /* The first play asks what should happen to the music when the match
+       starts; answered once and remembered. Every other case here does the
+       same — without it the click opens that sheet instead of playing. */
+    (0, eval)("LSM.policy='keep';");
+    (0, eval)('lsMusicDrawer')(true);
+    document.getElementById('lsMusicPlay').click();
+  });
+  await page.waitForTimeout(1200);
+  const playing = await page.evaluate(async () => {
+    (0, eval)('lsMusicDrawer')(false);
+    await new Promise((res) => setTimeout(res, 400));
+    const h = document.getElementById('lsMusicHint');
+    const a = document.getElementById('pzMusicEl');
+    const L = (0, eval)('LSM');
+    return { text: h.textContent, hidden: !!h.hidden, paused: a ? a.paused : null,
+             started: L.started };
+  });
+  ok('it really is playing', playing.paused === false && playing.started === true, JSON.stringify(playing));
+  ok('the strip is back once it is tucked away', playing.hidden === false, String(playing.hidden));
+  ok('and now suggests a speaker', /اسپیکر|هدفون/.test(playing.text), playing.text);
+  ok('the two messages are different', playing.text !== idle.text, JSON.stringify([idle.text, playing.text]));
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
 await browser.close();
 server.close();
 console.log('\n' + pass + ' passed, ' + fail + ' failed');

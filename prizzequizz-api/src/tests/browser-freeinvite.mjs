@@ -71,6 +71,7 @@ async function makePage(plan) {
   const errs = []; page.on('pageerror', (e) => errs.push(String(e.message || e).slice(0, 200)));
   await page.goto('http://127.0.0.1:' + PORT + '/');
   await page.waitForTimeout(5200);
+  await page.evaluate(() => { (0, eval)('mTickets={green:2,blue:2,red:2};'); });
   return { ctx, page, errs };
 }
 

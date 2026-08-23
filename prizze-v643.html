@@ -5471,6 +5471,16 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
   padding:9px 13px;background:transparent;border:0;border-inline-end:2px solid rgba(0,0,0,.55);
   color:var(--paper);font-family:inherit;font-size:12.5px;font-weight:800;cursor:pointer}
 .ls-music .lm-tab-t{white-space:nowrap}
+/* The strip beside the tab. It is the widest part of the closed row and it was
+   empty, so it says what the row is for — and opens it, because a blank half of
+   a control that reacts to nothing reads as a control that is broken. */
+.ls-music .lm-hint{flex:1 1 auto;min-width:0;display:flex;align-items:center;
+  padding:9px 12px;background:transparent;border:0;color:var(--muted);
+  font-family:inherit;font-size:11.5px;font-weight:800;line-height:1.4;
+  text-align:start;cursor:pointer;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ls-music .lm-hint:active{background:rgba(255,255,255,.05)}
+.ls-music .lm-dock.on .lm-hint{display:none}
 .ls-music .lm-note{font-size:17px}
 .ls-music .lm-dock.on .lm-tab{background:rgba(255,210,31,.12);color:var(--bolt)}
 /* A quiet pulse while it is playing and put away. */
@@ -5680,6 +5690,31 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
       .ls-verdict.ls-right .lsv-head{font-size:21px;font-weight:900;color:#05230f;margin-bottom:2px}
       .ls-verdict.ls-right .lsv-line{font-size:15px;font-weight:800;color:#0a3d1c;opacity:.9}
       .ls-verdict.bad{background:var(--bad-soft);color:var(--bad);border-color:var(--bad)}
+      /* BEING KNOCKED OUT, SAID AS LOUDLY AS SURVIVING IS. The winning card is
+         a solid green panel; this was a tinted line. Same weight, opposite
+         colour — a filled red card, a cross that lands on it, and every line
+         big enough to read at arm's length. */
+      .ls-verdict.ls-out{background:linear-gradient(180deg,#F0574A,#A5241A);
+        color:#fff;border-color:#000;box-shadow:0 5px 0 #000,0 0 34px rgba(240,87,74,.42);
+        padding:16px 16px 15px}
+      .ls-verdict.ls-out .lsv-x{font-size:40px;line-height:1;font-weight:900;color:#fff;
+        text-shadow:0 3px 0 rgba(0,0,0,.55);margin-bottom:4px;
+        animation:lsOutX .42s cubic-bezier(.2,1.5,.35,1) both}
+      .ls-verdict.ls-out .lsv-head{font-size:22px;font-weight:900;color:#fff;margin-bottom:5px;
+        text-shadow:0 2px 0 rgba(0,0,0,.45)}
+      .ls-verdict.ls-out .lsv-line{font-size:16px;font-weight:800;color:#ffe9e6}
+      .ls-verdict.ls-out .lsv-line b{color:#fff}
+      .ls-verdict.ls-out .lsv-out{margin-top:9px;font-size:17px;font-weight:900;color:#fff;
+        background:rgba(0,0,0,.30);border:2px solid rgba(0,0,0,.5);border-radius:12px;padding:7px 10px}
+      @keyframes lsOutX{0%{opacity:0;transform:scale(2.2) rotate(-18deg)}
+        60%{opacity:1;transform:scale(.92) rotate(3deg)}
+        100%{opacity:1;transform:scale(1) rotate(0)}}
+      @media(prefers-reduced-motion:reduce){.ls-verdict.ls-out .lsv-x{animation:none}}
+      /* The invite sheet borrows the entry screen's ticket tiles, and the sheet
+         centres and shrinks its text — which would shrink them too. */
+      .pz-inv-pick{margin-top:4px}
+      .pz-inv-pick .tk-opt{font-size:13px}
+      .pz-inv-pick .tk-opt b{font-size:12.5px}
       .ls-verdict .lsv-head{font-size:20px;line-height:1.5;margin-bottom:4px}
       .ls-verdict .lsv-line{font-size:16px}
       /* Saved by a shield. The card is RED — the answer was wrong, and telling
@@ -6829,6 +6864,10 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
       <div id="rgBody"></div>
       <div class="rg-check" id="rgCheck" onclick="toggleRgSkip()"><span class="rg-box" id="rgBox">✓</span> دیگر این راهنما را برای این حالت نشان نده</div>
       <button class="btn btn-primary" onclick="rulesGo()">متوجه شدم، بزن بریم!</button>
+      <!-- A WAY BACK, now that tapping beside the card is no longer one. Reading
+           the rules and deciding not to play is a real answer, and it needs a
+           button of its own or leaving is impossible. -->
+      <button class="btn btn-ghost" style="margin-top:8px" onclick="rulesBack()">بی‌خیال</button>
     </div>
   </div>
 
@@ -8492,8 +8531,21 @@ function lsBuild(snap){
         ?('حالا <b>'+lsFa(left)+'</b> سپر برایت مانده')
         :'دیگر سپری نداری — اشتباه بعدی یعنی حذف')+'</div></div>';
   } else if(r.phase==='elimination'&&myVerdict==='wrong'){
-    verdict='<div class="ls-verdict bad">'+(timedOut?'⏳ زمان شما به پایان رسید — ':'❌ ')+
-      'پاسخ درست: <b>'+(correctTxt||'—')+'</b> — شما حذف شدید</div>';
+    /* THE ONE THAT MATTERS MOST WAS THE ONE SAID QUIETEST.
+       «وقتی در آخرین بازمانده جواب غلط میدی یه نوشته قرمز میاد بدون کارت و
+        بدون پس زمینه. باید با پس زمینه باشه و حس جواب غلط رو به کاربر بده،
+        نوشته ها خوانا و بزرگ باشه.»
+
+       Getting it right and surviving on a shield both got a full card; being
+       knocked out — the end of the match for this player — got one thin line
+       with the correct answer, an em-dash and the news, all run together. So
+       it is a card now, with the same shape as the other two: what happened,
+       what the answer was, and what it cost, each on its own line. */
+    verdict='<div class="ls-verdict bad ls-out">'+
+      '<div class="lsv-x">✕</div>'+
+      '<div class="lsv-head">'+(timedOut?'⏳ زمان تمام شد':'❌ پاسخ اشتباه بود')+'</div>'+
+      '<div class="lsv-line">پاسخ درست: <b>'+(correctTxt||'—')+'</b></div>'+
+      '<div class="lsv-out">از مسابقه حذف شدی</div></div>';
   }
   body.innerHTML=watch+lsDashHtml(snap,true)+verdict+
     /* The elimination screen says nothing: the grid is already showing who went
@@ -9366,6 +9418,14 @@ function lsMusicMount(){
            hidden behind a button that looks like it does nothing. */
         '<span class="lm-live" id="lsMusicLive" hidden></span>'+
       '</button>'+
+      /* «در قسمت خالی که تاچ میکنی و کشویی باز میشه بنویسه میتونی از موزیک لذت
+         ببری، و وقتی موزیک در حال پخش هست بنویسه اگه به اسپیکر وصل بشی بیشتر
+         لذت میبری.»
+         The strip beside the tab was blank, and it is the part of the row a
+         thumb actually lands on — it is most of the row's width. So it says
+         what the drawer is for, and it opens the drawer, which is what anybody
+         tapping there was trying to do anyway. */
+      '<button type="button" class="lm-hint" id="lsMusicHint" onclick="lsMusicDrawer()" tabindex="-1"></button>'+
       '<div class="lm-slide" id="lsMusicSlide" aria-hidden="'+(LSM.open?'false':'true')+'">'+
         '<div class="lm-ctrls">'+
           '<button type="button" class="lm-btn" id="lsMusicPrev" onclick="lsMusicPrev()" aria-label="موزیک قبلی">⏮</button>'+
@@ -9391,6 +9451,10 @@ function lsMusicDrawer(open){
     const tab=document.getElementById('lsMusicTab');
     if(tab) tab.setAttribute('aria-expanded',LSM.open?'true':'false');
   }
+  /* Repaint: the hint in the strip beside the tab is only for the closed state,
+     and the CSS hides it either way — but `hidden` is what a screen reader
+     honours, and the two must not say different things. */
+  lsMusicPaint();
   lsMusicIdle();
   try{ vib(6); }catch(e){}
 }
@@ -9439,6 +9503,15 @@ function lsMusicPaint(){
   if(live) live.hidden=!playing;
   const tabT=document.getElementById('lsMusicTabT');
   if(tabT) tabT.textContent=playing?'در حال پخش':'موزیک';
+  const hint=document.getElementById('lsMusicHint');
+  if(hint){
+    hint.textContent=playing
+      ? '🔊 با اسپیکر یا هدفون بیشتر حال می‌دهد'
+      : (LSM.started?'▶ ادامه‌اش بده' : '🎶 تا شروع مسابقه می‌تونی از موزیک لذت ببری');
+    /* Only while it is tucked away: open, the controls are what belongs in
+       this space and the hint would be pushing them out of the row. */
+    hint.hidden=!!LSM.open;
+  }
   const tab=document.getElementById('lsMusicTab');
   if(tab) tab.setAttribute('aria-label',playing?'موزیک در حال پخش — برای کنترل بزن':'پخش موزیک');
   /* Anything the player just did with it counts as using it. */
@@ -10475,6 +10548,12 @@ function rulesGo(){
   document.getElementById('rulesGate').classList.remove('show');
   if(rgCb){const c=rgCb;rgCb=null;c();}
 }
+/* «بی‌خیال» — the same thing tapping beside the card used to do, only now it is
+   said on purpose. The callback is dropped, so the mode is not entered. */
+function rulesBack(){
+  rgCb=null; rgMode=null;
+  document.getElementById('rulesGate').classList.remove('show');
+}
 function updateModeEntryPlan(){
   const note=document.getElementById('mePlanNote'),btn=document.getElementById('meStartBtn');
   if(!note)return;
@@ -10721,6 +10800,12 @@ function showAaaModal(opts){
   primary.className='btn '+(opts.primaryClass||'btn-primary');
   secondary.className='btn '+(opts.secondaryClass||'btn-ghost');
   primary.textContent=opts.primaryText||'متوجه شدم';secondary.textContent=opts.secondaryText||'بعداً';
+  /* An EXPLICIT empty label means «this sheet has no primary action» — the
+     picker sheets say so and were getting a “متوجه شدم” that did nothing but
+     close them. Undefined still means «use the default», so nothing that never
+     mentioned it changes. Said here rather than at six call sites because the
+     next sheet like this should not have to know. */
+  primary.style.display=(opts.primaryText==='')?'none':'flex';
   secondary.style.display=opts.secondaryText?'flex':'none';
   if(tertiary){
     tertiary.className='btn '+(opts.tertiaryClass||'btn-ghost');
@@ -10744,7 +10829,21 @@ function showAaaModal(opts){
     aaaTimers.push(setTimeout(tick,180));
   }
   ov.dataset.timed=opts.seconds?'1':'0';
-  ov.dataset.dismissible=opts.dismissible===false?'0':'1';
+  /* «مودال ها هم نباید با تاچ به اطراف مودال حذف بشه، باید با دکمه هاش حذف بشه
+     — یعنی باید تا دکمه هاشو تاچ نکردی و جواب ندادی نره.»
+
+     A tap on the backdrop used to close any sheet not explicitly marked
+     otherwise, and a sheet that asks a question is closed by answering it —
+     a thumb landing beside a button is not an answer. So a sheet with any way
+     out of its own (a button, or a countdown that closes it) can only be left
+     through that way.
+
+     The one exception is a sheet with NO button and NO countdown: there the
+     backdrop is the only way out at all, and taking it away would trap the
+     player on a screen they cannot leave. That is a worse fault than the one
+     being fixed, so it keeps its escape. */
+  const _hasWayOut=!!(opts.seconds||(!opts.hideActions&&((opts.primaryText!=='')||opts.secondaryText||opts.tertiaryText)));
+  ov.dataset.dismissible=(opts.dismissible===false||_hasWayOut)?'0':'1';
   if(ph)ph.classList.add('modal-open');
   ov.setAttribute('aria-hidden','false');ov.classList.add('show');
   sfx(opts.sfx||'found');vib(opts.vib||[25,35]);
@@ -10769,16 +10868,9 @@ function setupDismissibleOverlays(){
       dismissAaaModal();
     });
   }
-  const rules=document.getElementById('rulesGate');
-  if(rules&&!rules.dataset.dismissInit){
-    rules.dataset.dismissInit='1';
-    rules.addEventListener('pointerdown',e=>{if(e.target===rules){rules.classList.remove('show');rgCb=null;}});
-  }
-  const warn=document.getElementById('cardWarn');
-  if(warn&&!warn.dataset.dismissInit){
-    warn.dataset.dismissInit='1';
-    warn.addEventListener('pointerdown',e=>{if(e.target===warn){const b=document.getElementById('warnBtn');if(b)b.click();}});
-  }
+  /* The rules gate and the cheat warning are answered too: the gate has «فهمیدم»
+     and the warning has its own button, and closing either by tapping beside it
+     was the same shortcut past the question. */
   document.querySelectorAll('.sheet-bg').forEach(bg=>{
     if(bg.dataset.dismissInit)return;bg.dataset.dismissInit='1';
     bg.addEventListener('pointerdown',e=>{
@@ -14258,6 +14350,20 @@ function pzShopReturnAfterBuy(){
   /* A beat, so the receipt is read before the screen changes under it. */
   setTimeout(()=>{
     try{
+      /* THE ARRANGED DUEL. They were sent here from an invitation they had
+         already accepted, so the ticket they just bought is the whole of what
+         was missing — «بعد از خرید بلیط مستقیم به روم بازی هدایت بشه». Putting
+         them back on the entry screen would ask them to choose a ticket they
+         have just been told which one to buy. */
+      if(to==='__pairDuel'){
+        curMode='survivor';
+        if((mTickets[selectedTicket]||0)>0){ startGame(); return; }
+        /* The purchase was for something else, or did not land on this tier.
+           The ordinary screen, rather than a search that cannot start. */
+        enterMode('survivor',true);
+        setTimeout(()=>{ try{ renderTicketSelect(); }catch(e){} },250);
+        return;
+      }
       go(to);
       /* Repaint the entry screen: it prints how many tickets you hold, and the
          whole point is that the number is different now. */
@@ -21736,18 +21842,12 @@ async function pzInviteWaitTick(){
   if(st&&st.status==='accepted'){
     PZ_INV_WAIT=null;
     try{ closeAaaModal(true); }catch(e){}
-    setTimeout(()=>{
-      /* Same key, same tier, so the queue can only pair the two of them. */
-      pzPairKey=w.id;
-      if(w.tier) selectedTicket=w.tier;
-      /* The friendly arrangement was for a number of coins, so that is what the
-         entry screen must be asking for when it opens — not the last amount
-         this player happened to leave selected there. */
-      if(w.coins>0) pzApplyCoinStake(w.coins);
-      duelTicket=null;
-      enterMode('survivor',true);
-      setTimeout(()=>{ try{ updateModeEntryPlan(); }catch(e){} try{ renderTicketSelect(); }catch(e){} },250);
-    },260);
+    /* Same key, same tier, so the queue can only pair the two of them — and the
+       same walk in as the person who accepted. The sender used to be dropped on
+       the entry screen with the tier they had just invited with SHUT, because
+       nothing told that screen an arrangement was in force; it put them back on
+       green while the other one stood on blue, and the two could never meet. */
+    setTimeout(()=>{ pzPairEnter(w.tier||'', w.id, w.coins); },260);
     return;
   }
   if(st&&(st.status==='rejected'||st.status==='expired'||st.status==='cancelled')){
@@ -21886,6 +21986,57 @@ function pzInviteGo(inv){
      player is left where they started wondering whether their tap registered. */
   setTimeout(()=>pzInviteGoNow(inv),260);
 }
+/* ── WALKING INTO A GAME THAT IS ALREADY ARRANGED ────────────────────────
+   «اگه گیرنده بلیط داشت مستقیم وارد رادار و روم بازی میشه، دیگه انتخاب بلیط رو
+    نمیبینه. ولی اگه بلیط انتخابی کاربر فرستنده رو نداشته باشه و قبول کنه باید
+    مستقیم بره به صفحه خرید بلیط و بعد از خرید بلیط مستقیم به روم بازی هدایت
+    بشه.»
+
+   Both sides of an arranged duel land here, and it is the same walk for both:
+   the ticket was agreed when the invitation was sent, so there is nothing left
+   to choose. Either you hold it and go in, or you do not and the shop is the
+   one stop on the way — and the shop hands you straight back into the match,
+   not onto a screen asking which ticket you would like.
+
+   The entry screen still exists and is still where somebody choosing a game
+   for themselves goes. It is only skipped when the choosing has already
+   happened. */
+function pzPairEnter(tier, pairId, coins){
+  /* The lock, on BOTH sides. «برای فرستنده فقط بلیط سبز فعاله، این قانون باید
+     در این مورد استثنا بشه» — the sender's screen used to be judged by the open
+     queue like anybody else's, so the tier they had just paid to invite with
+     was shut and the screen quietly put them back on green while the person
+     they invited stood on blue. The arrangement is the exception: for as long
+     as the pairing lives, its tier is the only one either of them can be on. */
+  pzPairKey=pairId||null;
+  if(tier){ selectedTicket=tier; _pzInviteTier=tier; }
+  duelTicket=null;
+  curMode='survivor';
+  /* A friendly duel is arranged for coins and a heart, and BOTH of those are
+     chosen on the entry screen — so that half keeps its screen. */
+  if(Number(coins)>0){
+    pzApplyCoinStake(Number(coins));
+    enterMode('survivor',true);
+    setTimeout(()=>{ try{ updateModeEntryPlan(); }catch(e){} try{ renderTicketSelect(); }catch(e){} },250);
+    return;
+  }
+  if(!tier){ enterMode('survivor',true); return; }
+  /* A TICKET GAME IS PLAYED IN THE HALF THAT HAS TICKETS. Said here as well as
+     at the call sites, because this is the function that is about to spend one
+     and there is no screen in between to notice. */
+  try{ if(pzFriendlyPlan()) pzSetPlan('premium'); }catch(e){}
+  if((mTickets[tier]||0)>0){
+    /* Straight to the radar. startGame does the same two things the entry
+       screen's button does — hold the ticket, start the search — so nothing is
+       skipped except the asking. */
+    try{ startGame(); }catch(e){ enterMode('survivor',true); }
+    return;
+  }
+  /* No ticket, and they have already said yes. The shop, and then the match. */
+  toast('برای این بازی به '+tDef(tier).name+' نیاز داری',2600);
+  goShopTickets('__pairDuel');
+}
+
 function pzInviteGoNow(inv){
   try{
     const coins=Number(inv.coinStake)||0;
@@ -21902,17 +22053,13 @@ function pzInviteGoNow(inv){
            match their opponent paid coins for. They were told this on the sheet
            they just tapped, and the way back is one line on the entry screen. */
         if(!pzFriendlyPlan()) pzSetPlan('free');
-        pzApplyCoinStake(coins);
       }
-      else if(inv.ticketTier){
-        /* «باید همون بلیطی که دعوت کرده فعال باشه و اون دوتای دیگه غیر فعال.»
-           The person who invited has already staked that tier; entering on a
-           different one would put two different stakes in one match. */
-        selectedTicket=inv.ticketTier; duelTicket=null; _pzInviteTier=inv.ticketTier;
-      }
-      pzPairKey=inv.id;                 // meet the person who invited them, nobody else
-      enterMode('survivor',true);
-      setTimeout(()=>{ try{ updateModeEntryPlan(); }catch(e){} try{ renderTicketSelect(); }catch(e){} },250);
+      /* «باید همون بلیطی که دعوت کرده فعال باشه و اون دوتای دیگه غیر فعال.»
+         The person who invited has already staked that tier; entering on a
+         different one would put two different stakes in one match. And with
+         nothing left to choose, there is nothing to choose it on — they go
+         to the radar, or to the shop and then the radar. */
+      pzPairEnter(coins>0?'':inv.ticketTier, inv.id, coins);
       return;
     }
     if(inv.mode==='ls'){
@@ -22194,20 +22341,55 @@ async function pzInviteMakeRoom(user,topic){
   toast(sent?'اتاق خصوصی ساخته شد — دعوت فرستاده شد ⏳':'اتاق ساخته شد — از داخل اتاق دعوت کن',3200);
 }
 
+/* ── WHICH TICKET THE INVITATION IS FOR ──────────────────────────────────
+   «در مودال دعوت به دوئل رنگ دکمه انتخاب بلیط باید با بلیط ها ست باشه و آیکون
+    بلیط ها هم باید رو دکمه باشه، و تعداد بلیط های موجود رو روی دکمه ها ببینه،
+    و اگه ۰ بود نتونه با اون بلیط دعوت کنه.»
+
+   Three identical grey rows told the sender nothing: not which ticket is which,
+   and not — the part that mattered — whether they own one. An invitation is a
+   promise to play for that stake, and «باید فرستنده بلیط داشته باشه تا بتونه با
+   اون بلیط دعوت کنه»: a tier they hold none of is a promise they cannot keep,
+   so it is offered greyed out with its count showing, not hidden. Hiding it
+   would read as the game having only two tickets.
+
+   Same three tiles as the entry screen, on purpose — a ticket should look like
+   itself wherever it is chosen. */
 function pzInvitePickTicket(user,onPick){
-  const rows=(typeof TICKET_DEFS!=='undefined'?TICKET_DEFS:[]).map(t=>
-    '<button class="btn btn-ghost pz-inv-tk" data-tk="'+frEsc(t.key)+'" style="width:100%;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">'+
-      '<span>'+frEsc(t.name)+'</span><span style="opacity:.8;font-size:12px">'+fa(t.value||0)+' تومان</span></button>').join('');
+  const defs=(typeof TICKET_DEFS!=='undefined'?TICKET_DEFS:[]);
+  const rows=defs.map(t=>{
+    const n=Number((typeof mTickets!=='undefined'&&mTickets[t.key])||0);
+    return '<button type="button" class="tk-opt pz-inv-tk'+(n>0?'':' shut')+'" data-tk="'+frEsc(t.key)+'"'+
+      ' aria-disabled="'+(n>0?'false':'true')+'" style="--tkc:'+t.color+'">'+
+      '<span class="tk-opt-art">'+pzTicketArt(t.key,t.icon)+'</span>'+
+      '<b>'+frEsc(t.name.replace('بلیط ',''))+'</b>'+
+      '<span class="tk-opt-n">'+fa(n)+' عدد</span>'+
+      '<span class="tk-opt-meta">'+(n>0?fa(t.value||0)+' ت':'🔒 نداری')+'</span>'+
+    '</button>';
+  }).join('');
+  const none=defs.every(t=>Number((typeof mTickets!=='undefined'&&mTickets[t.key])||0)<=0);
   try{
     showAaaModal({
       icon:'🎟️', title:'با کدام بلیط؟',
-      sub:'<div style="margin-bottom:6px;font-size:12.5px">دعوت برای <b>'+pzEsc(user.username||user.displayName||'بازیکن')+'</b></div>'+rows,
-      dismissible:true, primaryText:'', secondaryText:'بی‌خیال',
+      sub:'<div style="margin-bottom:8px;font-size:12.5px">دعوت برای <b>'+pzEsc(user.username||user.displayName||'بازیکن')+'</b></div>'+
+        '<div class="tk-pick pz-inv-pick" data-noart>'+rows+'</div>'+
+        (none?'<div class="tk-note" style="margin-top:9px">هیچ بلیطی نداری — اول یکی بخر تا بتوانی دعوت کنی.</div>':''),
+      dismissible:false,
+      primaryText:none?'🎫 خرید بلیط':'', primaryClass:'btn-yellow',
+      secondaryText:'بی‌خیال',
+      onPrimary:()=>{ closeAaaModal(false); goShopTickets(null); },
       onSecondary:()=>closeAaaModal(false)
     });
     setTimeout(()=>{
       document.querySelectorAll('.pz-inv-tk').forEach(b=>{
-        b.onclick=()=>{ const k=b.getAttribute('data-tk'); closeAaaModal(true); setTimeout(()=>onPick(k),150); };
+        b.onclick=()=>{
+          const k=b.getAttribute('data-tk');
+          /* «اگه ۰ بود نتونه با اون بلیط دعوت کنه» — refused, and told why.
+             Not `disabled`: a button that swallows the tap answers the question
+             «why can't I pick this?» with silence. */
+          if(Number((mTickets&&mTickets[k])||0)<=0){ toast(tDef(k).name+' نداری — با این بلیط نمی‌توانی دعوت کنی',3000); return; }
+          closeAaaModal(false); setTimeout(()=>onPick(k),150);
+        };
       });
     },60);
   }catch(e){}

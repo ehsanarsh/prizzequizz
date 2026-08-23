@@ -62,6 +62,11 @@ async function makePage() {
           stats: { alive: 1, eliminated: 0, cashedOut: 0, totalPlayers: 1, grossPot: 12500, remainingPot: 12500, paidOut: 0 }, question: null, votes: 0 } }) });
       return send({});
     }
+    /* TICKETS IN HAND. «باید فرستنده بلیط داشته باشه تا بتونه با اون بلیط دعوت
+       کنه» — an invitation is a promise to play for that stake, so a player
+       with an empty wallet cannot send one at all. Every case below is about
+       somebody who CAN invite, which means somebody who owns tickets. */
+    if (p === '/wallet') return send({ available: 0, locked: 0, tickets: { green: 2, blue: 2, red: 2, bronze: 0, silver: 0, gold: 0 } });
     if (p === '/users/online') return send({ players: onlinePlayers, onlineTotal: onlinePlayers.length, nextCost: 0, freeLeft: 3, coins: 500 });
     /* The room poll answers with a real snapshot. The server's own route 404s
        when there is no room rather than handing back an empty object, so a stub
@@ -89,6 +94,7 @@ async function makePage() {
   const errs = []; page.on('pageerror', (e) => errs.push(String(e.message || e).slice(0, 200)));
   await page.goto('http://127.0.0.1:' + PORT + '/');
   await page.waitForTimeout(5200);
+  await page.evaluate(() => { (0, eval)('mTickets={green:2,blue:2,red:2};'); });
   return { ctx, page, errs };
 }
 
@@ -255,18 +261,24 @@ const modal = (page) => page.evaluate(() => {
   });
   const answer = posted.find((x) => /\/invites\/inv9\/respond/.test(x.path));
   ok('accepting answers the server', !!answer && answer.body.accept === true, JSON.stringify(answer));
+  await page.waitForTimeout(900);
   const where = await page.evaluate(() => ({
     screen: [...document.querySelectorAll('.screen')].find((s) => s.classList.contains('active')).id,
     tier: (0, eval)('selectedTicket'),
-    key: (0, eval)('pzPairKey')
+    held: (0, eval)('duelTicket')
   }));
-  /* «قبول که کاربر رو به داخل روم هدایت کنه، البته به صفحه ورود با بلیط» */
-  ok('and takes them to the ticket-entry screen', where.screen === 'mode-entry', JSON.stringify(where));
-  ok('with the tier the sender picked already chosen', where.tier === 'blue', String(where.tier));
+  /* «اگه گیرنده بلیط داشت مستقیم وارد رادار و روم بازی میشه، دیگه انتخاب بلیط
+     رو نمیبینه» — the ticket was agreed when the invitation was sent and they
+     hold one, so there is nothing left to choose and no screen to choose it on. */
+  ok('and takes them straight to the radar', where.screen === 'matchmaking', JSON.stringify(where));
+  ok('on the tier the sender picked', where.tier === 'blue', String(where.tier));
+  ok('spending that ticket', where.held === 'blue', String(where.held));
   /* The accepter's half of the arrangement. Without the key they walk into the
      open queue and are handed to whichever stranger is searching — which is
-     exactly the report: the two who agreed never meet. */
-  ok('and carrying the invite as their private pairing key', where.key === 'inv9', String(where.key));
+     exactly the report: the two who agreed never meet. It is SPENT at the
+     enqueue, so the request is what proves it travelled. */
+  const enqA = posted.filter((x) => /matchmaking\/enqueue/.test(x.path)).pop();
+  ok('and carrying the invite as their private pairing key', !!enqA && enqA.body.pairKey === 'inv9', JSON.stringify(enqA && enqA.body));
   ok('no script errors', errs.length === 0, errs.join(' | '));
   await ctx.close();
 }
@@ -387,19 +399,22 @@ const modal = (page) => page.evaluate(() => {
   const landed = await page.evaluate(() => ({
     screen: [...document.querySelectorAll('.screen')].find((s) => s.classList.contains('active')).id,
     tier: (0, eval)('selectedTicket'),
-    key: (0, eval)('pzPairKey')
+    held: (0, eval)('duelTicket'),
+    lock: (0, eval)('_pzInviteTier')
   }));
-  ok('once accepted, the sender goes to the ticket-entry screen too', landed.screen === 'mode-entry', JSON.stringify(landed));
+  /* The sender walks the same walk as the person who accepted. Their side used
+     to be dropped on the entry screen with the tier they had just invited with
+     SHUT — nothing told that screen an arrangement was in force, so it judged
+     the tier by the open queue, found it empty, and put them back on green
+     while the other one stood on blue. */
+  ok('once accepted, the sender goes straight to the radar too', landed.screen === 'matchmaking', JSON.stringify(landed));
   ok('at the tier they offered', landed.tier === 'green', String(landed.tier));
+  ok('the arrangement locks their screen too', landed.lock === 'green', String(landed.lock));
+  ok('spending that ticket', landed.held === 'green', String(landed.held));
   /* THE POINT: the pair carry the same private key, so the queue can only put
      them together — a stranger searching at that moment cannot take the seat. */
-  ok('carrying the invite as a private pairing key', landed.key === 'inv1', String(landed.key));
-
-  posted.length = 0;
-  await page.evaluate(() => { try { (0, eval)('startMatchmaking')(); } catch (e) {} });
-  await page.waitForTimeout(1200);
-  const enq = posted.find((x) => /matchmaking\/enqueue/.test(x.path));
-  ok('and the search really carries it', !!enq && enq.body.pairKey === 'inv1', JSON.stringify(enq && enq.body));
+  const enq = posted.filter((x) => /matchmaking\/enqueue/.test(x.path)).pop();
+  ok('carrying the invite as a private pairing key', !!enq && enq.body.pairKey === 'inv1', JSON.stringify(enq && enq.body));
   const spent = await page.evaluate(() => (0, eval)('pzPairKey'));
   ok('the key is spent once, so it cannot capture the next ordinary search', spent === null, String(spent));
   ok('no script errors', errs.length === 0, errs.join(' | '));

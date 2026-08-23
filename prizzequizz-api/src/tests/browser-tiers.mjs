@@ -183,20 +183,134 @@ const readTiers = (page) => page.evaluate(() =>
 /* ── 4. INVITED WITH A PARTICULAR TICKET ───────────────────────────────── */
 /* «باید همون بلیطی که دعوت کرده فعال باشه و اون دوتای دیگه غیر فعال» — the
  * person who invited has already staked that tier, so entering on another one
- * would put two different stakes into one match. */
+ * would put two different stakes into one match.
+ *
+ * And «اگه گیرنده بلیط داشت مستقیم وارد رادار و روم بازی میشه، دیگه انتخاب
+ * بلیط رو نمیبینه»: with the ticket agreed and in hand there is nothing left
+ * to choose, so there is no screen to choose it on. */
 {
-  waitingByTier = { red: 5 };                            // red is busy, and still must not be offered
+  waitingByTier = { red: 5 }; posted = [];               // red is busy, and still must not be offered
   const { ctx, page, errs } = await makePage();
-  console.log('\nafter accepting an invitation sent with a blue ticket:');
-  await page.evaluate(async () => {
+  console.log('\naccepting an invitation sent with a blue ticket, holding one:');
+  const after = await page.evaluate(async () => {
     (0, eval)('pzInviteGoNow')({ id: 'inv-1', mode: 'duel', ticketTier: 'blue', coinStake: 0 });
-    await new Promise((r) => setTimeout(r, 900));
+    await new Promise((r) => setTimeout(r, 1200));
+    return {
+      screen: (document.querySelector('.screen.active') || {}).id || '',
+      ticket: (0, eval)('selectedTicket'),
+      held: (0, eval)('duelTicket'),
+      value: window.matchValue
+    };
   });
-  const tiers = await readTiers(page);
-  ok('the invited tier is the one open', tiers[1].shut === false, JSON.stringify(tiers[1]));
-  ok('green is shut, even though it is always open otherwise', tiers[0].shut === true, JSON.stringify(tiers[0]));
-  ok('and red is shut, even though people are waiting in it', tiers[2].shut === true, JSON.stringify(tiers[2]));
-  ok('the invited ticket is the chosen one', (await page.evaluate(() => (0, eval)('selectedTicket'))) === 'blue');
+  /* The pairing is SPENT at the enqueue — left lying about it would quietly
+     capture the next ordinary search — so what proves it travelled is the
+     request, not what is left in the variable afterwards. */
+  const enq1 = posted.filter((x) => x.path === '/matchmaking/enqueue').pop();
+  ok('the search starts straight away', after.screen === 'matchmaking', after.screen);
+  ok('no ticket screen in between', after.screen !== 'mode-entry', after.screen);
+  ok('on the tier the invitation named', after.ticket === 'blue', after.ticket);
+  ok('and that is the ticket being spent', after.held === 'blue', String(after.held));
+  ok('meeting only the person who invited them', enq1 && enq1.body.pairKey === 'inv-1', JSON.stringify(enq1 && enq1.body));
+  ok('playing for that tier’s value', after.value === 25000, String(after.value));
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
+/* ── 5. INVITED, AND WITHOUT THE TICKET ────────────────────────────────── */
+/* «ولی اگه بلیط انتخابی کاربر فرستنده رو نداشته باشه و قبول کنه باید مستقیم بره
+ * به صفحه خرید بلیط، و بعد از خرید بلیط مستقیم به روم بازی هدایت بشه.» */
+{
+  waitingByTier = {}; posted = [];
+  const { ctx, page, errs } = await makePage();
+  console.log('\naccepting one for a ticket they do not hold:');
+  const toShop = await page.evaluate(async () => {
+    (0, eval)('mTickets={green:1,blue:0,red:0};');
+    (0, eval)('pzInviteGoNow')({ id: 'inv-2', mode: 'duel', ticketTier: 'blue', coinStake: 0 });
+    await new Promise((r) => setTimeout(r, 1200));
+    return {
+      screen: (document.querySelector('.screen.active') || {}).id || '',
+      tab: (document.querySelector('#shopTabTickets') || {}).className || '',
+      toast: (document.getElementById('pzToast') || {}).textContent || ''
+    };
+  });
+  ok('the shop opens, not the ticket screen', toShop.screen === 'shop', toShop.screen);
+  ok('on the tickets shelf', /on|active/.test(toShop.tab), toShop.tab);
+  ok('and they are told which one they need', /بلیط آبی/.test(toShop.toast), toShop.toast.slice(0, 70));
+
+  /* THE PURCHASE LANDS AND THE MATCH BEGINS. The ticket arriving is what the
+     server would send back; what is under test is where the player is put next. */
+  const back = await page.evaluate(async () => {
+    (0, eval)('mTickets.blue=1;');
+    (0, eval)('pzShopReturnAfterBuy')();
+    await new Promise((r) => setTimeout(r, 1800));
+    return {
+      screen: (document.querySelector('.screen.active') || {}).id || '',
+      held: (0, eval)('duelTicket')
+    };
+  });
+  const enq2 = posted.filter((x) => x.path === '/matchmaking/enqueue').pop();
+  ok('buying it goes straight into the match', back.screen === 'matchmaking', back.screen);
+  ok('spending the ticket that was just bought', back.held === 'blue', String(back.held));
+  ok('still meeting only the person who invited them', enq2 && enq2.body.pairKey === 'inv-2', JSON.stringify(enq2 && enq2.body));
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
+/* ── 6. THE SENDER, WHO USED TO BE LEFT ON GREEN ───────────────────────── */
+/* «وقتی با بلیطی به غیر از سبز دعوت میکنی، گیرنده میتونه با اون بلیط وارد بازی
+ * بشه ولی فرستنده نه — برای فرستنده فقط بلیط سبز فعاله.»
+ *
+ * The sender's side never told the entry screen an arrangement was in force,
+ * so the screen judged their tier by the open queue like anybody else's, found
+ * it empty, and quietly put them back on green — while the person they invited
+ * stood on blue. The two could never meet. */
+{
+  waitingByTier = {}; posted = [];
+  const { ctx, page, errs } = await makePage();
+  console.log('\nthe sender, once their invitation is accepted:');
+  const sent = await page.evaluate(async () => {
+    (0, eval)("PZ_INV_WAIT={id:'inv-3',tier:'red',coins:0,until:Date.now()+60000};");
+    (0, eval)('pzPairEnter')('red', 'inv-3', 0);
+    await new Promise((r) => setTimeout(r, 1200));
+    return {
+      screen: (document.querySelector('.screen.active') || {}).id || '',
+      ticket: (0, eval)('selectedTicket'),
+      held: (0, eval)('duelTicket'),
+      lock: (0, eval)('_pzInviteTier')
+    };
+  });
+  const enq3 = posted.filter((x) => x.path === '/matchmaking/enqueue').pop();
+  ok('they go in on the tier they invited with', sent.ticket === 'red', sent.ticket);
+  ok('not on green', sent.ticket !== 'green', sent.ticket);
+  ok('the arrangement locks their screen too', sent.lock === 'red', String(sent.lock));
+  ok('and the search starts', sent.screen === 'matchmaking', sent.screen);
+  ok('spending the red ticket', sent.held === 'red', String(sent.held));
+  ok('paired to the invitation', enq3 && enq3.body.pairKey === 'inv-3', JSON.stringify(enq3 && enq3.body));
+  ok('and no chained-winner label rides along', enq3 && !enq3.body.waitTier, JSON.stringify(enq3 && enq3.body));
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
+/* ── 7. THE LOCK ITSELF, WHEREVER A SCREEN STILL OPENS ─────────────────── */
+/* A friendly duel is arranged for coins and still has an entry screen, and the
+ * shop fallback lands on one too. Wherever one opens under an arrangement, the
+ * agreed tier is the only one on it — green included, which is the part nobody
+ * would guess. */
+{
+  waitingByTier = { red: 5 };
+  const { ctx, page, errs } = await makePage();
+  console.log('\nthe entry screen under an arrangement:');
+  const tiers = await page.evaluate(async () => {
+    (0, eval)("pzPairKey='inv-4'; _pzInviteTier='blue'; selectedTicket='blue';");
+    (0, eval)("curMode='survivor'; enterMode('survivor',true);");
+    await new Promise((r) => setTimeout(r, 600));
+    (0, eval)('renderTicketSelect')();
+    await new Promise((r) => setTimeout(r, 200));
+    return [...document.querySelectorAll('#tkSelGrid .tk-opt')].map((b) => b.classList.contains('shut'));
+  });
+  ok('the invited tier is the one open', tiers[1] === false, JSON.stringify(tiers));
+  ok('green is shut, even though it is always open otherwise', tiers[0] === true, JSON.stringify(tiers));
+  ok('and red is shut, even though people are waiting in it', tiers[2] === true, JSON.stringify(tiers));
   /* THE ONE CASE THAT STILL NEEDS SAYING OUTRIGHT. Green is locked, and green
      is never locked — nobody would guess that from a padlock. */
   const note = await page.evaluate(() => (document.querySelector('#ticketSelectCard .tk-note') || {}).textContent || '');
@@ -478,6 +592,148 @@ const readTiers = (page) => page.evaluate(() =>
   const enq = posted.filter((x) => x.path === '/matchmaking/enqueue').pop();
   ok('no ticket', enq && !enq.body.ticketTier, JSON.stringify(enq && enq.body));
   ok('and no tier either', enq && !enq.body.waitTier, JSON.stringify(enq && enq.body));
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
+/* ── THE SHEET THAT ASKS WHICH TICKET TO INVITE WITH ───────────────────── */
+/* «در مودال دعوت به دوئل رنگ دکمه انتخاب بلیط باید با بلیط ها ست باشه و آیکون
+ * بلیط ها هم باید رو دکمه باشه، و تعداد بلیط های موجود رو روی دکمه ها ببینه، و
+ * اگه ۰ بود نتونه با اون بلیط دعوت کنه.»
+ *
+ * Three identical grey rows told the sender nothing — least of all whether
+ * they own the ticket they are about to promise to play for. */
+{
+  waitingByTier = {}; posted = []; duelCalls = [];
+  const { ctx, page, errs } = await makePage();
+  console.log('\nchoosing which ticket to invite with:');
+  const sheet = await page.evaluate(async () => {
+    (0, eval)('mTickets={green:3,blue:0,red:2};');
+    (0, eval)('pzInvitePickTicket')({ id: 'u9', username: 'رضا' }, () => {});
+    await new Promise((r) => setTimeout(r, 300));
+    return [...document.querySelectorAll('.pz-inv-tk')].map((b) => ({
+      key: b.getAttribute('data-tk'),
+      colour: getComputedStyle(b).getPropertyValue('--tkc').trim(),
+      border: getComputedStyle(b).borderTopColor,
+      art: !!b.querySelector('.tk-opt-art'),
+      count: (b.querySelector('.tk-opt-n') || {}).textContent || '',
+      meta: (b.querySelector('.tk-opt-meta') || {}).textContent || '',
+      shut: b.classList.contains('shut'),
+      aria: b.getAttribute('aria-disabled')
+    }));
+  });
+  ok('all three tickets are offered', sheet.length === 3, JSON.stringify(sheet.map((t) => t.key)));
+  /* «رنگ دکمه انتخاب بلیط باید با بلیط ها ست باشه» */
+  const colours = sheet.map((t) => t.colour);
+  ok('each carries its own colour', new Set(colours).size === 3 && colours.every(Boolean), JSON.stringify(colours));
+  ok('and wears it on its edge', new Set(sheet.map((t) => t.border)).size === 3, JSON.stringify(sheet.map((t) => t.border)));
+  /* «آیکون بلیط ها هم باید رو دکمه باشه» */
+  ok('and its own picture', sheet.every((t) => t.art), JSON.stringify(sheet.map((t) => t.art)));
+  /* «تعداد بلیط های موجود رو روی دکمه ها ببینه» */
+  ok('green shows the three they hold', /۳/.test(sheet[0].count), sheet[0].count);
+  ok('blue shows none', /۰/.test(sheet[1].count), sheet[1].count);
+  ok('red shows the two they hold', /۲/.test(sheet[2].count), sheet[2].count);
+  /* «اگه ۰ بود نتونه با اون بلیط دعوت کنه» */
+  ok('the one they have none of is locked', sheet[1].shut === true && sheet[1].aria === 'true', JSON.stringify(sheet[1]));
+  ok('and says so on the tile', /نداری/.test(sheet[1].meta), sheet[1].meta);
+  ok('the ones they hold are not locked', sheet[0].shut === false && sheet[2].shut === false, JSON.stringify([sheet[0].shut, sheet[2].shut]));
+  ok('and those quote what they are worth', /ت/.test(sheet[0].meta), sheet[0].meta);
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
+/* ── AND TAPPING ONE ───────────────────────────────────────────────────── */
+{
+  waitingByTier = {}; duelCalls = [];
+  const { ctx, page, errs } = await makePage();
+  console.log('\ntapping a ticket on that sheet:');
+  const picked = await page.evaluate(async () => {
+    (0, eval)('mTickets={green:3,blue:0,red:2};');
+    window.__picked = null;
+    (0, eval)('pzInvitePickTicket')({ id: 'u9', username: 'رضا' }, (k) => { window.__picked = k; });
+    await new Promise((r) => setTimeout(r, 300));
+    /* The one they hold none of, first. */
+    [...document.querySelectorAll('.pz-inv-tk')][1].click();
+    await new Promise((r) => setTimeout(r, 400));
+    const afterLocked = { picked: window.__picked, toast: (document.getElementById('pzToast') || {}).textContent || '',
+                          open: document.getElementById('aaaModal').classList.contains('show') };
+    [...document.querySelectorAll('.pz-inv-tk')][2].click();
+    await new Promise((r) => setTimeout(r, 500));
+    return { afterLocked, picked: window.__picked };
+  });
+  /* An invitation is a promise to play for that stake — one they cannot pay is
+     one they cannot make. */
+  ok('a ticket they do not hold cannot be invited with', picked.afterLocked.picked === null, String(picked.afterLocked.picked));
+  ok('and the tap says why rather than doing nothing', /نداری/.test(picked.afterLocked.toast), picked.afterLocked.toast.slice(0, 70));
+  ok('the sheet stays open so they can pick another', picked.afterLocked.open === true, String(picked.afterLocked.open));
+  ok('a ticket they do hold is chosen', picked.picked === 'red', String(picked.picked));
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
+/* ── A SHEET IS ANSWERED, NOT TAPPED AWAY ──────────────────────────────── */
+/* «مودال ها هم نباید با تاچ به اطراف مودال حذف بشه، باید با دکمه هاش حذف بشه —
+ * یعنی باید تا دکمه هاشو تاچ نکردی و جواب ندادی نره.» */
+{
+  waitingByTier = {}; duelCalls = [];
+  const { ctx, page, errs } = await makePage();
+  console.log('\ntapping beside a sheet that asked a question:');
+  const r = await page.evaluate(async () => {
+    let answered = null;
+    (0, eval)('showAaaModal')({
+      icon: '❓', title: 'یک سؤال', sub: 'جواب بده',
+      dismissible: true,                       // asked for, and no longer granted
+      primaryText: 'بله', secondaryText: 'نه',
+      onPrimary: () => { answered = 'yes'; (0, eval)('closeAaaModal')(false); },
+      onSecondary: () => { answered = 'no'; (0, eval)('closeAaaModal')(false); }
+    });
+    await new Promise((res) => setTimeout(res, 300));
+    const ov = document.getElementById('aaaModal');
+    const box = ov.getBoundingClientRect();
+    /* The corner of the backdrop — as far from the card as the sheet allows. */
+    ov.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: box.left + 3, clientY: box.top + 3 }));
+    await new Promise((res) => setTimeout(res, 400));
+    const stillOpen = ov.classList.contains('show');
+    /* Read WHILE it is open: closing resets the flag to its default, so a read
+       afterwards is the reset value and not the one under test. */
+    const flag = ov.dataset.dismissible;
+    document.getElementById('aaaSecondary').click();
+    await new Promise((res) => setTimeout(res, 400));
+    return { stillOpen, answered, closed: !ov.classList.contains('show'), flag };
+  });
+  ok('the sheet does not go', r.stillOpen === true, String(r.stillOpen));
+  ok('and nothing was answered for them', r.answered === null || r.answered === 'no', String(r.answered));
+  ok('the backdrop is marked as no way out', r.flag === '0', String(r.flag));
+  ok('its own button still closes it', r.closed === true, String(r.closed));
+  ok('and that button is what answers', r.answered === 'no', String(r.answered));
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
+/* ── …UNLESS THERE IS NO WAY OUT AT ALL ────────────────────────────────── */
+/* A sheet with no button and no countdown has only the backdrop. Taking that
+ * away would strand the player on a screen they cannot leave, which is a worse
+ * fault than the one being fixed. */
+{
+  waitingByTier = {}; duelCalls = [];
+  const { ctx, page, errs } = await makePage();
+  console.log('\na sheet with nothing to press:');
+  const r = await page.evaluate(async () => {
+    (0, eval)('showAaaModal')({ icon: '💳', title: 'در حال پرداخت', sub: 'صبر کن…', primaryText: '', secondaryText: '' });
+    await new Promise((res) => setTimeout(res, 300));
+    const ov = document.getElementById('aaaModal');
+    const primary = getComputedStyle(document.getElementById('aaaPrimary')).display;
+    const secondary = getComputedStyle(document.getElementById('aaaSecondary')).display;
+    const box = ov.getBoundingClientRect();
+    const flag = ov.dataset.dismissible;
+    ov.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: box.left + 3, clientY: box.top + 3 }));
+    await new Promise((res) => setTimeout(res, 400));
+    return { flag, gone: !ov.classList.contains('show'), primary, secondary };
+  });
+  ok('an explicitly empty primary really is hidden', r.primary === 'none', r.primary);
+  ok('and so is the secondary', r.secondary === 'none', r.secondary);
+  ok('the backdrop stays the way out', r.flag === '1', String(r.flag));
+  ok('and it works', r.gone === true, String(r.gone));
   ok('no script errors', errs.length === 0, errs.join(' | '));
   await ctx.close();
 }

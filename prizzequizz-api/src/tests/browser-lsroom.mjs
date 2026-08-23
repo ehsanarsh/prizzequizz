@@ -615,6 +615,94 @@ const render = (snap) => page.evaluate((s) => {
   ok('no script errors', errs.length === 0, errs.join(' | '));
 }
 
+/* ── THE WRONG ANSWER, SAID AS LOUDLY AS THE RIGHT ONE ─────────────────── */
+/* «وقتی در آخرین بازمانده جواب غلط میدی یه نوشته قرمز میاد بدون کارت و بدون پس
+ * زمینه. باید با پس زمینه باشه و حس جواب غلط رو به کاربر بده، نوشته ها خوانا و
+ * بزرگ باشه.»
+ *
+ * Surviving got a filled green panel; being knocked out — the END of the match
+ * for this player — got one thin tinted line with the correct answer, an
+ * em-dash and the news all run together. */
+{
+  console.log('\nanswering wrong and going out:');
+  errs.length = 0;
+  const out = room({ n: 8, round: 3, outIds: ['me', 'p4'], meStatus: 'eliminated' });
+  out.me.status = 'eliminated'; out.me.eliminatedRound = 3;
+  out.me.reveal = { options: ['الف', 'ب', 'پ', 'ت'], correctIndex: 2, yourIndex: 0, timedOut: false };
+  await render(out);
+  await page.waitForTimeout(400);
+  const v = await page.evaluate(() => {
+    const el = document.querySelector('#lsBody .ls-verdict');
+    if (!el) return null;
+    const cs = getComputedStyle(el);
+    const head = el.querySelector('.lsv-head'), line = el.querySelector('.lsv-line'), gone = el.querySelector('.lsv-out');
+    const px = (e) => (e ? parseFloat(getComputedStyle(e).fontSize) : 0);
+    const m = (cs.backgroundImage.match(/rgba?\([^)]+\)/g) || [cs.backgroundColor]);
+    const nums = m.map((c) => (c.match(/[\d.]+/g) || []).map(Number));
+    return {
+      cls: el.className, h: Math.round(el.getBoundingClientRect().height),
+      text: el.innerText.replace(/\n/g, ' | '),
+      fill: nums[0], alpha: nums[0] && nums[0].length > 3 ? nums[0][3] : 1,
+      headPx: px(head), linePx: px(line), gonePx: px(gone),
+      cross: !!el.querySelector('.lsv-x'),
+      lines: { head: !!head, line: !!line, gone: !!gone }
+    };
+  });
+  ok('there is a card at all', !!v && /ls-verdict/.test(v.cls), JSON.stringify(v && v.cls));
+  /* «بدون کارت و بدون پس زمینه» was the complaint — a filled panel, not a tint. */
+  ok('it is filled red, not a faint tint',
+     v.fill && v.fill[0] > v.fill[1] + 60 && v.fill[0] > v.fill[2] + 60 && v.alpha > 0.8, JSON.stringify({ fill: v.fill, alpha: v.alpha }));
+  ok('and it has real height, not one line', v.h >= 120, v.h + 'px');
+  /* «نوشته ها خوانا و بزرگ باشه» */
+  ok('what happened is said large', v.headPx >= 20, v.headPx + 'px');
+  ok('the correct answer is readable', v.linePx >= 15, v.linePx + 'px');
+  ok('and being out is said large too', v.gonePx >= 16, v.gonePx + 'px');
+  /* «حس جواب غلط رو به کاربر بده» — three separate lines rather than one run-on
+     sentence with a dash in the middle of it. */
+  ok('the three pieces each have their own line', v.lines.head && v.lines.line && v.lines.gone, JSON.stringify(v.lines));
+  ok('with a cross that lands on it', v.cross === true, String(v.cross));
+  ok('it says the answer was wrong', /پاسخ اشتباه بود/.test(v.text), v.text);
+  ok('it gives the right answer', /پاسخ درست/.test(v.text), v.text);
+  ok('and that they are out of the match', /حذف شدی/.test(v.text), v.text);
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+}
+
+/* ── RUNNING OUT OF TIME IS NOT ANSWERING WRONG ────────────────────────── */
+{
+  console.log('\nrunning out of time:');
+  errs.length = 0;
+  const out = room({ n: 8, round: 3, outIds: ['me'], meStatus: 'eliminated' });
+  out.me.status = 'eliminated'; out.me.eliminatedRound = 3;
+  out.me.reveal = { options: ['الف', 'ب', 'پ', 'ت'], correctIndex: 1, yourIndex: null, timedOut: true };
+  await render(out);
+  await page.waitForTimeout(400);
+  const v = await page.evaluate(() => {
+    const el = document.querySelector('#lsBody .ls-verdict');
+    return el ? { text: el.innerText.replace(/\n/g, ' | '), cls: el.className,
+                  h: Math.round(el.getBoundingClientRect().height) } : null;
+  });
+  ok('it is the same card', !!v && /ls-out/.test(v.cls) && v.h >= 120, JSON.stringify({ cls: v && v.cls, h: v && v.h }));
+  ok('and says the time ran out', /زمان تمام شد/.test(v.text), v.text);
+  ok('not that the answer was wrong', !/پاسخ اشتباه بود/.test(v.text), v.text);
+  ok('still telling them they are out', /حذف شدی/.test(v.text), v.text);
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+}
+
+/* ── AND A SPECTATOR CARRIES NO VERDICT ────────────────────────────────── */
+{
+  console.log('\nwatching after going out:');
+  errs.length = 0;
+  const out = room({ n: 8, round: 6, outIds: ['me', 'p2'], meStatus: 'eliminated' });
+  out.me.status = 'eliminated'; out.me.eliminatedRound = 3;
+  await page.evaluate(() => { (0, eval)('lsWatching=true;'); });
+  await render(out);
+  await page.waitForTimeout(400);
+  const has = await page.evaluate(() => !!document.querySelector('#lsBody .ls-verdict'));
+  ok('no verdict is shown to a spectator', has === false, String(has));
+  await page.evaluate(() => { (0, eval)('lsWatching=false;'); });
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 await browser.close(); server.close();
 process.exit(fail ? 1 : 0);
