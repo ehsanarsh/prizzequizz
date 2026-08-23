@@ -76,10 +76,14 @@
 html,body{height:100%}
 body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(--text);
   display:flex;align-items:center;justify-content:center;min-height:var(--pz-vh,100vh);padding:16px}
-/* Edge to edge on a phone. `align-items:stretch` is the belt to the fix in
-   `--pz-vh`'s braces: if the height ever comes back short again, the frame is
-   stretched to the body rather than centred with a band above and below it. */
-@media(max-width:480px){body{padding:0;align-items:stretch;justify-content:stretch}}
+/* Edge to edge on a phone. Only the padding belongs here: a later rule sets
+   `align-items:stretch` with !important for every width, and `.phone` sets its
+   own height with !important on top of that — so alignment cannot decide how
+   tall the frame is either way. What keeps the band from coming back above the
+   frame is `--pz-vh` being the WINDOW's height, and nothing else. Repeating
+   the alignment here read like a second line of defence that was never
+   attached to anything. */
+@media(max-width:480px){body{padding:0}}
 
 
 /* ============================================================
