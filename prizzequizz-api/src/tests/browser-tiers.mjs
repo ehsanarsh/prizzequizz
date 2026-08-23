@@ -32,6 +32,8 @@ let waitingByTier = {};
 let duelCalls = [];
 /* What the server says another look costs — the button is what has to say it. */
 let onlineCost = 0;
+/* What the server says about the invitation the sender is waiting on. */
+let inviteStatus = { id: 'inv-w', status: 'pending', secondsLeft: 50 };
 /* A board with the three kinds of name that broke the old podium: a long
    Persian one, a long Latin one, and a short one. */
 let board = [
@@ -64,6 +66,7 @@ async function makePage() {
        winner's next enqueue quotes it back to keep their seat. */
     if (p === '/duel-calls' && route.request().method() === 'POST') return send({ called: true, call: { id: 'c-new', toUserId: 'them', tier: 'blue', stage: 2, secondsLeft: 170 } });
     if (p === '/invites/incoming') return send({ invites: [] });
+    if (/^\/invites\/[^/]+$/.test(p) && route.request().method() === 'GET') return send(inviteStatus);
     if (p === '/users/me') return send({ id: 'me', username: 'ehsan', displayName: 'احسان', level: 5, balances: { wallet: 0 } });
     if (p === '/wallet') return send({ available: 0, locked: 0, tickets: { green: 3, blue: 2, red: 2 } });
     return send({});
@@ -853,16 +856,77 @@ const readTiers = (page) => page.evaluate(() =>
   ok('with dark text on it, so it can be read', sheet.fg[0] + sheet.fg[1] + sheet.fg[2] < 250, JSON.stringify(sheet.fg));
   ok('the button is really there', sheet.shown === true, String(sheet.shown));
   ok('and it is the only one', sheet.primaryShown === false, String(sheet.primaryShown));
-  /* It still calls the invitation off — walking away must not leave the other
-     player holding an appointment nobody is coming to. */
-  const cancelled = await page.evaluate(async () => {
+  ok('and it says the sheet can be put away', /می‌توانی این پیام را ببندی/.test(sheet.sub), sheet.sub.slice(0, 120));
+  /* «متوجه شدم» PUTS THE SHEET AWAY AND KEEPS LISTENING. It used to cancel the
+     invitation and stop the poll, which is how the sender ended up never
+     hearing anything at all. */
+  const closed = await page.evaluate(async () => {
     document.getElementById('aaaSecondary').click();
     await new Promise((r) => setTimeout(r, 500));
-    return { open: document.getElementById('aaaModal').classList.contains('show'), wait: (0, eval)('PZ_INV_WAIT') };
+    return { open: document.getElementById('aaaModal').classList.contains('show'), waiting: !!(0, eval)('PZ_INV_WAIT') };
   });
-  ok('pressing it closes the sheet', cancelled.open === false, String(cancelled.open));
-  ok('and stops waiting', cancelled.wait === null, String(cancelled.wait));
-  ok('telling the server the invitation is off', posted.some((x) => /\/invites\/inv-w\/cancel/.test(x.path)), JSON.stringify(posted.map((x) => x.path)));
+  ok('pressing it closes the sheet', closed.open === false, String(closed.open));
+  ok('but the answer is still being waited for', closed.waiting === true, String(closed.waiting));
+  ok('and the invitation is NOT called off', !posted.some((x) => /\/invites\/inv-w\/cancel/.test(x.path)), JSON.stringify(posted.map((x) => x.path)));
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
+/* ── BEING TURNED DOWN ─────────────────────────────────────────────────── */
+/* «اگه نیومد و رد کرد دیگه معلوم نمیشه که رد کرده یا اصلا به دستش نرسیده — اگه
+ * رد کرد باید اطلاع بده که حریف درخواست شما را رد کرد.» The two look identical
+ * from the sender's side, and telling them apart is the whole question. */
+{
+  waitingByTier = {}; posted = []; duelCalls = [];
+  inviteStatus = { id: 'inv-r', status: 'pending', secondsLeft: 50 };
+  const { ctx, page, errs } = await makePage();
+  console.log('\nwhen the invitation is refused:');
+  await page.evaluate(async () => {
+    (0, eval)('pzInviteWait')({ id: 'inv-r' }, 'green', 0, 'رضا');
+    await new Promise((r) => setTimeout(r, 400));
+    /* The sender puts the sheet away, as they are told they may. */
+    document.getElementById('aaaSecondary').click();
+    await new Promise((r) => setTimeout(r, 400));
+  });
+  inviteStatus = { id: 'inv-r', status: 'rejected', secondsLeft: 40 };
+  const told = await page.evaluate(async () => {
+    await new Promise((r) => setTimeout(r, 3200));
+    return {
+      shown: document.getElementById('aaaModal').classList.contains('show'),
+      title: (document.getElementById('aaaTitle') || {}).textContent || '',
+      sub: (document.getElementById('aaaSub') || {}).textContent || '',
+      waiting: !!(0, eval)('PZ_INV_WAIT')
+    };
+  });
+  ok('the sender is told, on a sheet of its own', told.shown === true, JSON.stringify(told).slice(0, 120));
+  ok('that the invitation was refused', /رد شد/.test(told.title), told.title);
+  ok('and by whom', /رضا/.test(told.sub), told.sub.slice(0, 90));
+  ok('the waiting is over', told.waiting === false, String(told.waiting));
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
+/* ── AND WHEN NOBODY ANSWERS AT ALL ────────────────────────────────────── */
+/* The other half of «رد کرده یا اصلا به دستش نرسیده» — said in different
+ * words, because it is a different thing and the sender's next move differs. */
+{
+  waitingByTier = {}; posted = []; duelCalls = [];
+  inviteStatus = { id: 'inv-e', status: 'expired', secondsLeft: 0 };
+  const { ctx, page, errs } = await makePage();
+  console.log('\nwhen nobody answers:');
+  const quiet = await page.evaluate(async () => {
+    (0, eval)('pzInviteWait')({ id: 'inv-e' }, 'green', 0, 'سارا');
+    await new Promise((r) => setTimeout(r, 3200));
+    return {
+      shown: document.getElementById('aaaModal').classList.contains('show'),
+      title: (document.getElementById('aaaTitle') || {}).textContent || '',
+      sub: (document.getElementById('aaaSub') || {}).textContent || ''
+    };
+  });
+  ok('the sender is told about that too', quiet.shown === true, JSON.stringify(quiet).slice(0, 120));
+  ok('and it is not called a refusal', !/رد شد/.test(quiet.title), quiet.title);
+  ok('it says no answer came', /جوابی نیامد/.test(quiet.title), quiet.title);
+  ok('and allows that it may never have arrived', /به دستش نرسیده/.test(quiet.sub), quiet.sub.slice(0, 120));
   ok('no script errors', errs.length === 0, errs.join(' | '));
   await ctx.close();
 }
@@ -1139,17 +1203,91 @@ const openRank = async (page, tab) => page.evaluate(async (t) => {
   ok('second is silver — no colour of its own', Math.abs(silver[0] - silver[2]) < 30 && silver[0] > 200, JSON.stringify(silver));
   ok('third is bronze', bronze[0] > 200 && bronze[1] > 120 && bronze[1] < bronze[0] - 40 && bronze[2] < bronze[1], JSON.stringify(bronze));
   ok('the three are really different', new Set([pods[0].baseBg, pods[1].baseBg, pods[2].baseBg]).size === 3);
-  /* And a medal on each, so the place is named as well as coloured. */
-  ok('each wears its own medal', pods[1].medal === '🥇' && pods[0].medal === '🥈' && pods[2].medal === '🥉',
-     JSON.stringify(pods.map((p) => p.medal)));
   /* The winner's plinth is the tallest — the shape of a podium. */
   ok('the plinths step down from the middle', pods[1].base.h > pods[0].base.h && pods[0].base.h > pods[2].base.h,
      JSON.stringify(pods.map((p) => p.base.h)));
-
   /* A podium of three faces and no numbers says nothing about why they are
      standing there. */
   ok('each place shows its score', pods.every((p) => /[۰-۹]/.test(p.score)), JSON.stringify(pods.map((p) => p.score)));
   ok('and the winner’s is the biggest of them', /۱٬۸۴۰|۱۸۴۰/.test(pods[1].score), pods[1].score);
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
+/* ── THE MEDALS ARE THE GAME'S OWN, NOT THE PHONE'S ────────────────────── */
+/* «این مدال‌ها رو به جای مدال‌های ایموجی در رنکینگ بزار، فقط به صورت webp و
+ * کم‌حجم.» An emoji medal is whatever the handset's font decides it is; three
+ * phones draw three different things and none of them is the game's. */
+{
+  waitingByTier = {}; posted = []; duelCalls = [];
+  const { ctx, page, errs } = await makePage();
+  console.log('\nthe medals on the podium:');
+  await openRank(page, 'cup');
+
+  /* The MARKUP the podium asks for, read from the builder rather than off the
+     page: this harness serves no medal files, so by the time a rendered podium
+     can be inspected the fallback ladder has already run to the end — which is
+     the ladder working, not the request being wrong. */
+  const asked = await page.evaluate(() => ({
+    gold: (0, eval)('pzMedalHTML')('p1', '🥇'),
+    silver: (0, eval)('pzMedalHTML')('p2', '🥈'),
+    bronze: (0, eval)('pzMedalHTML')('p3', '🥉'),
+    unknown: (0, eval)('pzMedalHTML')('p9', '🎖️')
+  }));
+  ok('each place asks for a picture, not a glyph', /<img /.test(asked.gold) && /<img /.test(asked.silver) && /<img /.test(asked.bronze),
+     JSON.stringify(asked).slice(0, 140));
+  /* «فقط به صورت webp» — that is what is asked for first. */
+  ok('and asks for the WebP first', /src="medal-gold\.webp"/.test(asked.gold), asked.gold.slice(0, 90));
+  ok('silver by its own name', /src="medal-silver\.webp"/.test(asked.silver), asked.silver.slice(0, 90));
+  ok('and bronze by its own', /src="medal-bronze\.webp"/.test(asked.bronze), asked.bronze.slice(0, 90));
+  /* A place with no artwork name of its own is not left with a broken tag. */
+  ok('anything else is just the glyph', !/<img /.test(asked.unknown) && /🎖️/.test(asked.unknown), asked.unknown);
+
+  /* Sized by CSS, so the emoji and the artwork occupy the same space and the
+     podium does not jump when the files finally land. */
+  const boxes = await page.evaluate(() => [...document.querySelectorAll('.podium .pod-medal')]
+    .map((m) => ({ w: Math.round(m.getBoundingClientRect().width), h: Math.round(m.getBoundingClientRect().height) })));
+  ok('the space is reserved whatever fills it', boxes.every((b) => b.w >= 24 && b.h >= 24), JSON.stringify(boxes));
+
+  /* THE LADDER ITSELF. A picture that has not been uploaded yet must not leave
+     a broken-image icon on the podium: WebP, then the same name as .png, then
+     the emoji — so the podium is right before the files arrive and better
+     after, and nothing has to be deployed in step with anything else. */
+  const fell = await page.evaluate(async () => {
+    const host = document.createElement('span');
+    host.innerHTML = (0, eval)('pzMedalHTML')('p1', '🥇');
+    document.body.appendChild(host);
+    const span = host.firstChild;
+    const img = span.querySelector('img');
+    const first = img.getAttribute('src');
+    (0, eval)('pzMedalFallback')(img, 'medal-gold', '🥇');
+    const second = span.querySelector('img') ? span.querySelector('img').getAttribute('src') : null;
+    (0, eval)('pzMedalFallback')(span.querySelector('img'), 'medal-gold', '🥇');
+    const out = { first, second, text: span.textContent, stillImg: !!span.querySelector('img') };
+    host.remove();
+    return out;
+  });
+  ok('it starts on the WebP', fell.first === 'medal-gold.webp', String(fell.first));
+  ok('a missing WebP falls back to the same name as PNG', fell.second === 'medal-gold.png', String(fell.second));
+  ok('and with neither, the emoji comes back', fell.text === '🥇' && fell.stillImg === false, JSON.stringify(fell));
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
+{
+  waitingByTier = {}; posted = []; duelCalls = [];
+  const { ctx, page, errs } = await makePage();
+  console.log('\nand the emoji each place falls back to:');
+  await openRank(page, 'cup');
+  const pods = await page.evaluate(() => [...document.querySelectorAll('.podium .pod')].map((p) => {
+    const m = p.querySelector('.pod-medal');
+    const img = m.querySelector('img');
+    if (img) img.dispatchEvent(new Event('error'));
+    if (m.querySelector('img')) m.querySelector('img').dispatchEvent(new Event('error'));
+    return { cls: p.className, medal: m.textContent };
+  }));
+  ok('each wears its own medal', pods[1].medal === '🥇' && pods[0].medal === '🥈' && pods[2].medal === '🥉',
+     JSON.stringify(pods.map((p) => p.medal)));
   ok('no script errors', errs.length === 0, errs.join(' | '));
   await ctx.close();
 }

@@ -76,7 +76,10 @@
 html,body{height:100%}
 body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(--text);
   display:flex;align-items:center;justify-content:center;min-height:var(--pz-vh,100vh);padding:16px}
-@media(max-width:480px){body{padding:0}}
+/* Edge to edge on a phone. `align-items:stretch` is the belt to the fix in
+   `--pz-vh`'s braces: if the height ever comes back short again, the frame is
+   stretched to the body rather than centred with a band above and below it. */
+@media(max-width:480px){body{padding:0;align-items:stretch;justify-content:stretch}}
 
 
 /* ============================================================
@@ -1344,10 +1347,14 @@ input,textarea,select,[contenteditable="true"],.pz-selectable,.pz-selectable *{
   border:2.5px solid #000;background:var(--paper);overflow:hidden}
 .pod .pav img,.pod .pav svg{width:100%;height:100%;object-fit:cover;display:block}
 /* Centred under the chin rather than tucked into a corner: on a podium the
-   medal is the label for the place, and a label belongs where the eye lands. */
-.pod-medal{position:absolute;bottom:-9px;left:50%;transform:translateX(-50%);
-  font-size:20px;line-height:1;filter:drop-shadow(0 2px 3px rgba(0,0,0,.6))}
-.pod.p1 .pod-medal{font-size:23px;bottom:-11px}
+   medal is the label for the place, and a label belongs where the eye lands.
+   Sized in one place so the artwork and the emoji fallback are the same size —
+   the picture must not jump when it finally lands. */
+.pod-medal{position:absolute;bottom:-11px;left:50%;transform:translateX(-50%);
+  width:30px;height:30px;display:grid;place-items:center;
+  font-size:22px;line-height:1;filter:drop-shadow(0 2px 3px rgba(0,0,0,.6))}
+.pod-medal img{width:100%;height:100%;object-fit:contain;display:block}
+.pod.p1 .pod-medal{width:38px;height:38px;font-size:27px;bottom:-14px}
 .pod.p1 .pav{width:78px;height:78px;box-shadow:0 0 0 4px #FFD21F,0 4px 0 #000,0 0 26px rgba(255,210,31,.55)}
 .pod.p2 .pav{width:62px;height:62px;box-shadow:0 0 0 4px #D8DEE6,0 4px 0 #000,0 0 18px rgba(216,222,230,.4)}
 .pod.p3 .pav{width:62px;height:62px;box-shadow:0 0 0 4px #E08B4C,0 4px 0 #000,0 0 18px rgba(224,139,76,.4)}
@@ -12797,6 +12804,39 @@ function showFriendProfile(id){
    rather than one yellow block and two grey ones, each with its own medal, its
    own ring around the face, and a shine that crosses the first place. The
    scores are here too — a podium without them is three faces and no reason. */
+/* ── THE MEDALS ──────────────────────────────────────────────────────────
+   «این مدال‌ها رو به جای مدال‌های ایموجی در رنکینگ بزار، به صورت واضح و خوشگل
+    دیده بشه، فقط به صورت webp و کم‌حجم.»
+
+   An emoji medal is whatever the phone's font decides it is — three different
+   phones draw three different things, and none of them is the game's. The real
+   artwork is loaded from beside the game itself:
+
+       medal-gold.webp · medal-silver.webp · medal-bronze.webp
+
+   and there is a ladder under it, because a picture that has not been uploaded
+   yet must not leave a broken-image icon on the podium: WebP first, the same
+   name as .png if that is what is there, and the emoji if neither is. So the
+   podium is correct before the files arrive and better after — nothing has to
+   be deployed in step with anything else. */
+const PZ_MEDAL_SRC={p1:'medal-gold',p2:'medal-silver',p3:'medal-bronze'};
+function pzMedalHTML(cls,fallback){
+  const base=PZ_MEDAL_SRC[cls];
+  if(!base) return '<span class="pod-medal">'+fallback+'</span>';
+  /* The fallback chain lives on the element: each failure hands over to the
+     next, and the last one puts the emoji back. No preloading, no probing —
+     one request that either works or does not. */
+  const esc=(x)=>String(x).replace(/'/g,"\\'");
+  return '<span class="pod-medal"><img src="'+base+'.webp" alt="" draggable="false"'
+    +' onerror="pzMedalFallback(this,\''+esc(base)+'\',\''+esc(fallback)+'\')"></span>';
+}
+function pzMedalFallback(img,base,emoji){
+  try{
+    if(!img._pzTried){ img._pzTried=1; img.src=base+'.png'; return; }
+    const host=img.parentNode; if(host) host.textContent=emoji;
+  }catch(e){}
+}
+
 function podium(list,unit){
   const p=list.slice(0,3);
   const u=unit||'';
@@ -12805,7 +12845,7 @@ function podium(list,unit){
     return '<div class="pod '+cls+'" onclick="showOpponentProfileByData(\''+jsStr(e.uid||'')+'\',\''+jsStr(e.n)+'\',\''+jsStr(e.a)+'\',\'سکوی رتبه‌بندی\')">'
       +(cls==='p1'?'<div class="pod-crown">👑</div>':'')
       +'<div class="pod-face"><div class="pav">'+pzFaceHTML({avatar:e.a,character:e.ch})+'</div>'
-        +'<span class="pod-medal">'+medal+'</span></div>'
+        +pzMedalHTML(cls,medal)+'</div>'
       +'<div class="pod-name"><bdi>'+pzEsc(e.n)+'</bdi></div>'
       +'<div class="pod-score">'+e.p+(u?' <small>'+pzEsc(u)+'</small>':'')+'</div>'
       +'<div class="base"><span class="rk">'+rank+'</span></div>'
@@ -22109,19 +22149,26 @@ try{ setInterval(()=>{ try{ if(_tok) pzInboxBadge(); }catch(e){} }, 45000); }cat
    and closes itself the moment the answer lands. Refusing or letting it lapse
    costs nothing — no ticket has been spent by either side yet. */
 let PZ_INV_WAIT=null;
-function pzInviteWait(inv,tier,coins){
-  PZ_INV_WAIT={id:inv.id,tier:tier,coins:Number(coins)||0,until:Date.now()+62000};
+function pzInviteWait(inv,tier,coins,name){
+  PZ_INV_WAIT={id:inv.id,tier:tier,coins:Number(coins)||0,name:name||'',until:Date.now()+62000};
   try{
     /* «دعوت ارسال شد، به محض پذیرفتن وارد بازی میشوید» — and the button says
        «متوجه شدم», because there is nothing here to decide: the invitation is
        already sent and the answer comes when it comes. It still cancels, so
        walking away does not leave the other player holding an appointment
        nobody is coming to. */
+    /* «متوجه شدم» CLOSES THE SHEET AND KEEPS LISTENING.
+       It used to cancel the invitation and stop the poll, which is how the
+       sender ended up never hearing anything: «اگه نیومد و رد کرد دیگه معلوم
+       نمیشه که رد کرده یا اصلا به دستش نرسیده». The two are not the same and
+       the sender has to be able to tell them apart — so the answer is still
+       waited for after the sheet is put away, and every ending is said out
+       loud. The words on the button are «متوجه شدم», not «بی‌خیال», and now
+       they mean what they say. */
     showAaaModal({icon:'⏳',title:'منتظر جواب',
-      sub:'دعوت ارسال شد — به محض پذیرفتن وارد بازی می‌شوید.',
+      sub:'دعوت ارسال شد — به محض پذیرفتن وارد بازی می‌شوید.<div style="margin-top:8px;font-size:12px;opacity:.8">می‌توانی این پیام را ببندی؛ جواب که آمد خبرت می‌کنیم.</div>',
       dismissible:true, primaryText:'', secondaryText:'متوجه شدم', secondaryClass:'btn-yellow',
-      onSecondary:()=>{ const w=PZ_INV_WAIT; PZ_INV_WAIT=null; closeAaaModal(false);
-        if(w) try{ pzApi('POST','/invites/'+encodeURIComponent(w.id)+'/cancel',{}); }catch(e){} }});
+      onSecondary:()=>{ closeAaaModal(false); }});
   }catch(e){}
   pzInviteWaitTick();
 }
@@ -22130,7 +22177,14 @@ async function pzInviteWaitTick(){
   if(Date.now()>w.until){
     PZ_INV_WAIT=null;
     try{ closeAaaModal(false); }catch(e){}
-    toast('جوابی نیامد — بعداً دوباره امتحان کن',3000);
+    const who=(w&&w.name)?w.name:'حریف';
+    setTimeout(()=>{
+      try{
+        showAaaModal({icon:'⌛',title:'جوابی نیامد',
+          sub:'<b>'+pzEsc(who)+'</b> در فرصت یک دقیقه‌ای جواب نداد — شاید دعوت به دستش نرسیده باشد.<div style="margin-top:8px;font-size:12px;opacity:.8">دوباره امتحان کن یا از حریف‌یابی وارد شو.</div>',
+          primaryText:'متوجه شدم', primaryClass:'btn-yellow', secondaryText:''});
+      }catch(e){ toast('جوابی نیامد — بعداً دوباره امتحان کن',3000); }
+    },250);
     return;
   }
   let st=null;
@@ -22150,7 +22204,26 @@ async function pzInviteWaitTick(){
   if(st&&(st.status==='rejected'||st.status==='expired'||st.status==='cancelled')){
     PZ_INV_WAIT=null;
     try{ closeAaaModal(false); }catch(e){}
-    toast(st.status==='rejected'?'دعوتت رد شد':'وقت دعوت تمام شد',2800);
+    /* «اگه رد کرد باید اطلاع بده که حریف درخواست شما را رد کرد.»
+       A refusal and an invitation nobody ever opened look identical from this
+       side, and the difference is the whole question the sender is asking. A
+       toast is what the game says when something small happened; being turned
+       down is not small, and it used to arrive after the sheet had been shut
+       and the waiting had already been stopped. */
+    const who=(w&&w.name)?w.name:'حریف';
+    setTimeout(()=>{
+      try{
+        if(st.status==='rejected'){
+          showAaaModal({icon:'🚫',title:'دعوتت رد شد',
+            sub:'<b>'+pzEsc(who)+'</b> درخواست بازی تو را رد کرد.<div style="margin-top:8px;font-size:12px;opacity:.8">می‌توانی کس دیگری را دعوت کنی یا از حریف‌یابی وارد شوی.</div>',
+            primaryText:'متوجه شدم', primaryClass:'btn-yellow', secondaryText:''});
+        }else{
+          showAaaModal({icon:'⌛',title:'جوابی نیامد',
+            sub:'<b>'+pzEsc(who)+'</b> در فرصت یک دقیقه‌ای جواب نداد — شاید دعوت به دستش نرسیده باشد.<div style="margin-top:8px;font-size:12px;opacity:.8">دوباره امتحان کن یا از حریف‌یابی وارد شو.</div>',
+            primaryText:'متوجه شدم', primaryClass:'btn-yellow', secondaryText:''});
+        }
+      }catch(e){ toast(st.status==='rejected'?'دعوتت رد شد':'جوابی نیامد',3000); }
+    },250);
     return;
   }
   setTimeout(pzInviteWaitTick,2000);
@@ -22708,7 +22781,7 @@ async function pzInviteSend(user,mode,extra){
        now waits for the answer and then queues on the invite's own key, which
        is the only ticket the other one can be paired with. */
     const inv=(r&&r.data)||{};
-    if(mode==='duel'&&inv.id) pzInviteWait(inv,extra.ticketTier||'',Number(extra.coinStake)||0);
+    if(mode==='duel'&&inv.id) pzInviteWait(inv,extra.ticketTier||'',Number(extra.coinStake)||0,user&&(user.username||user.displayName||user.n));
     else toast('دعوت فرستاده شد — منتظر جواب ⏳',2600);
     return true;
   }
@@ -22746,10 +22819,22 @@ async function pzInviteSend(user,mode,extra){
   function apply(){
     try{
       const h=Math.round(vv?vv.height:window.innerHeight);
-      root.style.setProperty('--pz-vh',h+'px');
       /* How much of the window the keyboard is covering. Anything that wants to
          lift itself by hand can read it; most things do not need to. */
       const kb=Math.max(0,Math.round(window.innerHeight-h-(vv?vv.offsetTop:0)));
+      /* THE APP FILLS THE WINDOW; ONLY A KEYBOARD MAKES IT SHORTER.
+         «وقتی نصب رو میزنی و اد تو هوم اسکرین میکنی تمام صفحه میشه، هدر گوشی هم
+          میره، ولی بازی نمیره تا اون بالا و اون قسمت سیاه میمونه.»
+         With `viewport-fit=cover` the LAYOUT viewport covers the whole screen,
+         status-bar strip included — but `visualViewport.height` reports only
+         the part the system considers visible, and on an installed Android PWA
+         that can be the shorter of the two. Taking it as the app's height left
+         the phone centred in a taller body, with a black band above it exactly
+         where the status bar used to be.
+         So the height is the WINDOW's, and the visual viewport is used for the
+         one thing it is right about: how much of it a keyboard has taken. */
+      const vh=(kb>90)?h:Math.max(h,Math.round(window.innerHeight));
+      root.style.setProperty('--pz-vh',vh+'px');
       root.style.setProperty('--pz-kb',kb+'px');
       document.body.classList.toggle('pz-kb-open',kb>90||typing);
       /* An input that has just been focused must be the thing you can see. */

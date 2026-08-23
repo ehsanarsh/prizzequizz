@@ -39,8 +39,16 @@
           android:name="android.support.customtabs.trusted.SPLASH_SCREEN_BACKGROUND_COLOR"
           android:resource="@color/splash_background"/>
       <meta-data
-          android:name="androix.browser.trusted.category"
+          android:name="androidx.browser.trusted.category"
           android:value="Games"/>
+      <!-- Full screen, and it STAYS full screen. Without this the app opens
+           with the phone's status bar across the top and a black strip where
+           the game should be; with plain "immersive" any stray edge swipe
+           brings the bars back for good and the strip returns. Sticky hides
+           them again on its own. -->
+      <meta-data
+          android:name="android.support.customtabs.trusted.DISPLAY_MODE"
+          android:value="sticky-immersive"/>
       <meta-data
           android:name="android.support.customtabs.trusted.STATUS_BAR_COLOR"
           android:resource="@color/splash_background"/>
