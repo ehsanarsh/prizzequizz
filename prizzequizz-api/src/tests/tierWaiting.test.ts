@@ -15,8 +15,11 @@
  * Run: REPOSITORY_DRIVER=memory npx tsx src/tests/tierWaiting.test.ts
  */
 import assert from 'node:assert';
+import { once } from 'node:events';
+import { createApiServer } from '../app.js';
 import { matchmakingQueue } from '../services/matchmakingQueue.js';
 import { repositories } from '../repositories/index.js';
+import { createSession } from '../services/sessionService.js';
 
 let pass = 0, fail = 0;
 const ok = (n: string, c: boolean, extra = '') => {
@@ -151,6 +154,83 @@ const q = async (userId: string, economyType: string, ticketTier?: string, pairK
   await q('u-chainpriv-1', 'v25000', undefined, 'invite-abc', 'blue');
   const after = (await matchmakingQueue.stats()).waitingByTier;
   ok('no tier is advertised for them', JSON.stringify(after) === before, before + ' → ' + JSON.stringify(after));
+}
+
+/* ── 11. WHAT THE DOOR ACCEPTS ────────────────────────────────────────── */
+/* Everything above talks to the queue directly. The label arrives over HTTP,
+ * from a client, and the one thing it must never become is a second way to
+ * name a ticket — so what the door lets through is worth its own check. */
+{
+  console.log('\nwhat the enqueue endpoint does with a label:');
+  process.env.REPOSITORY_DRIVER = 'memory';
+  const server = createApiServer({ attachRealtime: false });
+  server.listen(0);
+  await once(server, 'listening');
+  const port = (server.address() as any).port as number;
+  const base = `http://127.0.0.1:${port}/v1`;
+
+  const user = async (id: string) => {
+    await repositories.users.save({
+      id, username: id, displayName: id, phone: '0913' + Math.floor(Math.random() * 1e7),
+      plan: 'premium', wallet: 0, coins: 0, hearts: 5, xp: 0, level: 1, weeklyScore: 0,
+      tickets: { green: 2, blue: 2, red: 2, bronze: 0, silver: 0, gold: 0 }
+    } as any);
+    return createSession(id).accessToken;
+  };
+  const enqueue = async (token: string, body: Record<string, unknown>) => {
+    const res = await fetch(base + '/matchmaking/enqueue', {
+      method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + token },
+      body: JSON.stringify({ modeId: 'duel', skill: 800, ...body })
+    });
+    const parsed = await res.json().catch(() => null) as any;
+    return { status: res.status, data: parsed?.data, code: parsed?.error?.code ?? '' };
+  };
+  const tierCount = async (t: string) => (await matchmakingQueue.stats()).waitingByTier[t] ?? 0;
+
+  /* Every case gets a value bucket of its own. Sharing one with the cases
+     above would pair these players off with those, and a paired player is no
+     longer waiting — the count under test would empty for a reason that has
+     nothing to do with the label. */
+  try {
+    /* THE CHAINED WINNER, over the wire. */
+    const before = await tierCount('blue');
+    const chained = await enqueue(await user('http-chain'), { economyType: 'v90001', waitTier: 'blue' });
+    ok('a label with no ticket is accepted', chained.status < 300, JSON.stringify(chained).slice(0, 120));
+    ok('and the tier it names fills up', (await tierCount('blue')) === before + 1, String(await tierCount('blue')));
+
+    /* A LABEL IS NOT A TICKET. Sending both must not get somebody counted
+       twice, or counted anywhere they have not paid to be. */
+    const green0 = await tierCount('green');
+    const red0 = await tierCount('red');
+    const both = await enqueue(await user('http-both'), { economyType: 'v90002', ticketTier: 'red', waitTier: 'green' });
+    ok('a real ticket is taken as given', both.status < 300, JSON.stringify(both).slice(0, 120));
+    ok('and its tier is the one counted', (await tierCount('red')) === red0 + 1, red0 + ' → ' + (await tierCount('red')));
+    ok('while the label beside it is ignored', (await tierCount('green')) === green0, green0 + ' → ' + (await tierCount('green')));
+    /* AND THE RECORD ITSELF SAYS ONE THING. A queued player carrying a red
+       ticket AND a green label is a row that answers «which tier is this
+       person in?» two different ways — today the count reads the ticket first,
+       but the next thing to read the row would have to know that, and the row
+       should not have needed the knowing. The door drops the label. */
+    const stored = await matchmakingQueue.get(String(both.data?.id ?? ''));
+    ok('the ticket is what the row records', stored?.ticketTier === 'red', String(stored?.ticketTier));
+    ok('and the row carries no second answer', !stored?.waitTier, String(stored?.waitTier));
+
+    /* ANYTHING THAT IS NOT ONE OF THE THREE. A label is a word the client
+       chooses, so a word nobody sells a ticket for must count for nothing —
+       otherwise «بلیط بنفش» opens a door that does not exist. */
+    const junkBefore = JSON.stringify((await matchmakingQueue.stats()).waitingByTier);
+    await enqueue(await user('http-junk'), { economyType: 'v90003', waitTier: 'purple' });
+    const junkAfter = JSON.stringify((await matchmakingQueue.stats()).waitingByTier);
+    ok('an invented tier counts for nothing', junkAfter === junkBefore, junkBefore + ' → ' + junkAfter);
+
+    /* A LEAGUE TICKET IS NOT A DUEL TIER. It is a real ticket with a real
+       name, which is exactly why a whitelist and not a truthiness check. */
+    const gold = JSON.stringify((await matchmakingQueue.stats()).waitingByTier);
+    await enqueue(await user('http-gold'), { economyType: 'v90004', waitTier: 'gold' });
+    ok('a league ticket is not a duel tier either', JSON.stringify((await matchmakingQueue.stats()).waitingByTier) === gold, gold);
+  } finally {
+    server.close();
+  }
 }
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');

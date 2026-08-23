@@ -19,6 +19,7 @@
  */
 import { strict as assert } from 'node:assert';
 import { once } from 'node:events';
+import http from 'node:http';
 import { createApiServer } from '../app.js';
 import { repositories } from '../repositories/index.js';
 import { createSession } from '../services/sessionService.js';
@@ -51,6 +52,21 @@ async function main(): Promise<void> {
   await once(server, 'listening');
   const port = (server.address() as any).port as number;
   const base = `http://127.0.0.1:${port}/v1`;
+
+  /* A GET that really carries a body — `fetch` will not send one. */
+  const rawGet = (path: string, token: string, body: string) => new Promise<{ status: number; body: any }>((resolve, reject) => {
+    const req = http.request({
+      host: '127.0.0.1', port, path: '/v1' + path, method: 'GET',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer ' + token, 'content-length': Buffer.byteLength(body) }
+    }, (res) => {
+      let raw = '';
+      res.setEncoding('utf8');
+      res.on('data', (c) => { raw += c; });
+      res.on('end', () => { try { resolve({ status: res.statusCode ?? 0, body: JSON.parse(raw) }); } catch { resolve({ status: res.statusCode ?? 0, body: null }); } });
+    });
+    req.on('error', reject);
+    req.end(body);
+  });
 
   const call = async (method: string, path: string, token: string, body?: unknown) => {
     const res = await fetch(base + path, {
@@ -146,6 +162,26 @@ async function main(): Promise<void> {
       assert.equal(a.id, b.id, 'a second press opened a second modal');
     });
 
+    /* ONE KNOCK PER PERSON, not one knock per match. The claim is on the pair
+       (match, recipient) — a rule written on the match alone would let the
+       first call about a match silence everybody else's. */
+    await check('but two people can each be called about the same match', async () => {
+      const a = await callAfterWin({ toUserId: lose, fromUserId: win, fromName: 'برنده', tier: 'blue', matchId: 'm-pair', stage: 2 });
+      const b = await callAfterWin({ toUserId: bystander, fromUserId: win, fromName: 'برنده', tier: 'blue', matchId: 'm-pair', stage: 2 });
+      assert.notEqual(a.id, b.id, 'the second person was handed the first person’s call');
+      assert.equal((await pendingFor(bystander)).some((x) => x.id === b.id), true, 'the second person was never told');
+      assert.equal((await pendingFor(lose)).some((x) => x.id === a.id), true, 'the first person lost their call');
+    });
+
+    /* HOW LONG IT IS TRUE FOR IS THE WHOLE DESIGN. The winner's search lasts
+       sixty seconds; a window measured in hours would be a modal that sends
+       somebody after a player who left long ago — which is the exact thing
+       «پیداش کن» must never do. */
+    await check('the window is minutes, not hours', () => {
+      assert.ok(CALL_TTL_MS >= 60_000, 'too short to survive one closing screen: ' + CALL_TTL_MS);
+      assert.ok(CALL_TTL_MS <= 10 * 60_000, 'long enough to point at somebody who has gone: ' + CALL_TTL_MS);
+    });
+
     console.log('\nwhat a client is not allowed to say:');
 
     await check('the loser cannot send the call about their own defeat', async () => {
@@ -208,6 +244,28 @@ async function main(): Promise<void> {
     await check('a signed-out caller is told nothing at all', async () => {
       const res = await fetch(base + '/duel-calls');
       assert.equal(res.status, 401);
+    });
+
+    /* WHOSE CALLS THESE ARE IS DECIDED BY THE TOKEN AND BY NOTHING ELSE.
+       A browser will not put a body on a GET, but curl will — and a read that
+       took a name from the request would hand anybody anybody's calls. */
+    await check('naming somebody else in the request changes nothing', async () => {
+      _resetDuelCalls();
+      await callAfterWin({ toUserId: lose, fromUserId: win, fromName: 'برنده', tier: 'blue', matchId: 'm-peek', stage: 2 });
+      /* `fetch` refuses to put a body on a GET; the raw client does not, and
+         neither does curl — which is the point of the check. */
+      const parsed = await rawGet('/duel-calls', sb.accessToken, JSON.stringify({ userId: lose, toUserId: lose }));
+      assert.equal(parsed.status, 200, JSON.stringify(parsed));
+      assert.deepEqual(parsed.body?.data?.calls, [], 'a stranger read somebody else’s calls');
+      /* And the query string, which a GET really can carry and a later
+         refactor could be tempted to read. */
+      const q = await call('GET', '/duel-calls?userId=' + encodeURIComponent(lose), sb.accessToken);
+      assert.equal(q.status, 200, JSON.stringify(q));
+      assert.deepEqual(q.data.calls, [], 'a name in the query string was believed');
+      /* The call really is there — otherwise both lines above pass on an
+         empty table and prove nothing. */
+      const mine = await call('GET', '/duel-calls', sl.accessToken);
+      assert.equal(mine.data.calls.length, 1, 'the call under test was never written');
     });
 
     console.log('\nwhen it stops being true:');
