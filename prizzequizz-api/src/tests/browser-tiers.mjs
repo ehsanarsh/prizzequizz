@@ -30,6 +30,8 @@ let waitingByTier = {};
 /* What the server has waiting for this player, and what this player sent it.
    Both are read by the «حریفت ادامه داد» cases at the bottom. */
 let duelCalls = [];
+/* What the server says another look costs — the button is what has to say it. */
+let onlineCost = 0;
 let posted = [];
 
 async function makePage() {
@@ -46,7 +48,12 @@ async function makePage() {
     try { body = JSON.parse(route.request().postData() || 'null'); } catch { body = null; }
     posted.push({ method: route.request().method(), path: p, body });
     if (p === '/matchmaking/stats') return send({ queued: 0, matched: 0, waitingByTier, analytics: {} });
+    if (p === '/users/me/referral') return send({ code: 'K7XQ2MW', invites: 4, rewardTier: 'green', rewardCount: 1 });
+    if (p === '/users/online') return send({ players: [], onlineTotal: 0, nextCost: onlineCost, freeLeft: 0, coins: 900 });
     if (p === '/duel-calls' && route.request().method() === 'GET') return send({ calls: duelCalls });
+    /* The server resolves WHO lost the match and answers with their id — the
+       winner's next enqueue quotes it back to keep their seat. */
+    if (p === '/duel-calls' && route.request().method() === 'POST') return send({ called: true, call: { id: 'c-new', toUserId: 'them', tier: 'blue', stage: 2, secondsLeft: 170 } });
     if (p === '/invites/incoming') return send({ invites: [] });
     if (p === '/users/me') return send({ id: 'me', username: 'ehsan', displayName: 'احسان', level: 5, balances: { wallet: 0 } });
     if (p === '/wallet') return send({ available: 0, locked: 0, tickets: { green: 3, blue: 2, red: 2 } });
@@ -800,6 +807,254 @@ const readTiers = (page) => page.evaluate(() =>
   ok('yet it is marked as having its own way out', timed.flag === '0', String(timed.flag));
   ok('and is marked as timed', timed.timed === '1', String(timed.timed));
   ok('so tapping beside it does nothing', timed.stillOpen === true, String(timed.stillOpen));
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
+/* ── THE SHEET AFTER THE INVITATION GOES OUT ───────────────────────────── */
+/* «متن اون باید اینطوری باشه: دعوت ارسال شد، به محض پذیرفتن وارد بازی میشوید.
+ * و دکمه بیخیال باید بشه متوجه شدم و با رنگ زرد.» */
+{
+  waitingByTier = {}; posted = []; duelCalls = [];
+  const { ctx, page, errs } = await makePage();
+  console.log('\nwaiting for an answer:');
+  const sheet = await page.evaluate(async () => {
+    (0, eval)('pzInviteWait')({ id: 'inv-w' }, 'blue', 0);
+    await new Promise((r) => setTimeout(r, 400));
+    const sec = document.getElementById('aaaSecondary');
+    const cs = getComputedStyle(sec);
+    return {
+      title: (document.getElementById('aaaTitle') || {}).textContent || '',
+      sub: (document.getElementById('aaaSub') || {}).textContent || '',
+      label: sec.textContent,
+      cls: sec.className,
+      bg: (cs.backgroundImage.match(/\d+/g) || []).map(Number),
+      fg: (cs.color.match(/\d+/g) || []).map(Number),
+      shown: getComputedStyle(sec).display !== 'none',
+      primaryShown: getComputedStyle(document.getElementById('aaaPrimary')).display !== 'none'
+    };
+  });
+  ok('it says the invitation went out', /دعوت ارسال شد/.test(sheet.sub), sheet.sub);
+  ok('and what happens when they accept', /به محض پذیرفتن وارد بازی می‌شوید/.test(sheet.sub), sheet.sub);
+  /* The old wording described sitting and waiting; there is nothing to decide
+     here, so «بی‌خیال» read as an offer to call it off. */
+  ok('the button no longer says «بی‌خیال»', !/بی.?خیال/.test(sheet.label), sheet.label);
+  ok('it says «متوجه شدم»', /متوجه شدم/.test(sheet.label), sheet.label);
+  ok('and it is yellow', sheet.bg[0] > 200 && sheet.bg[1] > 170 && sheet.bg[2] < 130, JSON.stringify(sheet.bg));
+  ok('with dark text on it, so it can be read', sheet.fg[0] + sheet.fg[1] + sheet.fg[2] < 250, JSON.stringify(sheet.fg));
+  ok('the button is really there', sheet.shown === true, String(sheet.shown));
+  ok('and it is the only one', sheet.primaryShown === false, String(sheet.primaryShown));
+  /* It still calls the invitation off — walking away must not leave the other
+     player holding an appointment nobody is coming to. */
+  const cancelled = await page.evaluate(async () => {
+    document.getElementById('aaaSecondary').click();
+    await new Promise((r) => setTimeout(r, 500));
+    return { open: document.getElementById('aaaModal').classList.contains('show'), wait: (0, eval)('PZ_INV_WAIT') };
+  });
+  ok('pressing it closes the sheet', cancelled.open === false, String(cancelled.open));
+  ok('and stops waiting', cancelled.wait === null, String(cancelled.wait));
+  ok('telling the server the invitation is off', posted.some((x) => /\/invites\/inv-w\/cancel/.test(x.path)), JSON.stringify(posted.map((x) => x.path)));
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
+/* ── THE SEAT KEPT FOR THE PLAYER WHO LOST ─────────────────────────────── */
+/* «حریف باید تا ۱۰ ثانیه نتونه با کسی مچ بشه… ولی کاربر نباید این معطلی رو
+ * ببینه و بدونه، باید حس کنه سیستم در حال یافتن حریفه براش.» The window itself
+ * is the queue's business; what this device has to do is NAME the person, and
+ * do it without the winner noticing. */
+{
+  waitingByTier = {}; posted = []; duelCalls = [];
+  const { ctx, page, errs } = await makePage();
+  console.log('\nthe winner carrying on:');
+  const t0 = Date.now();
+  await page.evaluate(async () => {
+    (0, eval)("duelStage=1; duelStakeVal=12500; userPlan='premium'; pzRt.matchId='m-77';");
+    (0, eval)('duelContinue')();
+    await new Promise((r) => setTimeout(r, 2600));
+  });
+  const enq = posted.filter((x) => x.path === '/matchmaking/enqueue').pop();
+  const call = posted.find((x) => x.method === 'POST' && x.path === '/duel-calls');
+  ok('the loser is told', !!call, JSON.stringify(posted.map((x) => x.path)));
+  ok('and the search goes out', !!enq, JSON.stringify(posted.map((x) => x.path)));
+  /* The server named them; this device quotes the name back. */
+  ok('naming the player the seat is kept for', enq && enq.body.holdFor === 'them', JSON.stringify(enq && enq.body));
+  ok('and the radar is what they are looking at', (await page.evaluate(() => (document.querySelector('.screen.active') || {}).id)) === 'matchmaking');
+  /* «کاربر نباید این معطلی رو ببینه» — the wait for the name rides behind the
+     radar animation, which was already on screen. */
+  ok('the search was not held up noticeably', Date.now() - t0 < 4000, (Date.now() - t0) + 'ms');
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
+/* ── AND THE CLAIM IS SPENT ONCE ───────────────────────────────────────── */
+/* Left lying about it would hold up the NEXT ordinary search too — the same
+ * fault the pairing key was fixed for. */
+{
+  waitingByTier = {}; posted = []; duelCalls = [];
+  const { ctx, page, errs } = await makePage();
+  console.log('\nsearching again afterwards:');
+  await page.evaluate(async () => {
+    (0, eval)("duelStage=1; duelStakeVal=12500; userPlan='premium'; pzRt.matchId='m-78';");
+    (0, eval)('duelContinue')();
+    await new Promise((r) => setTimeout(r, 2600));
+    /* An ordinary search, later, with nothing arranged. */
+    (0, eval)("go('home'); duelTicket='green'; window.matchValue=12500;");
+    (0, eval)('startMatchmaking')();
+    await new Promise((r) => setTimeout(r, 1400));
+  });
+  const enqs = posted.filter((x) => x.path === '/matchmaking/enqueue');
+  ok('both searches went out', enqs.length === 2, String(enqs.length));
+  ok('the first kept the seat', enqs[0] && enqs[0].body.holdFor === 'them', JSON.stringify(enqs[0] && enqs[0].body));
+  ok('and the second kept nothing', enqs[1] && !enqs[1].body.holdFor, JSON.stringify(enqs[1] && enqs[1].body));
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
+/* ── MY REFERRAL CODE ──────────────────────────────────────────────────── */
+/* «هر کاربر یه کد داشته باشه… خودم یه کد دارم که هر کی با اون وارد بشه برای من
+ * یه بلیط سبز میده.» And, just as firmly: «بعد از ثبت نام دیگه جایی نباشه که
+ * بتونی وارد کنی» — so this screen shows a code and offers nowhere to type one. */
+{
+  waitingByTier = {}; posted = []; duelCalls = [];
+  const { ctx, page, errs } = await makePage();
+  console.log('\nmy referral code:');
+  const scr = await page.evaluate(async () => {
+    (0, eval)("menuGo('referral')");
+    await new Promise((r) => setTimeout(r, 900));
+    const sec = document.getElementById('referral');
+    return {
+      active: (document.querySelector('.screen.active') || {}).id || '',
+      code: (document.getElementById('refCode') || {}).textContent || '',
+      count: (document.getElementById('refCount') || {}).textContent || '',
+      inputs: sec ? sec.querySelectorAll('input,textarea').length : -1,
+      text: sec ? sec.innerText : '',
+      title: sec ? (sec.querySelector('.topbar h1') || {}).textContent || '' : ''
+    };
+  });
+  ok('the screen opens', scr.active === 'referral', scr.active);
+  ok('showing the code the server gave', /K7XQ2MW/.test(scr.code), scr.code);
+  ok('and how many have used it', /۴/.test(scr.count), scr.count);
+  /* THE HALF THAT IS A RULE, NOT A DECORATION. */
+  ok('there is nowhere to type a code', scr.inputs === 0, String(scr.inputs));
+  ok('it says what the reward is', /بلیط سبز/.test(scr.text), scr.text.slice(0, 120));
+  ok('and that the code goes in at sign-up', /ثبت‌نام/.test(scr.text), scr.text.slice(0, 200));
+  ok('the title rides its own card', /کد معرف/.test(scr.title), scr.title);
+
+  /* Copying is the point of the screen — a copy button that quietly does
+     nothing is worse than none. */
+  const copied = await page.evaluate(async () => {
+    let got = null;
+    try { Object.defineProperty(navigator, 'clipboard', { value: { writeText: (t) => { got = t; return Promise.resolve(); } }, configurable: true }); } catch (e) {}
+    (0, eval)('refCopy')();
+    await new Promise((r) => setTimeout(r, 400));
+    return { got, toast: (document.getElementById('pzToast') || {}).textContent || '' };
+  });
+  ok('the copy button copies the code', copied.got === 'K7XQ2MW', String(copied.got));
+  ok('and says so', /کپی/.test(copied.toast), copied.toast);
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
+/* ── THE NOTIFICATIONS SCREEN ──────────────────────────────────────────── */
+/* «توضیحات اول صفحه اعلان رو حذف — کاربر باید فقط روشن و خاموش کنه، به کاربر
+ * ربط نداره گوشی روی سرور ثبت شده یا نه. و یه قسمت هم بزار برای خاموش و روشن
+ * کردن دریافت دعوت به بازی که پیش فرض روشن باشه.» */
+{
+  waitingByTier = {}; posted = []; duelCalls = [];
+  const { ctx, page, errs } = await makePage();
+  console.log('\nthe notifications screen:');
+  const scr = await page.evaluate(async () => {
+    (0, eval)("openSettingDetail('notifications')");
+    await new Promise((r) => setTimeout(r, 600));
+    const box = document.getElementById('settingDetailContent');
+    return {
+      text: box ? box.innerText : '',
+      notes: box ? box.querySelectorAll('.set-note').length : -1,
+      pushStatus: !!document.getElementById('pzPushStatus'),
+      switches: box ? [...box.querySelectorAll('.set-row')].map((r) => (r.querySelector('b') || {}).textContent || '') : [],
+      invitesOn: (0, eval)('appSettings').notifGameInvites,
+      pushOn: (0, eval)('appSettings').notifPush
+    };
+  });
+  /* The two things that used to open the screen. */
+  ok('the explanation is gone', !/نوع اعلان‌هایی که از بازی/.test(scr.text), scr.text.slice(0, 100));
+  ok('and so is the report on whether the handset is registered', scr.pushStatus === false, String(scr.pushStatus));
+  ok('nothing is left explaining the screen to the player', scr.notes === 0, String(scr.notes));
+  /* «یه قسمت هم بزار برای… دریافت دعوت به بازی» */
+  ok('there is a switch for game invitations', scr.switches.some((t) => /دریافت دعوت به بازی/.test(t)), JSON.stringify(scr.switches));
+  ok('and it starts on', scr.invitesOn === true, String(scr.invitesOn));
+  /* Registering the handset is what the switch DOES, rather than a row you
+     tap next to a paragraph reporting whether it worked. */
+  ok('the push row is a switch now', scr.switches.some((t) => /اعلان روی گوشی/.test(t)), JSON.stringify(scr.switches));
+  ok('and it starts on too', scr.pushOn === true, String(scr.pushOn));
+
+  /* AND THE SWITCH MEANS IT. The sheet is what an invitation is on this
+     screen, so turning it off has to stop the sheet. */
+  const off = await page.evaluate(async () => {
+    (0, eval)("appSettings.notifGameInvites=false;");
+    (0, eval)("go('home'); PZ_INV_OPEN=null;");
+    /* The app raises prompts of its own on the way in; a sheet already on
+       screen would answer this question for us. */
+    for (let i = 0; i < 4; i++) {
+      const ov = document.getElementById('aaaModal');
+      if (!ov || !ov.classList.contains('show')) break;
+      const sec = document.getElementById('aaaSecondary');
+      const b = (sec && getComputedStyle(sec).display !== 'none') ? sec : document.getElementById('aaaPrimary');
+      if (b) b.click(); else break;
+      await new Promise((r) => setTimeout(r, 300));
+    }
+    await new Promise((r) => setTimeout(r, 200));
+    (0, eval)('pzInviteAsk')({ id: 'inv-x', mode: 'duel', ticketTier: 'green', coinStake: 0, fromName: 'رضا' });
+    await new Promise((r) => setTimeout(r, 500));
+    return document.getElementById('aaaModal').classList.contains('show');
+  });
+  ok('turned off, no invitation sheet opens', off === false, String(off));
+  const on = await page.evaluate(async () => {
+    (0, eval)("appSettings.notifGameInvites=true; PZ_INV_OPEN=null;");
+    (0, eval)('pzInviteAsk')({ id: 'inv-y', mode: 'duel', ticketTier: 'green', coinStake: 0, fromName: 'رضا' });
+    await new Promise((r) => setTimeout(r, 500));
+    return { shown: document.getElementById('aaaModal').classList.contains('show'),
+             title: (document.getElementById('aaaTitle') || {}).textContent || '' };
+  });
+  ok('turned back on, it opens again', on.shown === true && /رضا/.test(on.title), JSON.stringify(on));
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
+/* ── THE «SHOW MORE PLAYERS» BUTTON ────────────────────────────────────── */
+/* «دکمه نمایش افراد دیگر در صفحه افراد آنلاین رنگش سبز بشه و قیمتشم روش نوشته
+ * بشه، مثلا ۵۰۰ سکه.» */
+{
+  waitingByTier = {}; posted = []; duelCalls = [];
+  const { ctx, page, errs } = await makePage();
+  console.log('\nthe «show more players» button:');
+  const read = () => page.evaluate(() => {
+    const el = document.getElementById('onRefresh');
+    const cs = getComputedStyle(el);
+    return { text: el.textContent, bg: (cs.backgroundImage.match(/\d+/g) || []).map(Number), cls: el.className };
+  });
+
+  /* Before it has been drawn at all — the markup itself has to be green, or
+     the first paint of the screen is a grey button that turns green. */
+  await page.evaluate(async () => { (0, eval)("go('online')"); await new Promise((r) => setTimeout(r, 300)); });
+  const first = await read();
+  ok('it is green from the markup', /btn-green/.test(first.cls), first.cls);
+  ok('and not a ghost button', !/btn-ghost/.test(first.cls), first.cls);
+
+  onlineCost = 500;
+  await page.evaluate(async () => { await (0, eval)('onlineLoad')(false); await new Promise((r) => setTimeout(r, 300)); });
+  const paid = await read();
+  ok('once the server names a price, it is green', paid.bg[1] > paid.bg[0] + 40 && paid.bg[1] > paid.bg[2] + 40, JSON.stringify(paid.bg));
+  ok('and the price is written on it', /۵۰۰/.test(paid.text) && /سکه/.test(paid.text), paid.text);
+
+  /* And when it costs nothing, it says THAT — a button that only sometimes
+     says what it costs is one you have to press to find out. */
+  onlineCost = 0;
+  await page.evaluate(async () => { (0, eval)('ONLINE_BUSY=false'); await (0, eval)('onlineLoad')(false); await new Promise((r) => setTimeout(r, 300)); });
+  const free = await read();
+  ok('a free look says so', /رایگان/.test(free.text), free.text);
+  ok('and it is still green', /btn-green/.test(free.cls), free.cls);
   ok('no script errors', errs.length === 0, errs.join(' | '));
   await ctx.close();
 }

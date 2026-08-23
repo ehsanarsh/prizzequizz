@@ -18,6 +18,13 @@ function ladderStake(economyType: string): number {
   return Number.isFinite(n) && n > 0 ? n : 0;
 }
 
+/* Ten seconds, because that is what the person who lost is given to answer
+ * «پیداش کن» — «حریف باید تا ۱۰ ثانیه نتونه با کسی مچ بشه». Long enough to
+ * read a sheet and tap, short enough that the winner never notices they were
+ * waiting: they are on the radar the whole time, and the radar looks the same
+ * whether it is holding a seat or scanning. */
+const DUEL_CALL_HOLD_MS = 10_000;
+
 export function registerMatchmakingRoutes(router: Router, base: string): void {
   router.add('GET', `${base}/matchmaking/stats`, async (ctx) => {
     json(ctx.res, 200, await matchmakingQueue.stats());
@@ -39,6 +46,13 @@ export function registerMatchmakingRoutes(router: Router, base: string): void {
        the blue door for the person they just beat. Whitelisted, because it is
        a label the client chooses and it must never become a way to hold a
        ticket by another name. */
+    /* WHO HAS FIRST CLAIM ON THIS SEAT, AND FOR HOW LONG.
+       A duel winner who pressed «ادامه میدهم» has just had the player they
+       beat invited to come and find them, and that invitation is worth nothing
+       if the first stranger to search takes the seat first. Holding it costs
+       the holder their own chances and nobody else's — so the name is taken as
+       given, and only the WINDOW is decided here. */
+    const holdFor = optionalString(body, 'holdFor') || '';
     const waitTierRaw = (optionalString(body, 'waitTier') || '').toLowerCase();
     const waitTier = (['green', 'blue', 'red'].includes(waitTierRaw) && !ticketTier) ? waitTierRaw : undefined;
 
@@ -90,7 +104,7 @@ export function registerMatchmakingRoutes(router: Router, base: string): void {
          actually in, instead of letting three players pick three tiers and all
          wait alone. It does NOT change who meets whom: economyType already
          keeps stakes equal. */
-      ticket = await matchmakingQueue.enqueue({ userId: ctx.userId, modeId, economyType, coinStake, ticketTier: ticketTier || undefined, waitTier, skill, pairKey });
+      ticket = await matchmakingQueue.enqueue({ userId: ctx.userId, modeId, economyType, coinStake, ticketTier: ticketTier || undefined, waitTier, holdFor: holdFor || undefined, holdMs: DUEL_CALL_HOLD_MS, skill, pairKey });
     } catch (e) {
       if (holdId) { try { await refundHoldById(holdId, 'enqueue_failed'); } catch { /* best-effort */ } }
       throw e;

@@ -29,12 +29,13 @@ const ok = (n: string, c: boolean, extra = '') => {
 
 /* Real users, because two compatible tickets really do create a match and a
    match needs players. */
-const q = async (userId: string, economyType: string, ticketTier?: string, pairKey?: string, waitTier?: string) => {
+const q = async (userId: string, economyType: string, ticketTier?: string, pairKey?: string, waitTier?: string,
+                 hold?: { holdFor: string; holdMs: number }) => {
   await repositories.users.save({
     id: userId, username: userId, displayName: userId, wallet: 0, coins: 0, xp: 0, level: 1,
     createdAt: new Date().toISOString()
   } as any);
-  return matchmakingQueue.enqueue({ userId, modeId: 'duel', economyType: economyType as any, ticketTier, waitTier, skill: 800, pairKey });
+  return matchmakingQueue.enqueue({ userId, modeId: 'duel', economyType: economyType as any, ticketTier, waitTier, skill: 800, pairKey, ...(hold ?? {}) });
 };
 
 /* ── 1. NOBODY WAITING ────────────────────────────────────────────────── */
@@ -231,6 +232,95 @@ const q = async (userId: string, economyType: string, ticketTier?: string, pairK
   } finally {
     server.close();
   }
+}
+
+/* ── 12. TEN SECONDS KEPT FOR THE PLAYER WHO LOST ─────────────────────── */
+/* «وقتی مودال حریفت ادامه میده میتونی حقتو بگیری، حریف باید تا ۱۰ ثانیه نتونه
+ * با کسی مچ بشه و الویت با بازنده باید باشه، و حریف در قسمت رادار باشه ولی
+ * بدون حریف. بعد از ۱۰ ثانیه اگه بازنده پیداش کن رو زد پیداش کنه، و اگه بیخیال
+ * شد یا کلا نزد، بعد ۱۰ ثانیه حریف‌یابی برای کاربر شروع بشه.»
+ *
+ * The winner was in the open queue the instant they pressed «ادامه میدهم», so
+ * the first stranger to search took the seat and the invitation the loser had
+ * just been shown pointed at nobody. */
+{
+  console.log('\nthe winner’s seat, right after «ادامه میدهم»:');
+  const held = await q('hold-winner', 'v70001', undefined, undefined, 'blue', { holdFor: 'hold-loser', holdMs: 10_000 });
+  ok('they are queued and waiting, like anybody else', held.status === 'queued', held.status);
+  ok('and the queue shows them in their tier', ((await matchmakingQueue.stats()).waitingByTier.blue ?? 0) >= 1, JSON.stringify((await matchmakingQueue.stats()).waitingByTier));
+
+  /* «حریف در قسمت رادار باشه ولی بدون حریف» — a stranger searching at that
+     moment finds nothing here, and waits rather than taking the seat. */
+  const stranger = await q('hold-stranger', 'v70001');
+  ok('a stranger cannot take the seat', stranger.status === 'queued', stranger.status);
+  ok('and is left waiting instead', !stranger.matchId, String(stranger.matchId));
+
+  /* «الویت با بازنده باید باشه» — and the seat is still there when they come. */
+  const loser = await q('hold-loser', 'v70001');
+  ok('the player it was kept for gets it', loser.status === 'matched', loser.status);
+  ok('and it really is the winner they meet', loser.opponentUserId === 'hold-winner', String(loser.opponentUserId));
+}
+
+/* ── 13. PRIORITY, WITH SOMEBODY ELSE ALSO WAITING ────────────────────── */
+/* The stranger above is still in the queue. If the loser were simply handed
+ * the first compatible ticket, they would be given the stranger and the person
+ * who called them would still be sitting there. */
+{
+  console.log('\nwhen a stranger is already waiting in that tier:');
+  const other = await q('prio-stranger', 'v70002');
+  ok('the stranger is waiting first', other.status === 'queued', other.status);
+  const winner = await q('prio-winner', 'v70002', undefined, undefined, 'blue', { holdFor: 'prio-loser', holdMs: 10_000 });
+  ok('the winner joins without taking them', winner.status === 'queued', winner.status);
+  const loser = await q('prio-loser', 'v70002');
+  ok('the loser is given the seat kept for them', loser.status === 'matched', loser.status);
+  ok('not the stranger who was there first', loser.opponentUserId === 'prio-winner', String(loser.opponentUserId));
+}
+
+/* ── 14. AND AFTER THE TEN SECONDS ────────────────────────────────────── */
+/* «اگه بیخیال شد یا کلا نزد، بعد ۱۰ ثانیه حریف‌یابی برای کاربر شروع بشه» — the
+ * hold lapses on its own. Nothing is cancelled and nothing is re-queued: the
+ * same ticket simply stops being reserved, which is why the person waiting
+ * never sees a change. */
+{
+  console.log('\nonce the ten seconds are up:');
+  const winner = await q('lapse-winner', 'v70003', undefined, undefined, 'blue', { holdFor: 'lapse-loser', holdMs: 1 });
+  ok('the winner is waiting', winner.status === 'queued', winner.status);
+  await new Promise((r) => setTimeout(r, 30));
+  const stranger = await q('lapse-stranger', 'v70003');
+  ok('anybody may take the seat now', stranger.status === 'matched', stranger.status);
+  ok('and it is the winner they meet', stranger.opponentUserId === 'lapse-winner', String(stranger.opponentUserId));
+}
+
+/* ── 15. THE HOLD IS ONE-SIDED AND BOUNDED ────────────────────────────── */
+{
+  console.log('\nwhat the hold is not:');
+  /* It restricts the ticket that CARRIES it, not the person it names: the
+     loser is free to meet anybody else in the meantime. */
+  const winner = await q('one-winner', 'v70004', undefined, undefined, 'blue', { holdFor: 'one-loser', holdMs: 10_000 });
+  ok('the winner waits', winner.status === 'queued', winner.status);
+  const elsewhere = await q('one-other', 'v70005');
+  const loserElsewhere = await q('one-loser', 'v70005');
+  ok('the player it names is not held anywhere else', loserElsewhere.status === 'matched', loserElsewhere.status);
+  ok('meeting whoever was there', loserElsewhere.opponentUserId === 'one-other', String(loserElsewhere.opponentUserId));
+  void elsewhere;
+
+  /* AND IT CANNOT BE ASKED FOR FOREVER. A client names the person; the window
+     is decided here, so «hold this seat for a day» is not a thing that can be
+     said. */
+  const long = await q('cap-winner', 'v70006', undefined, undefined, 'blue', { holdFor: 'cap-loser', holdMs: 999_999_999 });
+  ok('a huge window is clamped', (long.holdUntil ?? 0) - Date.now() <= 30_000 + 50, String((long.holdUntil ?? 0) - Date.now()));
+  ok('and it is still a real hold', (long.holdUntil ?? 0) > Date.now(), String(long.holdUntil));
+}
+
+/* ── 16. NO HOLD MEANS NO CHANGE ──────────────────────────────────────── */
+/* The overwhelming majority of tickets carry none of this, and they must be
+ * exactly what they were. */
+{
+  console.log('\nan ordinary ticket:');
+  const a = await q('plain-a', 'v70007');
+  const b = await q('plain-b', 'v70007');
+  ok('two ordinary players still meet at once', b.status === 'matched', b.status);
+  ok('and neither carries a hold', !a.holdUntil && !b.holdUntil, JSON.stringify([a.holdUntil, b.holdUntil]));
 }
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');

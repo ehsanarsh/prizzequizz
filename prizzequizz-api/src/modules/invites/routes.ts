@@ -177,6 +177,11 @@ export function registerInviteRoutes(router: Router, base: string): void {
 function publicCall(c: any) {
   return {
     id: c.id, fromUserId: c.fromUserId, fromName: c.fromName,
+    /* WHO THE SEAT IS BEING KEPT FOR. Returned to the WINNER, whose next
+       enqueue quotes it back so the queue knows to hold their seat — they have
+       just played this person and already know who they are, so nothing is
+       revealed that was not already on the last screen. */
+    toUserId: c.toUserId,
     tier: c.tier || 'blue', matchId: c.matchId, stage: c.stage,
     secondsLeft: Math.max(0, Math.round((c.expiresAt - Date.now()) / 1000))
   };

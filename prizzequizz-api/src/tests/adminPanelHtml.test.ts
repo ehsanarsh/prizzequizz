@@ -659,7 +659,93 @@ function run(): void {
     assert.ok(body.includes("M_MODE==='lastSurvivor'"), 'LS needs its own branch');
   });
 
-  console.log(`[adminPanelHtml] ${passed} passed, ${failed} failed`);
+    /* ── EDITING A SUBMITTED QUESTION WHERE IT IS REVIEWED ─────────────── */
+  /* «باید بتونم سوال طرح شدهٔ کاربر رو ویرایش و ثبت کنم — الان نمیتونم ویرایش
+     کنم، باید تایید کنم و برم سرچ کنم پیدا کنم بعد ویرایش کنم.» */
+  check('the review queue can edit a question', () => {
+    const i = script.indexOf('async function renderQuizMaker(');
+    const body = script.slice(i, i + 4000);
+    assert.ok(/qmkEdit\(/.test(body), 'no edit button in the review queue');
+    assert.ok(script.includes('function qmkEdit('), 'the editor is missing');
+    assert.ok(script.includes('async function qmkSaveEdit('), 'nothing saves the edit');
+    /* The rows on screen are what it edits, so they have to be reachable. */
+    assert.ok(/window\._QMKROWS\s*=\s*rows/.test(body), 'the rows are not kept for the editor');
+  });
+
+  check('and editing does not decide the question', () => {
+    const i = script.indexOf('async function qmkSaveEdit(');
+    const body = script.slice(i, i + 1500);
+    const calls = body.split('\n').filter((l) => /await api\(/.test(l)).join('\n');
+    /* A PATCH changes what is on the form. A POST would replace the whole
+       record — every field left off resets to a default, and `status` would
+       reset with it, which is how «ویرایش» used to publish a pending
+       question by accident. */
+    assert.ok(/api\('PATCH','\/admin\/questions\/'/.test(calls), 'the save is not a PATCH');
+    assert.ok(!/status:/.test(calls), 'the save still sets a status');
+    /* Approving is still a decision of its own, offered beside it. */
+    assert.ok(/qmkReview\(id,'approve'\)/.test(body), 'there is no way to save and approve');
+  });
+
+  check('the form refuses what the server would refuse', () => {
+    const i = script.indexOf('async function qmkSaveEdit(');
+    const body = script.slice(i, i + 1500);
+    assert.ok(/new Set\(opts\)\.size!==4/.test(body), 'duplicate options are not caught');
+    assert.ok(/opts\.some\(v=>!v\)/.test(body), 'empty options are not caught');
+    assert.ok(/text\.length<8/.test(body), 'a too-short question is not caught');
+  });
+
+  /* THE OLD EDITOR HAD THE SAME FAULT. Correcting a typo on a question that
+     was waiting for review published it. */
+  check('the question-bank editor stopped force-approving too', () => {
+    const i = script.indexOf('async function qSaveEdit(');
+    /* The CALL, not the whole function — the comment above it quotes the old
+       line it is there to explain, and a naive search finds that instead. */
+    const body = script.slice(i, i + 1200).split('\n').filter((l) => /await api\(/.test(l)).join('\n');
+    assert.ok(body, 'no request found in qSaveEdit at all');
+    assert.ok(!/status:/.test(body), 'editing still sends a status: ' + body.trim().slice(0, 120));
+    assert.ok(/api\('PATCH','\/admin\/questions\/'/.test(body), 'the save is not a PATCH');
+  });
+
+  /* ── SEARCH THAT ANSWERS AS YOU TYPE ───────────────────────────────── */
+  /* «تمام سرچ بارهای پنل باید اینجوری باشه.» */
+  check('every search box filters as it is typed into', () => {
+    assert.ok(script.includes('function liveSearch('), 'there is no live search at all');
+    for (const id of ['uq', 'qsearch', 'acq']) {
+      const re = new RegExp('id="' + id + '"[^>]*oninput="liveSearch');
+      assert.ok(re.test(script), 'this box still waits to be told: ' + id);
+    }
+    /* The support queue already filtered live, and still does. */
+    assert.ok(/id="supq"[\s\S]{0,200}oninput="SUP_Q/.test(script), 'the support search lost its live filter');
+  });
+
+  check('and no search box needs a button any more', () => {
+    for (const [id, state] of [['uq', 'U_Q'], ['qsearch', 'Q_SEARCH'], ['acq', 'AC_Q']] as const) {
+      const re = new RegExp("onclick=\\\\\"" + state + "=\\\\$\\\\('#" + id + "'\\\\)");
+      assert.ok(!re.test(script), 'a search button is still there for ' + id);
+    }
+  });
+
+  check('typing does not cost a request per keystroke', () => {
+    const i = script.indexOf('function liveSearch(');
+    const body = script.slice(i, i + 900);
+    assert.ok(/clearTimeout\(_liveT\)/.test(body), 'nothing debounces the repaint');
+    assert.ok(/setTimeout\(/.test(body), 'the repaint is not deferred at all');
+  });
+
+  /* THE CARET. `render()` rebuilds the page, so without putting it back the
+     box loses focus on the first letter and the second letter goes nowhere —
+     which is worse than the button this replaced. */
+  check('the caret goes back where it was', () => {
+    assert.ok(script.includes('function liveRestore('), 'nothing restores focus');
+    const body = script.slice(script.indexOf('function liveRestore('), script.indexOf('function liveRestore(') + 500);
+    assert.ok(/\.focus\(\)/.test(body), 'focus is not restored');
+    assert.ok(/setSelectionRange/.test(body), 'the caret position is not restored');
+    /* Where it WAS, not at the end — typing in the middle of a word must not
+       throw the caret to the end on every letter. */
+    assert.ok(/f\.pos/.test(body), 'the caret is put back somewhere it guessed');
+  });
+
+console.log(`[adminPanelHtml] ${passed} passed, ${failed} failed`);
   if (failed) process.exit(1);
 }
 

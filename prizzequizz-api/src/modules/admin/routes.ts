@@ -478,6 +478,51 @@ export function registerAdminRoutes(router: Router, base: string): void {
     json(ctx.res, 201, question);
   });
 
+  /* EDIT WHAT WAS ASKED, WITHOUT DECIDING ANYTHING ELSE.
+   *
+   * «باید بتونم سوال طرح شدهٔ کاربر رو ویرایش و ثبت کنم — الان نمیتونم ویرایش
+   *  کنم، باید تایید کنم و برم سرچ کنم پیدا کنم بعد ویرایش کنم.»
+   *
+   * The only way to change a question was POST /admin/questions with the whole
+   * record — which means every field you do not send is replaced by a default:
+   * an unstated difficulty became «easy», an unstated status became «pending».
+   * So fixing a typo in the review queue meant approving it first (to find it),
+   * then editing it, and hoping nothing else moved. This changes exactly the
+   * fields it is given and touches nothing else, which is what «ویرایش» means
+   * and what lets the review screen offer it without also deciding the
+   * question's fate. */
+  router.add('PATCH', `${base}/admin/questions/:id`, async (ctx) => {
+    if (!requireAdmin(ctx, { tab: 'questions' })) return;
+    const question = await repositories.questions.findById(ctx.params.id!);
+    if (!question) return error(ctx.res, 404, 'QUESTION_NOT_FOUND', 'این سؤال پیدا نشد.');
+    const body = (ctx.body ?? {}) as Record<string, unknown>;
+    if (typeof body.text === 'string' && body.text.trim()) question.text = body.text.trim();
+    if (Array.isArray(body.options)) {
+      const opts = body.options.map((o) => String(o).trim()).filter(Boolean);
+      if (opts.length !== 4) return error(ctx.res, 422, 'OPTIONS_INVALID', 'دقیقاً چهار گزینه لازم است.');
+      if (new Set(opts).size !== 4) return error(ctx.res, 422, 'OPTIONS_DUPLICATE', 'گزینه‌ها نباید تکراری باشند.');
+      question.options = opts;
+    }
+    if (body.correctIndex !== undefined) {
+      const ci = Number(body.correctIndex);
+      if (!Number.isInteger(ci) || ci < 0 || ci >= question.options.length) {
+        return error(ctx.res, 422, 'CORRECT_INDEX_INVALID', 'شمارهٔ پاسخ درست معتبر نیست.');
+      }
+      question.correctIndex = ci;
+    }
+    if (typeof body.category === 'string' && body.category.trim()) question.category = body.category.trim();
+    if (typeof body.difficulty === 'string' && ['easy', 'medium', 'hard'].includes(body.difficulty)) {
+      question.difficulty = body.difficulty as Question['difficulty'];
+    }
+    /* Status is NOT touched here on purpose: approving is its own decision,
+       with its own route and its own reward, and editing must not make it by
+       accident. */
+    question.version += 1;
+    await repositories.questions.save(question);
+    audit(ctx.userId, 'QUESTION_EDITED', 'question', question.id, { text: question.text });
+    json(ctx.res, 200, question);
+  });
+
   router.add('PATCH', `${base}/admin/questions/:id/status`, async (ctx) => {
     if (!requireAdmin(ctx)) return;
     const question = await repositories.questions.findById(ctx.params.id!);

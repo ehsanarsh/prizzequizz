@@ -423,6 +423,43 @@ function modal(title,html){const bg=document.createElement('div');bg.className='
    key, so the built screen could never run. Only one of the two is kept. */
 const CONFIG_PAGES={cfg_xp:['xp','تنظیمات XP'],cfg_level:['level','تنظیمات Level'],cfg_cup:['cup','تنظیمات Cup'],cfg_gameplay:['gameplay','گیم‌پلی هر مود'],events:['events','رویدادها'],general:['general','تنظیمات عمومی'],campaign:['campaign','کمپین کاربر جدید']};
 
+/* ── SEARCH THAT ANSWERS AS YOU TYPE ─────────────────────────────────────
+   «سرچ هم طوری باشه که کلمه رو که میزنی اوتوماتیک سوالاتی که کلمات نوشته شده رو
+    داره بیاره بالا، دیگه منتظر نمونه که جستجو رو بزنم — یعنی تمام سرچ بارهای
+    پنل باید اینجوری باشه.»
+
+   Three things make that work and all three live here rather than at each
+   search box:
+
+     · a short wait, so a five-letter word is one repaint and not five. A
+       panel search re-fetches; per-keystroke would be a request storm.
+     · the CARET put back where it was. `render()` rebuilds the whole page, so
+       without this the box loses focus on the first letter and the second
+       letter goes nowhere — which is worse than the button it replaced.
+     · the box remembered by id, because after the repaint the old element is
+       gone and only its id survives. */
+let _liveT=null, _liveFocus=null;
+function liveSearch(id, apply, value){
+  const el=document.getElementById(id);
+  _liveFocus={ id:id, pos: el&&el.selectionStart!=null ? el.selectionStart : null };
+  clearTimeout(_liveT);
+  _liveT=setTimeout(async()=>{
+    _liveT=null;
+    try{ apply(value); }catch(e){}
+    try{ await render(); }catch(e){}
+    liveRestore();
+  },220);
+}
+function liveRestore(){
+  const f=_liveFocus; if(!f) return;
+  const el=document.getElementById(f.id); if(!el) return;
+  try{
+    el.focus();
+    const p=(f.pos==null)?el.value.length:Math.min(f.pos,el.value.length);
+    el.setSelectionRange(p,p);
+  }catch(e){}
+}
+
 async function render(){
   loading();
   // Access guard: block sections this account isn't permitted to see.
@@ -932,7 +969,7 @@ async function renderUsers(){
         '<label>هزینهٔ هر رفرش (سکه)<input type="number" id="oc_cost" min="0" max="1000" value="'+(oc.refreshCost||0)+'" style="width:110px"></label>'+
         '<label>رفرش رایگان روزانه<input type="number" id="oc_free" min="0" max="100" value="'+(oc.freeRefreshesPerDay||0)+'" style="width:110px"></label>'+
         '<button class="btn pri" onclick="saveOnlineCfg()">ذخیره</button></div></div>':'')+
-    '<div class="toolbar"><input id="uq" placeholder="جستجوی نام/یوزرنیم/شناسه/شماره..." value="'+esc(U_Q)+'" onkeydown="if(event.key===\'Enter\'){U_Q=this.value.trim();render();}"><button class="btn" onclick="U_Q=$(\'#uq\').value.trim();render()">جستجو</button></div>'+
+    '<div class="toolbar"><input id="uq" placeholder="جستجوی نام/یوزرنیم/شناسه/شماره..." value="'+esc(U_Q)+'" oninput="liveSearch(\'uq\',v=>{U_Q=v.trim();},this.value)" onkeydown="if(event.key===\'Enter\'){U_Q=this.value.trim();render();}"></div>'+
     '<div id="ubulk"></div>'+
     '<div class="tbl-wrap"><table><thead><tr><th style="width:34px"><input type="checkbox" id="uselall" onclick="uSelAll(this.checked)"></th>'+
       ['کاربر','لول/XP','کاپ','صندوق جایزه','وضعیت','عملیات'].map(c=>'<th>'+c+'</th>').join('')+'</tr></thead><tbody>'+
@@ -1565,7 +1602,7 @@ async function renderQuestions(){
     '<button class="btn pri" onclick="qAdd()">➕ افزودن</button> <button class="btn ok" onclick="qAdd(\'انتخاب موضوع\')">🎯 سؤال تعیین موضوع</button> <button class="btn info" onclick="qImport()">📥 ورود انبوه</button> <button class="btn" onclick="qSampleJson()">📄 نمونه JSON</button> <button class="btn" onclick="qExport()">CSV</button>')+
     qViewBar(badgeFor('questions'))+
     catTabs+
-    '<div class="toolbar"><input id="qsearch" placeholder="جستجوی متن سوال..." value="'+esc(Q_SEARCH)+'" onkeydown="if(event.key===\'Enter\'){Q_SEARCH=this.value;render();}"><button class="btn" onclick="Q_SEARCH=$(\'#qsearch\').value;render()">جستجو</button>'+
+    '<div class="toolbar"><input id="qsearch" placeholder="جستجوی متن سوال..." value="'+esc(Q_SEARCH)+'" oninput="liveSearch(\'qsearch\',v=>{Q_SEARCH=v;},this.value)" onkeydown="if(event.key===\'Enter\'){Q_SEARCH=this.value;render();}">'+
     '<div class="subtabs" style="margin:0">'+['','approved','pending','archived'].map(st=>'<button class="'+(Q_ST===st?'active':'')+'" onclick="Q_ST=\''+st+'\';render()">'+(st===''?'همه وضعیت‌ها':{approved:'تأییدشده',pending:'در انتظار',archived:'بایگانی'}[st])+'</button>').join('')+'</div></div>'+
     '<div id="qbulk"></div>'+
     '<div class="tbl-wrap"><table><thead><tr>'+
@@ -1585,7 +1622,10 @@ async function renderQuestions(){
   window._QALL=list; window._QFILT=filtered.slice(0,300).map(q=>q.id);
   qBulkBar();
   qLoadStats();   // fill the real «استفاده» / «٪ صحیح» columns in the background
-  const qi=$('#qsearch'); if(qi&&Q_SEARCH){qi.focus();qi.setSelectionRange(qi.value.length,qi.value.length);}
+  /* The caret is put back by `liveRestore` now — it knows WHERE it was, which
+     this could only ever guess at (it always jumped to the end). Kept for the
+     Enter path, which repaints without going through liveSearch. */
+  const qi=$('#qsearch'); if(qi&&Q_SEARCH&&!_liveFocus){qi.focus();qi.setSelectionRange(qi.value.length,qi.value.length);}
 }
 /* ── کوییزساز: questions players wrote ─────────────────────────────────
  * Approving one publishes it into the bank AND pays the author, so the button
@@ -1601,7 +1641,7 @@ async function renderQuizMaker(){
   let d; try{ d=await api('GET','/admin/user-questions?status='+encodeURIComponent(Q_MK_ST)+'&limit=300'); }
   catch(e){ $('#main').innerHTML=head('کوییزساز کاربران','')+qViewBar(0)+'<div class="empty">در دسترس نیست: '+esc(e.message)+'</div>'; return; }
   const rows=d.rows||[], c=d.counts||{pending:0,approved:0,rejected:0}, cfg=d.config||{};
-  window._QMKCFG=cfg;
+  window._QMKCFG=cfg; window._QMKROWS=rows;
   const modeTxt=!cfg.enabled?'جایزه خاموش است':(cfg.mode==='everyN'?'برای هر '+fa(cfg.n)+' سؤالِ تأییدشدهٔ هر کاربر، یک جایزه':'برای هر سؤال تأییدشده، یک جایزه');
   const stTabs='<div class="subtabs" style="margin:0">'+[['pending','در انتظار',c.pending],['approved','تأییدشده',c.approved],['rejected','ردشده',c.rejected],['all','همه',c.pending+c.approved+c.rejected]]
     .map(t=>'<button class="'+(Q_MK_ST===t[0]?'active':'')+'" onclick="Q_MK_ST=\''+t[0]+'\';render()">'+t[1]+' ('+fa(t[2])+')</button>').join('')+'</div>';
@@ -1619,11 +1659,50 @@ async function renderQuizMaker(){
       '<td class="mono">'+esc(fmtDate(r.createdAt))+'</td>'+
       '<td><span class="pill '+(r.status==='approved'?'ok':r.status==='rejected'?'bad':'pend')+'">'+({pending:'در انتظار',approved:'تأییدشده',rejected:'ردشده'}[r.status]||esc(r.status))+'</span></td>'+
       '<td>'+qmkPrizeText(r.reward)+'</td>'+
-      '<td>'+(r.status==='pending'
+      /* «باید بتونم سوال طرح شدهٔ کاربر رو ویرایش و ثبت کنم» — here, in the
+         queue, before deciding anything. Editing used to mean approving it
+         first so it would appear in the bank, then searching the bank for it. */
+      '<td><button class="btn sm" onclick="qmkEdit(\''+r.questionId+'\')">✏️ ویرایش</button> '+(r.status==='pending'
         ?'<button class="btn sm ok" onclick="qmkReview(\''+r.questionId+'\',\'approve\')">✅ تأیید و جایزه</button> <button class="btn sm bad" onclick="qmkReview(\''+r.questionId+'\',\'reject\')">✖ رد</button>'
         :'<span class="note">بررسی شد</span>')+'</td>'+
     '</tr>').join(''):'<tr><td colspan="8" class="empty">سوالی در این وضعیت نیست</td></tr>')+
     '</tbody></table></div>';
+}
+/* Edit a submitted question without deciding its fate. The rows on screen are
+   the source — they carry exactly what the player wrote — and the save is a
+   PATCH, so status, difficulty and everything else not on this form stay as
+   they were. Approving is still its own button. */
+function qmkEdit(id){
+  const r=(window._QMKROWS||[]).find(x=>x.questionId===id); if(!r){ toast('این سؤال پیدا نشد','bad'); return; }
+  const opts=(r.options||['','','','']).slice(0,4);
+  while(opts.length<4) opts.push('');
+  const cats=Object.keys((window._QCATCOUNT||{}));
+  modal('ویرایش سؤال کاربر',
+    '<div class="note">نویسنده: '+esc(r.username||r.userId||'—')+' · وضعیت: '+({pending:'در انتظار',approved:'تأییدشده',rejected:'ردشده'}[r.status]||esc(r.status))+
+      '<br>ذخیره فقط متن سؤال را عوض می‌کند؛ تأیید یا رد جداگانه است.</div>'+
+    '<div class="field"><label>متن سؤال</label><input id="qm_text" value="'+esc(r.text||'')+'"></div>'+
+    '<div class="grid g2">'+opts.map((o,j)=>'<div class="field"><label>گزینه '+fa(j+1)+'</label><input id="qm_o'+j+'" value="'+esc(o)+'"></div>').join('')+'</div>'+
+    '<div class="grid g2"><div class="field"><label>پاسخ درست</label><select id="qm_ci">'+
+      opts.map((o,j)=>'<option value="'+j+'"'+(j===Number(r.correctIndex||0)?' selected':'')+'>گزینه '+fa(j+1)+'</option>').join('')+'</select></div>'+
+      '<div class="field"><label>دسته</label><input id="qm_cat" value="'+esc(r.category||'')+'" list="qm_cat_list"><datalist id="qm_cat_list">'+
+        cats.map(c=>'<option value="'+esc(c)+'">').join('')+'</datalist></div></div>'+
+    '<div class="modal-actions" style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end">'+
+      '<button class="btn" onclick="this.closest(\'.modal-bg\').remove()">انصراف</button>'+
+      '<button class="btn pri" onclick="qmkSaveEdit(\''+id+'\')">💾 ذخیره</button>'+
+      '<button class="btn ok" onclick="qmkSaveEdit(\''+id+'\',true)">💾 ذخیره و تأیید</button></div>');
+}
+async function qmkSaveEdit(id,alsoApprove){
+  const opts=[0,1,2,3].map(j=>(($('#qm_o'+j)||{}).value||'').trim());
+  if(opts.some(v=>!v)){ toast('هر چهار گزینه باید پر باشد','bad'); return; }
+  if(new Set(opts).size!==4){ toast('گزینه‌ها نباید تکراری باشند','bad'); return; }
+  const text=(($('#qm_text')||{}).value||'').trim();
+  if(text.length<8){ toast('متن سؤال خیلی کوتاه است','bad'); return; }
+  try{
+    await api('PATCH','/admin/questions/'+id,{text,options:opts,correctIndex:Number(($('#qm_ci')||{}).value||0),category:(($('#qm_cat')||{}).value||'').trim()});
+    const bg=document.querySelector('.modal-bg'); if(bg) bg.remove();
+    if(alsoApprove){ await qmkReview(id,'approve'); return; }
+    toast('ذخیره شد','ok'); render();
+  }catch(e){ toast(e.message,'bad'); }
 }
 async function qmkReview(id,action){
   if(action==='reject'&&!confirm('این سؤال رد شود؟ به بانک سوال نمی‌رود و جایزه‌ای پرداخت نمی‌شود.'))return;
@@ -1726,8 +1805,15 @@ function qEdit(id){
     '<button class="btn pri" onclick="qSaveEdit(\''+id+'\')">💾 ذخیره</button>');
 }
 async function qSaveEdit(id){
-  const opts=[0,1,2,3].map(j=>($('#qe_o'+j)||{}).value).filter(v=>v!=null&&v.trim()!=='');
-  try{await api('POST','/admin/questions',{id,text:$('#qe_text').value.trim(),options:opts,correctIndex:Number($('#qe_ci').value||0),category:$('#qe_cat').value.trim(),difficulty:$('#qe_diff').value,status:'approved'});toast('ذخیره شد','ok');document.querySelector('.modal-bg').remove();render();}catch(e){toast(e.message,'bad');}
+  const opts=[0,1,2,3].map(j=>(($('#qe_o'+j)||{}).value||'').trim()).filter(Boolean);
+  /* EDITING IS NOT APPROVING. This used to send `status:'approved'` with every
+     save, so correcting a typo on a question waiting for review published it —
+     and a full POST meant every field left off the form was reset to a
+     default. A PATCH changes what is on the form and nothing else. */
+  try{
+    await api('PATCH','/admin/questions/'+id,{text:$('#qe_text').value.trim(),options:opts,correctIndex:Number($('#qe_ci').value||0),category:$('#qe_cat').value.trim(),difficulty:$('#qe_diff').value});
+    toast('ذخیره شد','ok');const bg=document.querySelector('.modal-bg');if(bg)bg.remove();render();
+  }catch(e){toast(e.message,'bad');}
 }
 function qSampleJson(){
   const sample=[
@@ -2004,7 +2090,7 @@ let AC_Q='';
 async function renderWallet(){
   const d=await api('GET','/admin/wallet/accounts?q='+encodeURIComponent(AC_Q));
   $('#main').innerHTML=head('مدیریت صندوق جایزه','موجودی کاربران، دفترکل، اصلاح دستی')+
-    '<div class="toolbar"><input id="acq" placeholder="جستجو..." value="'+esc(AC_Q)+'" onkeydown="if(event.key===\'Enter\'){AC_Q=this.value.trim();render();}"><button class="btn" onclick="AC_Q=$(\'#acq\').value.trim();render()">جستجو</button> <button class="btn info" onclick="checkConsistency()">بررسی سازگاری دفترکل</button></div>'+
+    '<div class="toolbar"><input id="acq" placeholder="جستجو..." value="'+esc(AC_Q)+'" oninput="liveSearch(\'acq\',v=>{AC_Q=v.trim();},this.value)" onkeydown="if(event.key===\'Enter\'){AC_Q=this.value.trim();render();}"> <button class="btn info" onclick="checkConsistency()">بررسی سازگاری دفترکل</button></div>'+
     tbl(['کاربر','قابل‌دریافت','بلوکه','عملیات'],(d.rows||[]).map(u=>[
       esc(u.username||'')+' <span class="mono" style="color:var(--muted)">'+String(u.userId).slice(0,8)+'</span>'+newTag('suspicious',u.lastAt),
       '<b style="color:var(--ok)">'+fa(u.account.available)+'</b>',fa(u.account.locked),

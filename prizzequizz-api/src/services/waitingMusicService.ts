@@ -215,8 +215,16 @@ export async function listTracks(): Promise<MusicTrack[]> {
       .sort((a, b) => a.sortOrder - b.sortOrder || a.createdAt.localeCompare(b.createdAt));
   }
   await ensureSchema(pool);
+  /* `slot` AND `likes` HAVE TO BE IN THE SELECT.
+     They were not, and `rowToTrack` reads what it is handed: an absent column
+     is undefined, `Number(undefined)||0` is 0, and `asSlot(undefined)` is
+     'any'. So the panel showed every track with no likes however many it had —
+     «لایک موزیک رو نمیتونم ببینم، رو صفره با اینکه لایک شده» — and every
+     track as «either half of the day», quietly discarding a night setting the
+     operator had made. One line, two silent lies. The heavy columns are still
+     left out: `data`/`data_bin` are the file itself. */
   const { rows } = await pool.query(
-    `SELECT id,title,mime,bytes,etag,enabled,sort_order,created_at FROM waiting_music ORDER BY sort_order, created_at`);
+    `SELECT id,title,mime,bytes,etag,enabled,sort_order,slot,likes,created_at FROM waiting_music ORDER BY sort_order, created_at`);
   return rows.map(rowToTrack);
 }
 

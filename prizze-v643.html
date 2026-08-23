@@ -433,8 +433,38 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
    the screen has scrolled. */
 .topbar.tb-card{padding:calc(12px + env(safe-area-inset-top,0px)) 12px 12px;margin:0 -4px 12px;
   background:var(--ink-2);border:var(--stroke);border-radius:19px;box-shadow:var(--hard-sm);z-index:8}
-.topbar.tb-card h1{text-shadow:none}
+/* «تک تک تیتر صفحات منو بیشتر و تنظیمات کارت داشته باشه، با نوشته درشت و
+   خوشگل، تیتر هر صفحه با رنگ مشکی.» The title rides a bright plate of its own
+   on the card: big, black on yellow, and impossible to lose against whatever
+   scrolls up behind it. The buttons stay on the card itself, where their own
+   colours still read — a yellow back arrow on a yellow plate would vanish. */
+.topbar.tb-card h1{text-shadow:none;font-size:19px;font-weight:900;color:#141414;
+  background:linear-gradient(180deg,#FFE24A,var(--bolt-2));
+  border:2.5px solid #000;border-radius:14px;box-shadow:0 3px 0 #000;
+  padding:7px 14px;margin:0 6px;letter-spacing:.2px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@media(max-width:370px){.topbar.tb-card h1{font-size:17px;padding:6px 10px}}
 .topbar .sub{font-size:12px;color:var(--muted);font-weight:700}
+
+/* ===== MY REFERRAL CODE ===== */
+.ref-hero{display:flex;flex-direction:column;align-items:center;text-align:center;gap:6px;
+  background:linear-gradient(180deg,#FFDD5C,#F1B211);color:var(--gold-ink);
+  border:var(--stroke);border-radius:22px;padding:18px 16px;box-shadow:var(--hard-sm);margin-bottom:14px}
+.ref-hero .ref-gift{font-size:42px;line-height:1;filter:drop-shadow(0 3px 0 rgba(0,0,0,.28))}
+.ref-hero b{font-size:14.5px;font-weight:900;line-height:1.8}
+.ref-hero p{font-size:12px;font-weight:800;line-height:1.85;opacity:.85;margin:0}
+.ref-code-card{background:var(--ink-2);border:var(--stroke);border-radius:22px;
+  padding:16px;box-shadow:var(--hard-sm);text-align:center;margin-bottom:14px}
+.ref-lbl{display:block;font-size:11.5px;font-weight:900;color:var(--muted)}
+.ref-code{display:block;font-size:34px;font-weight:900;letter-spacing:5px;color:var(--bolt);
+  margin:6px 0 14px;text-shadow:0 3px 0 #000;font-family:ui-monospace,Menlo,Consolas,monospace}
+.ref-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.ref-actions .btn{padding:12px 8px;font-size:13px;border-radius:15px}
+.ref-stat{display:flex;align-items:center;justify-content:space-between;gap:10px;
+  background:var(--ink-2);border:var(--stroke);border-radius:18px;padding:13px 15px;box-shadow:var(--hard-sm)}
+.ref-stat span{font-size:12.5px;font-weight:800;color:var(--muted)}
+.ref-stat b{font-size:20px;font-weight:900;color:var(--bolt)}
+@media(max-width:370px){.ref-code{font-size:28px;letter-spacing:3px}.ref-actions{grid-template-columns:1fr}}
 
 /* ===== BRAND STICKER BUTTONS ===== */
 .btn{width:100%;border:var(--stroke);border-radius:17px;padding:15px 16px;font-family:inherit;font-size:16px;font-weight:900;
@@ -5113,7 +5143,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
       <div class="field"><label>نام کاربری (یکتا)</label><input class="input" id="regUsername" placeholder="نام کاربری را با حروف انگلیسی وارد کنید" dir="ltr" oninput="clearFieldErr('regUsername')"><div class="field-err" id="errUsername"></div></div>
       <div class="field"><label>جنسیت</label><select class="input" id="regGender"><option value="">انتخاب کن…</option><option value="male">آقا</option><option value="female">خانم</option></select></div><div class="field-err" id="errGender"></div><div class="field"><label>کد معرف (اختیاری)</label><input class="input" id="regReferral" placeholder="کد دوستت رو وارد کن و جایزه بگیر" dir="ltr"></div>
       <div class="card" style="display:flex;gap:12px;align-items:center;background:linear-gradient(180deg,#FFDD5C,#F1B211);color:var(--gold-ink);margin-bottom:20px">
-        <span style="font-size:26px">🎁</span><div style="font-size:13px;font-weight:700;line-height:1.6">با هر دوستی که دعوت کنی، هر دو <b>پاداش نقدی</b> می‌گیرید!</div></div>
+        <span style="font-size:26px">🎁</span><div style="font-size:13px;font-weight:700;line-height:1.6">کد دوستت رو وارد کن تا برای او یک <b>بلیط سبز</b> فرستاده شود. بعد از ثبت‌نام دیگر جایی برای وارد کردن کد نیست.</div></div>
       <div class="grow"></div>
       <button class="btn btn-primary" onclick="submitRegister()">ثبت اطلاعات</button>
     </section>
@@ -6350,7 +6380,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
 
     <!-- ============ WALLET ============ -->
     <section class="screen pad" id="wallet">
-      <div class="topbar" style="padding:0 0 14px;background:none"><button class="iconbtn ib-back" onclick="menuBack('home')">→</button><h1>صندوق جایزه 🏆</h1><button class="iconbtn" onclick="exportWalletStatement()">📄</button></div>
+      <div class="topbar tb-card"><button class="iconbtn ib-back" onclick="menuBack('home')">→</button><h1>صندوق جایزه 🏆</h1><button class="iconbtn" onclick="exportWalletStatement()">📄</button></div>
       <div class="wallet-hero v2">
         <div class="top"><div><div class="lbl">موجودی صندوق جایزه</div><div class="bal mono"><span id="walletBal">۹۰۰٬۰۰۰</span> <small>تومان</small></div></div><div class="safe">🛡️ امن</div></div>
         <div class="wallet-substats" id="walletStats"></div>
@@ -6416,7 +6446,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
 
     <!-- ============ SETTINGS ============ -->
     <section class="screen pad" id="settings">
-      <div class="topbar" style="padding:0 0 14px;background:none"><button class="iconbtn ib-back" onclick="menuBack('home')">→</button><h1>تنظیمات ⚙️</h1></div>
+      <div class="topbar tb-card"><button class="iconbtn ib-back" onclick="menuBack('home')">→</button><h1>تنظیمات ⚙️</h1></div>
       <div class="settings-hero"><div class="gear">⚙️</div><div><b>مرکز کنترل پرایز کوییز</b><p>همه چیز قابل تنظیمه؛ صدا، اعلان، امنیت، ظاهر و تجربه بازی.</p>
 </div></div>
       <div class="set-group-title">تجربه بازی</div>
@@ -6436,15 +6466,36 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
       <div class="row danger-zone" onclick="confirmLogout()"><div class="r-ico" style="background:var(--bad-soft)">🚪</div><div class="r-txt"><b style="color:var(--bad)">خروج از حساب</b><span>خروج امن از این دستگاه</span></div><span class="r-arrow">‹</span></div>
     </section>
 
+    <!-- ============ MY REFERRAL CODE ============
+         Read, copied, shared. There is deliberately nowhere on this screen to
+         TYPE a code: «بعد از ثبت نام دیگه جایی نباشه که بتونی وارد کنی». -->
+    <section class="screen pad" id="referral">
+      <div class="topbar tb-card"><button class="iconbtn ib-back" onclick="menuBack('home')">→</button><h1>کد معرف من 🎁</h1><button class="iconbtn ib-close" onclick="menuBack('home')">✕</button></div>
+      <div class="ref-hero">
+        <div class="ref-gift">🎁</div>
+        <b>هر کسی با کد تو وارد بازی شود، یک بلیط سبز مهمان تو می‌شود</b>
+        <p>کدت را برای دوستانت بفرست. آن‌ها باید هنگام ثبت‌نام واردش کنند — بعد از ثبت‌نام دیگر جایی برای وارد کردن کد نیست.</p>
+      </div>
+      <div class="ref-code-card">
+        <span class="ref-lbl">کد تو</span>
+        <b class="ref-code" id="refCode" dir="ltr">…</b>
+        <div class="ref-actions">
+          <button class="btn btn-primary" onclick="refCopy()">📋 کپی کد</button>
+          <button class="btn btn-green" onclick="refShare()">📤 فرستادن به دوستان</button>
+        </div>
+      </div>
+      <div class="ref-stat"><span>تا حالا با کد تو وارد شده‌اند</span><b id="refCount">۰</b></div>
+    </section>
+
     <!-- ============ SETTING DETAIL ============ -->
     <section class="screen pad" id="setting-detail">
-      <div class="topbar" style="padding:0 0 14px;background:none"><button class="iconbtn ib-back" onclick="go('settings')">→</button><h1 id="settingDetailTitle">تنظیمات</h1></div>
+      <div class="topbar tb-card"><button class="iconbtn ib-back" onclick="go('settings')">→</button><h1 id="settingDetailTitle">تنظیمات</h1></div>
       <div class="set-detail-box" id="settingDetailContent"></div>
     </section>
 
     <!-- ============ FEEDBACK / SUGGESTIONS ============ -->
     <section class="screen pad" id="feedback">
-      <div class="topbar" style="padding:0 0 14px;background:none"><button class="iconbtn ib-back" onclick="menuBack('home')">→</button><h1>نظرات و پیشنهادات 💬</h1></div>
+      <div class="topbar tb-card"><button class="iconbtn ib-back" onclick="menuBack('home')">→</button><h1>نظرات و پیشنهادات 💬</h1></div>
       <div class="feedback-hero"><div class="ico">💡</div><div><b>صدای تو، مسیر بهتر بازی</b><p>ایده، انتقاد یا تجربه‌ات رو سریع ثبت کن. کوتاه، واضح و بدون فرم‌های طولانی.</p></div></div>
       <div class="feedback-tabs" id="feedbackTabs"><button class="feedback-tab active" data-t="idea" onclick="feedbackType('idea')">پیشنهاد</button><button class="feedback-tab" data-t="bug" onclick="feedbackType('bug')">گزارش مشکل</button><button class="feedback-tab" data-t="rate" onclick="feedbackType('rate')">امتیازدهی</button></div>
       <div class="feedback-card"><h3 id="feedbackTitle">پیشنهادت رو بنویس</h3><p id="feedbackHint">مثلاً درباره مودهای بازی، جایزه‌ها، UI یا لیگ هفتگی.</p><div class="field"><label>عنوان کوتاه</label><input class="input" id="feedbackSubject" placeholder="مثلاً گردونه شانس جذاب‌تر شود"></div><div class="field"><label>متن نظر</label><textarea class="input" id="feedbackBody" rows="4" style="resize:none;line-height:1.8" placeholder="نظرت رو کوتاه و واضح بنویس..."></textarea></div><div id="feedbackRatingBox" style="display:none"><label style="display:block;text-align:center;font-size:12px;color:var(--muted);font-weight:900">امتیاز کلی</label><div class="rate-row" id="rateRow"></div></div><button class="btn btn-primary" onclick="submitFeedback()">ارسال نظر</button></div>
@@ -6453,7 +6504,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
 
     <!-- ============ SUPPORT ============ -->
     <section class="screen pad" id="support">
-      <div class="topbar" style="padding:0 0 14px;background:none"><button class="iconbtn ib-back" onclick="menuBack('home')">→</button><h1>پشتیبانی 💬</h1></div>
+      <div class="topbar tb-card"><button class="iconbtn ib-back" onclick="menuBack('home')">→</button><h1>پشتیبانی 💬</h1></div>
       <div class="sup-hero">
         <div class="ico">🎧</div>
         <div style="flex:1;min-width:0">
@@ -6475,10 +6526,10 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
 
     <!-- ============ ONLINE PLAYERS ============ -->
     <section class="screen pad" id="online">
-      <div class="topbar" style="padding:0 0 14px;background:none"><button class="iconbtn ib-back" onclick="menuBack('home')">→</button><h1>افراد آنلاین 👥</h1></div>
+      <div class="topbar tb-card"><button class="iconbtn ib-back" onclick="menuBack('home')">→</button><h1>افراد آنلاین 👥</h1></div>
       <div class="online-head">
         <div><b id="onCount">—</b><span>الان آنلاین‌اند</span></div>
-        <button class="btn btn-ghost btn-sm" id="onRefresh" onclick="onlineRefresh()">🔄 نمایش افراد دیگر</button>
+        <button class="btn btn-green btn-sm" id="onRefresh" onclick="onlineRefresh()">🔄 نمایش افراد دیگر</button>
       </div>
       <div id="onList" class="online-list"></div>
     </section>
@@ -6490,13 +6541,13 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
          Survivor's: that list only holds the subjects running rooms today, so
          most of the game could not be written about at all. -->
     <section class="screen pad" id="qstopics">
-      <div class="topbar" style="padding:0 0 14px;background:none"><button class="iconbtn ib-back" onclick="menuBack('home')">→</button><h1>موضوع سؤال 🏷️</h1></div>
+      <div class="topbar tb-card"><button class="iconbtn ib-back" onclick="menuBack('home')">→</button><h1>موضوع سؤال 🏷️</h1></div>
       <div class="qsubmit-hero"><div class="ico">🏷️</div><div><b>اول موضوع را انتخاب کن</b><p>سؤالت برای همین موضوع ثبت می‌شود. کنار هر موضوع تعداد سؤال‌های تأییدشدهٔ آن آمده — موضوع‌های خلوت‌تر بیشتر به سؤال احتیاج دارند.</p></div></div>
       <div class="qs-topics" id="qsTopicList"><span class="qs-loading">در حال گرفتن موضوع‌ها…</span></div>
     </section>
 
     <section class="screen pad" id="qsubmit">
-      <div class="topbar" style="padding:0 0 14px;background:none"><button class="iconbtn ib-back" onclick="qsBack()">→</button><h1>تولید سوال ✍️</h1></div>
+      <div class="topbar tb-card"><button class="iconbtn ib-back" onclick="qsBack()">→</button><h1>تولید سوال ✍️</h1></div>
       <div class="qsubmit-hero"><div class="ico">✍️</div><div><b>سؤال بساز، سریع و راحت</b><p>سختی را انتخاب کن، سؤال را بنویس و چهار گزینه را در چهار کادر جدا وارد کن. روی گزینهٔ درست بزن تا سبز شود.</p></div></div>
 
       <!-- STEP 1 — the topic that was chosen on the way in, and the way back to
@@ -6541,7 +6592,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
 
     <!-- ============ RULES ============ -->
     <section class="screen pad" id="rules">
-      <div class="topbar" style="padding:0 0 14px;background:none"><button class="iconbtn ib-back" onclick="menuBack('home')">→</button><h1>قوانین و مقررات 📜</h1></div>
+      <div class="topbar tb-card"><button class="iconbtn ib-back" onclick="menuBack('home')">→</button><h1>قوانین و مقررات 📜</h1></div>
       <div id="rulesBody"></div>
     </section>
 
@@ -7168,6 +7219,11 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
     <div class="row" onclick="closeMenu();plansBack='home';go('plans')"><div class="r-ico">👑</div><div class="r-txt"><b>پلن اشتراک</b></div><span class="r-arrow">‹</span></div>
     <div class="row" onclick="closeMenu();pzOpenGiftRedeem()"><div class="r-ico">🎁</div><div class="r-txt"><b>کد هدیه</b><span>کدت رو وارد کن و جایزه بگیر</span></div><span class="r-arrow">‹</span></div>
     <div class="row" onclick="menuGo('stats')"><div class="r-ico">📈</div><div class="r-txt"><b>آمار و ارقام</b></div><span class="r-arrow">‹</span></div>
+    <!-- «هر کاربر یه کد داشته باشه… هر کی با اون وارد بشه برای من یه بلیط سبز
+         میده.» The other half of the referral system: the half you look at and
+         send to somebody, rather than the one you type once and never see
+         again. It lives here because it is a thing you own, not a setting. -->
+    <div class="row" onclick="menuGo('referral')"><div class="r-ico">🎁</div><div class="r-txt"><b>کد معرف من</b></div><span class="r-arrow">‹</span></div>
     <div class="row" onclick="menuGo('qstopics')"><div class="r-ico">✍️</div><div class="r-txt"><b>تولید سوال</b></div><span class="r-arrow">‹</span></div>
     <div class="row" onclick="menuGo('feedback')"><div class="r-ico">💬</div><div class="r-txt"><b>نظرات و پیشنهادات</b></div><span class="r-arrow">‹</span></div>
     <div class="row" onclick="menuGo('support')"><div class="r-ico">🎧</div><div class="r-txt"><b>پشتیبانی</b></div><span class="r-arrow">‹</span></div>
@@ -9506,7 +9562,7 @@ function lsMusicPaint(){
   const hint=document.getElementById('lsMusicHint');
   if(hint){
     hint.textContent=playing
-      ? '🔊 با اسپیکر یا هدفون بیشتر حال می‌دهد'
+      ? '🔊 با اسپیکر یا هدفون بیشتر حال می‌ده'
       : (LSM.started?'▶ ادامه‌اش بده' : '🎶 تا شروع مسابقه می‌تونی از موزیک لذت ببری');
     /* Only while it is tucked away: open, the controls are what belongs in
        this space and the hint would be pushing them out of the row. */
@@ -10453,7 +10509,64 @@ function toast(msg,ms){
 function openMenu(){const a=document.querySelector('.screen.active');if(a&&['login','otp','register','splash','intro'].indexOf(a.id)>=0)return;try{applyMyName();}catch(e){}document.getElementById('menuBg').classList.add('show');document.getElementById('menuSheet').classList.add('show');setTimeout(()=>{const s=document.getElementById('menuSheet');if(s)s.scrollTop=0;},30);}
 function closeMenu(){document.getElementById('menuBg').classList.remove('show');document.getElementById('menuSheet').classList.remove('show');}
 let openedFromMenu=false;
-function menuGo(id){openedFromMenu=true;closeMenu();go(id);if(id==='qstopics'){qsLoadTopics();qsLoadMine();}}
+function menuGo(id){openedFromMenu=true;closeMenu();go(id);if(id==='qstopics'){qsLoadTopics();qsLoadMine();}if(id==='referral'){refLoad();}}
+
+/* ── MY REFERRAL CODE ────────────────────────────────────────────────────
+   The server owns the code — it is unique across every player, so it cannot be
+   made here — and this screen only shows what it is told. */
+let PZ_REF=null;
+async function refLoad(){
+  const codeEl=document.getElementById('refCode'), cntEl=document.getElementById('refCount');
+  if(codeEl&&!PZ_REF) codeEl.textContent='…';
+  let r=null;
+  try{ r=await pzApi('GET','/users/me/referral'); }catch(e){}
+  if(!r||r.ok===false||!r.data){
+    if(codeEl) codeEl.textContent='—';
+    toast('کدت گرفته نشد — اینترنتت را بررسی کن',3000);
+    return;
+  }
+  PZ_REF=r.data;
+  if(codeEl) codeEl.textContent=String(PZ_REF.code||'—');
+  if(cntEl) cntEl.textContent=fa(Number(PZ_REF.invites)||0);
+}
+function refText(){
+  const c=(PZ_REF&&PZ_REF.code)||'';
+  return 'بیا پرایز کوییز بازی کنیم! موقع ثبت‌نام این کد معرف را وارد کن: '+c;
+}
+function refCopy(){
+  const c=(PZ_REF&&PZ_REF.code)||'';
+  if(!c){ toast('هنوز کدت نیامده'); return; }
+  /* The modern clipboard needs a secure context and a gesture; the old
+     selection trick needs neither. Both are tried, in that order, because a
+     copy button that quietly does nothing is worse than no copy button. */
+  const done=()=>{ toast('کد کپی شد ✅'); try{ vib(20); }catch(e){} };
+  try{
+    if(navigator.clipboard&&navigator.clipboard.writeText){
+      navigator.clipboard.writeText(c).then(done).catch(()=>refCopyFallback(c,done));
+      return;
+    }
+  }catch(e){}
+  refCopyFallback(c,done);
+}
+function refCopyFallback(text,done){
+  try{
+    const ta=document.createElement('textarea');
+    ta.value=text; ta.setAttribute('readonly',''); ta.style.cssText='position:fixed;top:-1000px;opacity:0';
+    document.body.appendChild(ta); ta.select(); ta.setSelectionRange(0,text.length);
+    const ok=document.execCommand&&document.execCommand('copy');
+    ta.remove();
+    if(ok) done(); else toast('کپی نشد — کد را دستی بردار',2600);
+  }catch(e){ toast('کپی نشد — کد را دستی بردار',2600); }
+}
+function refShare(){
+  const t=refText();
+  try{
+    if(navigator.share){ navigator.share({text:t}).catch(()=>{}); return; }
+  }catch(e){}
+  /* No share sheet on this device — the next best thing is the text on the
+     clipboard, ready to paste wherever they were going to send it. */
+  refCopyFallback(t,()=>toast('متن دعوت کپی شد — همین را بفرست ✅'));
+}
 function menuBack(fallback){if(openedFromMenu){openedFromMenu=false;go('home');setTimeout(openMenu,80);}else go(fallback||'home');}
 
 /* ============ SPLASH -> LOGIN ============ */
@@ -11201,13 +11314,31 @@ function duelContinue(){
    finished match is closing and they may be anywhere in the game. The server
    checks who really won before it passes anything on — this device only names
    the match. */
+/* The player whose claim on the next seat is still to be spent. Set the moment
+   the server names them and cleared by the enqueue that uses it, so an old
+   arrangement can never hold up a later, unrelated search.
+   `_pzHoldWait` is the request that will name them: the search starts seven
+   hundred milliseconds after «ادامه میدهم» and the answer usually beats it,
+   but «usually» is not a rule, and a seat left unheld is an invitation
+   pointing at nobody. The search waits for it — behind the radar, which is
+   already on screen and looks the same either way. */
+let _pzHoldFor=null, _pzHoldWait=null;
 function pzTellOpponentIContinued(matchId){
   if(!matchId||!_tok||userPlan!=='premium') return;
   const tier=pzTierForValue(duelStakeVal);
   /* Above red the ladder leaves the ticket shop behind — 100,000 is not sold —
      so there is no «با بلیط … حقتو ازش بگیری» to offer and nothing is sent. */
   if(!tier) return;
-  try{ pzApi('POST','/duel-calls',{matchId:matchId,tier:tier,stage:duelStage}); }catch(e){}
+  /* AND THE SEAT IS KEPT FOR THEM. «الویت با بازنده باید باشه» — the person
+     who just lost is given ten seconds to answer «پیداش کن» before anybody
+     else can take this place in the queue. The server names them; this device
+     only quotes the name back on the next enqueue, which is a moment away. */
+  try{
+    _pzHoldWait=pzApi('POST','/duel-calls',{matchId:matchId,tier:tier,stage:duelStage}).then(r=>{
+      const to=r&&r.data&&r.data.call&&r.data.call.toUserId;
+      if(to) _pzHoldFor=String(to);
+    }).catch(()=>{});
+  }catch(e){ _pzHoldWait=null; }
 }
 function rematch(){
   // درخواست بازی مجدد به حریف (شبیه‌سازی پاسخ حریف)
@@ -12257,6 +12388,9 @@ function closeStatSheet(){const s=document.getElementById('statSheet');if(s)s.cl
 const SETTINGS_KEY='pq_app_settings_v2';
 const DEFAULT_SETTINGS={
   notifications:true,notifMatch:true,notifLeague:true,notifRewards:true,notifFriends:true,quietHours:'off',
+  /* Both on to begin with: being invited to play is the point of the invite
+     system, and a handset that never asked to be quiet should not be. */
+  notifGameInvites:true,notifPush:true,
   sound:true,vibration:true,volume:'normal',countdownSound:true,
   language:'fa',twoFA:false,deviceLock:false,loginAlerts:true,
   onlineStatus:true,publicProfile:true,friendInvites:true,showWallet:true,
@@ -12292,7 +12426,22 @@ function settingAction(icon,title,sub,fn,cls){return '<div class="row '+(cls||''
 function choiceBtn(key,val,label){return '<button class="choice '+(appSettings[key]===val?'active':'')+'" onclick="setChoice(\''+key+'\',\''+val+'\')">'+label+'</button>';}
 function openSettingDetail(type){renderSettingDetail(type);go('setting-detail');}
 function toggleSetting(key){appSettings[key]=!appSettings[key];saveSettings();const active=document.querySelector('.screen.active');if(active&&active.id==='setting-detail')renderSettingDetail(active.dataset.type);sfx('select');
-  if(key==='notifications'||key==='notifMatch'||key==='notifLeague'||key==='notifRewards'||key==='notifFriends'){try{pzSyncNotifPrefs();}catch(e){}}
+  if(key==='notifications'||key==='notifMatch'||key==='notifLeague'||key==='notifRewards'||key==='notifFriends'||key==='notifGameInvites'){try{pzSyncNotifPrefs();}catch(e){}}
+  /* THE SWITCH IS WHAT REGISTERS THE HANDSET. That used to be a row the player
+     tapped, next to a paragraph reporting whether it had worked — «به کاربر
+     ربط نداره گوشی روی سرور ثبت شده یا نه». Turning it on asks for permission
+     and subscribes; turning it off drops back to a switch that is simply off.
+     If the browser refuses, the switch goes back to where it was rather than
+     claiming something that is not true. */
+  if(key==='notifPush'){
+    if(appSettings.notifPush){
+      Promise.resolve().then(()=>pzEnablePush(true)).then((okd)=>{
+        if(okd===false){ appSettings.notifPush=false; saveSettings();
+          const a=document.querySelector('.screen.active');
+          if(a&&a.id==='setting-detail') renderSettingDetail(a.dataset.type); }
+      }).catch(()=>{});
+    }
+  }
 }
 function setChoice(key,val){appSettings[key]=val;saveSettings();const active=document.querySelector('.screen.active');if(active&&active.id==='setting-detail')renderSettingDetail(active.dataset.type);toast('تنظیمات ذخیره شد ✅');}
 function renderSettingDetail(type){
@@ -12300,13 +12449,23 @@ function renderSettingDetail(type){
   sec.dataset.type=type;let html='';
   const titles={notifications:'اعلان‌ها 🔔',audio:'صدا و لرزش 🔊',gameplay:'تنظیمات بازی 🎮',appearance:'ظاهر و دسترس‌پذیری 🎨',language:'زبان 🌐',security:'امنیت حساب 🔐',privacy:'حریم خصوصی 🛡️',data:'داده‌ها و راهنماها 🧰'};title.textContent=titles[type]||'تنظیمات';
   if(type==='notifications'){
-    html+='<p class="set-note">نوع اعلان‌هایی که از بازی دریافت می‌کنی را تنظیم کن.</p>';
-    html+='<div id="pzPushStatus" class="set-note">در حال بررسی وضعیت اعلان روی این گوشی…</div>';
-    setTimeout(()=>{try{pzRenderPushStatus();}catch(e){}},0);
+    /* «توضیحات اول صفحه اعلان رو حذف کن — کاربر باید فقط روشن و خاموش کنه، به
+       کاربر ربط نداره گوشی روی سرور ثبت شده یا نه.»
+
+       Two things used to open this screen: a sentence explaining what the
+       screen was, and a live report on whether this handset was registered
+       with the push service — permission state, subscription state, the lot.
+       None of it is a decision the player can make, and all of it was the
+       first thing they read. The switches are the screen now; registering the
+       handset is what the push switch DOES, quietly, when it is turned on. */
     html+=settingAction('📬','صندوق پیام‌ها','همهٔ اعلان‌های دریافتی‌ات را ببین','pzOpenInbox()');
-    html+=settingAction('📲','اعلان روی گوشی','حتی وقتی داخل بازی نیستی، خبر بگیر','pzEnablePush(true)');
     html+=settingSwitch('notifications','اعلان‌ها','فعال یا غیرفعال کردن همه اعلان‌های بازی');
-    html+=settingSwitch('notifMatch','یادآوری مسابقه','دعوت به دوئل، شروع روم و نوبت بازی');
+    html+=settingSwitch('notifPush','اعلان روی گوشی','حتی وقتی داخل بازی نیستی، خبر بگیر');
+    /* «یه قسمت هم بزار برای خاموش و روشن کردن دریافت دعوت به بازی که پیش فرض
+       روشن باشه» — and it really stops them: the sheet is what an invitation
+       IS on this screen, so this is what decides whether one appears. */
+    html+=settingSwitch('notifGameInvites','دریافت دعوت به بازی','وقتی کسی تو را به دوئل دعوت کند، همان‌جا نشانت بده');
+    html+=settingSwitch('notifMatch','یادآوری مسابقه','شروع روم و نوبت بازی');
     html+=settingSwitch('notifLeague','لیگ هفتگی','صعود، بلیت جدید و پایان هفته لیگ');
     html+=settingSwitch('notifRewards','جوایز و صندوق جایزه','واریز جایزه، برداشت و گردونه شانس');
     html+=settingSwitch('notifFriends','پیام دوستان','وقتی دوستی در چت پیام می‌دهد، روی گوشی خبر بده');
@@ -17017,7 +17176,17 @@ async function onlineLoad(refresh){
      people are really there. */
   const r=res.data;
   const cnt=document.getElementById('onCount'); if(cnt) cnt.textContent=fa(r.onlineTotal||0);
-  if(btn) btn.textContent=(r.nextCost>0)?('🔄 نمایش افراد دیگر · '+fa(r.nextCost)+' سکه'):'🔄 نمایش افراد دیگر';
+  /* «رنگش سبز بشه و قیمتشم روش نوشته بشه» — the price belongs ON the button,
+     before it is pressed. It was already written there when the server named
+     one, and now it is written there when the server names none too: «رایگان»
+     is the answer to the same question, and a button that only sometimes says
+     what it costs is one you have to press to find out. */
+  if(btn){
+    btn.classList.remove('btn-ghost'); btn.classList.add('btn-green');
+    btn.textContent=(r.nextCost>0)
+      ? ('🔄 نمایش افراد دیگر · '+fa(r.nextCost)+' سکه')
+      : '🔄 نمایش افراد دیگر · رایگان';
+  }
   if(r.charged>0){ toast(fa(r.charged)+' سکه کم شد'); try{ pzRefreshHoldings(); }catch(e){} }
   const ps=r.players||[];
   /* Kept so a tap can find the person again without re-parsing the card. */
@@ -18548,7 +18717,18 @@ async function submitRegister(){
   if(btn){btn.disabled=false;btn.textContent=_t;}
   if(r.ok){
     _usr=r.data; try{localStorage.setItem('pz_usr',JSON.stringify(_usr));}catch(e){}
-    applyMyName(); toast('اطلاعاتت ثبت شد ✅');
+    applyMyName();
+    /* A code that was typed and did not work has to be SAID so — silently
+       swallowing it means the friend who sent it never gets their ticket and
+       neither of them ever finds out why. The registration itself is already
+       done either way, so this is news, not an error. */
+    const rf=(r.data&&r.data.referral)||null;
+    if(ref&&rf&&!rf.applied){
+      toast(rf.reason==='CODE_NOT_FOUND'?'کد معرف پیدا نشد — بقیهٔ اطلاعاتت ثبت شد'
+        :rf.reason==='OWN_CODE'?'کد خودت را نمی‌توانی وارد کنی — بقیهٔ اطلاعاتت ثبت شد'
+        :'کد معرف ثبت نشد — بقیهٔ اطلاعاتت ثبت شد',3600);
+    } else if(ref&&rf&&rf.applied){ toast('کد معرف ثبت شد — به دوستت یک بلیط سبز رسید 🎁',3600); }
+    else toast('اطلاعاتت ثبت شد ✅');
     /* CHOOSE THE CHARACTER NOW, not «later, somewhere». Registration used to
        mark the character step DONE without ever showing it — the player was
        sent to the plans screen with a default face and had to go and find the
@@ -18936,7 +19116,18 @@ startMatchmaking = async function(){
      passer-by can take the seat. Spent on use: a key left lying about would
      quietly capture the NEXT ordinary search too. */
   const _pair=pzPairKey||undefined; pzPairKey=null;
-  const r=await pzApi('POST','/matchmaking/enqueue',{modeId:'duel',economyType:_eco,skill:800,ticketTier:_tkTier,waitTier:_waitTier,pairKey:_pair});
+  /* «کاربر نباید این معطلی رو ببینه و بدونه، باید حس کنه سیستم در حال یافتن
+     حریفه براش» — and they do: the radar has been sweeping since before this
+     line ran. Bounded, so a request that never answers costs a moment rather
+     than the whole search. */
+  if(_pzHoldWait){
+    const w=_pzHoldWait; _pzHoldWait=null;
+    try{ await Promise.race([w, new Promise(r=>setTimeout(r,900))]); }catch(e){}
+  }
+  /* Spent on use, exactly like the pairing key above: a claim left lying about
+     would quietly hold up the NEXT ordinary search too. */
+  const _hold=_pzHoldFor||undefined; _pzHoldFor=null;
+  const r=await pzApi('POST','/matchmaking/enqueue',{modeId:'duel',economyType:_eco,skill:800,ticketTier:_tkTier,waitTier:_waitTier,pairKey:_pair,holdFor:_hold});
   if(r&&!r.ok&&r.error&&(r.error.code==='NO_TICKET'||r.error.code==='TICKET_TIER_INVALID')){ clearInterval(mmTimer);clearInterval(mmPingT); toast('بلیط لازم را نداری؛ از فروشگاه تهیه کن',3500); try{pzSyncWallet();}catch(e){} go('home'); return; }
   if(!r.ok){clearInterval(mmTimer);clearInterval(mmPingT);_pzRefundEntry();toast((r&&r.error&&r.error.message)||'خطای سرور در شروع جستجو',3500);go('home');return;}
   
@@ -21820,9 +22011,14 @@ let PZ_INV_WAIT=null;
 function pzInviteWait(inv,tier,coins){
   PZ_INV_WAIT={id:inv.id,tier:tier,coins:Number(coins)||0,until:Date.now()+62000};
   try{
+    /* «دعوت ارسال شد، به محض پذیرفتن وارد بازی میشوید» — and the button says
+       «متوجه شدم», because there is nothing here to decide: the invitation is
+       already sent and the answer comes when it comes. It still cancels, so
+       walking away does not leave the other player holding an appointment
+       nobody is coming to. */
     showAaaModal({icon:'⏳',title:'منتظر جواب',
-      sub:'دعوت فرستاده شد. تا وقتی جواب بدهد اینجا منتظر می‌مانی — اگر قبول کند، مستقیم با هم روبه‌رو می‌شوید.',
-      dismissible:true, primaryText:'', secondaryText:'بی‌خیال',
+      sub:'دعوت ارسال شد — به محض پذیرفتن وارد بازی می‌شوید.',
+      dismissible:true, primaryText:'', secondaryText:'متوجه شدم', secondaryClass:'btn-yellow',
       onSecondary:()=>{ const w=PZ_INV_WAIT; PZ_INV_WAIT=null; closeAaaModal(false);
         if(w) try{ pzApi('POST','/invites/'+encodeURIComponent(w.id)+'/cancel',{}); }catch(e){} }});
   }catch(e){}
@@ -21938,6 +22134,10 @@ let PZ_INV_SEEN={}, PZ_INV_OPEN=null, PZ_INV_POLL=null;
    without the player ever choosing. */
 function pzInviteAsk(inv){
   if(!inv||!inv.id) return;
+  /* «یه قسمت هم بزار برای خاموش و روشن کردن دریافت دعوت به بازی» — and it has
+     to mean it. The sheet IS the invitation as far as this screen is
+     concerned, so the switch decides here, not in a label somewhere. */
+  try{ if(window.appSettings&&appSettings.notifGameInvites===false) return; }catch(e){}
   if(PZ_INV_OPEN===inv.id) return;                 // already on screen
   PZ_INV_OPEN=inv.id;
   const coins=Number(inv.coinStake)||0;

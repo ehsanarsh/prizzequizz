@@ -38,6 +38,20 @@ export interface MatchmakingTicket {
    *
    * It counts and nothing else — no ticket is held, taken or refunded for it. */
   waitTier?: string;
+  /* FIRST CLAIM ON THIS SEAT, AND FOR HOW LONG.
+   *
+   * «حریف باید تا ۱۰ ثانیه نتونه با کسی مچ بشه و الویت با بازنده باید باشه.»
+   * A duel winner who presses «ادامه میدهم» is somebody the player they just
+   * beat has been invited to come and find — and until now the winner was in
+   * the open queue the moment they pressed it, so the first stranger to search
+   * took the seat and the invitation pointed at nobody.
+   *
+   * So the seat is held: while `holdUntil` is in the future this ticket meets
+   * `holdForUserId` and no one else. Afterwards the hold is simply ignored and
+   * the ticket is an ordinary one — nothing is cancelled, nothing is re-queued,
+   * and the person waiting never sees a change. */
+  holdForUserId?: string;
+  holdUntil?: number;
   skill: number;
   /** PRIVATE PAIRING. Two people who agreed to play each other queue with the
    *  same key and meet ONLY each other; a ticket without a key never meets one
@@ -71,7 +85,7 @@ export interface MatchmakingStats {
 }
 
 export interface MatchmakingQueue {
-  enqueue(input: { userId: string; modeId: GameModeId; economyType: PlanType; coinStake?: number; ticketTier?: string; waitTier?: string; skill?: number; pairKey?: string }): Promise<MatchmakingTicket>;
+  enqueue(input: { userId: string; modeId: GameModeId; economyType: PlanType; coinStake?: number; ticketTier?: string; waitTier?: string; holdFor?: string; holdMs?: number; skill?: number; pairKey?: string }): Promise<MatchmakingTicket>;
   get(ticketId: string): Promise<MatchmakingTicket | null>;
   cancel(ticketId: string, userId: string): Promise<MatchmakingTicket | null>;
   forceBot(ticketId: string, userId: string): Promise<MatchmakingTicket | null>;
@@ -86,6 +100,29 @@ const DEFAULT_BOT_MS = 30_000;
 // client polls every 2s; if we haven't heard from a ticket in this window we
 // treat it as ABANDONED and never pair a live player with it (prevents the
 // "ghost opponent": you get matched, but the other side already left/crashed).
+/** Is this ticket still keeping a seat for one particular person? */
+function heldFrom(t: MatchmakingTicket, now = Date.now()): string {
+  return (t.holdUntil ?? 0) > now ? String(t.holdForUserId || '') : '';
+}
+/** Can these two meet, as far as the hold is concerned?
+ *
+ *  BOTH SIDES ARE ASKED, and the second one is not an afterthought: «حریف باید
+ *  تا ۱۰ ثانیه نتونه با کسی مچ بشه» is a rule about the WINNER, and the winner
+ *  is usually the one arriving. Guarding only the waiting side meant that the
+ *  moment a stranger was already in the tier — which is the common case, since
+ *  the tier is only open when somebody is standing in it — the winner was
+ *  matched to them on arrival and the seat was never kept at all. */
+function holdAllows(waiting: MatchmakingTicket, arrivingUserId: string, arrivingHold = '', now = Date.now()): boolean {
+  const held = heldFrom(waiting, now);
+  if (held && held !== arrivingUserId) return false;
+  if (arrivingHold && arrivingHold !== waiting.userId) return false;
+  return true;
+}
+/** The hold an incoming enqueue is asking for, if it is asking for a live one. */
+function askedHold(input: { holdFor?: string; holdMs?: number }): string {
+  return (input.holdFor && (input.holdMs ?? 0) > 0) ? String(input.holdFor) : '';
+}
+
 const FRESH_MS = Number(process.env.MATCHMAKING_FRESH_MS ?? 9_000);
 function isFresh(ticket: MatchmakingTicket): boolean {
   return Date.now() - new Date(ticket.updatedAt).getTime() <= FRESH_MS;
@@ -94,7 +131,7 @@ function isFresh(ticket: MatchmakingTicket): boolean {
 abstract class BaseMatchmakingQueue implements MatchmakingQueue {
   protected analytics = { enqueued: 0, matched: 0, botFallbacks: 0, cancelled: 0, expired: 0 };
 
-  abstract enqueue(input: { userId: string; modeId: GameModeId; economyType: PlanType; coinStake?: number; ticketTier?: string; waitTier?: string; skill?: number; pairKey?: string }): Promise<MatchmakingTicket>;
+  abstract enqueue(input: { userId: string; modeId: GameModeId; economyType: PlanType; coinStake?: number; ticketTier?: string; waitTier?: string; holdFor?: string; holdMs?: number; skill?: number; pairKey?: string }): Promise<MatchmakingTicket>;
   abstract get(ticketId: string): Promise<MatchmakingTicket | null>;
   abstract cancel(ticketId: string, userId: string): Promise<MatchmakingTicket | null>;
   abstract forceBot(ticketId: string, userId: string): Promise<MatchmakingTicket | null>;
@@ -122,13 +159,17 @@ abstract class BaseMatchmakingQueue implements MatchmakingQueue {
 export class MemoryMatchmakingQueue extends BaseMatchmakingQueue {
   private tickets = new Map<string, MatchmakingTicket>();
 
-  async enqueue(input: { userId: string; modeId: GameModeId; economyType: PlanType; coinStake?: number; ticketTier?: string; waitTier?: string; skill?: number; pairKey?: string }): Promise<MatchmakingTicket> {
+  async enqueue(input: { userId: string; modeId: GameModeId; economyType: PlanType; coinStake?: number; ticketTier?: string; waitTier?: string; holdFor?: string; holdMs?: number; skill?: number; pairKey?: string }): Promise<MatchmakingTicket> {
     await this.expireOldTickets();
     const now = new Date().toISOString();
     const skill = input.skill ?? 1000;
     const pairKey = input.pairKey || '';
     this.analytics.enqueued += 1;
-    const compatible = [...this.tickets.values()].find((t) =>
+    /* «الویت با بازنده باید باشه.» A seat kept for THIS arrival is the one
+       they should get, even if some other open ticket would also have done —
+       otherwise the invitation sends them into the queue to be handed to a
+       stranger while the person who called them waits beside it. */
+    const fits = (t: MatchmakingTicket) =>
       t.status === 'queued' && isFresh(t) && t.userId !== input.userId && t.modeId === input.modeId && t.economyType === input.economyType
       /* The private key has to match BOTH ways: a keyed ticket only ever meets
          the person it agreed to play, and an open ticket is never handed to
@@ -137,8 +178,12 @@ export class MemoryMatchmakingQueue extends BaseMatchmakingQueue {
       /* Two people who agreed to play each other are not matched on skill —
          they already chose. */
       && (pairKey ? true : Math.abs(t.skill - skill) <= wideningWindow(t.createdAt))
-    );
-    const ticket: MatchmakingTicket = { id: id(), userId: input.userId, modeId: input.modeId, economyType: input.economyType, coinStake: input.coinStake, ticketTier: input.ticketTier || undefined, waitTier: input.waitTier || undefined, skill, pairKey: pairKey || undefined, status: 'queued', createdAt: now, updatedAt: now };
+      /* A seat being kept for somebody else is not a seat — and a player who is
+         keeping one of their own is not looking for another. */
+      && holdAllows(t, input.userId, askedHold(input));
+    const all = [...this.tickets.values()];
+    const compatible = all.find((t) => fits(t) && heldFrom(t) === input.userId) ?? all.find(fits);
+    const ticket: MatchmakingTicket = { id: id(), userId: input.userId, modeId: input.modeId, economyType: input.economyType, coinStake: input.coinStake, ticketTier: input.ticketTier || undefined, waitTier: input.waitTier || undefined, holdForUserId: input.holdFor || undefined, holdUntil: input.holdFor ? Date.now() + Math.max(0, Math.min(30_000, input.holdMs ?? 0)) : undefined, skill, pairKey: pairKey || undefined, status: 'queued', createdAt: now, updatedAt: now };
     if (compatible) return this.matchTickets(ticket, compatible, skill);
     this.tickets.set(ticket.id, ticket);
     /* economyType and skill are what pairing is actually done on, so a player
@@ -228,7 +273,7 @@ export class RedisMatchmakingQueue extends BaseMatchmakingQueue {
   private client: ReturnType<typeof createClient> | null = null;
   constructor(private readonly url = process.env.REDIS_URL ?? 'redis://localhost:6379') { super(); }
 
-  async enqueue(input: { userId: string; modeId: GameModeId; economyType: PlanType; coinStake?: number; ticketTier?: string; waitTier?: string; skill?: number; pairKey?: string }): Promise<MatchmakingTicket> {
+  async enqueue(input: { userId: string; modeId: GameModeId; economyType: PlanType; coinStake?: number; ticketTier?: string; waitTier?: string; holdFor?: string; holdMs?: number; skill?: number; pairKey?: string }): Promise<MatchmakingTicket> {
     await this.expireOldTickets();
     const client = await this.getClient(); const now = new Date().toISOString(); const skill = input.skill ?? 1000;
     const pairKey = input.pairKey || '';
@@ -243,11 +288,12 @@ export class RedisMatchmakingQueue extends BaseMatchmakingQueue {
          both ways, and skill does not come into a game two people chose. */
       if ((candidate.pairKey || '') !== pairKey) continue;
       if (!pairKey && Math.abs(candidate.skill - skill) > wideningWindow(candidate.createdAt)) continue;
+      if (!holdAllows(candidate, input.userId, askedHold(input))) continue;
       await client.zRem(queueKey, candidate.id);
-      const ticket: MatchmakingTicket = { id: id(), userId: input.userId, modeId: input.modeId, economyType: input.economyType, coinStake: input.coinStake, ticketTier: input.ticketTier || undefined, waitTier: input.waitTier || undefined, skill, pairKey: pairKey || undefined, status: 'queued', createdAt: now, updatedAt: now };
+      const ticket: MatchmakingTicket = { id: id(), userId: input.userId, modeId: input.modeId, economyType: input.economyType, coinStake: input.coinStake, ticketTier: input.ticketTier || undefined, waitTier: input.waitTier || undefined, holdForUserId: input.holdFor || undefined, holdUntil: input.holdFor ? Date.now() + Math.max(0, Math.min(30_000, input.holdMs ?? 0)) : undefined, skill, pairKey: pairKey || undefined, status: 'queued', createdAt: now, updatedAt: now };
       return this.matchTickets(ticket, candidate, skill);
     }
-    const ticket: MatchmakingTicket = { id: id(), userId: input.userId, modeId: input.modeId, economyType: input.economyType, coinStake: input.coinStake, ticketTier: input.ticketTier || undefined, waitTier: input.waitTier || undefined, skill, pairKey: pairKey || undefined, status: 'queued', createdAt: now, updatedAt: now };
+    const ticket: MatchmakingTicket = { id: id(), userId: input.userId, modeId: input.modeId, economyType: input.economyType, coinStake: input.coinStake, ticketTier: input.ticketTier || undefined, waitTier: input.waitTier || undefined, holdForUserId: input.holdFor || undefined, holdUntil: input.holdFor ? Date.now() + Math.max(0, Math.min(30_000, input.holdMs ?? 0)) : undefined, skill, pairKey: pairKey || undefined, status: 'queued', createdAt: now, updatedAt: now };
     await this.saveTicket(ticket); await client.zAdd(queueKey, { score: skill, value: ticket.id });
     logger.info('redis_matchmaking_queued', { ticketId: ticket.id, userId: ticket.userId, modeId: ticket.modeId, economyType: ticket.economyType, coinStake: ticket.coinStake, skill });
     return ticket;

@@ -449,6 +449,50 @@ await check('and two people can each be called about their own match', async () 
   assert.equal((await callSvc.pendingFor('pair-b')).length, 1, 'the second player was never told');
 });
 
+/* ── WHAT THE PANEL READS BACK ───────────────────────────────────────────── */
+/* «لایک موزیک رو نمیتونم ببینم، رو صفره با اینکه لایک شده.»
+ *
+ * `listTracks` is the panel's only source, and its SELECT did not name `likes`
+ * or `slot`. `rowToTrack` reads what it is handed: an absent column is
+ * undefined, `Number(undefined)||0` is 0, and `asSlot(undefined)` is 'any'. So
+ * every track showed no likes however many it had — and every track showed as
+ * «either half of the day», quietly discarding a night setting somebody had
+ * made. Two silent lies out of one missing line. */
+await check('a liked track reads back with its likes', async () => {
+  const music = await import('../services/waitingMusicService.js');
+  /* A real file — the upload checks the magic bytes against the declared type,
+     and it is right to. */
+  const t = await music.addTrack({ title: 'liked-one', audio: mp3(2048) });
+  await music.likeTrack(t.id, 1);
+  await music.likeTrack(t.id, 1);
+  await music.likeTrack(t.id, 1);
+  const row = (await music.listTracks()).find((x) => x.id === t.id);
+  assert.ok(row, 'the track vanished from the list');
+  assert.equal(row!.likes, 3, 'the panel would show ' + row!.likes + ' likes for a track liked three times');
+});
+
+await check('and a night track reads back as a night track', async () => {
+  const music = await import('../services/waitingMusicService.js');
+  const t = await music.addTrack({ title: 'night-one', audio: mp3(2048) });
+  await music.setTrackSlot(t.id, 'night');
+  const row = (await music.listTracks()).find((x) => x.id === t.id);
+  assert.ok(row, 'the track vanished from the list');
+  assert.equal(row!.slot, 'night', 'the panel would show it as «' + row!.slot + '»');
+});
+
+/* The file itself is still left out — it is megabytes, and the panel lists
+   dozens of rows. A SELECT that started dragging it along would be the same
+   fault in the other direction. */
+await check('the file is still not dragged into the listing', async () => {
+  const music = await import('../services/waitingMusicService.js');
+  const rows = await music.listTracks();
+  assert.ok(rows.length > 0, 'nothing to check');
+  for (const r of rows) {
+    assert.ok(!('data' in (r as any)), 'the listing carries the audio itself');
+    assert.ok(!('data_bin' in (r as any)), 'the listing carries the audio itself');
+  }
+});
+
 /* ── the rule, so the next column added does not repeat this ─────────────── */
 console.log('every column a fresh database gets, an old one gets too:');
 const fs = await import('node:fs');

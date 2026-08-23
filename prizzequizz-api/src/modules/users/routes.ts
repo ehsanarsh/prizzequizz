@@ -7,6 +7,7 @@ import { buildUserStats } from '../../services/userStatsService.js';
 import { equippedCharacterFor } from '../../services/characterSelectionService.js';
 import { effectiveWeeklyScore } from '../../services/scoringConfig.js';
 import { listOnlinePlayers, OnlinePlayersError } from '../../services/onlinePlayersService.js';
+import { codeFor, inviteCount, redeem as redeemReferral, ReferralError, REFERRAL_REWARD_TIER, REFERRAL_REWARD_COUNT } from '../../services/referralService.js';
 
 export function registerUserRoutes(router: Router, base: string): void {
   /* "Me" is whoever the token says it is — and nobody otherwise. This used to
@@ -39,11 +40,27 @@ export function registerUserRoutes(router: Router, base: string): void {
   });
 
   // Complete/update the player's own profile (display name + unique username).
+  /* MY OWN CODE — the half of this a player looks at rather than types.
+     «خودم یه کد دارم که هر کی با اون وارد بشه برای من یه بلیط سبز میده.» There
+     is deliberately no way to POST a code here: the only door is the one that
+     completes a registration, and it is above. */
+  router.add('GET', `${base}/users/me/referral`, async (ctx) => {
+    if (!ctx.userId) return error(ctx.res, 401, 'UNAUTHORIZED', 'ابتدا وارد شو.');
+    const code = await codeFor(ctx.userId);
+    json(ctx.res, 200, {
+      code, invites: await inviteCount(ctx.userId),
+      rewardTier: REFERRAL_REWARD_TIER, rewardCount: REFERRAL_REWARD_COUNT
+    });
+  });
+
   router.add('PATCH', `${base}/users/me`, async (ctx) => {
     if (!ctx.userId) return error(ctx.res, 401, 'UNAUTHORIZED', 'ابتدا وارد شو.');
     const user = await repositories.users.findById(ctx.userId);
     if (!user) return error(ctx.res, 404, 'USER_NOT_FOUND', 'User not found');
     const body = (ctx.body ?? {}) as Record<string, unknown>;
+    /* Read BEFORE the fields below are written: «اولین ثبت نام» is the call
+       that gives the account a username, and after this line it will have one. */
+    const wasNew = !String(user.username || '').trim();
     if (typeof body.displayName === 'string' && body.displayName.trim()) user.displayName = body.displayName.trim().slice(0, 120);
     if (typeof body.username === 'string' && body.username.trim()) user.username = body.username.trim().slice(0, 64);
     /* Gender is optional and reversible. Anything that is not one of the three
@@ -59,7 +76,27 @@ export function registerUserRoutes(router: Router, base: string): void {
     } catch {
       return error(ctx.res, 409, 'USERNAME_TAKEN', 'این نام کاربری قبلاً گرفته شده است');
     }
-    json(ctx.res, 200, { ...toDto(user), avatar: await avatarUrlFor(user.id), character: await equippedCharacterFor(user.id) });
+    /* ── «کد معرف» ──────────────────────────────────────────────────────
+       «اون کد رو باید در اولین ثبت نام وارد کنن، وگرنه بعد از ثبت نام دیگه
+        جایی نباشه که بتونی وارد کنی و جایزه ببری.»
+
+       So the window is THIS call, and only while it is the one that completes
+       the account — `wasNew` is read before the save above, from whether the
+       player had a username at all. Hiding the box on later screens would be a
+       UI decision, and a UI decision is not a rule: somebody who found the
+       endpoint afterwards gets the same answer as somebody who found the
+       screen. Best-effort — a code that does not exist must not fail a
+       registration that is otherwise complete. */
+    let referral: { applied: boolean; reason?: string } = { applied: false };
+    const rawRef = typeof body.referralCode === 'string' ? body.referralCode.trim() : '';
+    if (rawRef) {
+      if (!wasNew) referral = { applied: false, reason: 'TOO_LATE' };
+      else {
+        try { await redeemReferral(ctx.userId, rawRef); referral = { applied: true }; }
+        catch (e) { referral = { applied: false, reason: e instanceof ReferralError ? e.code : 'FAILED' }; }
+      }
+    }
+    json(ctx.res, 200, { ...toDto(user), avatar: await avatarUrlFor(user.id), character: await equippedCharacterFor(user.id), referral });
   });
   /* ---- Profile photo ----
    * The client uploads an ALREADY-SHRUNK square thumbnail (WebP when the device
