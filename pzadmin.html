@@ -423,43 +423,21 @@ function modal(title,html){const bg=document.createElement('div');bg.className='
    key, so the built screen could never run. Only one of the two is kept. */
 const CONFIG_PAGES={cfg_xp:['xp','تنظیمات XP'],cfg_level:['level','تنظیمات Level'],cfg_cup:['cup','تنظیمات Cup'],cfg_gameplay:['gameplay','گیم‌پلی هر مود'],events:['events','رویدادها'],general:['general','تنظیمات عمومی'],campaign:['campaign','کمپین کاربر جدید']};
 
-/* ── SEARCH THAT ANSWERS AS YOU TYPE ─────────────────────────────────────
-   «سرچ هم طوری باشه که کلمه رو که میزنی اوتوماتیک سوالاتی که کلمات نوشته شده رو
-    داره بیاره بالا، دیگه منتظر نمونه که جستجو رو بزنم — یعنی تمام سرچ بارهای
-    پنل باید اینجوری باشه.»
+/* SEARCH-AS-YOU-TYPE WAS TRIED HERE AND TAKEN BACK OUT.
+   «قسمت سرچ پنل رو به حالت قبل برگردون، الان نمیشه تایپ کرد، با هر حرف یه بار
+    صفحه رفرش میشه.»
 
-   Three things make that work and all three live here rather than at each
-   search box:
+   It was built on `render()`, which is the wrong tool: `render()` re-fetches
+   the section and rebuilds the whole page including the toolbar the box lives
+   in. Debouncing it and putting the caret back afterwards made it survivable
+   on paper and unusable in the hand — the page blinked under every pause and
+   typing became something you fought.
 
-     · a short wait, so a five-letter word is one repaint and not five. A
-       panel search re-fetches; per-keystroke would be a request storm.
-     · the CARET put back where it was. `render()` rebuilds the whole page, so
-       without this the box loses focus on the first letter and the second
-       letter goes nowhere — which is worse than the button it replaced.
-     · the box remembered by id, because after the repaint the old element is
-       gone and only its id survives. */
-let _liveT=null, _liveFocus=null;
-function liveSearch(id, apply, value){
-  const el=document.getElementById(id);
-  _liveFocus={ id:id, pos: el&&el.selectionStart!=null ? el.selectionStart : null };
-  clearTimeout(_liveT);
-  _liveT=setTimeout(async()=>{
-    _liveT=null;
-    try{ apply(value); }catch(e){}
-    try{ await render(); }catch(e){}
-    liveRestore();
-  },220);
-}
-function liveRestore(){
-  const f=_liveFocus; if(!f) return;
-  const el=document.getElementById(f.id); if(!el) return;
-  try{
-    el.focus();
-    const p=(f.pos==null)?el.value.length:Math.min(f.pos,el.value.length);
-    el.setSelectionRange(p,p);
-  }catch(e){}
-}
-
+   Doing this properly means repainting only the ROWS — the way the support
+   queue's own filter does, with no fetch and no page rebuild — and that is a
+   different piece of work per section, not one helper over the top. Until
+   then the button and Enter are what they were, which at least does what it
+   says. */
 async function render(){
   loading();
   // Access guard: block sections this account isn't permitted to see.
@@ -969,7 +947,7 @@ async function renderUsers(){
         '<label>هزینهٔ هر رفرش (سکه)<input type="number" id="oc_cost" min="0" max="1000" value="'+(oc.refreshCost||0)+'" style="width:110px"></label>'+
         '<label>رفرش رایگان روزانه<input type="number" id="oc_free" min="0" max="100" value="'+(oc.freeRefreshesPerDay||0)+'" style="width:110px"></label>'+
         '<button class="btn pri" onclick="saveOnlineCfg()">ذخیره</button></div></div>':'')+
-    '<div class="toolbar"><input id="uq" placeholder="جستجوی نام/یوزرنیم/شناسه/شماره..." value="'+esc(U_Q)+'" oninput="liveSearch(\'uq\',v=>{U_Q=v.trim();},this.value)" onkeydown="if(event.key===\'Enter\'){U_Q=this.value.trim();render();}"></div>'+
+    '<div class="toolbar"><input id="uq" placeholder="جستجوی نام/یوزرنیم/شناسه/شماره..." value="'+esc(U_Q)+'" onkeydown="if(event.key===\'Enter\'){U_Q=this.value.trim();render();}"><button class="btn" onclick="U_Q=$(\'#uq\').value.trim();render()">جستجو</button></div>'+
     '<div id="ubulk"></div>'+
     '<div class="tbl-wrap"><table><thead><tr><th style="width:34px"><input type="checkbox" id="uselall" onclick="uSelAll(this.checked)"></th>'+
       ['کاربر','لول/XP','کاپ','صندوق جایزه','وضعیت','عملیات'].map(c=>'<th>'+c+'</th>').join('')+'</tr></thead><tbody>'+
@@ -1602,7 +1580,7 @@ async function renderQuestions(){
     '<button class="btn pri" onclick="qAdd()">➕ افزودن</button> <button class="btn ok" onclick="qAdd(\'انتخاب موضوع\')">🎯 سؤال تعیین موضوع</button> <button class="btn info" onclick="qImport()">📥 ورود انبوه</button> <button class="btn" onclick="qSampleJson()">📄 نمونه JSON</button> <button class="btn" onclick="qExport()">CSV</button>')+
     qViewBar(badgeFor('questions'))+
     catTabs+
-    '<div class="toolbar"><input id="qsearch" placeholder="جستجوی متن سوال..." value="'+esc(Q_SEARCH)+'" oninput="liveSearch(\'qsearch\',v=>{Q_SEARCH=v;},this.value)" onkeydown="if(event.key===\'Enter\'){Q_SEARCH=this.value;render();}">'+
+    '<div class="toolbar"><input id="qsearch" placeholder="جستجوی متن سوال..." value="'+esc(Q_SEARCH)+'" onkeydown="if(event.key===\'Enter\'){Q_SEARCH=this.value;render();}"><button class="btn" onclick="Q_SEARCH=$(\'#qsearch\').value;render()">جستجو</button>'+
     '<div class="subtabs" style="margin:0">'+['','approved','pending','archived'].map(st=>'<button class="'+(Q_ST===st?'active':'')+'" onclick="Q_ST=\''+st+'\';render()">'+(st===''?'همه وضعیت‌ها':{approved:'تأییدشده',pending:'در انتظار',archived:'بایگانی'}[st])+'</button>').join('')+'</div></div>'+
     '<div id="qbulk"></div>'+
     '<div class="tbl-wrap"><table><thead><tr>'+
@@ -1622,10 +1600,7 @@ async function renderQuestions(){
   window._QALL=list; window._QFILT=filtered.slice(0,300).map(q=>q.id);
   qBulkBar();
   qLoadStats();   // fill the real «استفاده» / «٪ صحیح» columns in the background
-  /* The caret is put back by `liveRestore` now — it knows WHERE it was, which
-     this could only ever guess at (it always jumped to the end). Kept for the
-     Enter path, which repaints without going through liveSearch. */
-  const qi=$('#qsearch'); if(qi&&Q_SEARCH&&!_liveFocus){qi.focus();qi.setSelectionRange(qi.value.length,qi.value.length);}
+  const qi=$('#qsearch'); if(qi&&Q_SEARCH){qi.focus();qi.setSelectionRange(qi.value.length,qi.value.length);}
 }
 /* ── کوییزساز: questions players wrote ─────────────────────────────────
  * Approving one publishes it into the bank AND pays the author, so the button
@@ -2090,7 +2065,7 @@ let AC_Q='';
 async function renderWallet(){
   const d=await api('GET','/admin/wallet/accounts?q='+encodeURIComponent(AC_Q));
   $('#main').innerHTML=head('مدیریت صندوق جایزه','موجودی کاربران، دفترکل، اصلاح دستی')+
-    '<div class="toolbar"><input id="acq" placeholder="جستجو..." value="'+esc(AC_Q)+'" oninput="liveSearch(\'acq\',v=>{AC_Q=v.trim();},this.value)" onkeydown="if(event.key===\'Enter\'){AC_Q=this.value.trim();render();}"> <button class="btn info" onclick="checkConsistency()">بررسی سازگاری دفترکل</button></div>'+
+    '<div class="toolbar"><input id="acq" placeholder="جستجو..." value="'+esc(AC_Q)+'" onkeydown="if(event.key===\'Enter\'){AC_Q=this.value.trim();render();}"><button class="btn" onclick="AC_Q=$(\'#acq\').value.trim();render()">جستجو</button> <button class="btn info" onclick="checkConsistency()">بررسی سازگاری دفترکل</button></div>'+
     tbl(['کاربر','قابل‌دریافت','بلوکه','عملیات'],(d.rows||[]).map(u=>[
       esc(u.username||'')+' <span class="mono" style="color:var(--muted)">'+String(u.userId).slice(0,8)+'</span>'+newTag('suspicious',u.lastAt),
       '<b style="color:var(--ok)">'+fa(u.account.available)+'</b>',fa(u.account.locked),

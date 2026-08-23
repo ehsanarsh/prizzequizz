@@ -706,43 +706,45 @@ function run(): void {
     assert.ok(/api\('PATCH','\/admin\/questions\/'/.test(body), 'the save is not a PATCH');
   });
 
-  /* ── SEARCH THAT ANSWERS AS YOU TYPE ───────────────────────────────── */
-  /* «تمام سرچ بارهای پنل باید اینجوری باشه.» */
-  check('every search box filters as it is typed into', () => {
-    assert.ok(script.includes('function liveSearch('), 'there is no live search at all');
-    for (const id of ['uq', 'qsearch', 'acq']) {
-      const re = new RegExp('id="' + id + '"[^>]*oninput="liveSearch');
-      assert.ok(re.test(script), 'this box still waits to be told: ' + id);
-    }
-    /* The support queue already filtered live, and still does. */
-    assert.ok(/id="supq"[\s\S]{0,200}oninput="SUP_Q/.test(script), 'the support search lost its live filter');
-  });
+  /* ── SEARCH-AS-YOU-TYPE WAS TRIED AND TAKEN BACK OUT ────────────────
+     «قسمت سرچ پنل رو به حالت قبل برگردون، الان نمیشه تایپ کرد، با هر حرف یه
+      بار صفحه رفرش میشه.»
 
-  check('and no search box needs a button any more', () => {
+     It was built on `render()`, which re-fetches the section and rebuilds the
+     whole page — including the toolbar the box lives in. Debounced and with
+     the caret put back it survived on paper and was unusable in the hand.
+     What is checked now is that the boxes work the way they did before: a
+     button, or Enter. */
+  check('every search box has a way to run it', () => {
     for (const [id, state] of [['uq', 'U_Q'], ['qsearch', 'Q_SEARCH'], ['acq', 'AC_Q']] as const) {
-      const re = new RegExp("onclick=\\\\\"" + state + "=\\\\$\\\\('#" + id + "'\\\\)");
-      assert.ok(!re.test(script), 'a search button is still there for ' + id);
+      const box = new RegExp('id="' + id + '"');
+      assert.ok(box.test(script), 'the search box is gone: ' + id);
+      /* Enter, so the keyboard alone is enough. */
+      const enter = new RegExp('id="' + id + '"[^>]*onkeydown=[^>]*' + state);
+      assert.ok(enter.test(script), 'Enter does not search in ' + id);
+      /* And a button, for the same reason it was put back. The markup is
+         written inside a JS string, so its quotes arrive escaped — matching
+         the two names either side of them is what survives that. */
+      const btn = new RegExp(state + "=\\$\\([^)]*#" + id);
+      assert.ok(btn.test(script), 'there is no search button for ' + id);
     }
   });
 
-  check('typing does not cost a request per keystroke', () => {
-    const i = script.indexOf('function liveSearch(');
-    const body = script.slice(i, i + 900);
-    assert.ok(/clearTimeout\(_liveT\)/.test(body), 'nothing debounces the repaint');
-    assert.ok(/setTimeout\(/.test(body), 'the repaint is not deferred at all');
+  check('and nothing repaints the page on every keystroke', () => {
+    assert.ok(!script.includes('function liveSearch('), 'the live search is back');
+    assert.ok(!script.includes('function liveRestore('), 'its caret restore is back');
+    for (const id of ['uq', 'qsearch', 'acq']) {
+      const re = new RegExp('id="' + id + '"[^>]*oninput=');
+      assert.ok(!re.test(script), 'this box repaints as it is typed into: ' + id);
+    }
   });
 
-  /* THE CARET. `render()` rebuilds the page, so without putting it back the
-     box loses focus on the first letter and the second letter goes nowhere —
-     which is worse than the button this replaced. */
-  check('the caret goes back where it was', () => {
-    assert.ok(script.includes('function liveRestore('), 'nothing restores focus');
-    const body = script.slice(script.indexOf('function liveRestore('), script.indexOf('function liveRestore(') + 500);
-    assert.ok(/\.focus\(\)/.test(body), 'focus is not restored');
-    assert.ok(/setSelectionRange/.test(body), 'the caret position is not restored');
-    /* Where it WAS, not at the end — typing in the middle of a word must not
-       throw the caret to the end on every letter. */
-    assert.ok(/f\.pos/.test(body), 'the caret is put back somewhere it guessed');
+  /* The support queue's filter is the one that WORKS this way, and it works
+     because it repaints only its own list — no fetch, no page rebuild. It is
+     the shape a real live filter would have to take, and it stays. */
+  check('the support queue keeps its own in-place filter', () => {
+    assert.ok(/id="supq"[\s\S]{0,200}oninput="SUP_Q/.test(script), 'the support search lost its filter');
+    assert.ok(/supPaintQueue\(\)/.test(script), 'it no longer repaints just its list');
   });
 
 console.log(`[adminPanelHtml] ${passed} passed, ${failed} failed`);
