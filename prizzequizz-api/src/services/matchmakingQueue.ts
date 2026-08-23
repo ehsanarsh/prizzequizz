@@ -118,9 +118,21 @@ function holdAllows(waiting: MatchmakingTicket, arrivingUserId: string, arriving
   if (arrivingHold && arrivingHold !== waiting.userId) return false;
   return true;
 }
-/** The hold an incoming enqueue is asking for, if it is asking for a live one. */
+/** The hold an incoming enqueue is asking for, if it is asking for a live one.
+ *  A name with no window is not a hold: `holdUntilFor` would put its expiry in
+ *  the past, so the waiting side would ignore it — and the arriving side must
+ *  agree, or one ticket refuses everybody over a claim nothing honours. */
 function askedHold(input: { holdFor?: string; holdMs?: number }): string {
   return (input.holdFor && (input.holdMs ?? 0) > 0) ? String(input.holdFor) : '';
+}
+/** HOW LONG A HELD SEAT IS HELD FOR. Said once, because it is a rule about
+ *  what a client may ask for and not a detail of building a ticket: a window
+ *  can be asked for and it can be clamped, and it must be clamped the same way
+ *  in every driver or one of them takes «hold this for a day» at its word. */
+const MAX_HOLD_MS = 30_000;
+function holdUntilFor(input: { holdFor?: string; holdMs?: number }): number | undefined {
+  if (!input.holdFor) return undefined;
+  return Date.now() + Math.max(0, Math.min(MAX_HOLD_MS, input.holdMs ?? 0));
 }
 
 const FRESH_MS = Number(process.env.MATCHMAKING_FRESH_MS ?? 9_000);
@@ -183,7 +195,7 @@ export class MemoryMatchmakingQueue extends BaseMatchmakingQueue {
       && holdAllows(t, input.userId, askedHold(input));
     const all = [...this.tickets.values()];
     const compatible = all.find((t) => fits(t) && heldFrom(t) === input.userId) ?? all.find(fits);
-    const ticket: MatchmakingTicket = { id: id(), userId: input.userId, modeId: input.modeId, economyType: input.economyType, coinStake: input.coinStake, ticketTier: input.ticketTier || undefined, waitTier: input.waitTier || undefined, holdForUserId: input.holdFor || undefined, holdUntil: input.holdFor ? Date.now() + Math.max(0, Math.min(30_000, input.holdMs ?? 0)) : undefined, skill, pairKey: pairKey || undefined, status: 'queued', createdAt: now, updatedAt: now };
+    const ticket: MatchmakingTicket = { id: id(), userId: input.userId, modeId: input.modeId, economyType: input.economyType, coinStake: input.coinStake, ticketTier: input.ticketTier || undefined, waitTier: input.waitTier || undefined, holdForUserId: input.holdFor || undefined, holdUntil: holdUntilFor(input), skill, pairKey: pairKey || undefined, status: 'queued', createdAt: now, updatedAt: now };
     if (compatible) return this.matchTickets(ticket, compatible, skill);
     this.tickets.set(ticket.id, ticket);
     /* economyType and skill are what pairing is actually done on, so a player
@@ -290,10 +302,10 @@ export class RedisMatchmakingQueue extends BaseMatchmakingQueue {
       if (!pairKey && Math.abs(candidate.skill - skill) > wideningWindow(candidate.createdAt)) continue;
       if (!holdAllows(candidate, input.userId, askedHold(input))) continue;
       await client.zRem(queueKey, candidate.id);
-      const ticket: MatchmakingTicket = { id: id(), userId: input.userId, modeId: input.modeId, economyType: input.economyType, coinStake: input.coinStake, ticketTier: input.ticketTier || undefined, waitTier: input.waitTier || undefined, holdForUserId: input.holdFor || undefined, holdUntil: input.holdFor ? Date.now() + Math.max(0, Math.min(30_000, input.holdMs ?? 0)) : undefined, skill, pairKey: pairKey || undefined, status: 'queued', createdAt: now, updatedAt: now };
+      const ticket: MatchmakingTicket = { id: id(), userId: input.userId, modeId: input.modeId, economyType: input.economyType, coinStake: input.coinStake, ticketTier: input.ticketTier || undefined, waitTier: input.waitTier || undefined, holdForUserId: input.holdFor || undefined, holdUntil: holdUntilFor(input), skill, pairKey: pairKey || undefined, status: 'queued', createdAt: now, updatedAt: now };
       return this.matchTickets(ticket, candidate, skill);
     }
-    const ticket: MatchmakingTicket = { id: id(), userId: input.userId, modeId: input.modeId, economyType: input.economyType, coinStake: input.coinStake, ticketTier: input.ticketTier || undefined, waitTier: input.waitTier || undefined, holdForUserId: input.holdFor || undefined, holdUntil: input.holdFor ? Date.now() + Math.max(0, Math.min(30_000, input.holdMs ?? 0)) : undefined, skill, pairKey: pairKey || undefined, status: 'queued', createdAt: now, updatedAt: now };
+    const ticket: MatchmakingTicket = { id: id(), userId: input.userId, modeId: input.modeId, economyType: input.economyType, coinStake: input.coinStake, ticketTier: input.ticketTier || undefined, waitTier: input.waitTier || undefined, holdForUserId: input.holdFor || undefined, holdUntil: holdUntilFor(input), skill, pairKey: pairKey || undefined, status: 'queued', createdAt: now, updatedAt: now };
     await this.saveTicket(ticket); await client.zAdd(queueKey, { score: skill, value: ticket.id });
     logger.info('redis_matchmaking_queued', { ticketId: ticket.id, userId: ticket.userId, modeId: ticket.modeId, economyType: ticket.economyType, coinStake: ticket.coinStake, skill });
     return ticket;

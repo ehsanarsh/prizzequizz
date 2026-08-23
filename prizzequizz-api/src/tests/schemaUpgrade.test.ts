@@ -480,10 +480,32 @@ await check('and a night track reads back as a night track', async () => {
   assert.equal(row!.slot, 'night', 'the panel would show it as «' + row!.slot + '»');
 });
 
-/* The file itself is still left out — it is megabytes, and the panel lists
-   dozens of rows. A SELECT that started dragging it along would be the same
-   fault in the other direction. */
-await check('the file is still not dragged into the listing', async () => {
+const fsSrc = await import('node:fs');
+const hereSrc = (await import('node:url')).fileURLToPath(new URL('.', import.meta.url));
+
+/* THE FILE ITSELF IS STILL LEFT OUT, and this has to be checked on the QUERY
+   rather than on the rows. `rowToTrack` builds a fresh object out of named
+   fields, so an audio column dragged back from the database never appears on
+   what comes out — the cost is real (megabytes per row, dozens of rows) and
+   entirely invisible from the other end. The same reason the «says every
+   optional column twice» rule below reads source: some faults only exist in
+   the SQL. */
+await check('the listing names its columns and leaves the audio behind', async () => {
+  const src = fsSrc.readFileSync(hereSrc + '../services/waitingMusicService.ts', 'utf8');
+  const i = src.indexOf('export async function listTracks(');
+  assert.ok(i > 0, 'listTracks not found');
+  const body = src.slice(i, i + 1600);
+  const sel = /SELECT ([\s\S]*?) FROM waiting_music/.exec(body);
+  assert.ok(sel, 'no SELECT found in listTracks');
+  const cols = sel![1]!;
+  assert.ok(!/\*/.test(cols), 'the listing selects everything: ' + cols.trim().slice(0, 80));
+  assert.ok(!/\bdata\b|data_bin/.test(cols), 'the listing drags the audio with it: ' + cols.trim().slice(0, 80));
+  /* And it really does name the two the panel reads. */
+  assert.ok(/\blikes\b/.test(cols), 'likes is missing again: ' + cols.trim().slice(0, 80));
+  assert.ok(/\bslot\b/.test(cols), 'slot is missing again: ' + cols.trim().slice(0, 80));
+});
+
+await check('and nothing on a listed row carries the file', async () => {
   const music = await import('../services/waitingMusicService.js');
   const rows = await music.listTracks();
   assert.ok(rows.length > 0, 'nothing to check');

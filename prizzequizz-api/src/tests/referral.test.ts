@@ -87,6 +87,7 @@ async function main(): Promise<void> {
       assert.equal(codes.size, 40, 'a code was handed out twice');
     });
 
+
     await check('a code is read the way a person types it', () => {
       assert.equal(normalizeCode(' ' + ownerCode.toLowerCase() + ' '), ownerCode);
       assert.equal(normalizeCode(ownerCode.split('').join('-')), ownerCode);
@@ -161,6 +162,15 @@ async function main(): Promise<void> {
       const before = await green(owner);
       await assert.rejects(() => redeem(owner, ownerCode), (e: any) => e.code === 'OWN_CODE');
       assert.equal(await green(owner), before, 'a player paid themselves');
+    });
+
+    /* Which refusal comes first matters: somebody who has already used a code
+       and then mistypes another should be told they have used theirs, not sent
+       looking for a code that does not exist. */
+    await check('a used-up player is told so even for an unknown code', async () => {
+      const friend = await player('پرمصرف');
+      await redeem(friend, ownerCode);
+      await assert.rejects(() => redeem(friend, 'ZZZZZZZ'), (e: any) => e.code === 'ALREADY_REDEEMED');
     });
 
     await check('a code nobody owns is refused', async () => {
@@ -267,6 +277,27 @@ async function main(): Promise<void> {
     await check('and ReferralError carries a code worth showing', () => {
       const e = new ReferralError('OWN_CODE', 'x');
       assert.equal(e.code, 'OWN_CODE');
+    });
+
+    /* ── LAST, BECAUSE IT WIPES THE TABLE ────────────────────────────────
+       THE DRAW IS CHECKED, AND THE CHECK IS BOUNDED. Forty draws out of 31^7
+       will not collide by chance, so the only way to see the collision path at
+       all is to make every draw come out the same — which is also the only way
+       to see whether it draws again or spins forever. */
+    console.log('\nwhen the draw keeps coming out the same:');
+    await check('a taken code is drawn again, and not forever', async () => {
+      _resetReferrals();
+      const first = await player('اول');
+      const second = await player('دوم');
+      const real = Math.random;
+      try {
+        Math.random = () => 0.5;                 // every draw is identical
+        const a = await codeFor(first);
+        assert.ok(a, 'the first player got no code');
+        /* The second cannot have that one, and there is no other on offer — so
+           it has to give up rather than hang. */
+        await assert.rejects(() => codeFor(second), (e: any) => e.code === 'CODE_UNAVAILABLE');
+      } finally { Math.random = real; }
     });
   } finally {
     server.close();

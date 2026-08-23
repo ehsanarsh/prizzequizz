@@ -229,6 +229,27 @@ const q = async (userId: string, economyType: string, ticketTier?: string, pairK
     const gold = JSON.stringify((await matchmakingQueue.stats()).waitingByTier);
     await enqueue(await user('http-gold'), { economyType: 'v90004', waitTier: 'gold' });
     ok('a league ticket is not a duel tier either', JSON.stringify((await matchmakingQueue.stats()).waitingByTier) === gold, gold);
+
+    /* ── AND THE HELD SEAT, OVER THE WIRE ────────────────────────────────
+       Everything above about holds talks to the queue directly. The winner's
+       claim arrives over HTTP, and the WINDOW is the server's to decide —
+       «تا ۱۰ ثانیه» is a rule, not a suggestion a client makes. */
+    const held = await enqueue(await user('http-hold'), { economyType: 'v90005', holdFor: 'http-loser' });
+    ok('a claim sent over HTTP is accepted', held.status < 300, JSON.stringify(held).slice(0, 100));
+    const ticket = await matchmakingQueue.get(String(held.data?.id ?? ''));
+    ok('and it really reaches the queue', ticket?.holdForUserId === 'http-loser', String(ticket?.holdForUserId));
+    /* «حریف باید تا ۱۰ ثانیه نتونه با کسی مچ بشه» — about ten seconds, not
+       ten minutes: a seat kept for somebody who has walked away is a player
+       left staring at a radar that will never find anybody. */
+    const left = (ticket?.holdUntil ?? 0) - Date.now();
+    ok('for about ten seconds', left > 5_000 && left <= 15_000, left + 'ms');
+
+    /* A stranger cannot take it, and the player it names can. */
+    const passerby = await enqueue(await user('http-passerby'), { economyType: 'v90005' });
+    ok('a stranger is left waiting', passerby.data?.status !== 'matched', JSON.stringify(passerby.data?.status));
+    await repositories.users.save({ id: 'http-loser', username: 'http-loser', displayName: 'http-loser', wallet: 0, coins: 0, xp: 0, level: 1 } as any);
+    const claimed = await enqueue(createSession('http-loser').accessToken, { economyType: 'v90005' });
+    ok('the player it was kept for takes it', claimed.data?.status === 'matched', JSON.stringify(claimed.data?.status));
   } finally {
     server.close();
   }
@@ -310,6 +331,19 @@ const q = async (userId: string, economyType: string, ticketTier?: string, pairK
   const long = await q('cap-winner', 'v70006', undefined, undefined, 'blue', { holdFor: 'cap-loser', holdMs: 999_999_999 });
   ok('a huge window is clamped', (long.holdUntil ?? 0) - Date.now() <= 30_000 + 50, String((long.holdUntil ?? 0) - Date.now()));
   ok('and it is still a real hold', (long.holdUntil ?? 0) > Date.now(), String(long.holdUntil));
+}
+
+/* ── 15b. A NAME WITH NO WINDOW IS NOT A HOLD ─────────────────────────── */
+/* The expiry would already be in the past, so the WAITING side ignores it. The
+ * arriving side has to agree, or one ticket sits there refusing everybody over
+ * a claim that nothing else in the system honours. */
+{
+  console.log('\na hold asked for with no window at all:');
+  const waiting = await q('nowin-other', 'v70008');
+  ok('somebody is waiting', waiting.status === 'queued', waiting.status);
+  const t = await q('nowin-winner', 'v70008', undefined, undefined, undefined, { holdFor: 'nowin-loser', holdMs: 0 });
+  ok('the arriving player is not held back by it', t.status === 'matched', t.status);
+  ok('meeting the person who was waiting', t.opponentUserId === 'nowin-other', String(t.opponentUserId));
 }
 
 /* ── 16. NO HOLD MEANS NO CHANGE ──────────────────────────────────────── */

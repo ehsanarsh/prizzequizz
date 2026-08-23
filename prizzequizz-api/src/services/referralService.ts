@@ -110,8 +110,17 @@ export async function codeFor(userId: string): Promise<string> {
   if (!pool) {
     const have = mem.get(uid);
     if (have) return have.code;
-    let code = makeCode();
-    while ([...mem.values()].some((r) => r.code === code)) code = makeCode();
+    /* BOUNDED, like the database path below. `while (taken) draw again` reads
+       as harmless — the alphabet is 31 characters and the code is seven of
+       them — but «practically never» is not «never», and an unbounded loop on
+       a value that could stop being unique is a hang, not a retry. Eight
+       draws, then say so. */
+    let code = '';
+    for (let i = 0; i < 8; i++) {
+      const c = makeCode();
+      if (![...mem.values()].some((r) => r.code === c)) { code = c; break; }
+    }
+    if (!code) throw new ReferralError('CODE_UNAVAILABLE', 'کد ساخته نشد؛ دوباره تلاش کن');
     mem.set(uid, { userId: uid, code, referredBy: '', redeemedAt: 0, createdAt: Date.now() });
     return code;
   }
