@@ -28,10 +28,10 @@ const ok = (n, c, extra = '') => { if (c) { pass++; console.log('  ok   ' + n + 
    a code with no name in it and no extension. Nothing about a picture can be
    worked out from what it is called, which is the whole reason the game has to
    look names up rather than guess at them. */
-const MEDIA_URL = {
-  logo: '/media/msi929ll-52a9mhwm',
-  'medal-bronze': '/media/mt69rmlc-jwpizbiq'
-};
+const MEDIA_URL = { logo: '/media/msi929ll-52a9mhwm',
+  'medal-gold': '/media/mt69rmlc-jwpizbiq',
+  'medal-silver': '/media/mt69rmwy-r9kfd8cc',
+  'medal-bronze': '/media/mt69rloa-nb98jwyc' };
 const ONE_PIXEL = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4f0n+PwAHtALwCdbNDwAAAABJRU5ErkJggg==', 'base64');
 /* '' = nothing uploaded · 'media' = uploaded through the panel, so only the
    panel's own addresses answer · 'root' = sitting beside index.html instead. */
@@ -180,6 +180,25 @@ async function makePage(query = '') {
   ok('copying puts one link on the clipboard', copied.length === 1, JSON.stringify(copied));
   ok('and it is the code, not the username', /ref=K7XQ2MW/.test(copied[0] || ''), String(copied[0]));
   ok('the username is nowhere in it', !/ehsan/.test(copied[0] || ''), String(copied[0]));
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
+/* ── 3b. THE MESSAGE THAT GOES WITH IT ──────────────────────────────────── */
+/* «نوشته بیا پرایز کوییز بازی کنیم ولی لینک سایت و بازی رو اصلا نذاشته.» It
+   asked someone to come and play and gave them no way of getting there. */
+{
+  const { ctx, page, errs } = await makePage();
+  console.log('\nthe message sent with the code:');
+  const t = await page.evaluate(async () => {
+    await (0, eval)('pzRefCode')();
+    return (0, eval)('refText')();
+  });
+  ok('it still asks them to come and play', /بیا پرایز کوییز بازی کنیم/.test(t), t);
+  ok('it carries a link', /https?:\/\/[^\s]+/.test(t), t);
+  ok('and the link is the way into the game', /[?&]ref=K7XQ2MW/.test(t), t);
+  ok('the code is written out too', t.includes(MY_CODE), t);
+  ok('and it says when to use it', /موقع ثبت‌نام/.test(t), t);
   ok('no script errors', errs.length === 0, errs.join(' | '));
   await ctx.close();
 }

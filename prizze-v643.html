@@ -10487,9 +10487,11 @@ function pzArtLegacy(el, tries, onDone){
    time, and a name nobody has uploaded yet still behaves itself. */
 const PZ_IMG_URLS={
   'logo':         '/media/msi929ll-52a9mhwm',
-  'medal-bronze': '/media/mt69rmlc-jwpizbiq'
-  /* 'medal-gold':   '…',  ← paste the «کپی نشانی» of each upload here
-     'medal-silver': '…',  */
+  'medal-gold':   '/media/mt69rmlc-jwpizbiq',
+  'medal-silver': '/media/mt69rmwy-r9kfd8cc',
+  'medal-bronze': '/media/mt69rloa-nb98jwyc'
+  /* To add one: upload it, press «کپی نشانی», and paste the address here
+     beside the name the game knows the picture by. */
 };
 const PZ_IMG_EXTS=['webp','png','jpg'];
 function pzImgCandidates(name){
@@ -10659,9 +10661,18 @@ async function refLoad(){
   if(codeEl) codeEl.textContent=String(PZ_REF.code||'—');
   if(cntEl) cntEl.textContent=fa(Number(PZ_REF.invites)||0);
 }
+/* THE MESSAGE HAS TO CARRY THE WAY IN.
+   «در متن دعوت نوشته بیا پرایز کوییز بازی کنیم ولی لینک سایت و بازی رو اصلا
+    نذاشته.» It asked someone to come and play and then gave them no way to get
+   there — the code on its own is useless to a person who cannot find the game.
+   The link carries the code too, so tapping it is the whole of it; the written
+   code stays for anyone who reads the message on one phone and signs up on
+   another. */
 function refText(){
   const c=(PZ_REF&&PZ_REF.code)||'';
-  return 'بیا پرایز کوییز بازی کنیم! موقع ثبت‌نام این کد معرف را وارد کن: '+c;
+  return 'بیا پرایز کوییز بازی کنیم! 🎮\n'
+    +(c?('کد معرف من: '+c+'\n'):'')
+    +'موقع ثبت‌نام واردش کن:\n'+pzInviteLink(c);
 }
 function refCopy(){
   const c=(PZ_REF&&PZ_REF.code)||'';

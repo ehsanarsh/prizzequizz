@@ -31,7 +31,10 @@ const ONE_PIXEL = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAD
    extension — so a picture's address has to be LOOKED UP, never guessed. The
    medals that are in the game's table are here; the ones that are not fall
    back to its own folder, which is what «uploaded=root» stands for. */
-const MEDIA_URL = { 'medal-bronze': '/media/mt69rmlc-jwpizbiq', logo: '/media/msi929ll-52a9mhwm' };
+const MEDIA_URL = { logo: '/media/msi929ll-52a9mhwm',
+  'medal-gold': '/media/mt69rmlc-jwpizbiq',
+  'medal-silver': '/media/mt69rmwy-r9kfd8cc',
+  'medal-bronze': '/media/mt69rloa-nb98jwyc' };
 const MEDIA_OWNER = Object.fromEntries(Object.entries(MEDIA_URL).map(([k, v]) => [v, k]));
 /* '' = nothing uploaded · 'media' = uploaded through the panel · 'root' =
    sitting beside index.html instead. */
@@ -1370,11 +1373,13 @@ const openRank = async (page, tab) => page.evaluate(async (t) => {
   }));
   ok('each place asks for a picture, not a glyph', /<img /.test(asked.gold) && /<img /.test(asked.silver) && /<img /.test(asked.bronze),
      JSON.stringify(asked).slice(0, 140));
-  /* A medal that has been uploaded is asked for by the address the panel gave
-     it; one that has not is asked for by name, «فقط به صورت webp» first. */
-  ok('an uploaded medal is asked for by its own address', asked.bronze.includes('src="' + MEDIA_URL['medal-bronze'] + '"'), asked.bronze.slice(0, 120));
-  ok('one that is not uploaded is asked for by name', asked.gold.includes('src="./medal-gold.webp"'), asked.gold.slice(0, 120));
-  ok('silver too', asked.silver.includes('src="./medal-silver.webp"'), asked.silver.slice(0, 120));
+  /* Each medal is asked for by the address its own upload was given — there is
+     no name in those addresses, so getting one wrong hangs the wrong metal
+     round the wrong neck and nothing about the page would look broken. */
+  ok('gold is asked for by gold’s address', asked.gold.includes('src="' + MEDIA_URL['medal-gold'] + '"'), asked.gold.slice(0, 120));
+  ok('silver by silver’s', asked.silver.includes('src="' + MEDIA_URL['medal-silver'] + '"'), asked.silver.slice(0, 120));
+  ok('and bronze by bronze’s', asked.bronze.includes('src="' + MEDIA_URL['medal-bronze'] + '"'), asked.bronze.slice(0, 120));
+  ok('and no two of them share one', new Set([MEDIA_URL['medal-gold'], MEDIA_URL['medal-silver'], MEDIA_URL['medal-bronze']]).size === 3);
   /* A place with no artwork name of its own is not left with a broken tag. */
   ok('anything else is just the glyph', !/<img /.test(asked.unknown) && /🎖️/.test(asked.unknown), asked.unknown);
 
@@ -1404,10 +1409,11 @@ const openRank = async (page, tab) => page.evaluate(async (t) => {
     host.remove();
     return out;
   });
-  ok('a name with no upload starts beside the game', fell.seen[0] === './medal-gold.webp', String(fell.seen[0]));
-  ok('and works through the formats', fell.seen[1] === './medal-gold.png' && fell.seen[2] === './medal-gold.jpg',
+  ok('it starts at the address the upload was given', fell.seen[0] === MEDIA_URL['medal-gold'], String(fell.seen[0]));
+  ok('then falls back to the name, beside the game', fell.seen[1] === './medal-gold.webp', String(fell.seen[1]));
+  ok('and through the formats after that', fell.seen[2] === './medal-gold.png' && fell.seen[3] === './medal-gold.jpg',
      JSON.stringify(fell.seen));
-  ok('three addresses, no more', fell.seen.length === 3, JSON.stringify(fell.seen));
+  ok('four addresses, no more', fell.seen.length === 4, JSON.stringify(fell.seen));
   ok('and with none of them, the emoji comes back', fell.text === '🥇' && fell.stillImg === false, JSON.stringify(fell));
   ok('no script errors', errs.length === 0, errs.join(' | '));
   await ctx.close();
