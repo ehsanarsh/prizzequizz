@@ -781,7 +781,15 @@ async function eliminateMe(page) {
      the sentence around it». */
   ok('the name is isolated from the sentence', w.whoTag === 'BDI', w.whoTag);
   ok('the name is the name', w.whoTxt === 'Reza_77', w.whoTxt);
+  /* THE AMOUNT AND NOTHING ELSE. The line that was complained about read
+     «Reza_77 — ۲۵۰٬۰۰۰ تومان», and the em-dash was half the problem: a
+     separator belonging to neither piece, sitting between a Latin name and a
+     run of digits, is the exact join the bidirectional algorithm picks up and
+     moves. Splitting the line is only half the fix if the dash rides along
+     into the amount. */
   ok('the amount is its own piece', /۲۵۰٬۰۰۰|250,000/.test(w.amtTxt) && /تومان/.test(w.amtTxt), w.amtTxt);
+  ok('and carries no separator with it', !/[—–-]/.test(w.amtTxt), JSON.stringify(w.amtTxt));
+  ok('it is only the number and the unit', /^[\s]*[۰-۹0-9٬,]+\s*تومان\s*$/.test(w.amtTxt), JSON.stringify(w.amtTxt));
   ok('and it sits under the name, not beside it', w.sameLine === false, String(w.sameLine));
   ok('the row really is stacked', w.col === 'column', w.col);
   ok('no script errors', errs.length === 0, errs.join(' | '));

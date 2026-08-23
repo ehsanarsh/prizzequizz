@@ -105,10 +105,13 @@ const readTiers = (page) => page.evaluate(() =>
   /* AND THE REASON COSTS NOTHING. The padlock rides in the row already
      reserved for it — left free to grow, it took three pixels off every ticket
      tile, and on this screen every pixel a tile takes comes out of the banner.
-     Measured against the OPEN tile, which carries no padlock at all. */
-  const heights = await page.evaluate(() =>
-    [...document.querySelectorAll('#tkSelGrid .tk-opt')].map((b) => Math.round(b.getBoundingClientRect().height)));
-  ok('a locked tile is no taller than an open one', heights[1] === heights[0] && heights[2] === heights[0], JSON.stringify(heights));
+     Measured on the ROW, not on the tile: the tiles are grid cells and grid
+     cells stretch to match each other, so comparing one tile to another can
+     never fail however tall the padlock's line gets. */
+  const metaH = await page.evaluate(() =>
+    [...document.querySelectorAll('#tkSelGrid .tk-opt-meta')].map((e) => Math.round(e.getBoundingClientRect().height)));
+  ok('the padlock row is the height it reserved', metaH.every((h) => h === 11), JSON.stringify(metaH));
+  ok('the locked row is no taller than the empty one', metaH[1] === metaH[0] && metaH[2] === metaH[0], JSON.stringify(metaH));
   /* Tapping one says the whole sentence, where it costs no room at all. */
   const why = await page.evaluate(async () => {
     [...document.querySelectorAll('#tkSelGrid .tk-opt')][1].click();
