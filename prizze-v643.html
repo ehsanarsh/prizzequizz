@@ -1320,21 +1320,89 @@ input,textarea,select,[contenteditable="true"],.pz-selectable,.pz-selectable *{
 .item .price{background:linear-gradient(180deg,#FFE24A,var(--bolt-2));border:2px solid #000;color:#141414;border-radius:100px;padding:6px;font-size:13px;font-weight:900}
 
 /* ===== RANKINGS ===== */
-.podium{display:flex;justify-content:center;align-items:flex-end;gap:10px;padding:16px 0}
-.pod{display:flex;flex-direction:column;align-items:center;gap:8px}
-.pod .pav{border-radius:50%;display:grid;place-items:center;font-size:26px;border:var(--stroke);background:var(--paper)}
-.pod.p1 .pav{width:74px;height:74px;box-shadow:0 0 0 4px var(--bolt),var(--hard-sm)}
-.pod.p2 .pav{width:58px;height:58px;box-shadow:0 0 0 4px #cfcfcf,var(--hard-sm)}
-.pod.p3 .pav{width:58px;height:58px;box-shadow:0 0 0 4px #cd7f32,var(--hard-sm)}
-.pod .base{border-radius:12px 12px 0 0;width:66px;background:var(--ink-2);border:var(--stroke);border-bottom:none;display:flex;flex-direction:column;align-items:center;padding:8px 4px 0}
-.pod.p1 .base{height:70px;background:linear-gradient(var(--bolt),#8a6a00)}
-.pod.p2 .base{height:52px}.pod.p3 .base{height:42px}
-/* A player who has not chosen a name is called user_1785586862877, and that
-   overflowed the plinth and covered the neighbouring places. Clip it to the
-   plinth instead of letting it spill across the podium. */
-.pod .base b{font-size:12px;font-weight:900;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;direction:ltr}
-.pod.p1 .base b{color:#141414}
-.pod .rk{font-size:20px;font-weight:900}.pod.p1 .rk{color:#141414}
+/* THE PODIUM. «اسم افراد واضح دیده بشه و سکو خیلی خوشگل‌تر از این باید باشه با
+   رنگ واضح.»
+   The name used to live INSIDE the plinth — sixty-six pixels wide, one line,
+   clipped — after being cut down to its first word on the way in. It has a
+   band of its own now, the full width of the column and two lines if it needs
+   them, which is the whole point of a podium: it is three names.
+   And the three places are three COLOURS — gold, silver and bronze carried by
+   the plinth, the ring around the face and the medal — so which is which is
+   read at a glance rather than worked out from the heights. */
+.podium{position:relative;z-index:0;display:flex;justify-content:center;align-items:flex-end;gap:8px;padding:14px 4px 0}
+.pod{position:relative;flex:1 1 0;min-width:0;max-width:120px;
+  display:flex;flex-direction:column;align-items:center;gap:5px;cursor:pointer}
+.pod:active{transform:translateY(2px)}
+/* the crown over first place */
+.pod-crown{font-size:24px;line-height:1;filter:drop-shadow(0 3px 0 rgba(0,0,0,.45));
+  animation:podCrown 2.6s ease-in-out infinite}
+@keyframes podCrown{0%,100%{transform:translateY(0) rotate(-4deg)}50%{transform:translateY(-4px) rotate(4deg)}}
+@media(prefers-reduced-motion:reduce){.pod-crown{animation:none}}
+/* the face, with its medal on the rim */
+.pod-face{position:relative;flex:none}
+.pod .pav{border-radius:50%;display:grid;place-items:center;font-size:26px;
+  border:2.5px solid #000;background:var(--paper);overflow:hidden}
+.pod .pav img,.pod .pav svg{width:100%;height:100%;object-fit:cover;display:block}
+/* Centred under the chin rather than tucked into a corner: on a podium the
+   medal is the label for the place, and a label belongs where the eye lands. */
+.pod-medal{position:absolute;bottom:-9px;left:50%;transform:translateX(-50%);
+  font-size:20px;line-height:1;filter:drop-shadow(0 2px 3px rgba(0,0,0,.6))}
+.pod.p1 .pod-medal{font-size:23px;bottom:-11px}
+.pod.p1 .pav{width:78px;height:78px;box-shadow:0 0 0 4px #FFD21F,0 4px 0 #000,0 0 26px rgba(255,210,31,.55)}
+.pod.p2 .pav{width:62px;height:62px;box-shadow:0 0 0 4px #D8DEE6,0 4px 0 #000,0 0 18px rgba(216,222,230,.4)}
+.pod.p3 .pav{width:62px;height:62px;box-shadow:0 0 0 4px #E08B4C,0 4px 0 #000,0 0 18px rgba(224,139,76,.4)}
+/* THE NAME, GIVEN ROOM. Two lines, the column's full width, and a `bdi` so a
+   Latin username cannot drag the line around it. */
+/* A FIXED height, not a minimum. The columns share a baseline, so a name that
+   runs to two lines while its neighbours use one does not push its own name
+   down — it lifts that whole column, face and all, and the three come out
+   ragged. Two lines' worth of room for everybody, always. */
+.pod-name{width:100%;text-align:center;font-size:12px;font-weight:900;line-height:1.45;
+  color:var(--paper);height:2.9em;display:flex;align-items:center;justify-content:center;
+  padding:0 2px;overflow:hidden;margin-top:6px}
+.pod-name bdi{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
+  overflow:hidden;word-break:break-word;max-width:100%}
+.pod.p1 .pod-name{font-size:13.5px;color:#FFE9A8}
+.pod-score{font-size:12px;font-weight:900;color:var(--bolt);line-height:1;white-space:nowrap}
+.pod-score small{font-size:9px;color:var(--muted);font-weight:800}
+.pod.p1 .pod-score{font-size:14px}
+/* the plinth: its colour IS the place */
+.pod .base{position:relative;width:100%;border-radius:14px 14px 0 0;border:2.5px solid #000;border-bottom:none;
+  display:flex;align-items:flex-start;justify-content:center;padding-top:7px;overflow:hidden;
+  box-shadow:inset 0 -14px 22px rgba(0,0,0,.28)}
+.pod.p1 .base{height:88px;background:linear-gradient(180deg,#FFE97A,#E0A80B 55%,#9C7100)}
+.pod.p2 .base{height:64px;background:linear-gradient(180deg,#F2F5F9,#B9C3CE 55%,#7F8B98)}
+.pod.p3 .base{height:50px;background:linear-gradient(180deg,#F3B07A,#D0763A 55%,#8A4A1D)}
+/* A light behind first place, so the eye is told where to go before it reads
+   anything. Behind everything: it lifts the column without touching it. */
+.pod.p1::before{content:"";position:absolute;z-index:-1;left:50%;top:8%;
+  width:150%;height:70%;transform:translateX(-50%);pointer-events:none;
+  background:radial-gradient(closest-side,rgba(255,210,31,.30),rgba(255,210,31,0))}
+/* a shine crossing the winner's plinth */
+.pod.p1 .base::after{content:"";position:absolute;top:0;bottom:0;width:38%;
+  background:linear-gradient(100deg,rgba(255,255,255,0),rgba(255,255,255,.55),rgba(255,255,255,0));
+  animation:podShine 3.4s ease-in-out infinite}
+@keyframes podShine{0%{inset-inline-start:-45%}55%,100%{inset-inline-start:115%}}
+@media(prefers-reduced-motion:reduce){.pod.p1 .base::after{display:none}}
+.pod .rk{position:relative;z-index:1;font-size:22px;font-weight:900;color:#141414;
+  text-shadow:0 1px 0 rgba(255,255,255,.5)}
+.pod.p1 .rk{font-size:26px}
+/* «متن هر هفته ریست میشود و نفرات برتر به لیگ هفتگی راه پیدا می‌کنند» — under
+   the three people it is about, joined to the band they stand on. */
+.pod-note{position:relative;margin:0 0 12px;padding:10px 12px;border-radius:0 0 16px 16px;
+  border:2.5px solid #000;border-top:none;background:var(--ink-2);
+  font-size:11.5px;font-weight:800;line-height:1.75;color:var(--muted);text-align:center;
+  box-shadow:var(--hard-sm);display:flex;flex-direction:column;gap:2px}
+/* THE FLOOR THE PLINTHS STAND ON. Without a line here the three of them look
+   cropped by the card rather than standing on it — they have no bottom edge of
+   their own, on purpose, so this is the edge. */
+.pod-note::before{content:"";position:absolute;top:0;left:10px;right:10px;height:3px;
+  border-radius:2px;background:linear-gradient(90deg,rgba(255,210,31,0),rgba(255,210,31,.55),rgba(255,210,31,0))}
+@media(max-width:370px){
+  .pod-name{font-size:11px}.pod.p1 .pod-name{font-size:12.5px}
+  .pod.p1 .pav{width:68px;height:68px}.pod.p2 .pav,.pod.p3 .pav{width:54px;height:54px}
+  .pod-note{font-size:10.5px}
+}
 .rankrow{display:flex;align-items:center;gap:12px;padding:11px 14px;background:var(--ink-2);border:2px solid #000;border-radius:15px;margin-bottom:9px;box-shadow:var(--hard-sm)}
 .rankrow .num{width:24px;font-weight:900;color:var(--muted);text-align:center}
 .rankrow .rav{width:38px;height:38px;border-radius:11px;background:var(--ink-3);border:2px solid #000;display:grid;place-items:center;font-size:18px}
@@ -12713,12 +12781,37 @@ function showFriendProfile(id){
    weight that could only ever mislead. The two RENDERERS below are not mock
    data and must stay — deleting them with the tables is what left the rankings
    screen stuck on "loading" the moment a board had three or more players. */
-function podium(list){
+/* ── THE PODIUM ──────────────────────────────────────────────────────────
+   «سکوی اول دوم و سوم صفحهٔ رنکینگ رو باز طراحی کن، و اسم افراد واضح دیده بشه،
+    و سکو خیلی خوشگل‌تر از این باید باشه با رنگ واضح، و متن هر هفته ریست میشود
+    و نفرات برتر به لیگ هفتگی راه پیدا می‌کنند.»
+
+   THE NAME WAS THE WORST OF IT, and it was thrown away twice over: only the
+   first word survived `split(' ')[0]`, and what was left was clipped inside a
+   66-pixel plinth. A player called «علی رضایی» was «علی», and one called
+   user_1785586862877 was a row of dots. The name now sits on a band of its own
+   under the plinth — the full width of the column, two lines if it needs them —
+   so it is read rather than guessed at.
+
+   «رنگ واضح»: gold, silver and bronze as real gradients on the plinth itself
+   rather than one yellow block and two grey ones, each with its own medal, its
+   own ring around the face, and a shine that crosses the first place. The
+   scores are here too — a podium without them is three faces and no reason. */
+function podium(list,unit){
   const p=list.slice(0,3);
-  const pod=(i,rank,cls)=>'<div class="pod '+cls+'" onclick="showOpponentProfileByData(\''+jsStr(p[i].uid||'')+'\',\''+jsStr(p[i].n)+'\',\''+jsStr(p[i].a)+'\',\'سکوی رتبه‌بندی\')">'
-    +'<div class="pav">'+pzFaceHTML({avatar:p[i].a,character:p[i].ch})+'</div>'
-    +'<div class="base"><div class="rk">'+rank+'</div><b>'+p[i].n.split(' ')[0]+'</b></div></div>';
-  return '<div class="podium">'+pod(1,'۲','p2')+pod(0,'۱','p1')+pod(2,'۳','p3')+'</div>';
+  const u=unit||'';
+  const place=(i,rank,cls,medal)=>{
+    const e=p[i]; if(!e) return '';
+    return '<div class="pod '+cls+'" onclick="showOpponentProfileByData(\''+jsStr(e.uid||'')+'\',\''+jsStr(e.n)+'\',\''+jsStr(e.a)+'\',\'سکوی رتبه‌بندی\')">'
+      +(cls==='p1'?'<div class="pod-crown">👑</div>':'')
+      +'<div class="pod-face"><div class="pav">'+pzFaceHTML({avatar:e.a,character:e.ch})+'</div>'
+        +'<span class="pod-medal">'+medal+'</span></div>'
+      +'<div class="pod-name"><bdi>'+pzEsc(e.n)+'</bdi></div>'
+      +'<div class="pod-score">'+e.p+(u?' <small>'+pzEsc(u)+'</small>':'')+'</div>'
+      +'<div class="base"><span class="rk">'+rank+'</span></div>'
+    +'</div>';
+  };
+  return '<div class="podium">'+place(1,'۲','p2','🥈')+place(0,'۱','p1','🥇')+place(2,'۳','p3','🥉')+'</div>';
 }
 function rankRows(list,unit){
   unit=unit||'XP';
@@ -12741,7 +12834,7 @@ function rankRows(list,unit){
      wins     → ledger, lifetime
    The home screen paints the weekly cup; this screen carries all four. */
 const _rankMeta={
-  cup:{kind:'weekly',unit:'🏆',title:'🏆 کاپ هفتگی',crit:'معیار: کاپِ (🏆) این هفته',note:'هر هفته ریست می‌شود · نفرات برتر به لیگ بالاتر می‌روند'},
+  cup:{kind:'weekly',unit:'🏆',title:'🏆 کاپ هفتگی',crit:'معیار: کاپِ (🏆) این هفته',note:'هر هفته ریست می‌شود · نفرات برتر به لیگ هفتگی راه پیدا می‌کنند'},
   overall:{kind:'overall',unit:'XP',title:'⭐ رنکینگ کلی',crit:'معیار: مجموع XP',note:'مجموع XP از ابتدای فعالیت کاربر (دائمی)'},
   weekWins:{kind:'weekly-winnings',unit:'تومان',title:'💵 برد این هفته',crit:'معیار: مبلغ برده‌شده در این هفته',note:'همزمان با کاپ هفتگی ریست می‌شود'},
   wins:{kind:'winnings',unit:'تومان',title:'💰 برد کلی',crit:'معیار: مبلغ برنده‌شده',note:'بیشترین جایزهٔ کسب‌شده از ابتدا (دائمی)'}
@@ -12770,7 +12863,15 @@ async function rankTab(el,tab){
     c.innerHTML=_rankHeader(m)+'<div style="text-align:center;color:var(--muted);padding:28px 14px;font-weight:800;line-height:1.9;border:2px dashed rgba(255,255,255,.14);border-radius:18px;margin-top:8px"><div style="font-size:42px;margin-bottom:6px">🏁</div>هنوز رتبه‌بندی‌ای ثبت نشده.<br>اولین بازی را انجام بده تا در جدول ظاهر شوی!</div>';
     return;
   }
-  c.innerHTML=_rankHeader(m)+(list.length>=3?podium(list):'')+rankRows(list,m.unit);
+  /* «متن هر هفته ریست میشود و نفرات برتر به لیگ هفتگی راه پیدا می‌کنند» — under the podium, where
+     the three people it is about are standing, rather than only in the card at
+     the top of the screen. It is only true of the boards that DO reset, so the
+     permanent ones do not claim it. */
+  const resets=(m.kind==='weekly'||m.kind==='weekly-winnings');
+  /* Two clauses, two lines. Run together they wrap wherever the width happens
+     to fall and leave «می‌کنند» stranded on a line of its own. */
+  const note=resets?'<div class="pod-note"><span>🔄 هر هفته ریست می‌شود</span><span>🏅 نفرات برتر به لیگ هفتگی راه پیدا می‌کنند</span></div>':'';
+  c.innerHTML=_rankHeader(m)+(list.length>=3?podium(list,m.unit)+note:'')+rankRows(list,m.unit);
 }
 function confettiBurst(colors){
   const ph=document.querySelector('.phone');

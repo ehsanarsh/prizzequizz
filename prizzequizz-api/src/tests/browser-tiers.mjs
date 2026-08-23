@@ -32,6 +32,14 @@ let waitingByTier = {};
 let duelCalls = [];
 /* What the server says another look costs — the button is what has to say it. */
 let onlineCost = 0;
+/* A board with the three kinds of name that broke the old podium: a long
+   Persian one, a long Latin one, and a short one. */
+let board = [
+  { userId: 'a', username: 'محمدرضا حسین‌زاده', score: 1840, avatar: '', character: null },
+  { userId: 'b', username: 'Ali_TheDestroyer_99', score: 1610, avatar: '', character: null },
+  { userId: 'c', username: 'سارا', score: 1455, avatar: '', character: null },
+  { userId: 'd', username: 'رضا', score: 1200, avatar: '', character: null, highlighted: true }
+];
 let posted = [];
 
 async function makePage() {
@@ -50,6 +58,7 @@ async function makePage() {
     if (p === '/matchmaking/stats') return send({ queued: 0, matched: 0, waitingByTier, analytics: {} });
     if (p === '/users/me/referral') return send({ code: 'K7XQ2MW', invites: 4, rewardTier: 'green', rewardCount: 1 });
     if (p === '/users/online') return send({ players: [], onlineTotal: 0, nextCost: onlineCost, freeLeft: 0, coins: 900 });
+    if (p.startsWith('/leaderboards/')) return send({ entries: board });
     if (p === '/duel-calls' && route.request().method() === 'GET') return send({ calls: duelCalls });
     /* The server resolves WHO lost the match and answers with their id — the
        winner's next enqueue quotes it back to keep their seat. */
@@ -1055,6 +1064,168 @@ const readTiers = (page) => page.evaluate(() =>
   const free = await read();
   ok('a free look says so', /رایگان/.test(free.text), free.text);
   ok('and it is still green', /btn-green/.test(free.cls), free.cls);
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
+/* ── THE PODIUM ────────────────────────────────────────────────────────── */
+/* «سکوی اول دوم و سوم صفحهٔ رنکینگ رو باز طراحی کن، و اسم افراد واضح دیده بشه،
+ * و سکو خیلی خوشگل‌تر از این باید باشه با رنگ واضح، و متن هر هفته ریست میشود و
+ * نفرات برتر به لیگ هفتگی راه پیدا می‌کنند.» */
+const openRank = async (page, tab) => page.evaluate(async (t) => {
+  for (let i = 0; i < 5; i++) {
+    const ov = document.getElementById('aaaModal');
+    if (!ov || !ov.classList.contains('show')) break;
+    const s = document.getElementById('aaaSecondary');
+    const b = (s && getComputedStyle(s).display !== 'none') ? s : document.getElementById('aaaPrimary');
+    if (b) b.click(); else break;
+    await new Promise((r) => setTimeout(r, 300));
+  }
+  (0, eval)("go('rankings')");
+  await new Promise((r) => setTimeout(r, 300));
+  await (0, eval)('rankTab')(null, t);
+  await new Promise((r) => setTimeout(r, 600));
+}, tab);
+
+{
+  waitingByTier = {}; posted = []; duelCalls = [];
+  const { ctx, page, errs } = await makePage();
+  console.log('\nthe rankings podium:');
+  await openRank(page, 'cup');
+
+  const pods = await page.evaluate(() => {
+    const box = (e) => { const r = e.getBoundingClientRect(); return { t: Math.round(r.top), b: Math.round(r.bottom), h: Math.round(r.height), w: Math.round(r.width) }; };
+    return [...document.querySelectorAll('.podium .pod')].map((p) => {
+      const n = p.querySelector('.pod-name');
+      const base = p.querySelector('.base');
+      return {
+        cls: p.className,
+        name: n ? n.textContent : null,
+        nameBox: n ? box(n) : null,
+        /* Does the whole name actually fit, or is part of it hidden? */
+        nameClipped: n ? (n.scrollHeight > n.clientHeight + 2 || n.scrollWidth > n.clientWidth + 2) : null,
+        score: (p.querySelector('.pod-score') || {}).textContent || '',
+        medal: (p.querySelector('.pod-medal') || {}).textContent || '',
+        crown: !!p.querySelector('.pod-crown'),
+        base: base ? box(base) : null,
+        baseBg: base ? getComputedStyle(base).backgroundImage : ''
+      };
+    });
+  });
+
+  ok('all three places are on it', pods.length === 3, String(pods.length));
+  /* The centre column is FIRST place — a podium reads 2·1·3, not 1·2·3. */
+  ok('first place stands in the middle', /p1/.test(pods[1].cls), pods.map((p) => p.cls).join(' | '));
+  ok('with the crown', pods[1].crown === true && !pods[0].crown && !pods[2].crown, JSON.stringify(pods.map((p) => p.crown)));
+
+  /* «اسم افراد واضح دیده بشه» — the whole name, not its first word. */
+  ok('the winner’s full name is shown', pods[1].name === 'محمدرضا حسین‌زاده', pods[1].name);
+  ok('not just the first word of it', !/^محمدرضا$/.test(pods[1].name), pods[1].name);
+  ok('a long Latin name is shown in full too', pods[0].name === 'Ali_TheDestroyer_99', pods[0].name);
+  ok('and none of the three is cut off', pods.every((p) => p.nameClipped === false), JSON.stringify(pods.map((p) => p.nameClipped)));
+  /* It has real room: the column's width, and two lines when it needs them. */
+  ok('the name gets the whole column', pods.every((p) => p.nameBox.w >= 80), JSON.stringify(pods.map((p) => p.nameBox.w)));
+  ok('with room for two lines', pods.every((p) => p.nameBox.h >= 30), JSON.stringify(pods.map((p) => p.nameBox.h)));
+  /* A two-line name must not lift its own column out of line with the rest —
+     the columns share a baseline and that is what makes it a podium. */
+  ok('every plinth stands on the same floor', pods[0].base.b === pods[1].base.b && pods[1].base.b === pods[2].base.b,
+     JSON.stringify(pods.map((p) => p.base.b)));
+
+  /* «با رنگ واضح» — gold, silver and bronze, told apart by colour and not by
+     height alone. */
+  const rgb = (s) => (s.match(/\d+/g) || []).map(Number).slice(0, 3);
+  const gold = rgb(pods[1].baseBg), silver = rgb(pods[0].baseBg), bronze = rgb(pods[2].baseBg);
+  ok('first place is gold', gold[0] > 200 && gold[1] > 170 && gold[2] < 160, JSON.stringify(gold));
+  ok('second is silver — no colour of its own', Math.abs(silver[0] - silver[2]) < 30 && silver[0] > 200, JSON.stringify(silver));
+  ok('third is bronze', bronze[0] > 200 && bronze[1] > 120 && bronze[1] < bronze[0] - 40 && bronze[2] < bronze[1], JSON.stringify(bronze));
+  ok('the three are really different', new Set([pods[0].baseBg, pods[1].baseBg, pods[2].baseBg]).size === 3);
+  /* And a medal on each, so the place is named as well as coloured. */
+  ok('each wears its own medal', pods[1].medal === '🥇' && pods[0].medal === '🥈' && pods[2].medal === '🥉',
+     JSON.stringify(pods.map((p) => p.medal)));
+  /* The winner's plinth is the tallest — the shape of a podium. */
+  ok('the plinths step down from the middle', pods[1].base.h > pods[0].base.h && pods[0].base.h > pods[2].base.h,
+     JSON.stringify(pods.map((p) => p.base.h)));
+
+  /* A podium of three faces and no numbers says nothing about why they are
+     standing there. */
+  ok('each place shows its score', pods.every((p) => /[۰-۹]/.test(p.score)), JSON.stringify(pods.map((p) => p.score)));
+  ok('and the winner’s is the biggest of them', /۱٬۸۴۰|۱۸۴۰/.test(pods[1].score), pods[1].score);
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
+/* ── THE LINE UNDER IT ─────────────────────────────────────────────────── */
+/* «متن هر هفته ریست میشود و نفرات برتر به لیگ هفتگی راه پیدا می‌کنند» */
+{
+  waitingByTier = {}; posted = []; duelCalls = [];
+  const { ctx, page, errs } = await makePage();
+  console.log('\nwhat the podium says about the week:');
+  await openRank(page, 'cup');
+  const note = await page.evaluate(() => {
+    const n = document.querySelector('.pod-note');
+    if (!n) return null;
+    const pod = document.querySelector('.podium');
+    return { text: n.innerText.replace(/\n/g, ' '),
+             top: Math.round(n.getBoundingClientRect().top),
+             podBottom: Math.round(pod.getBoundingClientRect().bottom) };
+  });
+  ok('there is a line under the podium', !!note, String(note));
+  ok('it says the board resets every week', /هر هفته ریست می‌شود/.test(note.text), note.text);
+  ok('and that the top players reach the weekly league', /به لیگ هفتگی راه پیدا می‌کنند/.test(note.text), note.text);
+  /* Not «به لیگ بالاتر می‌روند» — the wording was corrected. */
+  ok('in those words and not the old ones', !/لیگ بالاتر/.test(note.text), note.text);
+  /* Under the three people it is about, joined to the floor they stand on. */
+  ok('it sits directly under the plinths', Math.abs(note.top - note.podBottom) <= 2, note.top + ' vs ' + note.podBottom);
+
+  /* A board that does NOT reset must not claim to. */
+  await openRank(page, 'overall');
+  const perm = await page.evaluate(() => ({
+    note: !!document.querySelector('.pod-note'),
+    podium: !!document.querySelector('.podium')
+  }));
+  ok('the lifetime board still has a podium', perm.podium === true, String(perm.podium));
+  ok('but says nothing about resetting', perm.note === false, String(perm.note));
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
+/* ── AND ON A SHORT PHONE ──────────────────────────────────────────────── */
+{
+  waitingByTier = {}; posted = []; duelCalls = [];
+  const ctx = await browser.newContext({ viewport: { width: 320, height: 640 }, hasTouch: true, isMobile: true });
+  await ctx.addInitScript(() => {
+    localStorage.setItem('pz_tok', 't'); localStorage.setItem('pz_rtok', 'r');
+    localStorage.setItem('pz_usr', JSON.stringify({ id: 'me', username: 'ehsan', displayName: 'احسان', level: 5 }));
+    localStorage.setItem('pq_user_plan', 'premium');
+  });
+  await ctx.route('**/v1/**', (route) => {
+    const p = new URL(route.request().url()).pathname.replace(/^.*\/v1/, '');
+    const send = (d) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, data: d }) });
+    if (p.startsWith('/leaderboards/')) return send({ entries: board });
+    if (p === '/invites/incoming') return send({ invites: [] });
+    if (p === '/duel-calls') return send({ calls: [] });
+    return send({});
+  });
+  const page = await ctx.newPage();
+  const errs = []; page.on('pageerror', (e) => errs.push(String(e.message || e).slice(0, 200)));
+  await page.goto('http://127.0.0.1:' + PORT + '/');
+  await page.waitForTimeout(5200);
+  console.log('\non a narrow phone:');
+  await openRank(page, 'cup');
+  const small = await page.evaluate(() => {
+    const pods = [...document.querySelectorAll('.podium .pod')];
+    const sec = document.getElementById('rankings');
+    return {
+      count: pods.length,
+      clipped: pods.map((p) => { const n = p.querySelector('.pod-name'); return n.scrollHeight > n.clientHeight + 2 || n.scrollWidth > n.clientWidth + 2; }),
+      widest: Math.max(...pods.map((p) => Math.round(p.getBoundingClientRect().width))),
+      /* The page may scroll down; it must not scroll sideways. */
+      sideways: sec.scrollWidth > sec.clientWidth + 2
+    };
+  });
+  ok('all three still fit', small.count === 3, String(small.count));
+  ok('no name is cut off', small.clipped.every((c) => c === false), JSON.stringify(small.clipped));
+  ok('and nothing runs off the side of the screen', small.sideways === false, String(small.sideways));
   ok('no script errors', errs.length === 0, errs.join(' | '));
   await ctx.close();
 }
