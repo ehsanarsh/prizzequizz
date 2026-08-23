@@ -1382,6 +1382,13 @@ input,textarea,select,[contenteditable="true"],.pz-selectable,.pz-selectable *{
   display:flex;align-items:flex-start;justify-content:center;padding-top:7px;overflow:hidden;
   box-shadow:inset 0 -14px 22px rgba(0,0,0,.28)}
 .pod.p1 .base{height:88px;background:linear-gradient(180deg,#FFE97A,#E0A80B 55%,#9C7100)}
+/* «یه عکس هم با نام logo آپلود کردم، باید در سکو زیر نفر اول باشه، روی سکوی
+   یک بچسبه.» Below the rank digit, on the gold itself — and absolutely
+   positioned so the digit does not move whether the picture arrives or not.
+   If it never arrives the tag removes itself and the plinth is what it was. */
+.pod.p1 .base .pod-logo{position:absolute;left:50%;bottom:7px;transform:translateX(-50%);
+  width:56px;max-height:46px;object-fit:contain;pointer-events:none;z-index:2;
+  filter:drop-shadow(0 2px 3px rgba(0,0,0,.45))}
 .pod.p2 .base{height:64px;background:linear-gradient(180deg,#F2F5F9,#B9C3CE 55%,#7F8B98)}
 .pod.p3 .base{height:50px;background:linear-gradient(180deg,#F3B07A,#D0763A 55%,#8A4A1D)}
 /* A light behind first place, so the eye is told where to go before it reads
@@ -5220,7 +5227,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
       <p style="color:var(--muted);font-size:13px;margin-bottom:20px">این اطلاعات توی پروفایل و رنکینگ نمایش داده می‌شه</p>
       <div class="field"><label>نام و نام خانوادگی</label><input class="input" id="regFullName" placeholder="نام و نام خانوادگی را به فارسی وارد کنید" oninput="clearFieldErr('regFullName')"><div class="field-err" id="errFullName"></div></div>
       <div class="field"><label>نام کاربری (یکتا)</label><input class="input" id="regUsername" placeholder="نام کاربری را با حروف انگلیسی وارد کنید" dir="ltr" oninput="clearFieldErr('regUsername')"><div class="field-err" id="errUsername"></div></div>
-      <div class="field"><label>جنسیت</label><select class="input" id="regGender"><option value="">انتخاب کن…</option><option value="male">آقا</option><option value="female">خانم</option></select></div><div class="field-err" id="errGender"></div><div class="field"><label>کد معرف (اختیاری)</label><input class="input" id="regReferral" placeholder="کد دوستت رو وارد کن و جایزه بگیر" dir="ltr"></div>
+      <div class="field"><label>جنسیت</label><select class="input" id="regGender"><option value="">انتخاب کن…</option><option value="male">آقا</option><option value="female">خانم</option></select></div><div class="field-err" id="errGender"></div><div class="field"><label>کد معرف (اختیاری)</label><input class="input" id="regReferral" placeholder="کد دوستت را وارد کن تا جایزه‌اش به او برسد" dir="ltr"></div>
       <div class="card" style="display:flex;gap:12px;align-items:center;background:linear-gradient(180deg,#FFDD5C,#F1B211);color:var(--gold-ink);margin-bottom:20px">
         <span style="font-size:26px">🎁</span><div style="font-size:13px;font-weight:700;line-height:1.6">کد دوستت رو وارد کن تا برای او یک <b>بلیط سبز</b> فرستاده شود. بعد از ثبت‌نام دیگر جایی برای وارد کردن کد نیست.</div></div>
       <div class="grow"></div>
@@ -6552,8 +6559,8 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
       <div class="topbar tb-card"><button class="iconbtn ib-back" onclick="menuBack('home')">→</button><h1>کد معرف من 🎁</h1><button class="iconbtn ib-close" onclick="menuBack('home')">✕</button></div>
       <div class="ref-hero">
         <div class="ref-gift">🎁</div>
-        <b>هر کسی با کد تو وارد بازی شود، یک بلیط سبز مهمان تو می‌شود</b>
-        <p>کدت را برای دوستانت بفرست. آن‌ها باید هنگام ثبت‌نام واردش کنند — بعد از ثبت‌نام دیگر جایی برای وارد کردن کد نیست.</p>
+        <b>هر کسی با کد تو وارد بازی شود، یک بلیط سبز به تو می‌رسد</b>
+        <p>جایزه برای توست، نه برای تازه‌وارد. کدت را برای دوستانت بفرست؛ آن‌ها باید هنگام ثبت‌نام واردش کنند — بعد از ثبت‌نام دیگر جایی برای وارد کردن کد نیست.</p>
       </div>
       <div class="ref-code-card">
         <span class="ref-lbl">کد تو</span>
@@ -10360,6 +10367,11 @@ function go(id){
      screen opened on its «در حال بارگذاری…» skeleton and stayed there, with no
      topics and no records. Loading here covers every way in, including coming
      back from a run, where stale numbers would otherwise be shown as current. */
+  /* A player who arrived on an invite link should not have to be told the code
+     by hand — that is the one step the link exists to remove. Here rather than
+     at the one call site that used to do it, so every route into registration
+     is covered, the way the record screen is. */
+  if(id==='register'){ try{ pzFillRefFromLink(); }catch(e){} }
   if(id==='record'&&typeof rmLoadOverview==='function'){ try{ rmLoadOverview(); }catch(e){} }
   if(id==='recordBoard'&&typeof rmRenderBoard==='function'){ try{ rmRenderBoard(); }catch(e){} }
   /* Home is rebuilt on every visit: the rails carry live counts (unread mail,
@@ -10453,6 +10465,37 @@ function pzArtLegacy(el, tries, onDone){
  *
  * So a player never waits for artwork, and an operator's new file still appears
  * without anybody clearing anything. */
+/* ── WHERE THE PICTURES ACTUALLY ARE ─────────────────────────────────────
+   «من عکسا رو از site-admin آپلود می‌کنم، می‌ره به این آدرس /media/… پس هر
+    عکسی رو باید اول از اینجا سرچ کنه، نبود بره جاهای دیگه رو سرچ کنه.»
+
+   Artwork uploaded from the site-admin panel does not land beside index.html;
+   it lands under the media folder. Asking for it by bare name was asking in
+   the one place an uploaded file is never going to be — which is why the
+   medals came back as emoji however many times they were uploaded, and why
+   every other picture the game names would have done the same.
+
+   So a name is a LIST of addresses now, tried in order: the media folder
+   first, the game's own folder second, and the formats in the order they are
+   worth having. One list, used by BOTH loaders — the `data-pzsrc` pictures and
+   the podium's medals — because two lists is how one of them ends up right and
+   the other one wrong. If the media folder is ever renamed, the first string
+   here is the whole change.
+
+   Names with a slash or a scheme in them are left exactly as they are: those
+   are already addresses, not names to look up. */
+const PZ_IMG_BASES=['/media/mt6bmqa0-gu24xve1','.'];
+const PZ_IMG_EXTS=['webp','png','jpg'];
+function pzImgCandidates(name){
+  const n=String(name||'');
+  if(!n) return [];
+  if(/[:/]/.test(n)) return PZ_IMG_EXTS.map((e)=>n+'.'+e);
+  const out=[];
+  for(let i=0;i<PZ_IMG_BASES.length;i++)
+    for(let j=0;j<PZ_IMG_EXTS.length;j++)
+      out.push(String(PZ_IMG_BASES[i]).replace(/\/+$/,'')+'/'+n+'.'+PZ_IMG_EXTS[j]);
+  return out;
+}
 const _pzArtUrls={};       /* base → object URL of the freshest bytes we hold */
 const _pzArtChecked={};    /* base → revalidated once this session */
 function pzArtRevalidate(base, tries){
@@ -10480,7 +10523,7 @@ function pzArtRevalidate(base, tries){
 }
 function pzTryArt(el, base, onDone){
   if(!el) return;
-  const tries=[base+'.webp', base+'.png', base+'.jpg'];
+  const tries=pzImgCandidates(base);
   el.setAttribute('data-pzart', base);
   /* Already fetched once this session → straight onto the screen, no network,
      no flicker, however many times the card is rebuilt. */
@@ -12823,22 +12866,33 @@ function showFriendProfile(id){
    name as .png if that is what is there, and the emoji if neither is. So the
    podium is correct before the files arrive and better after — nothing has to
    be deployed in step with anything else. */
+/* `fallback` is what to leave behind when the name is nowhere: an emoji for
+   the medals, nothing at all for the logo — a picture that was never uploaded
+   should leave no trace, not a broken-image icon. */
+function pzArtHTML(name,cls,fallback){
+  const list=pzImgCandidates(name);
+  const q=(x)=>String(x).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+  const j=(x)=>String(x).replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;');
+  return '<img'+(cls?' class="'+q(cls)+'"':'')+' src="'+q(list[0])+'" alt="" draggable="false"'
+    +' data-pz-art="'+q(name)+'" data-pz-step="0"'
+    +' onerror="pzArtNext(this,\''+j(fallback||'')+'\')">';
+}
+function pzArtNext(img,fallback){
+  try{
+    const name=img.getAttribute('data-pz-art')||'';
+    const step=(Number(img.getAttribute('data-pz-step'))||0)+1;
+    const list=pzImgCandidates(name);
+    if(step<list.length){ img.setAttribute('data-pz-step',String(step)); img.src=list[step]; return; }
+    const host=img.parentNode;
+    if(fallback&&host) host.textContent=fallback;
+    else img.remove();
+  }catch(e){}
+}
 const PZ_MEDAL_SRC={p1:'medal-gold',p2:'medal-silver',p3:'medal-bronze'};
 function pzMedalHTML(cls,fallback){
   const base=PZ_MEDAL_SRC[cls];
   if(!base) return '<span class="pod-medal">'+fallback+'</span>';
-  /* The fallback chain lives on the element: each failure hands over to the
-     next, and the last one puts the emoji back. No preloading, no probing —
-     one request that either works or does not. */
-  const esc=(x)=>String(x).replace(/'/g,"\\'");
-  return '<span class="pod-medal"><img src="'+base+'.webp" alt="" draggable="false"'
-    +' onerror="pzMedalFallback(this,\''+esc(base)+'\',\''+esc(fallback)+'\')"></span>';
-}
-function pzMedalFallback(img,base,emoji){
-  try{
-    if(!img._pzTried){ img._pzTried=1; img.src=base+'.png'; return; }
-    const host=img.parentNode; if(host) host.textContent=emoji;
-  }catch(e){}
+  return '<span class="pod-medal">'+pzArtHTML(base,'',fallback)+'</span>';
 }
 
 function podium(list,unit){
@@ -12852,7 +12906,8 @@ function podium(list,unit){
         +pzMedalHTML(cls,medal)+'</div>'
       +'<div class="pod-name"><bdi>'+pzEsc(e.n)+'</bdi></div>'
       +'<div class="pod-score">'+e.p+(u?' <small>'+pzEsc(u)+'</small>':'')+'</div>'
-      +'<div class="base"><span class="rk">'+rank+'</span></div>'
+      +'<div class="base"><span class="rk">'+rank+'</span>'
+        +(cls==='p1'?pzArtHTML('logo','pod-logo',''):'')+'</div>'
     +'</div>';
   };
   return '<div class="podium">'+place(1,'۲','p2','🥈')+place(0,'۱','p1','🥇')+place(2,'۳','p3','🥉')+'</div>';
@@ -13801,7 +13856,11 @@ function renderRequests(c,q){
 function renderAddFriend(c,q){
   const out=(_frOutgoing||[]);
   const outHtml=out.length?('<div class="section-title" style="margin-top:4px">درخواست‌های ارسالی (در انتظار پاسخ)</div>'+out.map(s=>'<div class="friend-card"><div class="fav">'+pzFaceHTML({avatar:s.a,character:s.ch})+'</div><div class="info"><b>'+frEsc(s.n)+'</b><span>@'+frEsc(s.u)+' · لول '+fa(s.lvl)+'</span><div class="meta"><span class="mini-badge y">در انتظار پاسخ ⏳</span></div></div></div>').join('')):'';
-  c.innerHTML='<div class="add-panel"><h3>افزودن دوست با یوزرنیم</h3><p>یوزرنیم دقیق دوستت رو وارد کن تا درخواست دوستی براش بره.</p><div style="display:flex;gap:8px"><input class="input" id="friendAddInput" placeholder="مثلاً Sara_1452" dir="ltr" onkeydown="if(event.key===\'Enter\')sendFriendRequest()"><button class="btn btn-primary btn-sm" style="height:48px" onclick="sendFriendRequest()">ارسال</button></div><div class="qr-card"><div class="qr-box"></div><div style="flex:1"><b style="font-size:13px">لینک دعوت تو</b><div style="font-size:12px;color:var(--bolt);font-weight:900;margin-top:4px" dir="ltr">'+frEsc(((typeof _usr!=='undefined'&&_usr&&_usr.username)||'PRIZZE'))+'</div></div><button class="btn btn-ghost btn-sm" onclick="copyInviteLink()">کپی</button></div></div>'+outHtml;
+  c.innerHTML='<div class="add-panel"><h3>افزودن دوست با یوزرنیم</h3><p>یوزرنیم دقیق دوستت رو وارد کن تا درخواست دوستی براش بره.</p><div style="display:flex;gap:8px"><input class="input" id="friendAddInput" placeholder="مثلاً Sara_1452" dir="ltr" onkeydown="if(event.key===\'Enter\')sendFriendRequest()"><button class="btn btn-primary btn-sm" style="height:48px" onclick="sendFriendRequest()">ارسال</button></div><div class="qr-card"><div class="qr-box"></div><div style="flex:1"><b style="font-size:13px">کد معرف تو</b><div style="font-size:12px;color:var(--bolt);font-weight:900;margin-top:4px" dir="ltr" id="frRefCode">…</div></div><button class="btn btn-ghost btn-sm" onclick="copyInviteLink()">کپی</button></div></div>'+outHtml;
+  /* It showed the USERNAME and called it the invite link. The link is the
+     referral code — that is the only thing a new player can redeem — so the
+     card shows the code, filled in when it arrives rather than guessed. */
+  frPaintRefCode();
 }
 async function openFriendChat(id){frActiveChat=id;frActiveTab='chats';document.querySelectorAll('#frTabs .fr-tab').forEach(b=>b.classList.toggle('active',b.dataset.tab==='chats'));const f=FRIENDS_DATA.find(x=>x.id===id);if(f)f.unread=0;renderFriendsHub();await frLoadMessages(id);if(frActiveChat===id)renderChatView(id);frStartChatPoll(id);try{pzAskPushForChat();}catch(e){}}
 function renderChatView(id){
@@ -13880,14 +13939,69 @@ async function declineFriendRequest(id){const r=await pzApi('POST','/friends/req
    PQ-SHAHAB-9865 — that every player in the game copied as if it were theirs.
    It is built from where the game is actually being played and from THIS
    player's own name now. */
-function pzInviteLink(){
-  var who='';
-  try{ who=(_usr&&(_usr.username||_usr.displayName))||''; }catch(e){}
+/* THE INVITE LINK IS THE REFERRAL CODE, OR IT IS NOTHING.
+   «در صفحهٔ دوستان هم در قسمت افزودن، لینک دعوت و کپی لینک دعوت هم باید همان
+    کد معرف باشه.» It used to carry the sender's USERNAME — a value the
+   referral system has never heard of. Anyone following that link and signing
+   up rewarded nobody, because there was no code in it to redeem. */
+function pzInviteLink(code){
   var origin='https://prizequiz.ir';
   try{ if(/^https?:$/.test(location.protocol)&&location.hostname&&location.hostname!=='localhost') origin=location.origin; }catch(e){}
-  return origin+(who?('/?ref='+encodeURIComponent(who)):'/');
+  var c=String(code||'');
+  return origin+(c?('/?ref='+encodeURIComponent(c)):'/');
 }
-function copyInviteLink(){const link=pzInviteLink();try{navigator.clipboard&&navigator.clipboard.writeText(link);}catch(e){}recordMissionEvent('social',1);toast('لینک دعوت کپی شد 🎁');}
+/* The code is the player's own and never changes, so it is fetched once and
+   kept. The friends screen can ask for it before the referral screen has ever
+   been opened, which is why this waits rather than reading a blank. */
+/* A LINK THAT CARRIES A CODE HAS TO HAND IT OVER.
+   `?ref=` was written into every invite link and read by nobody — the new
+   player landed on the game and still had to be told the code by hand, which
+   is the one step an invite link exists to remove. It is remembered across the
+   splash and the login, because registration is several screens after the tap
+   that brought them here. Never overwrites something already typed. */
+function pzRefFromLink(){
+  try{
+    const q=new URLSearchParams(location.search||'');
+    const v=(q.get('ref')||'').trim();
+    if(v){ try{ sessionStorage.setItem('pz_ref',v); }catch(e){} return v; }
+  }catch(e){}
+  try{ return (sessionStorage.getItem('pz_ref')||'').trim(); }catch(e){ return ''; }
+}
+function pzFillRefFromLink(){
+  try{
+    const el=document.getElementById('regReferral'); if(!el) return;
+    if(String(el.value||'').trim()) return;
+    const v=pzRefFromLink(); if(v) el.value=v;
+  }catch(e){}
+}
+/* Read once, now, while the address bar still says what it said when the link
+   was tapped. Registration is minutes and several screens away by the time the
+   box exists, and by then the query string may be long gone. */
+try{ pzRefFromLink(); }catch(e){}
+async function frPaintRefCode(){
+  const el=document.getElementById('frRefCode'); if(!el) return;
+  const c=await pzRefCode();
+  const now=document.getElementById('frRefCode');   /* the tab may have moved on */
+  if(now) now.textContent=c||'—';
+}
+async function pzRefCode(){
+  try{ if(PZ_REF&&PZ_REF.code) return String(PZ_REF.code); }catch(e){}
+  try{ await refLoad(); }catch(e){}
+  try{ return (PZ_REF&&PZ_REF.code)?String(PZ_REF.code):''; }catch(e){ return ''; }
+}
+async function copyInviteLink(){
+  const c=await pzRefCode();
+  if(!c){ toast('کدت گرفته نشد — اینترنتت را بررسی کن',3000); return; }
+  const link=pzInviteLink(c);
+  const done=()=>{ recordMissionEvent('social',1); toast('لینک دعوت کپی شد 🎁'); try{ vib(20); }catch(e){} };
+  try{
+    if(navigator.clipboard&&navigator.clipboard.writeText){
+      navigator.clipboard.writeText(link).then(done).catch(()=>refCopyFallback(link,done));
+      return;
+    }
+  }catch(e){}
+  refCopyFallback(link,done);
+}
 function sortFriendsOnline(){FRIENDS_DATA.sort((a,b)=>(b.on-a.on));renderFriendsHub();}
 function showFavoritesOnly(){const i=document.getElementById('frSearch');if(i)i.value='⭐';const c=document.getElementById('friendsContent');const list=FRIENDS_DATA.filter(f=>f.fav);c.innerHTML=list.length?list.map(f=>friendCard(f,'friend')).join(''):'<div class="fr-empty"><span class="big">⭐</span>هنوز دوست محبوب نداری.</div>';}
 /* icon:f.a printed the avatar's URL into the modal — iconHTML is the slot that
@@ -17073,7 +17187,10 @@ function hmRailItems(){
     ],
     left:[
       {ico:'🎁',lbl:'هدایا',go:()=>openDailyRewards(),tag:()=>hmGiftTag()},
-      {ico:'🤝',lbl:'دعوت',go:()=>go('friends')},
+      /* «اسمش به دعوت دوستان عوض بشه و وقتی می‌زنی باید به صفحهٔ کد معرف من
+         بره» — it went to the friends list, which is where you manage people
+         you already know, not where you bring new ones in. */
+      {ico:'🤝',lbl:'دعوت دوستان',go:()=>hmReferral()},
       {ico:'✏️',lbl:'کوییزساز',go:()=>hmQuizMaker()}
     ]
   };
@@ -17087,6 +17204,9 @@ function hmRailItems(){
  * file at all, and its try/catch turned that into a silent empty string.
  *
  * All three now read the same state the screens behind them read. */
+/* Same door the menu row uses, so the screen arrives with its code already
+   being fetched rather than showing «…» until something else asks. */
+function hmReferral(){ try{ go('referral'); refLoad(); }catch(e){} }
 function hmSpinTag(){ try{ return (pzRW&&pzRW.loaded&&pzRW.ready)?'!':''; }catch(e){ return ''; } }
 function hmGiftTag(){
   try{

@@ -26,12 +26,23 @@ const ok = (n, c, extra = '') => { if (c) { pass++; console.log('  ok   ' + n + 
    bare emoji passes every test, because every test would be looking at the
    fallback either way. One gold pixel is enough — the size comes from CSS. */
 const ONE_PIXEL = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4f0n+PwAHtALwCdbNDwAAAABJRU5ErkJggg==', 'base64');
-let medalsUploaded = false;
+/* Where the site-admin panel puts what it is given. The game has to look here
+   FIRST — asking for a bare name was asking in the one place an uploaded file
+   never is, which is why the medals kept coming back as emoji. */
+const MEDIA = '/media/mt6bmqa0-gu24xve1';
+/* '' = nothing uploaded · 'media' = uploaded through the panel, so only the
+   media folder answers · 'root' = sitting beside index.html instead. */
+let artUploaded = '';
+let artAsked = [];
 
 const server = http.createServer((q, r) => {
   const rel = decodeURIComponent(q.url.split('?')[0]);
-  if (/^\/medal-[a-z]+\.(webp|png)$/.test(rel)) {
-    if (!medalsUploaded) { r.writeHead(404); return r.end('no'); }
+  const art = /^(?:(\/media\/[^/]+))?\/([a-z0-9-]+)\.(webp|png)$/.exec(rel);
+  if (art && /^(medal-[a-z]+|logo)$/.test(art[2])) {
+    artAsked.push(rel);
+    const inMedia = art[1] === MEDIA;
+    const serve = (artUploaded === 'media' && inMedia) || (artUploaded === 'root' && !art[1]);
+    if (!serve) { r.writeHead(404); return r.end('no'); }
     r.writeHead(200, { 'content-type': 'image/png' }); return r.end(ONE_PIXEL);
   }
   const f = path.join(ROOT, q.url === '/' ? 'prizze-v643.html' : rel);
@@ -1353,10 +1364,11 @@ const openRank = async (page, tab) => page.evaluate(async (t) => {
   }));
   ok('each place asks for a picture, not a glyph', /<img /.test(asked.gold) && /<img /.test(asked.silver) && /<img /.test(asked.bronze),
      JSON.stringify(asked).slice(0, 140));
-  /* «فقط به صورت webp» — that is what is asked for first. */
-  ok('and asks for the WebP first', /src="medal-gold\.webp"/.test(asked.gold), asked.gold.slice(0, 90));
-  ok('silver by its own name', /src="medal-silver\.webp"/.test(asked.silver), asked.silver.slice(0, 90));
-  ok('and bronze by its own', /src="medal-bronze\.webp"/.test(asked.bronze), asked.bronze.slice(0, 90));
+  /* «هر عکسی رو باید اول از اینجا سرچ کنه» — the media folder, and «فقط به
+     صورت webp» — WebP before PNG inside it. */
+  ok('and asks the media folder first', asked.gold.includes('src="' + MEDIA + '/medal-gold.webp"'), asked.gold.slice(0, 120));
+  ok('silver by its own name', asked.silver.includes('src="' + MEDIA + '/medal-silver.webp"'), asked.silver.slice(0, 120));
+  ok('and bronze by its own', asked.bronze.includes('src="' + MEDIA + '/medal-bronze.webp"'), asked.bronze.slice(0, 120));
   /* A place with no artwork name of its own is not left with a broken tag. */
   ok('anything else is just the glyph', !/<img /.test(asked.unknown) && /🎖️/.test(asked.unknown), asked.unknown);
 
@@ -1366,27 +1378,34 @@ const openRank = async (page, tab) => page.evaluate(async (t) => {
     .map((m) => ({ w: Math.round(m.getBoundingClientRect().width), h: Math.round(m.getBoundingClientRect().height) })));
   ok('the space is reserved whatever fills it', boxes.every((b) => b.w >= 24 && b.h >= 24), JSON.stringify(boxes));
 
-  /* THE LADDER ITSELF. A picture that has not been uploaded yet must not leave
-     a broken-image icon on the podium: WebP, then the same name as .png, then
-     the emoji — so the podium is right before the files arrive and better
-     after, and nothing has to be deployed in step with anything else. */
+  /* THE LADDER ITSELF, rung by rung. A picture that is not uploaded yet must
+     not leave a broken-image icon on the podium — and one uploaded through the
+     panel must be found without anything being moved by hand. Media folder
+     first, the game's own folder second, WebP before PNG in each, emoji last. */
   const fell = await page.evaluate(async () => {
     const host = document.createElement('span');
     host.innerHTML = (0, eval)('pzMedalHTML')('p1', '🥇');
     document.body.appendChild(host);
     const span = host.firstChild;
-    const img = span.querySelector('img');
-    const first = img.getAttribute('src');
-    (0, eval)('pzMedalFallback')(img, 'medal-gold', '🥇');
-    const second = span.querySelector('img') ? span.querySelector('img').getAttribute('src') : null;
-    (0, eval)('pzMedalFallback')(span.querySelector('img'), 'medal-gold', '🥇');
-    const out = { first, second, text: span.textContent, stillImg: !!span.querySelector('img') };
+    const seen = [];
+    for (let i = 0; i < 6; i++) {
+      const img = span.querySelector('img');
+      if (!img) break;
+      seen.push(img.getAttribute('src'));
+      (0, eval)('pzArtNext')(img, '🥇');
+    }
+    const out = { seen, text: span.textContent, stillImg: !!span.querySelector('img') };
     host.remove();
     return out;
   });
-  ok('it starts on the WebP', fell.first === 'medal-gold.webp', String(fell.first));
-  ok('a missing WebP falls back to the same name as PNG', fell.second === 'medal-gold.png', String(fell.second));
-  ok('and with neither, the emoji comes back', fell.text === '🥇' && fell.stillImg === false, JSON.stringify(fell));
+  ok('it starts in the media folder', fell.seen[0] === MEDIA + '/medal-gold.webp', String(fell.seen[0]));
+  ok('and works through the formats there first', fell.seen[1] === MEDIA + '/medal-gold.png' && fell.seen[2] === MEDIA + '/medal-gold.jpg',
+     JSON.stringify(fell.seen.slice(0, 3)));
+  ok('only then beside the game itself', fell.seen[3] === './medal-gold.webp', String(fell.seen[3]));
+  ok('and its other formats after that', fell.seen[4] === './medal-gold.png' && fell.seen[5] === './medal-gold.jpg',
+     JSON.stringify(fell.seen.slice(3)));
+  ok('six addresses, no more', fell.seen.length === 6, JSON.stringify(fell.seen));
+  ok('and with none of them, the emoji comes back', fell.text === '🥇' && fell.stillImg === false, JSON.stringify(fell));
   ok('no script errors', errs.length === 0, errs.join(' | '));
   await ctx.close();
 }
@@ -1397,7 +1416,7 @@ const openRank = async (page, tab) => page.evaluate(async (t) => {
    way to notice if the podium ever stops calling the builder at all. */
 {
   waitingByTier = {}; posted = []; duelCalls = [];
-  medalsUploaded = true;
+  artUploaded = 'media'; artAsked = [];
   const { ctx, page, errs } = await makePage();
   console.log('\nonce the medal files are on the server:');
   await openRank(page, 'cup');
@@ -1424,7 +1443,7 @@ const openRank = async (page, tab) => page.evaluate(async (t) => {
   ok('each keeps the space the CSS reserved', worn.every((p) => p.w >= 24), JSON.stringify(worn.map((p) => p.w)));
   ok('no script errors', errs.length === 0, errs.join(' | '));
   await ctx.close();
-  medalsUploaded = false;
+  artUploaded = '';
 }
 
 {
