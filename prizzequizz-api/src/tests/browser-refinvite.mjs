@@ -197,7 +197,12 @@ async function makePage(query = '') {
   ok('it still asks them to come and play', /بیا پرایز کوییز بازی کنیم/.test(t), t);
   ok('it carries a link', /https?:\/\/[^\s]+/.test(t), t);
   ok('and the link is the way into the game', /[?&]ref=K7XQ2MW/.test(t), t);
-  ok('the code is written out too', t.includes(MY_CODE), t);
+  /* The code is inside the URL as well, so «does the text contain it» cannot
+     tell the two apart — it has to be there as a line a person can READ, for
+     whoever opens the message on one phone and signs up on another. */
+  ok('the code is written out too, not only buried in the link',
+     new RegExp('کد معرف من: ' + MY_CODE).test(t), t);
+  ok('and on a line of its own', t.split('\n').some((l) => l.trim() === 'کد معرف من: ' + MY_CODE), JSON.stringify(t.split('\n')));
   ok('and it says when to use it', /موقع ثبت‌نام/.test(t), t);
   ok('no script errors', errs.length === 0, errs.join(' | '));
   await ctx.close();
