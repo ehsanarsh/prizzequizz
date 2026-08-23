@@ -70,7 +70,7 @@ const readTiers = (page) => page.evaluate(() =>
   [...document.querySelectorAll('#tkSelGrid .tk-opt')].map((b) => ({
     name: (b.querySelector('b') || {}).textContent || '',
     shut: b.classList.contains('shut'),
-    disabled: !!b.disabled,
+    disabled: b.getAttribute('aria-disabled') === 'true',
     colour: getComputedStyle(b).getPropertyValue('--tkc').trim(),
     borderColour: getComputedStyle(b).borderTopColor,
     art: !!b.querySelector('.tk-opt-art')
@@ -92,9 +92,23 @@ const readTiers = (page) => page.evaluate(() =>
   const colours = tiers.map((t) => t.colour);
   ok('each ticket carries its own colour', new Set(colours).size === 3 && colours.every(Boolean), JSON.stringify(colours));
   ok('and its own picture', tiers.every((t) => t.art), JSON.stringify(tiers.map((t) => t.art)));
-  /* A locked pair with no explanation is indistinguishable from a broken screen. */
-  const note = await page.evaluate(() => (document.querySelector('#ticketSelectCard .tk-note') || {}).textContent || '');
-  ok('and the screen says why the others are locked', /منتظر حریف/.test(note), note.slice(0, 70));
+  /* A locked pair with no explanation is indistinguishable from a broken
+     screen — but the explanation must not be a paragraph. «اندازه تصویر بنر رو
+     به حداکثرترین حالت ممکن برسون» is a rule about this exact screen, and a
+     note under the tickets was paid for out of the picture. So the padlock
+     carries the reason, in the row already reserved for it. */
+  const meta = await page.evaluate(() =>
+    [...document.querySelectorAll('#tkSelGrid .tk-opt')].map((b) => (b.querySelector('.tk-opt-meta') || {}).textContent || ''));
+  ok('the locked ones say why on the tile', /🔒/.test(meta[1]) && /منتظر/.test(meta[1]), JSON.stringify(meta));
+  ok('and the open one says nothing', meta[0].trim() === '', JSON.stringify(meta));
+  ok('no paragraph is spent on it', (await page.evaluate(() => !document.querySelector('#ticketSelectCard .tk-note'))) === true);
+  /* Tapping one says the whole sentence, where it costs no room at all. */
+  const why = await page.evaluate(async () => {
+    [...document.querySelectorAll('#tkSelGrid .tk-opt')][1].click();
+    await new Promise((r) => setTimeout(r, 300));
+    return (document.getElementById('pzToast') || {}).textContent || '';
+  });
+  ok('and tapping it says why in full', /منتظر حریف/.test(why), why.slice(0, 70));
 
   /* Tapping a shut one must not select it. */
   const tapped = await page.evaluate(async () => {
@@ -173,8 +187,11 @@ const readTiers = (page) => page.evaluate(() =>
   ok('green is shut, even though it is always open otherwise', tiers[0].shut === true, JSON.stringify(tiers[0]));
   ok('and red is shut, even though people are waiting in it', tiers[2].shut === true, JSON.stringify(tiers[2]));
   ok('the invited ticket is the chosen one', (await page.evaluate(() => (0, eval)('selectedTicket'))) === 'blue');
+  /* THE ONE CASE THAT STILL NEEDS SAYING OUTRIGHT. Green is locked, and green
+     is never locked — nobody would guess that from a padlock. */
   const note = await page.evaluate(() => (document.querySelector('#ticketSelectCard .tk-note') || {}).textContent || '');
   ok('and the screen says it is because of the invitation', /دعوت/.test(note), note.slice(0, 70));
+  ok('naming the ticket it was sent with', /بلیط آبی/.test(note), note.slice(0, 70));
 
   /* THE LOCK MUST NOT OUTLIVE THE INVITATION. Walking back in on their own,
      every tier is judged by the queue again. */

@@ -896,13 +896,18 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
    button that disappears looks like a bug, one with a padlock explains itself. */
 .tk-opt.shut{opacity:.42;filter:grayscale(.75);cursor:not-allowed}
 .tk-opt.shut:active{transform:none;box-shadow:0 3px 0 #000}
-.tk-note{margin-top:9px;font-size:11px;font-weight:800;line-height:1.75;color:var(--muted);
-  background:rgba(255,255,255,.05);border:2px solid rgba(255,255,255,.10);border-radius:13px;padding:9px 11px}
+.tk-note{margin-top:7px;font-size:11px;font-weight:800;line-height:1.6;color:var(--muted);
+  background:rgba(255,255,255,.05);border:2px solid rgba(255,255,255,.10);border-radius:12px;padding:6px 10px}
 .tk-opt-art{display:flex;align-items:center;justify-content:center;height:34px;font-size:24px;line-height:1}
 .tk-opt-art img{height:34px;width:auto;max-width:100%;object-fit:contain;display:block;filter:drop-shadow(0 2px 3px rgba(0,0,0,.45))}
 .tk-opt b{font-size:12.5px;line-height:1.2}
 .tk-opt-n{font-size:10.5px;opacity:.92;font-weight:800}
-.tk-opt-meta{font-size:9px;opacity:.78;font-weight:800;display:flex;align-items:center;gap:3px;min-height:11px}
+/* Pinned to the height it already reserved, so the padlock's reason rides in
+   for free. Left to grow, it took three pixels off the ticket tile — and on
+   this screen every pixel a tile takes comes out of the banner. */
+.tk-opt-meta{font-size:9px;opacity:.78;font-weight:800;display:flex;align-items:center;
+  justify-content:center;gap:3px;height:11px;line-height:11px;
+  white-space:nowrap;overflow:hidden;max-width:100%}
 .tk-opt-sh{font-style:normal;font-size:8.5px;letter-spacing:-1px}
 @media (max-height:700px){
   .tk-opt{padding:6px 4px 6px}
@@ -4060,8 +4065,9 @@ button,input,textarea,select{font-family:'Vazirmatn',system-ui,sans-serif}
    that never carried those classes — the sheets, the quick-chat panel, the
    photo viewer, the wheel. Named here rather than edited into fifteen call
    sites, so the next sheet that gets a ✕ is red without anyone remembering to
-   ask for it. The one ✕ deliberately left alone is the search box's: it empties
-   a field, it is not a way out of anywhere. */
+   ask for it. The crosses deliberately left alone are the ones that are not
+   buttons — the big ✕ the elimination animation stamps across the screen is a
+   mark, not a way out, and it is drawn where the animation wants it. */
 .sheet-x,.qcp-x,.pz-lb-x,.pzm-quit{
   background:linear-gradient(180deg,#FF7A6B,var(--bad-d))!important;color:#fff!important;
   border-color:#000!important}
@@ -14630,7 +14636,11 @@ function renderTicketSelect(){
     /* «دکمه هر بلیط به رنگ خودش باشه و آیکون خودش» — its own colour, on the
        button, whether or not it is the chosen one. */
     b.style.backgroundImage=(selectedTicket===t.key)?t.grad:'none';
-    b.disabled=!open;
+    /* NOT `disabled`. A disabled button swallows the tap entirely, so the one
+       moment a player asks «why can't I pick this?» was answered with silence —
+       which reads as a broken screen, not a locked door. `aria-disabled` says
+       the same thing to a screen reader, the guard in onclick below refuses the
+       selection just as firmly, and the tap gets to explain itself. */
     b.setAttribute('aria-disabled',open?'false':'true');
     /* Only the count — the tier price is not shown on the ticket itself. The
        SAME component Last Survivor uses, so a ticket looks like itself in both
@@ -14638,21 +14648,29 @@ function renderTicketSelect(){
     b.innerHTML='<span class="tk-opt-art">'+pzTicketArt(t.key,t.icon)+'</span>'+
       '<b>'+t.name.replace('بلیط ','')+'</b>'+
       '<span class="tk-opt-n">'+fa(mTickets[t.key]||0)+' عدد</span>'+
-      '<span class="tk-opt-meta">'+(open?'':'🔒')+'</span>';
+      /* The padlock stands in the row that is already there for it, so the
+         reason costs no height at all. */
+      '<span class="tk-opt-meta">'+(open?'':'🔒 کسی منتظر نیست')+'</span>';
     b.onclick=()=>{
       if(!pzTierOpen(t.key)){ toast(pzTierWhyShut(t.key),3000); return; }
       selectedTicket=t.key; renderTicketSelect();
     };
     g.appendChild(b);
   });
-  /* Say why, rather than leaving two dead buttons on the screen. */
-  const shut=TICKET_DEFS.filter(t=>!pzTierOpen(t.key));
-  if(shut.length){
+  /* SAYING WHY, WITHOUT SPENDING THE BANNER ON IT.
+     «اندازه تصویر بنر رو به حداکثرترین حالت ممکن برسون» is a rule about this
+     very screen, and a permanent paragraph under the tickets broke it: the
+     picture lost sixty pixels and the screen began to scroll. So the ordinary
+     case — a tier with nobody in it — is explained by the padlock on the tile,
+     which costs nothing, and by the full sentence in the toast the moment
+     somebody taps it.
+     The invitation is the one case that still needs saying outright, because
+     it is the surprising one: GREEN is locked, and green is never locked.
+     Nobody would guess that from a padlock. */
+  if(pzPairKey&&_pzInviteTier&&TICKET_DEFS.some(t=>!pzTierOpen(t.key))){
     const n=document.createElement('div');
     n.className='tk-note';
-    n.textContent=(pzPairKey&&_pzInviteTier)
-      ? 'این دعوت با '+tDef(_pzInviteTier).name+' فرستاده شده — با همان بازی می‌کنی.'
-      : 'بلیط‌های قفل‌شده وقتی باز می‌شوند که کسی با همان بلیط منتظر حریف باشد. با بلیط سبز شروع کن؛ اگر بردی و ادامه دادی، نوبت بلیط بعدی است.';
+    n.textContent='این دعوت با '+tDef(_pzInviteTier).name+' فرستاده شده — با همان بازی می‌کنی.';
     card.appendChild(n);
   }
   const btn=document.getElementById('meStartBtn');

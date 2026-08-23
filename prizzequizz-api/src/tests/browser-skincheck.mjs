@@ -265,6 +265,83 @@ const railTags = (page) => page.evaluate(() => {
   await ctx.close();
 }
 
+/* ── EVERY WAY OUT IS RED, EVERY WAY BACK IS YELLOW ─────────────────────── */
+/* «هر دکمه ضربدر برای خروج هست باید قرمز بشه و هر دکمه بک زرد بشه.»
+ *
+ * `ib-close` and `ib-back` already said this, and the two buttons above prove
+ * it. What was missing is every OTHER way out — the sheets, the quick-chat
+ * panel, the photo viewer, the wheel, the quit button on the game screen —
+ * none of which ever carried those classes. Checked as a rule rather than as
+ * a tour of fifteen screens, so the next sheet that gets a ✕ is red without
+ * anybody remembering to ask for it. */
+{
+  const { ctx, page, errs } = await makePage();
+  console.log('every ✕ and every ↩ in the game:');
+  const col = await page.evaluate(() => {
+    const probe = (cls, tag = 'button') => {
+      const e = document.createElement(tag);
+      cls.split(' ').forEach((c) => e.classList.add(c));
+      e.textContent = '✕';
+      document.querySelector('.phone').appendChild(e);
+      const bg = getComputedStyle(e).backgroundImage;
+      const fg = getComputedStyle(e).color;
+      e.remove();
+      return { bg: (bg.match(/\d+/g) || []).map(Number), fg: (fg.match(/\d+/g) || []).map(Number) };
+    };
+    return {
+      sheet: probe('sheet-x'), qcp: probe('qcp-x'), lb: probe('pz-lb-x'), quit: probe('pzm-quit'),
+      close: probe('iconbtn ib-close'), back: probe('iconbtn ib-back'), pzback: probe('pz-back')
+    };
+  });
+  const red = (c) => !!c && c.bg.length >= 3 && c.bg[0] > 170 && c.bg[1] < 150 && c.bg[2] < 140;
+  const yellow = (c) => !!c && c.bg.length >= 3 && c.bg[0] > 200 && c.bg[1] > 160 && c.bg[2] < 130;
+  ok('a sheet’s ✕ is red', red(col.sheet), JSON.stringify(col.sheet.bg));
+  ok('the quick-chat ✕ is red', red(col.qcp), JSON.stringify(col.qcp.bg));
+  /* This one was YELLOW — the same colour as every back button in the game,
+     on a button that closes a full-screen photo. */
+  ok('the photo viewer’s ✕ is red', red(col.lb), JSON.stringify(col.lb.bg));
+  ok('the quit button on the game screen is red', red(col.quit), JSON.stringify(col.quit.bg));
+  ok('and so is any ib-close', red(col.close), JSON.stringify(col.close.bg));
+  ok('a back arrow is yellow', yellow(col.back), JSON.stringify(col.back.bg));
+  ok('and so is a pz-back', yellow(col.pzback), JSON.stringify(col.pzback.bg));
+  /* Red on red is unreadable; the mark on the button has to be legible. */
+  const light = (c) => c.fg.length >= 3 && c.fg[0] + c.fg[1] + c.fg[2] > 600;
+  ok('the crosses are drawn in white', ['sheet', 'qcp', 'lb', 'quit', 'close'].every((k) => light(col[k])),
+     JSON.stringify(['sheet', 'qcp', 'lb', 'quit', 'close'].map((k) => col[k].fg)));
+
+  /* THE RULE IS ABOUT BUTTONS. A ✕ that is not pressable is a mark, not an
+     exit — the big cross the elimination animation stamps across the screen is
+     drawn where the animation wants it, and painting it as a button would be
+     reading the rule backwards. */
+  const decorative = await page.evaluate(() => {
+    const e = document.querySelector('.lsmo-x');
+    return e ? { tag: e.tagName, pressable: typeof e.onclick === 'function' } : null;
+  });
+  ok('a decorative cross is not a button at all', !decorative || (decorative.tag !== 'BUTTON' && !decorative.pressable), JSON.stringify(decorative));
+
+  /* AND EVERY ✕ BUTTON IN THE MARKUP REALLY CARRIES ONE OF THESE CLASSES. A
+     button that closes something and was never given the class is the fault
+     this is about, and no colour check can see one that does not exist. */
+  const stray = await page.evaluate(() => {
+    const out = [];
+    for (const b of document.querySelectorAll('button')) {
+      if (b.textContent.trim() !== '✕') continue;
+      const c = b.className || '';
+      if (/ib-close|sheet-x|qcp-x|pz-lb-x|pzm-quit/.test(c)) continue;
+      out.push(c || '(no class)');
+    }
+    return out;
+  });
+  ok('no ✕ button anywhere is left uncoloured', stray.length === 0, JSON.stringify(stray).slice(0, 200));
+  /* And the check can actually see them: an empty page would pass the line
+     above too. */
+  const crosses = await page.evaluate(() =>
+    [...document.querySelectorAll('button')].filter((b) => b.textContent.trim() === '✕').length);
+  ok('and there really are crosses to check', crosses >= 8, String(crosses));
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 await browser.close(); server.close();
 process.exit(fail ? 1 : 0);

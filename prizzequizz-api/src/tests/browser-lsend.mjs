@@ -653,6 +653,194 @@ async function eliminateMe(page) {
   await ctx.close();
 }
 
+/* ── ONE ROOM, ONE WINNER, ONE FACE ────────────────────────────────────── */
+/* «در قسمت صفحه آخر برد یا باخت در آخرین بازمانده، در کارت بالا عکس دو نفر هست
+ * مثل دوئل. در بازی ۲۰ نفره چرا باید عکس ۲ نفر بیاد؟»
+ *
+ * Nothing ever told the result screen it was not a duel. `gameType` is set by
+ * each mode as it starts and Last Survivor never set it, so after one duel it
+ * stayed 'duel' for the rest of the session — and the room of twenty was
+ * summed up with two portraits and a «۵ - ۳». */
+{
+  const { ctx, page, errs } = await makePage();
+  console.log('\nthe result screen after a room of twenty:');
+  /* A duel first, so `gameType` really is stale by the time the room ends —
+     which is the only way the fault ever appeared. */
+  await page.evaluate(() => { (0, eval)("gameType='duel';"); });
+  await enterRoom(page);
+  await eliminateMe(page);
+  await page.waitForTimeout(900);
+  await settleModals(page);
+  const board = await page.evaluate(() => {
+    const b = document.getElementById('resBoard') || document.querySelector('.res-board');
+    return {
+      type: (0, eval)('gameType'),
+      faces: b ? b.querySelectorAll('.rb-face').length : -1,
+      solo: b ? b.classList.contains('solo') : null,
+      score: (document.getElementById('resultDuelScore') || {}).textContent || '',
+      /* The row itself stays — Last Survivor puts «مرور مسابقه» in it — but the
+         rematch button in it belongs to a duel and to nothing else. */
+      rematch: (document.getElementById('rematchBtn') || {}).style.display,
+      review: (document.getElementById('reviewBtn') || {}).style.display
+    };
+  });
+  ok('the mode is no longer «duel»', board.type === 'lastSurvivor', String(board.type));
+  ok('one face, not two', board.faces === 1, String(board.faces));
+  ok('and the board knows it is a lone result', board.solo === true, String(board.solo));
+  /* A «۵ - ۳» belongs to two players. */
+  ok('no duel scoreline', board.score.trim() === '', JSON.stringify(board.score));
+  /* «بازی مجدد با همین حریف» in a room of twenty has no «همین حریف»; the
+     «ادامه» beside it would have run duelContinue on a room with no rungs. */
+  ok('no rematch offer', board.rematch === 'none', String(board.rematch));
+  ok('but the match is still there to look back at', board.review === 'block', String(board.review));
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
+/* ── THE PRIZE ARRIVES AS A NUMBER, NOT AS A NOTICE ────────────────────── */
+/* «اون سهم جایزه الان داخل یه کادر فقط نوشته میشه، اصلا حس هیجان به کاربر
+ * نمیده. باید فقط اون عدد بیاد جلو وسط بزرگ با موشن، بعد ثابت بشه، بعد با موشن
+ * بره سر جای خودش.» */
+{
+  const { ctx, page, errs } = await makePage();
+  console.log('\nthe shape of the announcement:');
+  await enterRoom(page);
+  const look = await page.evaluate(async () => {
+    (0, eval)('lsPotHero')('lsRemain', 10000, 40000);
+    await new Promise((r) => setTimeout(r, 200));
+    const card = document.querySelector('#lsPotHero .lph-card');
+    const num = document.querySelector('#lsPotHero .lph-num');
+    const add = document.querySelector('#lsPotHero .lph-add');
+    const cs = card ? getComputedStyle(card) : null;
+    const ns = num ? getComputedStyle(num) : null;
+    const as = add ? getComputedStyle(add) : null;
+    return {
+      size: ns ? parseFloat(ns.fontSize) : 0,
+      addSize: as ? parseFloat(as.fontSize) : 0,
+      addAnim: as ? as.animationName : '',
+      border: cs ? parseFloat(cs.borderTopWidth) : -1,
+      bg: cs ? cs.backgroundColor : '',
+      centred: num ? Math.abs((num.getBoundingClientRect().left + num.getBoundingClientRect().right) / 2 - window.innerWidth / 2) : 999
+    };
+  });
+  /* «بزرگ» is the whole request — it has to dwarf ordinary text, not merely
+     be a little larger than it. */
+  ok('the number is enormous', look.size >= 48, look.size + 'px');
+  /* «داخل یه کادر فقط نوشته میشه» was the complaint: a frame turns a number
+     arriving into a notice to be read. */
+  ok('there is no box around it', look.border <= 0, String(look.border));
+  ok('and no panel behind it', /rgba\(0, 0, 0, 0\)|transparent/.test(look.bg), look.bg);
+  ok('it lands in the middle of the screen', look.centred < 12, look.centred + 'px off centre');
+  /* The «+N» is what makes it read as money landing rather than a figure
+     being swapped for another. */
+  ok('what is being added is big enough to see', look.addSize >= 18, look.addSize + 'px');
+  ok('and it moves', /lphAdd/.test(look.addAnim), look.addAnim);
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
+/* ── THE SPECTATOR'S ENDING ────────────────────────────────────────────── */
+/* «وقتی کسی حذف میشه و تماشای مسابقه رو میزنه، بعد از پایان متن برنده مسابقه
+ * فلانی شد و مبلغ فلان قدر برنده شد خیلی به هم ریخته نشون داده میشه.»
+ *
+ * A username of unknown direction, an em-dash and a run of digits, all on one
+ * right-to-left line, is exactly the shape the bidirectional algorithm
+ * reorders into nonsense — a Latin name jumps to the wrong end of the sentence
+ * and takes the dash with it. */
+{
+  const { ctx, page, errs } = await makePage();
+  console.log('\nwatching somebody else finish:');
+  await enterRoom(page);
+  const w = await page.evaluate(async () => {
+    (0, eval)('_lsWatchEndShown=false;');
+    (0, eval)('lsShowWatchEnding')({
+      room: { status: 'finished' },
+      players: [{ userId: 'a', username: 'Reza_77', payoutCash: 250000 },
+                { userId: 'b', username: 'مهدی', payoutCash: 90000 }],
+      stats: {}
+    });
+    await new Promise((r) => setTimeout(r, 300));
+    const rows = [...document.querySelectorAll('.ls-watchend .lwe-win')];
+    const first = rows[0];
+    const who = first ? first.querySelector('.lwe-who') : null;
+    const amt = first ? first.querySelector('.lwe-amt') : null;
+    return {
+      rows: rows.length,
+      heading: (document.querySelector('.ls-watchend .lwe-line') || {}).textContent || '',
+      whoTag: who ? who.tagName : '',
+      whoTxt: who ? who.textContent : '',
+      amtTxt: amt ? amt.textContent : '',
+      /* Separate lines is the fix: nothing is mixed, so nothing is reordered. */
+      sameLine: (who && amt) ? Math.abs(who.getBoundingClientRect().top - amt.getBoundingClientRect().top) < 4 : null,
+      col: first ? getComputedStyle(first).flexDirection : ''
+    };
+  });
+  ok('both winners are listed', w.rows === 2, String(w.rows));
+  ok('and the heading is in the plural', /برندگان/.test(w.heading), w.heading);
+  /* <bdi> is the one element whose whole job is «do not let this text reorder
+     the sentence around it». */
+  ok('the name is isolated from the sentence', w.whoTag === 'BDI', w.whoTag);
+  ok('the name is the name', w.whoTxt === 'Reza_77', w.whoTxt);
+  ok('the amount is its own piece', /۲۵۰٬۰۰۰|250,000/.test(w.amtTxt) && /تومان/.test(w.amtTxt), w.amtTxt);
+  ok('and it sits under the name, not beside it', w.sameLine === false, String(w.sameLine));
+  ok('the row really is stacked', w.col === 'column', w.col);
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
+/* ── ONE WINNER, AND NOBODY AT ALL ─────────────────────────────────────── */
+{
+  const { ctx, page, errs } = await makePage();
+  console.log('\nthe other two endings:');
+  await enterRoom(page);
+  const one = await page.evaluate(async () => {
+    (0, eval)('_lsWatchEndShown=false;');
+    (0, eval)('lsShowWatchEnding')({ room: {}, players: [{ userId: 'a', username: 'Ali', payoutCash: 50000 }], stats: {} });
+    await new Promise((r) => setTimeout(r, 200));
+    return { heading: (document.querySelector('.ls-watchend .lwe-line') || {}).textContent || '',
+             rows: document.querySelectorAll('.ls-watchend .lwe-win').length };
+  });
+  ok('one winner is announced in the singular', /برندهٔ این اتاق/.test(one.heading), one.heading);
+  ok('with one row', one.rows === 1, String(one.rows));
+
+  const wipe = await page.evaluate(async () => {
+    (0, eval)('_lsWatchEndShown=false;');
+    (0, eval)('lsShowWatchEnding')({
+      room: { wipeout: { lastUserId: 'z' } },
+      players: [{ userId: 'z', username: 'Sara', payoutCash: 30000 }], stats: {} });
+    await new Promise((r) => setTimeout(r, 200));
+    const lines = [...document.querySelectorAll('.ls-watchend .lwe-line')].map((e) => e.textContent);
+    const who = document.querySelector('.ls-watchend .lwe-who');
+    return { lines, who: who ? who.textContent : '', tag: who ? who.tagName : '' };
+  });
+  /* The sentence and the name used to share a line here too, with the name in
+     the middle of it — the worst case of all for reordering. */
+  ok('a wipeout says so plainly', /برنده‌ای نداشت/.test(wipe.lines.join(' ')), JSON.stringify(wipe.lines));
+  ok('and the name it names is on its own', wipe.tag === 'BDI' && wipe.who === 'Sara', wipe.tag + ':' + wipe.who);
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
+/* ── THE WALLET IS CALLED THE PRIZE BOX ────────────────────────────────── */
+/* «در منو بیشتر اسم کیف پول تغییر پیدا کنه به صندوق جایزه و بغیر اونم هر اسمی
+ * کیف پول هست تغییر کنه به صندوق جایزه.» */
+{
+  const { ctx, page, errs } = await makePage();
+  console.log('\nwhat the wallet is called:');
+  const words = await page.evaluate(() => {
+    const txt = document.body.innerText || '';
+    /* The whole document, not just what is on screen: every screen's markup is
+       in the page, and one missed label is the one the player finds. */
+    const html = document.documentElement.innerHTML;
+    return { old: (html.match(/کیف پول/g) || []).length, neu: (html.match(/صندوق جایزه/g) || []).length, seen: /کیف پول/.test(txt) };
+  });
+  ok('nothing is called a wallet any more', words.old === 0, String(words.old));
+  ok('and the prize box is named all over', words.neu > 10, String(words.neu));
+  ok('nothing on screen says the old word', words.seen === false, String(words.seen));
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 await browser.close();
 server.close();

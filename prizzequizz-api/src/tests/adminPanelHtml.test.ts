@@ -576,6 +576,60 @@ function run(): void {
     }
   });
 
+  /* «در پنل مدیریت در تب دوئل ورودی رو نوشته قلب سکه و مبلغ. باید در دوستانه
+     با قلب و سکه باشه، در رقابت اصلی با بلیط. الان همه چی درسته ها — فقط در
+     پنل اونجوری نوشته شده، یعنی منطق بازی رو دست نزن.»
+
+     The game was right and the labels were wrong: «بازی نقدی — مبلغ» sat beside
+     the hearts and coins as if the paid duel were entered by typing a number,
+     when it is entered with a ticket. An operator reading this page would set
+     the wrong thing and wonder why nothing changed. */
+  check('the duel tab names the two entries the way the game does', () => {
+    const i = script.indexOf('async function renderDuel(');
+    const body = script.slice(i, i + 4000);
+    assert.ok(body.includes('دوستانه — قلب'), 'the friendly entry is not named as friendly');
+    assert.ok(body.includes('دوستانه — سکه'), 'the friendly coin entry is not named as friendly');
+    assert.ok(!/بازی رایگان — قلب/.test(body), 'the old «بازی رایگان» label is still there');
+    assert.ok(!/بازی نقدی — مبلغ/.test(body), 'the paid duel is still described as an amount to type');
+    /* The paid duel is entered with a TICKET, and this page must say where a
+       ticket is actually configured rather than implying it is here. */
+    assert.ok(/بلیط/.test(body), 'the ticket is never mentioned on the duel tab');
+    assert.ok(/بلیط‌ها/.test(body), 'the tab does not say where tickets are set');
+  });
+
+  check('and the field that remains explains what it really is', () => {
+    const i = script.indexOf('async function renderDuel(');
+    const body = script.slice(i, i + 4000);
+    /* The number is still real — it is the base value used when somebody
+       enters the paid duel WITHOUT a ticket — so it stays, with the sentence
+       that stops it being read as «the price of a paid duel». */
+    assert.ok(body.includes("num('du_ep_cash'"), 'the base value field was removed, not relabelled');
+    assert.ok(/ارزش پایهٔ رقابت اصلی/.test(body), 'the base value is not named as a base value');
+    assert.ok(/ارزش از خود بلیط می‌آید/.test(body), 'nothing says where the value normally comes from');
+  });
+
+  check('the prize rows are named by half, not by price', () => {
+    const i = script.indexOf('async function renderDuel(');
+    const body = script.slice(i, i + 4000);
+    assert.ok(body.includes('دوستانه — پایه (سکه)'), 'the friendly prize base is not named');
+    assert.ok(body.includes('رقابت اصلی — ضریب'), 'the paid multiplier is not named');
+    assert.ok(!/رایگان — پایه/.test(body), 'the old «رایگان» prize label is still there');
+    assert.ok(!/نقدی — ضریب ورودی/.test(body), 'the old «نقدی» multiplier label is still there');
+    /* The formula line said «مبلغ ورودی × ضریب», which is the same wrong idea
+       one line further down. */
+    assert.ok(/ارزش بلیط × ضریب/.test(body), 'the formula still talks about a typed amount');
+  });
+
+  /* THE LOGIC IS NOT TOUCHED. «یعنی منطق بازی رو دست نزن» — the field names
+     that carry the values are the same ones as before, so this is a change of
+     wording and nothing else. */
+  check('and none of the settings behind the labels moved', () => {
+    const save = script.slice(script.indexOf('async function duelSave('), script.indexOf('async function duelSave(') + 2000);
+    for (const f of ['du_ef_h', 'du_ef_c', 'du_ep_cash', 'du_rf_base', 'du_rf_stage', 'du_rp_mult']) {
+      assert.ok(save.includes(f), 'saving no longer reads ' + f);
+    }
+  });
+
   /* ── THE MATCHES TAB ────────────────────────────────────────────────── */
   /* «باید در تب مسابقات دوئل رو جدا بنویسه، آخرین بازمانده رو جدا بنویسه، همه
      یا هیچ رو جدا بنویسه، و همه در تب مسابقات باشن.» */
