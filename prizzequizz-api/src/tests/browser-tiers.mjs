@@ -967,6 +967,28 @@ const readTiers = (page) => page.evaluate(() =>
   await ctx.close();
 }
 
+/* ── TURNED DOWN BY SOMEBODY WHOSE NAME WE NEVER HAD ───────────────────── */
+/* An invitation can be sent from a place that knows only an id. The notice
+   still has to read as a sentence, so the blank becomes «حریف» — leaving it
+   empty gives «‌ درخواست بازی تو را رد کرد», which reads as a bug. */
+{
+  waitingByTier = {}; posted = []; duelCalls = [];
+  inviteStatus = { id: 'inv-n', status: 'rejected', secondsLeft: 40 };
+  const { ctx, page, errs } = await makePage();
+  console.log('\nrefused by someone whose name we never had:');
+  const told = await page.evaluate(async () => {
+    (0, eval)('pzInviteWait')({ id: 'inv-n' }, 'green', 0);
+    await new Promise((r) => setTimeout(r, 3200));
+    return { title: (document.getElementById('aaaTitle') || {}).textContent || '',
+             sub: (document.getElementById('aaaSub') || {}).textContent || '' };
+  });
+  ok('it is still called a refusal', /رد شد/.test(told.title), told.title);
+  ok('and the blank reads «حریف»', /حریف\s*درخواست/.test(told.sub), told.sub.slice(0, 90));
+  ok('so the sentence does not start on a gap', !/^\s*درخواست/.test(told.sub), told.sub.slice(0, 60));
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
 /* ── AND WHEN NOBODY ANSWERS AT ALL ────────────────────────────────────── */
 /* The other half of «رد کرده یا اصلا به دستش نرسیده» — said in different
  * words, because it is a different thing and the sender's next move differs. */
@@ -988,6 +1010,40 @@ const readTiers = (page) => page.evaluate(() =>
   ok('and it is not called a refusal', !/رد شد/.test(quiet.title), quiet.title);
   ok('it says no answer came', /جوابی نیامد/.test(quiet.title), quiet.title);
   ok('and allows that it may never have arrived', /به دستش نرسیده/.test(quiet.sub), quiet.sub.slice(0, 120));
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
+/* ── AND WHEN THE MINUTE SIMPLY RUNS OUT ───────────────────────────────── */
+/* There are two different ways to hear nothing, and only one of them comes
+   from the server. The case above is the server saying «expired»; this is the
+   sender's own minute lapsing while the server is still saying «pending» —
+   which is also what happens when the poll cannot reach it at all. Same
+   silence, different branch, and it was the untested one. The deadline is
+   pushed into the past rather than waited out. */
+{
+  waitingByTier = {}; posted = []; duelCalls = [];
+  inviteStatus = { id: 'inv-t', status: 'pending', secondsLeft: 0 };
+  const { ctx, page, errs } = await makePage();
+  console.log('\nwhen the minute runs out and the server is still saying «pending»:');
+  const lapsed = await page.evaluate(async () => {
+    (0, eval)('pzInviteWait')({ id: 'inv-t' }, 'green', 0, 'مهسا');
+    await new Promise((r) => setTimeout(r, 300));
+    (0, eval)('PZ_INV_WAIT').until = Date.now() - 1;
+    await new Promise((r) => setTimeout(r, 3400));
+    return {
+      shown: document.getElementById('aaaModal').classList.contains('show'),
+      title: (document.getElementById('aaaTitle') || {}).textContent || '',
+      sub: (document.getElementById('aaaSub') || {}).textContent || '',
+      waiting: !!(0, eval)('PZ_INV_WAIT')
+    };
+  });
+  ok('the sender is told, on a sheet of its own', lapsed.shown === true, JSON.stringify(lapsed).slice(0, 120));
+  ok('it says no answer came', /جوابی نیامد/.test(lapsed.title), lapsed.title);
+  ok('and it is not called a refusal', !/رد شد/.test(lapsed.title), lapsed.title);
+  ok('it names who was invited', /مهسا/.test(lapsed.sub), lapsed.sub.slice(0, 90));
+  ok('and allows that it may never have arrived', /به دستش نرسیده/.test(lapsed.sub), lapsed.sub.slice(0, 120));
+  ok('the waiting is over', lapsed.waiting === false, String(lapsed.waiting));
   ok('no script errors', errs.length === 0, errs.join(' | '));
   await ctx.close();
 }

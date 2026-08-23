@@ -109,6 +109,60 @@ const room = (over = {}) => {
   await ctx.close();
 }
 
+/* ── 1b. INSTALLED ON THE HOME SCREEN, WITH NO KEYBOARD ─────────────────── */
+/* «وقتی نصب رو میزنی و اد تو هوم اسکرین میکنی تمام صفحه میشه، هدر گوشی هم
+ * میره، ولی بازی نمیره تا اون بالا و اون قسمت هدر خود گوشی سیاه میمونه.»
+ *
+ * With `viewport-fit=cover` the LAYOUT viewport covers the whole screen, the
+ * strip the status bar used to occupy included — but on an installed Android
+ * PWA `visualViewport.height` reports only the part the system counts as
+ * visible, which is the shorter of the two. Taking that as the app's height
+ * left the frame centred in a taller body with a black band above it, exactly
+ * where the status bar had been. A difference this small is not a keyboard,
+ * and must not be read as one either. */
+{
+  const { ctx, page, errs } = await makePage();
+  console.log('\ninstalled on the home screen, no keyboard:');
+
+  const full = await page.evaluate(async () => {
+    const vv = window.visualViewport;
+    /* 44px short of the window — the status-bar strip, not a keyboard. */
+    Object.defineProperty(vv, 'height', { configurable: true, get: () => 800 });
+    vv.dispatchEvent(new Event('resize'));
+    await new Promise((r) => setTimeout(r, 250));
+    const r = document.querySelector('.phone').getBoundingClientRect();
+    return {
+      vh: parseInt(getComputedStyle(document.documentElement).getPropertyValue('--pz-vh'), 10),
+      kbOpen: document.body.classList.contains('pz-kb-open'),
+      top: Math.round(r.top), bottom: Math.round(r.bottom), height: Math.round(r.height),
+      inner: window.innerHeight
+    };
+  });
+  ok('the app is as tall as the window, not as tall as the visual viewport',
+     full.vh === full.inner, full.vh + ' vs ' + full.inner);
+  ok('so the frame reaches the very top', full.top <= 1, String(full.top));
+  ok('and the very bottom', Math.abs(full.bottom - full.inner) <= 1, full.bottom + ' vs ' + full.inner);
+  ok('no black band is left anywhere', full.height >= full.inner - 1, full.height + ' vs ' + full.inner);
+  ok('and a 44px strip is not mistaken for a keyboard', full.kbOpen === false, String(full.kbOpen));
+
+  /* And a real keyboard still shortens it — the window height is the app's
+     height, not a floor it can never go below. */
+  const typing = await page.evaluate(async () => {
+    const vv = window.visualViewport;
+    Object.defineProperty(vv, 'height', { configurable: true, get: () => 480 });
+    vv.dispatchEvent(new Event('resize'));
+    await new Promise((r) => setTimeout(r, 250));
+    return {
+      vh: parseInt(getComputedStyle(document.documentElement).getPropertyValue('--pz-vh'), 10),
+      kbOpen: document.body.classList.contains('pz-kb-open')
+    };
+  });
+  ok('a keyboard still takes its half back', typing.vh >= 475 && typing.vh <= 485, String(typing.vh));
+  ok('and is known to be up', typing.kbOpen === true, String(typing.kbOpen));
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
 /* ── 2. THE TYPING BOX SITS ON THE KEYBOARD ─────────────────────────────── */
 {
   /* A real conversation, opened the way a player opens one: the friend list
