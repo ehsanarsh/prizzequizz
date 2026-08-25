@@ -529,7 +529,8 @@ for (const [file, table, atLeast] of [
   ['../services/duelRunService.ts', 'duel_runs', 5],
   ['../services/waitingMusicService.ts', 'waiting_music', 5],
   ['../services/questionSeenService.ts', 'question_seen', 2],
-  ['../services/duelCallService.ts', 'duel_calls', 5]
+  ['../services/duelCallService.ts', 'duel_calls', 5],
+  ['../services/referralService.ts', 'referrals', 3]
 ] as const) {
   await check(table + ' says every optional column twice', async () => {
     const src = fs.readFileSync(here + file, 'utf8');
@@ -543,6 +544,10 @@ for (const [file, table, atLeast] of [
        and needs no ALTER. Every other column does — whether or not it happens
        to be new today, because the point is the next one somebody adds. */
     const migratable = lines
+      /* PRIMARY KEY is implicitly NOT NULL, so a primary key column cannot be
+         added to a table with rows in it any more than a bare NOT NULL one
+         can — it was there on day one and needs no ALTER. */
+      .filter((l) => !/PRIMARY KEY/i.test(l))
       .filter((l) => /DEFAULT/i.test(l) || !/NOT NULL/i.test(l))
       .map((l) => l.split(/\s+/)[0] ?? '')
       .filter((c) => /^[a-z_]+$/.test(c) && c !== 'id');

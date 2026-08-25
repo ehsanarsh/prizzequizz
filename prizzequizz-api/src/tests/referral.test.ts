@@ -19,9 +19,12 @@ import { repositories } from '../repositories/index.js';
 import { createSession } from '../services/sessionService.js';
 import { id } from '../utils/id.js';
 import { getTickets } from '../services/ticketService.js';
+import { recordMatch } from '../services/missionService.js';
+import { notifications } from '../services/notificationService.js';
 import {
   _resetReferrals, codeFor, ownerOf, redeem, hasRedeemed, inviteCount,
-  normalizeCode, ReferralError, REFERRAL_REWARD_TIER, REFERRAL_REWARD_COUNT
+  normalizeCode, ReferralError, REFERRAL_REWARD_TIER, REFERRAL_REWARD_COUNT,
+  payReferralReward, wasRewarded
 } from '../services/referralService.js';
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -114,18 +117,50 @@ async function main(): Promise<void> {
 
     console.log('\nusing one:');
 
-    await check('the code’s owner gets a green ticket', async () => {
+    /* «بعد از ثبت‌نام، بعد از اولین بازیِ دعوت‌شده، به فرستنده یه بلیط سبز
+       می‌دیم.» Typing the code is a claim, not a payment: signing up is free
+       and takes a minute, so paying for it pays for accounts rather than for
+       players. The ticket is earned by the first match. */
+    await check('typing a code pays nobody yet', async () => {
       const friend = await player('دوست');
       const before = await green(owner);
       const r = await redeem(friend, ownerCode);
       assert.equal(r.ownerUserId, owner);
+      assert.equal(await green(owner), before, 'the ticket was paid before it was earned');
+      assert.equal(await wasRewarded(friend), false);
+    });
+
+    await check('and the first match settles it', async () => {
+      const friend = await player('دوست-الف');
+      await redeem(friend, ownerCode);
+      const before = await green(owner);
+      const paid = await payReferralReward(friend);
+      assert.deepEqual(paid, { ownerUserId: owner, tier: REFERRAL_REWARD_TIER, count: REFERRAL_REWARD_COUNT }, JSON.stringify(paid));
       assert.equal(await green(owner), before + REFERRAL_REWARD_COUNT);
+      assert.equal(await wasRewarded(friend), true);
+    });
+
+    /* The hook runs on EVERY match. It has to be silent on all of them but the
+       first, or one invitation buys a lifetime of tickets. */
+    await check('and never settles twice, however many matches follow', async () => {
+      const friend = await player('دوست-ب');
+      await redeem(friend, ownerCode);
+      assert.ok(await payReferralReward(friend));
+      const after = await green(owner);
+      for (let i = 0; i < 5; i++) assert.equal(await payReferralReward(friend), null);
+      assert.equal(await green(owner), after, 'a second ticket was paid for one invitation');
+    });
+
+    await check('a player who typed no code earns nobody anything', async () => {
+      const stranger = await player('غریبه');
+      assert.equal(await payReferralReward(stranger), null);
     });
 
     await check('and the person who typed it gets nothing', async () => {
       const friend = await player('دوست۲');
       const before = await green(friend);
       await redeem(friend, ownerCode);
+      await payReferralReward(friend);
       assert.equal(await green(friend), before, 'the reward went to the wrong person');
     });
 
@@ -133,11 +168,12 @@ async function main(): Promise<void> {
       const friend = await player('دوست۳');
       const before = await green(owner);
       await redeem(friend, '  ' + ownerCode.toLowerCase() + ' ');
+      await payReferralReward(friend);
       assert.equal(await green(owner), before + 1);
     });
 
     await check('the owner can see how many came in on it', async () => {
-      assert.equal(await inviteCount(owner), 3, 'three friends have used it by now');
+      assert.equal(await inviteCount(owner), 5, 'five friends have used it by now');
     });
 
     console.log('\nevery way of using one twice:');
@@ -196,6 +232,60 @@ async function main(): Promise<void> {
       assert.equal(await hasRedeemed(friend), false);
     });
 
+    /* ── FROM A FINISHED MATCH, AND SAID OUT LOUD ────────────────────────
+       The two halves above are the rule and the payment. This is the wiring:
+       nothing pays anybody unless a real match end reaches it, and «الان کاربر
+       هیچ خبری نداره که بلیطش اضافه شده یا نه» — the ticket has to arrive with
+       a sentence attached, naming who earned it. */
+    console.log('\nwhen the invited player actually plays:');
+
+    await check('finishing a match is what pays the inviter', async () => {
+      const host = await player('میزبان-بازی');
+      const code = await codeFor(host);
+      const newbie = await player('نوآمدهٔ بازیکن', false);
+      await redeem(newbie, code);
+      const before = await green(host);
+      await recordMatch({ userId: newbie, won: false });
+      assert.equal(await green(host), before + REFERRAL_REWARD_COUNT, 'the match did not pay the inviter');
+    });
+
+    await check('and the inviter is told, by name', async () => {
+      const host = await player('میزبان-خبر');
+      const code = await codeFor(host);
+      const newbie = await player('پویا', false);
+      /* Give them the name they will be known by, the way registration does. */
+      const u = await repositories.users.findById(newbie);
+      await repositories.users.save({ ...(u as any), username: 'pouya_7', displayName: 'پویا' });
+      await redeem(newbie, code);
+      await recordMatch({ userId: newbie, won: false });
+      const inbox = await notifications.list(host, 20);
+      const note = inbox.find((n) => (n.data as any)?.kind === 'referral_reward');
+      assert.ok(note, 'the ticket arrived with nothing said: ' + JSON.stringify(inbox.map((n) => n.title)));
+      assert.match(note!.title, /بلیط سبز/, note!.title);
+      assert.match(note!.body, /pouya_7/, note!.body);
+      assert.match(note!.body, /اولین مسابقه/, note!.body);
+      assert.equal((note!.data as any).tier, REFERRAL_REWARD_TIER);
+      assert.equal((note!.data as any).count, REFERRAL_REWARD_COUNT);
+    });
+
+    await check('and told only once, not after every match', async () => {
+      const host = await player('میزبان-یک‌بار');
+      const code = await codeFor(host);
+      const newbie = await player('بازیکن-مکرر', false);
+      await redeem(newbie, code);
+      for (let i = 0; i < 4; i++) await recordMatch({ userId: newbie, won: i % 2 === 0 });
+      const notes = (await notifications.list(host, 50)).filter((n) => (n.data as any)?.kind === 'referral_reward');
+      assert.equal(notes.length, 1, 'the inviter was told ' + notes.length + ' times for one invitation');
+      assert.equal(await green(host), REFERRAL_REWARD_COUNT, 'more than one ticket for one invitation');
+    });
+
+    await check('a player who came in on nobody’s code pays nobody', async () => {
+      const alone = await player('تنها', false);
+      const before = (await notifications.list(alone, 20)).length;
+      await recordMatch({ userId: alone, won: true });
+      assert.equal((await notifications.list(alone, 20)).length, before);
+    });
+
     console.log('\nthe window: first registration, and nowhere else:');
 
     /* WHO COUNTS AS NEW — AGAINST THE ACCOUNT SIGN-UP ACTUALLY MAKES.
@@ -252,7 +342,10 @@ async function main(): Promise<void> {
       const r = await call('PATCH', '/users/me', s.accessToken, { displayName: 'تازه‌وارد', username: 'newbie1', referralCode: code });
       assert.equal(r.status, 200, JSON.stringify(r));
       assert.deepEqual(r.data.referral, { applied: true }, JSON.stringify(r.data.referral));
-      assert.equal(await green(host), before + 1);
+      /* Registering is the CLAIM. The ticket is earned by the first match. */
+      assert.equal(await green(host), before, 'the ticket was paid at sign-up');
+      await payReferralReward(newbie);
+      assert.equal(await green(host), before + 1, 'the first match did not settle it');
     });
 
     /* THE RULE THE WHOLE REQUEST TURNS ON. «بعد از ثبت نام دیگه جایی نباشه که

@@ -6566,8 +6566,8 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
       <div class="topbar tb-card"><button class="iconbtn ib-back" onclick="menuBack('home')">→</button><h1>کد معرف من 🎁</h1><button class="iconbtn ib-close" onclick="menuBack('home')">✕</button></div>
       <div class="ref-hero">
         <div class="ref-gift">🎁</div>
-        <b>هر کسی با کد تو وارد بازی شود، یک بلیط سبز به تو می‌رسد</b>
-        <p>جایزه برای توست، نه برای تازه‌وارد. کدت را برای دوستانت بفرست؛ آن‌ها باید هنگام ثبت‌نام واردش کنند — بعد از ثبت‌نام دیگر جایی برای وارد کردن کد نیست.</p>
+        <b>هر کسی با کد تو وارد بازی شود و اولین مسابقه‌اش را بدهد، یک بلیط سبز به تو می‌رسد</b>
+        <p>جایزه برای توست، نه برای تازه‌وارد. کدت را برای دوستانت بفرست؛ آن‌ها باید هنگام ثبت‌نام واردش کنند — بعد از ثبت‌نام دیگر جایی برای وارد کردن کد نیست. بلیط وقتی می‌رسد که دوستت اولین مسابقه‌اش را بدهد، و همان موقع بهت خبر می‌دهیم.</p>
       </div>
       <div class="ref-code-card">
         <span class="ref-lbl">کد تو</span>
@@ -19018,7 +19018,7 @@ async function submitRegister(){
       toast(rf.reason==='CODE_NOT_FOUND'?'کد معرف پیدا نشد — بقیهٔ اطلاعاتت ثبت شد'
         :rf.reason==='OWN_CODE'?'کد خودت را نمی‌توانی وارد کنی — بقیهٔ اطلاعاتت ثبت شد'
         :'کد معرف ثبت نشد — بقیهٔ اطلاعاتت ثبت شد',3600);
-    } else if(ref&&rf&&rf.applied){ toast('کد معرف ثبت شد — به دوستت یک بلیط سبز رسید 🎁',3600); }
+    } else if(ref&&rf&&rf.applied){ toast('کد معرف ثبت شد — بعد از اولین مسابقه‌ات، به دوستت یک بلیط سبز می‌رسد 🎁',4200); }
     else toast('اطلاعاتت ثبت شد ✅');
     /* CHOOSE THE CHARACTER NOW, not «later, somewhere». Registration used to
        mark the character step DONE without ever showing it — the player was

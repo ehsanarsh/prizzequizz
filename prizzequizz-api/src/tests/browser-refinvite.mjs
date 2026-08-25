@@ -150,7 +150,11 @@ async function makePage(query = '') {
     hero: (document.querySelector('#referral .ref-hero') || {}).textContent || '',
     ph: (document.getElementById('regReferral') || {}).placeholder || ''
   }));
-  ok('the referral screen says the ticket comes to you', /به تو می‌رسد/.test(words.hero), words.hero.slice(0, 80));
+  ok('the referral screen says the ticket comes to you', /به تو می‌رسد/.test(words.hero), words.hero.slice(0, 110));
+  /* «بعد از اولین بازیِ دعوت‌شده» — the screen has to say WHEN, or a player
+     who invites someone and sees nothing that evening thinks it is broken. */
+  ok('and says it arrives after their first match', /اولین مسابقه/.test(words.hero), words.hero.slice(0, 140));
+  ok('and that they will be told when it does', /خبر می‌دهیم/.test(words.hero), words.hero.slice(0, 260));
   ok('and no longer that it is the newcomer’s', !/مهمان تو می‌شود/.test(words.hero), words.hero.slice(0, 80));
   ok('it says so outright', /جایزه برای توست/.test(words.hero), words.hero.slice(0, 140));
   /* The box the NEWCOMER types into must not promise them a prize. */

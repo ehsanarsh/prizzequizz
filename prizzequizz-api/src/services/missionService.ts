@@ -21,6 +21,11 @@ import { recordCategories } from './recordModeService.js';
 import { awardScoring } from './matchEngine.js';
 import { grantCharacter } from './characterSelectionService.js';
 import { logger } from './logger.js';
+import { notifications } from './notificationService.js';
+import { payReferralReward } from './referralService.js';
+
+/* Ticket tiers are stored by colour and shown by name. */
+const TICKET_LABEL: Record<string, string> = { green: 'سبز', blue: 'آبی', red: 'قرمز' };
 
 /* Every countable thing the game can report. A mission targets one of these;
  * adding a mission never needs a new metric, and adding a metric is the only
@@ -968,10 +973,40 @@ export interface MatchOutcome {
   friendMatch?: boolean;
   at?: number;
 }
+/* Pay the person who invited this player, the first time this player finishes
+ * a match — and then TELL them, by name. «الان کاربر هیچ خبری نداره که بلیطش
+ * اضافه شده یا نه»: a ticket that appears in a balance with nothing said is a
+ * reward nobody connects to anything they did. */
+async function settleReferral(userId: string): Promise<void> {
+  const paid = await payReferralReward(userId);
+  if (!paid) return;
+  let who = '';
+  try { const u = await repositories.users.findById(userId); who = String(u?.username || u?.displayName || '').trim(); } catch { /* named or not, the ticket is paid */ }
+  const tier = TICKET_LABEL[paid.tier] ?? paid.tier;
+  await notifications.create({
+    userId: paid.ownerUserId,
+    type: 'wallet_update',
+    title: `${paid.count} بلیط ${tier} گرفتی 🎁`,
+    body: who
+      ? `${who} با کد معرف تو وارد بازی شد و اولین مسابقه‌اش را داد — ${paid.count} بلیط ${tier} به تو رسید.`
+      : `یک نفر با کد معرف تو وارد بازی شد و اولین مسابقه‌اش را داد — ${paid.count} بلیط ${tier} به تو رسید.`,
+    data: { kind: 'referral_reward', tier: paid.tier, count: paid.count, invitedName: who },
+    push: true
+  }).catch(() => undefined);
+}
+
 export async function recordMatch(o: MatchOutcome): Promise<void> {
   const userId = o.userId;
   if (!userId || userId.startsWith('bot_')) return;
   const at = o.at ?? Date.now();
+  /* THE REFERRAL REWARD IS EARNED HERE, NOT AT SIGN-UP.
+     This is the one place the whole game funnels through when a player
+     finishes a match — duels and Last Survivor both end up here — so it is
+     where «بعد از اولین بازیِ دعوت‌شده» can be answered without every mode
+     having to remember. It settles once and then costs a single lookup.
+     Best-effort and out of the way of everything else: a missions write must
+     never fail because a ticket did not land. */
+  await settleReferral(userId).catch(() => undefined);
   await quietly('match', async () => {
     await record(userId, 'matchesPlayed', 1);
     if (o.paid) await record(userId, 'paidMatch', 1);
