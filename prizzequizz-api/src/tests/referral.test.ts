@@ -24,18 +24,29 @@ import {
   normalizeCode, ReferralError, REFERRAL_REWARD_TIER, REFERRAL_REWARD_COUNT
 } from '../services/referralService.js';
 
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { isUnregistered } from '../modules/users/routes.js';
+
 let passed = 0, failed = 0;
 async function check(name: string, fn: () => Promise<void> | void): Promise<void> {
   try { await fn(); passed++; console.log('  ok   ' + name); }
   catch (e) { failed++; console.log('  FAIL ' + name + ': ' + (e as Error).message); }
 }
 
+/* A PLAYER THE WAY SIGN-UP MAKES ONE.
+   `withUsername: false` used to mean «username: \'\'», which sign-up never
+   produces: auth gives a brand-new account `user_<timestamp>` and «بازیکن
+   جدید» so it has something to be called. Testing against a shape the system
+   cannot create is how the referral reward passed every test here and reached
+   nobody in production — the server read «new» as «has no username» and every
+   real account had one from its first second. */
 async function player(name: string, withUsername = true): Promise<string> {
   const userId = id();
   await repositories.users.save({
     id: userId, phone: '0912' + Math.floor(Math.random() * 1e7),
-    username: withUsername ? 'n_' + userId.slice(0, 6) : '',
-    displayName: withUsername ? name : '', plan: 'free', level: 1, xp: 0, weeklyScore: 0,
+    username: withUsername ? 'n_' + userId.slice(0, 6) : `user_${Date.now()}${Math.floor(Math.random() * 1000)}`,
+    displayName: withUsername ? name : 'بازیکن جدید', plan: 'free', level: 1, xp: 0, weeklyScore: 0,
     wallet: 0, coins: 0, hearts: 5, tickets: { green: 0, blue: 0, red: 0, bronze: 0, silver: 0, gold: 0 }
   } as any);
   return userId;
@@ -186,6 +197,50 @@ async function main(): Promise<void> {
     });
 
     console.log('\nthe window: first registration, and nowhere else:');
+
+    /* WHO COUNTS AS NEW — AGAINST THE ACCOUNT SIGN-UP ACTUALLY MAKES.
+       This is the bug the whole feature died of. The window was read as «the
+       account has no username», and sign-up has never created one that way: it
+       fills in `user_<timestamp>` and «بازیکن جدید» so the player has something
+       to be called. So every real account failed the test on its first second
+       and every code was refused as TOO_LATE — the invitation worked, the code
+       auto-filled, the registration went through, and nobody was ever paid.
+
+       The two checks below are the guard. The first is the rule against the
+       shape; the second reads the placeholder out of the sign-up code itself,
+       so moving it there without moving this fails here rather than in
+       somebody's hands. */
+    await check('a freshly signed-up account counts as new', () => {
+      assert.equal(isUnregistered({ username: 'user_1712345678901', displayName: 'بازیکن جدید' }), true);
+      assert.equal(isUnregistered({ username: '', displayName: '' }), true);
+      assert.equal(isUnregistered({ username: 'user_1', displayName: 'اسم واقعی' }), true);
+      assert.equal(isUnregistered({ username: 'sara_92', displayName: 'بازیکن جدید' }), true);
+    });
+
+    await check('and a finished one does not', () => {
+      assert.equal(isUnregistered({ username: 'sara_92', displayName: 'سارا' }), false);
+      /* Not a placeholder — a real name that merely starts the same way. */
+      assert.equal(isUnregistered({ username: 'user_of_the_year', displayName: 'سارا' }), false);
+    });
+
+    await check('the placeholder sign-up writes is one this rule recognises', () => {
+      let dir = process.cwd(), src = '';
+      for (let i = 0; i < 5; i++) {
+        const f = resolve(dir, 'prizzequizz-api/src/modules/auth/routes.ts');
+        const g = resolve(dir, 'src/modules/auth/routes.ts');
+        if (existsSync(f)) { src = readFileSync(f, 'utf8'); break; }
+        if (existsSync(g)) { src = readFileSync(g, 'utf8'); break; }
+        const up = dirname(dir); if (up === dir) break; dir = up;
+      }
+      assert.ok(src, 'auth/routes.ts not found');
+      const un = /username: `([^`]+)`/.exec(src);
+      const dn = /displayName: '([^']+)'/.exec(src);
+      assert.ok(un && dn, 'the account sign-up creates no longer looks the way this test reads it');
+      /* `user_${Date.now()}` as it would actually come out. */
+      const username = String(un![1]).replace(/\$\{Date\.now\(\)\}/, String(Date.now()));
+      assert.equal(isUnregistered({ username, displayName: String(dn![1]) }), true,
+        'sign-up makes an account this rule would call already-registered: ' + username + ' / ' + dn![1]);
+    });
 
     await check('a code typed while completing the account is taken', async () => {
       _resetReferrals();

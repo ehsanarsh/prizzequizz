@@ -9,6 +9,30 @@ import { effectiveWeeklyScore } from '../../services/scoringConfig.js';
 import { listOnlinePlayers, OnlinePlayersError } from '../../services/onlinePlayersService.js';
 import { codeFor, inviteCount, redeem as redeemReferral, ReferralError, REFERRAL_REWARD_TIER, REFERRAL_REWARD_COUNT } from '../../services/referralService.js';
 
+/* HAS THIS ACCOUNT FINISHED REGISTERING?
+ *
+ * It used to be «has it got no username», which was wrong about every account
+ * that has ever existed: signing up does not leave the username blank — auth
+ * creates the account with `user_<timestamp>` and «بازیکن جدید» so the player
+ * has something to be called before choosing anything. So `wasNew` answered
+ * false for everybody, every referral code was refused as TOO_LATE, and the
+ * green ticket could never reach the person who did the inviting. The feature
+ * looked complete from both ends and paid out to nobody.
+ *
+ * The tests missed it because they built their «new» player with an empty
+ * username — a shape the real sign-up never produces.
+ *
+ * This is the same test the CLIENT uses to decide whether to show the
+ * registration screen at all (`_pzNeedsRegister`), so the two agree about who
+ * is new; a player who is being asked to register is a player whose code can
+ * still count.
+ */
+export function isUnregistered(u: { username?: string | null; displayName?: string | null }): boolean {
+  const dn = String(u.displayName || '').trim();
+  const un = String(u.username || '');
+  return !dn || dn === 'بازیکن جدید' || /^user_\d+$/.test(un);
+}
+
 export function registerUserRoutes(router: Router, base: string): void {
   /* "Me" is whoever the token says it is — and nobody otherwise. This used to
    * fall back to the seeded demo account when the token was missing or stale,
@@ -59,8 +83,8 @@ export function registerUserRoutes(router: Router, base: string): void {
     if (!user) return error(ctx.res, 404, 'USER_NOT_FOUND', 'User not found');
     const body = (ctx.body ?? {}) as Record<string, unknown>;
     /* Read BEFORE the fields below are written: «اولین ثبت نام» is the call
-       that gives the account a username, and after this line it will have one. */
-    const wasNew = !String(user.username || '').trim();
+       that fills the account in, and after this line it is filled in. */
+    const wasNew = isUnregistered(user);
     if (typeof body.displayName === 'string' && body.displayName.trim()) user.displayName = body.displayName.trim().slice(0, 120);
     if (typeof body.username === 'string' && body.username.trim()) user.username = body.username.trim().slice(0, 64);
     /* Gender is optional and reversible. Anything that is not one of the three

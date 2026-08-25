@@ -60,7 +60,7 @@ function run(): void {
     /* This is the check that would have caught `androix.`. Anything that
      * starts with the letters of "android" has to continue into one of the two
      * real namespaces — a near miss is a name Android silently ignores. */
-    const names = [...manifest.matchAll(/android:name="([^"]+)"/g)].map((m) => m[1]);
+    const names = [...manifest.matchAll(/android:name="([^"]+)"/g)].map((m) => String(m[1] ?? ''));
     assert.ok(names.length >= 5, 'the manifest should declare more than a handful of names');
     for (const n of names) {
       if (!/^androi/i.test(n)) continue;                       // com.google.… and the like
@@ -74,7 +74,7 @@ function run(): void {
      * "sticky-immersive" hides them again on its own. */
     const m = /android:name="android\.support\.customtabs\.trusted\.DISPLAY_MODE"\s+android:value="([^"]+)"/.exec(manifest);
     assert.ok(m, 'the launcher declares no display mode, so it opens with the phone bars showing');
-    assert.equal(m![1], 'sticky-immersive');
+    assert.equal(String(m?.[1] ?? ''), 'sticky-immersive');
   });
 
   check('the app is allowed to open prizequiz.ir without a browser bar', () => {
@@ -169,9 +169,11 @@ function run(): void {
   check('the assetlinks template names this app and waits for a real fingerprint', () => {
     const j = JSON.parse(links) as Array<{ target: { package_name: string; sha256_cert_fingerprints: string[] } }>;
     assert.equal(j.length, 1);
-    assert.equal(j[0].target.package_name, PACKAGE);
-    assert.equal(j[0].target.sha256_cert_fingerprints.length, 1);
-    assert.match(j[0].target.sha256_cert_fingerprints[0], /PUT_YOUR/,
+    const target = j[0]?.target;
+    assert.ok(target, 'the template has no target');
+    assert.equal(target?.package_name, PACKAGE);
+    assert.equal(target?.sha256_cert_fingerprints.length, 1);
+    assert.match(String(target?.sha256_cert_fingerprints[0] ?? ''), /PUT_YOUR/,
       'the template carries a real fingerprint — it is a template, it should carry a placeholder');
   });
 
