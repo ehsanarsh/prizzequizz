@@ -75,6 +75,13 @@ tbody tr:hover{background:var(--panel2)}
 .cat-art-x{position:absolute;top:2px;left:2px;width:18px;height:18px;border:0;border-radius:50%;cursor:pointer;
   background:rgba(0,0,0,.66);color:#fff;font-size:11px;line-height:18px;padding:0;text-align:center}
 .cfg-row label{font-size:12.5px;color:var(--ink)}.cfg-row .path{font-size:10px;color:var(--muted);direction:ltr;text-align:right;display:block}
+/* یک جمله زیر اسم فیلد: چه کار می‌کند، یا چرا کاری نمی‌کند. */
+.cfg-help{display:block;font-size:11px;color:var(--muted);line-height:1.8;margin-top:2px}
+/* فیلدی که سرور نمی‌خواندش. کم‌رنگ نمی‌شود — خوانا می‌ماند و صریح می‌گوید. */
+.cfg-dead{display:inline-block;font-size:10px;font-weight:800;margin-top:3px;padding:1px 7px;border-radius:999px;
+  background:rgba(255,210,31,.13);color:var(--gold);border:1px solid rgba(255,210,31,.35)}
+.cfg-row.dead{border-bottom-style:dotted}
+.cfg-row.dead>input{opacity:.75}
 textarea.json{min-height:300px;font-family:ui-monospace,monospace;font-size:12px;line-height:1.6;white-space:pre;direction:ltr;text-align:left}
 .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.65);display:grid;place-items:center;z-index:50;padding:14px}
 .modal{background:var(--panel);border:1.5px solid var(--line);border-radius:16px;padding:20px;width:100%;max-width:640px;max-height:90vh;overflow:auto}
@@ -520,6 +527,7 @@ async function renderDashboard(){
       stat('میانگینِ زمانِ مسابقه','',fmtDur(d.avgMatchSec))+
       stat('درآمدِ امروز','gold',money(d.todayRevenue))+
     '</div>'+
+    dashRevenueCard(d)+
     '<div class="grid g4" style="margin-bottom:13px">'+
       stat('دریافت جایزهٔ در انتظار','bad',fa(d.pendingWithdrawals)+' ('+money(d.pendingWithdrawAmount)+')')+
       stat('تیکتِ پشتیبانیِ باز','pend',fa(d.openTickets))+
@@ -538,6 +546,41 @@ async function renderDashboard(){
     '';
   /* Both panels fill themselves in so a slow query never blocks the dashboard. */
   dashLoadAlerts(); dashLoadServers();
+}
+
+/* ── «درآمدِ امروز» چطور حساب شده ─────────────────────────────────────────
+   «قسمت داشبورد هم سود رو معلوم نیست چجوری حساب می‌کنه.»
+
+   عدد درست بود؛ چیزی که نبود این بود که از کجا آمده. یک عدد تنها را نه می‌شود
+   بررسی کرد، نه با آن بحث کرد، نه بر اساسش کاری کرد — چهار خطِ پشتش را می‌شود.
+
+   و یک خط عمداً بیرون است: پولِ بلیط. آن پول وارد می‌شود تا به‌عنوان جایزه
+   برگردد؛ درآمد نیست. اینجا نوشته می‌شود که دیده شود بیرون گذاشته شده، نه
+   اینکه کاربر بماند که شاید بی‌سروصدا شمرده شده باشد. */
+function dashRevenueCard(d){
+  const p=d.todayRevenueParts; if(!p) return '';
+  const money=v=>fa(v)+' ت';
+  const line=(label,val,why)=>
+    '<div style="display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px dashed var(--line)">'+
+      '<div><b>'+label+'</b>'+(why?'<div class="sub" style="margin-top:2px">'+why+'</div>':'')+'</div>'+
+      '<div class="mono" style="white-space:nowrap;color:'+(Number(val)?'var(--ok)':'var(--muted)')+'">'+money(val)+'</div>'+
+    '</div>';
+  return '<div class="card" style="margin-bottom:13px;border-color:var(--gold)">'+
+    '<b>🧮 «درآمدِ امروز» از کجا آمده</b>'+
+    '<div class="sub" style="margin:6px 0 10px;line-height:1.9">از نیمه‌شب تا الان. جمعِ این چهار خط همان عددِ بالاست.</div>'+
+    line('کمیسیون بازی‌ها',p.fees,'درصدی که از جایزهٔ نقدیِ بردها برداشته می‌شود')+
+    line('فروش کمک‌ها',p.lifelines,'')+
+    line('فروشگاه، به‌جز بلیط',p.shop,'سکه، پک چت، کاراکتر و بقیه')+
+    line('جریمه‌ها',p.penalties,'')+
+    line('دفترِ خودِ شرکت',p.house,'کمیسیون آخرین بازمانده، پاتِ بدون برنده، و تبلیغاتی که دستی ثبت شده')+
+    '<div style="display:flex;justify-content:space-between;gap:12px;padding:10px 0 2px;font-weight:800">'+
+      '<span>جمع</span><span class="mono" style="color:var(--gold)">'+money(p.total)+'</span></div>'+
+    '<div class="note" style="margin-top:10px;line-height:2">'+
+      '<b>پولِ بلیط در این عدد نیست</b> — امروز '+money(p.ticketsExcluded)+' بلیط فروخته شده، و آن پول درآمد نیست: '+
+      'وارد می‌شود تا به‌عنوان جایزه برگردد. سهمِ ما از همان، «کمیسیون بازی‌ها»ی بالاست که شمرده شده.'+
+      '<br>تفکیکِ کاملِ ماهانه و سودِ خالص بعد از هزینه‌ها در تب «💰 مالی و حسابداری» است.'+
+    '</div>'+
+  '</div>';
 }
 
 /* Live security alerts — every entry comes from a rule that actually fired. */
@@ -5274,33 +5317,137 @@ async function renderConfigSection(key,title){
   if(!CFG)await loadCfg();
   const node=CFG[key];
   let body;
+  /* پاک‌سازی همین‌جا، نه فقط در شاخهٔ فرم: شمارشِ پایین از همین فهرست می‌آید، و
+     بخشی که آرایه است هیچ فیلدی نمی‌سازد — با فهرستِ بازمانده از صفحهٔ قبل،
+     عددی گزارش می‌شد که به این صفحه ربطی نداشت. */
+  _CFG_FIELDS=[];
   if(node==null){ body='<div class="empty">این بخش هنوز در config تعریف نشده.</div>'; }
   else if(Array.isArray(node)||hasArrayDeep(node)){
     body='<div class="note">این بخش شاملِ فهرست/آرایه است؛ برای افزودن آیتم (لیگ، مأموریت، محصول، بنر، رویداد و…) مستقیم اینجا JSON را ویرایش کن. خالی بودن یعنی هنوز موردی تعریف نشده (۰).</div>'+
       '<textarea class="json" id="cfg_arr">'+esc(JSON.stringify(node,null,2))+'</textarea>'+
       '<button class="btn pri" style="margin-top:10px" onclick="saveConfigArray(\''+key+'\')">💾 ذخیره</button>';
   } else {
-    _CFG_FIELDS=[];
     body='<div class="card">'+buildFields(node,key)+'<button class="btn pri" style="margin-top:12px" onclick="saveConfigForm(\''+key+'\')">💾 ذخیره</button></div>';
   }
-  $('#main').innerHTML=head(title,'Data-Driven — تغییر بلافاصله اعمال و ماندگار می‌شود',
-    '<button class="btn" onclick="go(\'rawcfg\')">ویرایش خام کل</button>')+body;
+  /* یک جملهٔ صادق بالای صفحه: چند فیلد اینجا واقعاً به بازی می‌رسند. */
+  const dead=_CFG_FIELDS.filter(f=>{const m=cfgMeta(f.path);return m&&!m.wired;}).length;
+  const live=_CFG_FIELDS.length-dead;
+  const note=_CFG_FIELDS.length
+    ? '<div class="note" style="margin-bottom:12px;line-height:2">از '+fa(_CFG_FIELDS.length)+' تنظیمِ این صفحه، '+
+      '<b style="color:var(--ok)">'+fa(live)+'</b> مورد را سرور می‌خواند و بلافاصله در بازی اعمال می‌شود'+
+      (dead?('، و <b style="color:var(--gold)">'+fa(dead)+'</b> مورد هنوز به بازی وصل نیست و با علامت مشخص شده — '+
+             'عوض کردنشان ذخیره می‌شود ولی چیزی در بازی تغییر نمی‌کند. هر کدام را خواستی بگو تا واقعی شود.'):'.')+
+      '</div>'
+    : '';
+  $('#main').innerHTML=head(title,'تغییر بلافاصله اعمال و ماندگار می‌شود',
+    '<button class="btn" onclick="go(\'rawcfg\')">ویرایش خام کل</button>')+note+body;
+}
+/* ══ گیم‌پلی و بالانس، به فارسی — و صادق دربارهٔ اینکه چه چیزی واقعاً کار می‌کند ══
+   «فارسی بکن و کامل بکن، طوری که هر تغییراتی واقعی باشه و کار کنه.»
+
+   این صفحه‌ها تا حالا یک فرمِ خامِ JSON بودند: کلیدِ انگلیسی را می‌نوشتند و
+   یک کادر جلویش می‌گذاشتند. مشکل بزرگ‌تر این بود که خیلی از آن کلیدها را
+   سرور اصلاً نمی‌خواند — عوضشان می‌کردی، «ذخیره و اعمال شد ✅» می‌گرفتی، و در
+   بازی هیچ اتفاقی نمی‌افتاد. یک پنل که خاموش شدنِ کاری را تأیید می‌کند، بدتر
+   از پنلی است که آن کار را ندارد.
+
+   پس هر فیلد اینجا یک اسم فارسی دارد، یک جملهٔ توضیح، و — مهم‌تر از هر دو —
+   علامتی که می‌گوید سرور می‌خواندش یا نه. آن‌هایی که خوانده نمی‌شوند حذف
+   نشده‌اند: صریح علامت خورده‌اند، تا هر کدام را که خواستی جدا و با احتیاط
+   وصل کنیم.
+
+   هر ورودیِ «وصل» با خواندنِ خودِ کد سرور تعیین شده، نه با حدس:
+     • xp.perWin/perLoss/perDraw و xp.multiplier و cup.win/loss/draw را
+       scoringConfig.ts::getResultBonus می‌خواند.
+     • gameplay.duel.baseRounds/maxRounds را matchEngine.ts::duelRounds.
+     • بقیهٔ gameplay.* یک نسخهٔ سایه است؛ مقدارِ زنده زیر modes.* است و از
+       تب خودِ همان مود ویرایش می‌شود. */
+const CFG_FA={
+  /* ── XP ─────────────────────────────────────────────────────────── */
+  'xp.perWin':      ['XP بردِ مسابقه','در پایان هر مسابقه به برنده اضافه می‌شود.',1],
+  'xp.perLoss':     ['XP باختِ مسابقه','بازنده هم چیزی می‌گیرد تا از رقابت دلسرد نشود.',1],
+  'xp.perDraw':     ['XP مساوی','وقتی مسابقه بدون برنده تمام می‌شود.',1],
+  'xp.multiplier':  ['ضریب کلِ XP','هر سه عدد بالا در این ضرب می‌شوند. ۱ یعنی بدون تغییر.',1],
+  'xp.perCorrect':  ['XP هر پاسخ درست','',0,'XP هر پاسخ از جدول ثابتِ سختی سؤال حساب می‌شود (آسان/متوسط/سخت)، نه از اینجا.'],
+  'xp.perMission':  ['XP هر مأموریت','',0,'جایزهٔ هر مأموریت در تب «🎯 مأموریت‌ها» تعیین می‌شود.'],
+  'xp.dailyLogin':  ['XP ورود روزانه','',0,'جایزهٔ روزانه در تب «🎡 گردونه و جایزه روزانه» است.'],
+  'xp.combo':       ['XP پاسخ‌های پشت‌سرهم','',0,'پاداشِ زنجیره فعلاً از جدول ثابتِ سرور می‌آید.'],
+  'xp.continue':    ['XP ادامه دادن','',0,''],
+  'xp.golden':      ['XP سؤال طلایی','',0,''],
+  'xp.perLevel':    ['XP هر لول','',0,''],
+
+  /* ── Level ──────────────────────────────────────────────────────── */
+  'level.xpPerLevelBase':      ['XP پایهٔ هر لول','',0,'فرمول لول فعلاً ثابت است: لول = √(XP ÷ ۱۰۰) + ۱'],
+  'level.curve':               ['شکل منحنی رشد','',0,'همان فرمول ثابت بالا؛ این مقدار خوانده نمی‌شود.'],
+  'level.rewardCoinsPerLevel': ['سکهٔ جایزهٔ هر لول','',0,'جایزهٔ لول‌گرفتن هنوز پرداخت نمی‌شود.'],
+  'level.rewardTicketPerLevel':['بلیط جایزهٔ هر لول','',0,'جایزهٔ لول‌گرفتن هنوز پرداخت نمی‌شود.'],
+
+  /* ── Cup ────────────────────────────────────────────────────────── */
+  'cup.win':        ['کاپ بردِ مسابقه','🏆 هفتگی — همین است که رتبه و لیگ را می‌سازد.',1],
+  'cup.loss':       ['کاپ باختِ مسابقه','بازنده هم کاپ می‌گیرد تا در لیگ بماند.',1],
+  'cup.draw':       ['کاپ مساوی','',1],
+  'cup.continue':   ['کاپ ادامه دادن','',0,''],
+  'cup.perLeague':  ['کاپ هر لیگ','',0,'آستانهٔ لیگ‌ها در تب «🛡️ لیگ‌ها» تعیین می‌شود.'],
+  'cup.weeklyReset':['ریست هفتگی کاپ','',0,'کاپ همیشه هفتگی ریست می‌شود؛ خاموش کردنِ این گزینه کاری نمی‌کند.'],
+  'cup.minEntry':   ['حداقل کاپ برای ورود','',0,''],
+
+  /* ── گیم‌پلی مودها ─────────────────────────────────────────────── */
+  'gameplay.duel.baseRounds': ['تعداد راندِ پایهٔ دوئل','مسابقه با این تعداد راند شروع می‌شود.',1],
+  'gameplay.duel.maxRounds':  ['حداکثر راندِ دوئل','سقفِ راند وقتی مسابقه مساوی پیش می‌رود.',1]
+};
+/* هر چیزِ دیگری زیر gameplay.* یک نسخهٔ سایه است. */
+const CFG_FA_SHADOW={
+  duel:['تب «⚔️ دوئل»','تعداد سؤال و مهلت پاسخِ دوئل از تب دوئل تنظیم می‌شود.'],
+  lastSurvivor:['تب «🏆 آخرین بازمانده»','تعداد سؤال، مهلت و ظرفیت روم از تب آخرین بازمانده تنظیم می‌شود.'],
+  allOrNothing:['—','این مود هنوز در بازی فعال نیست.']
+};
+/* اسم فارسی گروه‌ها، تا تیترها هم انگلیسی نمانند. */
+const CFG_FA_GROUP={
+  duel:'دوئل ⚔️', lastSurvivor:'آخرین بازمانده 🏆', allOrNothing:'همه یا هیچ 🤝',
+  weeklyLeague:'لیگ هفتگی 📈', entry:'ورودی', reward:'جایزه', free:'دوستانه', paid:'رقابت اصلی',
+  unlocks:'بازگشایی‌ها', hold:'نگهداشت جایزه', wallet:'صندوق جایزه'
+};
+function cfgMeta(path){
+  const m=CFG_FA[path];
+  if(m) return {label:m[0],help:m[1]||'',wired:!!m[2],note:m[3]||''};
+  /* زیرِ gameplay و بیرون از فهرست بالا = نسخهٔ سایه. */
+  const g=/^gameplay\.([A-Za-z]+)\./.exec(path);
+  if(g){
+    const sh=CFG_FA_SHADOW[g[1]];
+    return {label:'',help:'',wired:false,note:sh?('این مقدار خوانده نمی‌شود. مقدار واقعی در '+sh[0]+' است — '+sh[1]):'این مقدار خوانده نمی‌شود.'};
+  }
+  return null;
 }
 let _CFG_FIELDS=[];
 function hasArrayDeep(o){ if(Array.isArray(o))return true; if(o&&typeof o==='object')return Object.values(o).some(v=>Array.isArray(v)); return false; }
+/* برچسبِ یک فیلد: اسم فارسی اگر داریم، وگرنه همان کلید — و زیرش یا جمله‌ای که
+   می‌گوید چه کار می‌کند، یا صریح می‌گوید که کاری نمی‌کند. */
+function cfgLabel(k,p){
+  const m=cfgMeta(p);
+  const name=(m&&m.label)?m.label:k;
+  let sub='<span class="path">'+esc(p)+'</span>';
+  if(m&&m.help) sub='<span class="cfg-help">'+esc(m.help)+'</span>'+sub;
+  if(m&&!m.wired){
+    sub='<span class="cfg-dead">هنوز وصل نیست</span>'+
+        (m.note?'<span class="cfg-help">'+esc(m.note)+'</span>':'')+sub;
+  }
+  return '<label>'+esc(name)+sub+'</label>';
+}
 function buildFields(obj,path){
   let html='';
   for(const k of Object.keys(obj)){
     const v=obj[k]; const p=path+'.'+k;
     if(v!==null&&typeof v==='object'&&!Array.isArray(v)){
-      html+='<div style="margin:10px 0 4px;font-weight:800;color:var(--gold);font-size:13px">'+esc(k)+'</div>'+buildFields(v,p);
+      html+='<div style="margin:10px 0 4px;font-weight:800;color:var(--gold);font-size:13px">'+esc(CFG_FA_GROUP[k]||k)+'</div>'+buildFields(v,p);
     }else if(Array.isArray(v)){
-      html+='<div class="cfg-row"><label>'+esc(k)+'<span class="path">'+esc(p)+' (آرایه — از ویرایش خام)</span></label><input value="'+esc(JSON.stringify(v))+'" disabled></div>';
+      html+='<div class="cfg-row"><label>'+esc(CFG_FA_GROUP[k]||k)+'<span class="path">'+esc(p)+' (آرایه — از ویرایش خام)</span></label><input value="'+esc(JSON.stringify(v))+'" disabled></div>';
     }else{
       const id='cf_'+_CFG_FIELDS.length; _CFG_FIELDS.push({id,path:p,type:typeof v});
-      if(typeof v==='boolean')html+='<div class="cfg-row"><label>'+esc(k)+'<span class="path">'+esc(p)+'</span></label><input id="'+id+'" type="checkbox" '+(v?'checked':'')+'></div>';
-      else if(typeof v==='number')html+='<div class="cfg-row"><label>'+esc(k)+'<span class="path">'+esc(p)+'</span></label><input id="'+id+'" type="number" value="'+v+'"></div>';
-      else html+='<div class="cfg-row"><label>'+esc(k)+'<span class="path">'+esc(p)+'</span></label><input id="'+id+'" value="'+esc(v)+'"></div>';
+      const m=cfgMeta(p);
+      const row='<div class="cfg-row'+(m&&!m.wired?' dead':'')+'">'+cfgLabel(k,p);
+      if(typeof v==='boolean')html+=row+'<input id="'+id+'" type="checkbox" '+(v?'checked':'')+'></div>';
+      else if(typeof v==='number')html+=row+'<input id="'+id+'" type="number" value="'+v+'"></div>';
+      else html+=row+'<input id="'+id+'" value="'+esc(v)+'"></div>';
     }
   }
   return html;

@@ -17,6 +17,20 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 
+/* The same walk buildFields does — used by the balance checks below. */
+function scalarsOf(o: any, path: string): string[] {
+  const out: string[] = [];
+  const walk = (n: any, p: string) => {
+    for (const k of Object.keys(n)) {
+      const v = n[k], q = p + '.' + k;
+      if (v !== null && typeof v === 'object' && !Array.isArray(v)) walk(v, q);
+      else if (!Array.isArray(v)) out.push(q);
+    }
+  };
+  walk(o, path);
+  return out;
+}
+
 let passed = 0, failed = 0;
 function check(name: string, fn: () => void): void {
   try { fn(); passed++; console.log('  ✔ ' + name); }
@@ -772,6 +786,124 @@ function run(): void {
   check('the support queue keeps its own in-place filter', () => {
     assert.ok(/id="supq"[\s\S]{0,200}oninput="SUP_Q/.test(script), 'the support search lost its filter');
     assert.ok(/supPaintQueue\(\)/.test(script), 'it no longer repaints just its list');
+  });
+
+  /* ══ گیم‌پلی و بالانس ══════════════════════════════════════════════════
+     «فارسی بکن و کامل بکن، طوری که هر تغییراتی واقعی باشه و کار کنه.»
+
+     The balance pages were a raw JSON form: the English config key, a box, and
+     nothing else. The part that mattered was invisible — most of those keys
+     are not read by the server at all, so an operator could change one, be
+     told «ذخیره و اعمال شد ✅», and nothing in the game would move.
+
+     These checks hold the panel to what the SERVER actually does. The «wired»
+     flags are read out of the panel and compared against the code that reads
+     the config, so wiring a field up later without unmarking it here — or
+     marking something live that nothing reads — fails right here. */
+  const cfgFa = /const CFG_FA=\{([\s\S]*?)\n\};/.exec(script);
+
+  /* Checked against the CONFIG ITSELF rather than a number typed here: every
+     scalar the panel will draw a box for has to resolve to a Persian name. A
+     key added to game-config.json next month and left unnamed fails here
+     instead of appearing in the panel in English. */
+  check('every balance field the panel draws has a Persian name', () => {
+    assert.ok(cfgFa, 'the Persian dictionary is gone');
+    const named = new Map([...cfgFa![1]!.matchAll(/'([a-zA-Z.]+)':\s*\['([^']*)'/g)].map((m) => [m[1]!, m[2]!]));
+    for (const [path, label] of named) {
+      assert.ok(label.trim().length > 0, 'no name for ' + path);
+      assert.ok(/[آ-ی]/.test(label), 'the name for ' + path + ' is not Persian: ' + label);
+    }
+
+    let dir = process.cwd(), raw = '';
+    for (let i = 0; i < 5; i++) {
+      for (const rel of ['prizzequizz-api/config/game-config.json', 'config/game-config.json']) {
+        const f = resolve(dir, rel);
+        if (existsSync(f)) { raw = readFileSync(f, 'utf8'); break; }
+      }
+      if (raw) break;
+      const up = dirname(dir); if (up === dir) break; dir = up;
+    }
+    assert.ok(raw, 'game-config.json not found');
+    const cfg = JSON.parse(raw) as Record<string, any>;
+
+    const missing = ['xp', 'level', 'cup']
+      .flatMap((block) => scalarsOf(cfg[block], block))
+      .filter((p) => !named.has(p));
+    assert.deepEqual(missing, [], 'these are still shown in English: ' + missing.join(', '));
+
+    /* gameplay is different: two fields are named outright and every other one
+       is caught by the shadow rule, which has to actually match them. */
+    const shadow = /^gameplay\.[A-Za-z]+\./;
+    const unexplained = scalarsOf(cfg.gameplay, 'gameplay').filter((p) => !named.has(p) && !shadow.test(p));
+    assert.deepEqual(unexplained, [], 'gameplay fields with no name and no shadow note: ' + unexplained.join(', '));
+  });
+
+  check('and the ones the server ignores say so', () => {
+    const paths = [...cfgFa![1]!.matchAll(/'([a-zA-Z.]+)':\s*\['[^']*','[^']*',([01])/g)]
+      .map((m) => [m[1]!, m[2] === '1'] as const);
+    /* Read out of the server's own code: scoringConfig.getResultBonus is the
+       only thing that looks at xp/cup, and matchEngine.duelRounds the only
+       thing that looks at gameplay. */
+    const WIRED = new Set(['xp.perWin', 'xp.perLoss', 'xp.perDraw', 'xp.multiplier',
+                           'cup.win', 'cup.loss', 'cup.draw',
+                           'gameplay.duel.baseRounds', 'gameplay.duel.maxRounds']);
+    for (const [path, wired] of paths) {
+      assert.equal(wired, WIRED.has(path),
+        wired ? path + ' is marked live but nothing reads it'
+              : path + ' is marked dead but the server does read it');
+    }
+    for (const w of WIRED) {
+      assert.ok(paths.some(([p]) => p === w), 'the one field that works is not listed: ' + w);
+    }
+  });
+
+  check('a dead field is marked on its own row', () => {
+    assert.ok(script.includes('هنوز وصل نیست'), 'nothing says a field is not wired');
+    assert.ok(/cfgMeta\(p\)/.test(script), 'buildFields never looks the field up');
+    assert.ok(script.includes("'<div class=\"cfg-row'+(m&&!m.wired?' dead':'')"), 'the row itself is not marked');
+  });
+
+  check('and the page counts how many of its settings are real', () => {
+    assert.ok(/const dead=_CFG_FIELDS\.filter/.test(script), 'the header does not count the dead fields');
+    assert.ok(script.includes('مورد را سرور می‌خواند'), 'the header does not say how many are live');
+  });
+
+  /* A shadow copy is worse than a missing setting: it looks like the real one.
+     gameplay.duel.questionCount exists and is never read — the live value is
+     modes.duel.questionCount, edited from the duel tab. */
+  check('shadow gameplay fields point at where the real setting lives', () => {
+    assert.ok(script.includes('CFG_FA_SHADOW={'), 'the shadow map is gone');
+    for (const mode of ['duel', 'lastSurvivor']) {
+      assert.ok(new RegExp(mode + ":\\['[^']*[آ-ی]").test(script), 'no Persian pointer for ' + mode);
+    }
+    assert.ok(script.includes('^gameplay'), 'nothing recognises a gameplay field as a shadow');
+  });
+
+  check('group headings are Persian too', () => {
+    assert.ok(script.includes('CFG_FA_GROUP={'), 'the group names are gone');
+    assert.ok(script.includes('CFG_FA_GROUP[k]||k'), 'buildFields does not use them');
+    for (const k of ['duel', 'lastSurvivor', 'entry', 'reward']) {
+      assert.ok(new RegExp(k + ":'[^']*[آ-ی]").test(script), 'no Persian name for the ' + k + ' group');
+    }
+  });
+
+  /* ── «سود رو معلوم نیست چجوری حساب می‌کنه» ─────────────────────────────
+     The number was right; what was missing was where it came from. A lone
+     figure cannot be checked or argued with — the lines behind it can. */
+  check('the dashboard shows what today’s revenue is made of', () => {
+    assert.ok(script.includes('function dashRevenueCard('), 'the breakdown card is gone');
+    assert.ok(/stat\('درآمدِ امروز'[\s\S]{0,120}dashRevenueCard\(d\)/.test(script),
+      'the breakdown is not drawn beside the number it explains');
+    for (const part of ['fees', 'lifelines', 'shop', 'penalties', 'house']) {
+      assert.ok(new RegExp('p\\.' + part + '\\b').test(script), 'the ' + part + ' line is missing');
+    }
+    assert.ok(script.includes('p.total'), 'the card never shows the total it adds up to');
+  });
+
+  check('and says out loud that ticket money is not in it', () => {
+    assert.ok(script.includes('پولِ بلیط در این عدد نیست'), 'nothing says ticket money is excluded');
+    assert.ok(script.includes('p.ticketsExcluded'),
+      'the excluded amount is not shown, so an operator cannot tell it was left out on purpose');
   });
 
 console.log(`[adminPanelHtml] ${passed} passed, ${failed} failed`);

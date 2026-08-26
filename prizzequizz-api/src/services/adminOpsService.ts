@@ -196,6 +196,7 @@ export async function dashboardMetrics(): Promise<Record<string, unknown>> {
       dau: await activeTodayCount().catch(() => 0),
       newUsersToday: 0,
       matchesToday: 0, runningMatches: runningCount, avgMatchSec: 0, todayRevenue: 0,
+      todayRevenueParts: { fees: 0, lifelines: 0, penalties: 0, shop: 0, house: 0, ticketsExcluded: 0, total: 0 },
       pendingWithdrawals: 0, pendingWithdrawAmount: 0, openTickets: 0,
       usersSeries: [], matchesSeries: [], liveFeed: [], system: sys,
       note: 'memory driver — connect Postgres for full metrics'
@@ -235,12 +236,17 @@ export async function dashboardMetrics(): Promise<Record<string, unknown>> {
      * commission, what the shop sold that was not a ticket, the helps, the
      * fines — and, from the house's own book, Last Survivor's commission, its
      * forfeited pots and any advertising entered by hand. */
+    /* Each line on its own as well as the sum. «سود رو معلوم نیست چجوری حساب
+       می‌کنه» — a single number cannot be checked, argued with, or acted on;
+       the four lines behind it can. */
     q(`SELECT
-         coalesce(sum(amount) FILTER (WHERE entry_type='fee'),0)
-        +coalesce(sum(amount) FILTER (WHERE entry_type='lifeline_purchase'),0)
-        +coalesce(sum(amount) FILTER (WHERE entry_type='penalty'),0)
-        +coalesce(sum(amount) FILTER (WHERE entry_type='shop_purchase'
-                                        AND coalesce(metadata->>'category','') <> 'tickets'),0) AS net
+         coalesce(sum(amount) FILTER (WHERE entry_type='fee'),0) AS fees,
+         coalesce(sum(amount) FILTER (WHERE entry_type='lifeline_purchase'),0) AS lifelines,
+         coalesce(sum(amount) FILTER (WHERE entry_type='penalty'),0) AS penalties,
+         coalesce(sum(amount) FILTER (WHERE entry_type='shop_purchase'
+                                        AND coalesce(metadata->>'category','') <> 'tickets'),0) AS shop,
+         coalesce(sum(amount) FILTER (WHERE entry_type='shop_purchase'
+                                        AND coalesce(metadata->>'category','') = 'tickets'),0) AS tickets
        FROM wallet_ledger WHERE created_at >= current_date`),
     q(`SELECT coalesce(sum(amount),0) AS net FROM house_revenue WHERE created_at >= current_date`)
   ]);
@@ -253,13 +259,30 @@ export async function dashboardMetrics(): Promise<Record<string, unknown>> {
   for (const r of await q(`SELECT amount, status, created_at FROM withdraw_requests ORDER BY created_at DESC LIMIT 4`))
     feed.push({ kind: 'withdraw', at: iso(r.created_at), text: `برداشت ${Number(r.amount).toLocaleString('fa-IR')} · ${r.status}` });
   feed.sort((a, b) => (b.at || '').localeCompare(a.at || ''));
+  const n = (v: unknown) => Number(v ?? 0) || 0;
+  const r0: any = revToday[0] ?? {};
+  const todayParts = {
+    fees: n(r0.fees),              // کمیسیون بازی‌ها
+    lifelines: n(r0.lifelines),    // فروش کمک‌ها
+    penalties: n(r0.penalties),    // جریمه‌ها
+    shop: n(r0.shop),              // فروشگاه، به‌جز بلیط
+    house: n(houseToday[0]?.net),  // کمیسیون آخرین بازمانده، پات بدون برنده، تبلیغات
+    /* Reported so the operator can SEE it was left out, rather than wondering
+       whether it was quietly counted. */
+    ticketsExcluded: n(r0.tickets),
+    total: 0
+  };
+  todayParts.total = todayParts.fees + todayParts.lifelines + todayParts.penalties + todayParts.shop + todayParts.house;
   return {
     registeredUsers, newUsersToday, dau, onlineUsers,
     matchesToday, runningMatches: runningCount, avgMatchSec,
     /* The ledger's share plus the house's own book — Last Survivor's commission
        and forfeited pots never pass through a player's wallet, so a
        ledger-only figure could never see them. */
-    todayRevenue: (Number(revToday[0]?.net ?? 0) || 0) + (Number(houseToday[0]?.net ?? 0) || 0),
+    todayRevenue: todayParts.total,
+    /* What went into it, line by line — plus the one number that deliberately
+       did NOT: ticket money is not earnings, it is the prize pool arriving. */
+    todayRevenueParts: todayParts,
     pendingWithdrawals: Number(pendingW[0]?.n ?? 0) || 0,
     pendingWithdrawAmount: Number(pendingW[0]?.amt ?? 0) || 0,
     openTickets,
