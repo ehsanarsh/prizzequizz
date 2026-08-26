@@ -73,7 +73,14 @@ async function makePage(w = 390, h = 844) {
       const lit = (sel) => { const e = document.querySelector(sel); if (!e) return null;
         return { done: e.classList.contains('done'), grey: /grayscale\(0?\.\d+\)|grayscale\(1\)/.test(getComputedStyle(e.querySelector('img')).filter) }; };
       return {
-        text: (document.getElementById('wpInside') || {}).textContent || '',
+        /* The sentence lives UNDER the rail now. `tube` is what is written
+           inside the bar itself, which has to stay empty: the token's own
+           «۷۶۰ 🏆» badge rides across that band, and two Persian numbers
+           sharing it is the whole complaint. */
+        text: (document.getElementById('wpSay') || {}).textContent || '',
+        tubeText: (document.getElementById('wpInside') || {}).textContent || '',
+        sayBox: mid('#wpSay'), tokenBadge: mid('#wpMarker b'),
+        sayLines: [...document.querySelectorAll('#wpSay > div')].map((d) => d.textContent || ''),
         bronze: mid('#wpBronze'), silver: mid('#wpSilver'), gold: mid('#wpGold'),
         token: mid('#wpMarker'), fill: mid('#wpFill'), track: mid('#weeklyProgress .wpl-track'),
         tube,
@@ -85,9 +92,32 @@ async function makePage(w = 390, h = 844) {
   const zero = await read(0);
   /* «پهن‌تر»: it has to be a tube you can write inside, not a hairline. */
   ok('the bar is wide enough to write in', zero.tube && zero.tube.h >= 22, JSON.stringify(zero.tube));
-  ok('and the sentence is inside it', zero.text.length > 0 && /کاپ تا لیگ/.test(zero.text), zero.text);
-  ok('with nothing left to reach, it names the FIRST league', /برنز/.test(zero.text), zero.text);
-  ok('and counts the cups exactly', /۵۰۰/.test(zero.text), zero.text);
+  /* «عددهای فارسی بغل هم افتادن» — nothing may share the band the token's
+     badge rides across, so the bar carries no words at all. */
+  ok('nothing is written inside the bar', zero.tubeText.trim() === '', zero.tubeText);
+  ok('the sentence is under the rail instead', zero.text.length > 0, zero.text);
+  ok('and it clears the token’s badge completely',
+     !zero.tokenBadge || zero.sayBox.t >= zero.tokenBadge.b - 1,
+     JSON.stringify({ badgeBottom: Math.round((zero.tokenBadge || {}).b), sayTop: Math.round(zero.sayBox.t) }));
+
+  /* «باید بنویسه شما در لیگ فلان هستی، تا لیگ فلان چند کاپ نیاز داری» — and
+     «چند تا کاپ داره», which was written nowhere at all. */
+  ok('it says which league the player is in', /هنوز وارد هیچ لیگی نشده‌ای/.test(zero.text), zero.text);
+  ok('it says how many cups they have', /۰ کاپ داری/.test(zero.text), zero.text);
+  ok('it names the league they are climbing to', /تا لیگ برنز/.test(zero.text), zero.text);
+  ok('and how many more that takes', /۵۰۰<\/b>? کاپ دیگر لازم داری|۵۰۰ کاپ دیگر لازم داری/.test(zero.text), zero.text);
+  /* «عددهای فارسی بغل هم افتادن» — every number must have WORDS on both sides
+     of it. Checked by pulling the numbers out of each line and looking at what
+     is between them: a gap of only spaces or punctuation is two numbers
+     sitting together, which is the thing being complained about. Digits inside
+     one number are of course adjacent, so the comparison is between number
+     TOKENS, not between digits. */
+  const numbersTouch = (line) => {
+    const parts = String(line).split(/[۰-۹٬]+/);
+    return parts.slice(1, -1).some((between) => !/[آ-ی]/.test(between));
+  };
+  ok('the sentence is two lines, not one run-on', zero.sayLines.length === 2, JSON.stringify(zero.sayLines));
+  ok('and no two numbers are left touching', !zero.sayLines.some(numbersTouch), JSON.stringify(zero.sayLines));
 
   /* THE BADGES STAND IN ORDER, AND WHERE THEIR THRESHOLDS ARE — not at three
      numbers typed into a stylesheet. Bronze 500, silver 1500, gold 3000 on one
@@ -134,7 +164,9 @@ async function makePage(w = 390, h = 844) {
   ok('and not pinned to the end of the rail', top.token.r <= top.track.r + 2 && top.token.c > top.silver.c,
      JSON.stringify({ token: Math.round(top.token.c), trackEnd: Math.round(top.track.r) }));
   ok('every badge is lit', top.litB.done && top.litS.done && top.litG.done);
-  ok('and the tube says the league is theirs', /طلایی/.test(top.text) && !/تا لیگ/.test(top.text), top.text);
+  ok('and the sentence says the league is theirs', /الان در لیگ طلایی هستی/.test(top.text), top.text);
+  ok('with nothing left above it', /بالاترین لیگ/.test(top.text) && !/کاپ دیگر لازم داری/.test(top.text), top.text);
+  ok('and it still says how many cups they have', /۴٬?۲۰۰ کاپ داری/.test(top.text), top.text);
   /* And the bar itself is filled past the gold badge, not stopped at it. */
   ok('the bar is filled past gold too', top.fill.r > top.gold.c, Math.round(top.fill.r - top.gold.c) + 'px');
 
@@ -144,11 +176,12 @@ async function makePage(w = 390, h = 844) {
     (0, eval)('weeklyScore=150'); (0, eval)('renderWeeklyProgress()');
     await new Promise((r) => setTimeout(r, 800));
     const c = (s) => { const e = document.querySelector(s); const r = e.getBoundingClientRect(); return r.left + r.width / 2; };
-    return { text: document.getElementById('wpInside').textContent, bronze: c('#wpBronze'), token: c('#wpMarker'), silver: c('#wpSilver') };
+    return { text: document.getElementById('wpSay').textContent, bronze: c('#wpBronze'), token: c('#wpMarker'), silver: c('#wpSilver') };
   });
   ok('moving the thresholds moves the badges', moved.token > moved.bronze && moved.token < moved.silver,
      JSON.stringify({ bronze: Math.round(moved.bronze), token: Math.round(moved.token), silver: Math.round(moved.silver) }));
-  ok('and the sentence follows the new numbers', /۵۰ کاپ تا لیگ نقره/.test(moved.text), moved.text);
+  ok('and the sentence follows the new numbers', /تا لیگ نقره‌ای ۵۰ کاپ دیگر لازم داری/.test(moved.text), moved.text);
+  ok('and names the league they are in now', /الان در لیگ برنز هستی/.test(moved.text), moved.text);
   ok('no script errors', errs.length === 0, errs.join(' | '));
   await ctx.close();
 }

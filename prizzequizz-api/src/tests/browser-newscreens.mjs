@@ -562,14 +562,14 @@ console.log('the league cut lines on the cup rail:');
   await page.waitForTimeout(700);
   ok('home asks the server where the cut lines are', cutlineCalls >= 1, String(cutlineCalls));
 
-  /* The badges stand ON the bar now, so their old two-line captions are gone
-     and the cut line travels with the sentence written inside the tube — for
-     the line actually being chased, which is the only one a player can act on.
-     What must NOT be lost is that the number is a rank read off the live board,
-     not a fixed threshold. */
+  /* The badges stand ON the bar, and the cut line travels with the sentence —
+     which now sits UNDER the rail rather than inside the tube, because the
+     token's own cup badge rides across the tube and two Persian numbers were
+     ending up shoulder to shoulder. What must NOT be lost in that move is that
+     the number is a rank read off the live board, not a fixed threshold. */
   const say = (score) => page.evaluate((v) => {
     (0, eval)('weeklyScore=' + v); (0, eval)('renderWeeklyProgress()');
-    return document.getElementById('wpInside').textContent;
+    return document.getElementById('wpSay').textContent;
   }, score);
 
   const toSilver = await say(600);        // past bronze, chasing silver (rank 30 @ 860)

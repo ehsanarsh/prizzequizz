@@ -4557,6 +4557,13 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
   transition:width .6s cubic-bezier(.2,.9,.3,1)!important}
 /* The sentence, inside the tube. It is centred on the WHOLE tube rather than on
    the filled part, so it does not slide about as the week goes on. */
+/* Two short lines, centred, with room to wrap on a narrow phone. Numbers are
+   the only thing picked out in colour, because they are the answer. */
+.weekly-progress-line .wpl-say{position:relative;z-index:2;text-align:center;margin:2px 2px 0;
+  font-size:10.5px;font-weight:900;line-height:1.5;color:var(--muted)}
+.weekly-progress-line .wpl-say .l2{color:#cfcfd6}
+.weekly-progress-line .wpl-say b{color:var(--bolt)}
+@media(max-width:370px){.weekly-progress-line .wpl-say{font-size:9.5px;line-height:1.45}}
 .weekly-progress-line .wpl-inside{position:absolute!important;left:2%!important;right:2%!important;
   top:48px!important;height:28px!important;z-index:3!important;display:flex!important;
   align-items:center!important;justify-content:center!important;
@@ -6047,8 +6054,14 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
             <div class="wpl-flag silver" id="wpSilver"><em><img src="data:image/webp;base64,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" alt="Silver"></em><small></small></div>
             <div class="wpl-flag gold" id="wpGold"><em><img src="data:image/webp;base64,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" alt="Gold"></em><small></small></div>
           </div>
-          <!-- The «تا Silver …» line is gone: the flags on the rail already say
-               where the next target is, and the token says how far along it is. -->
+          <!-- THE SENTENCE LIVES UNDER THE RAIL, NOT INSIDE THE TUBE.
+               It used to be written inside the tube, where the token's own
+               «۷۶۰ 🏆» badge rides across it: two Persian numbers ended up
+               shoulder to shoulder and neither one said what it was. Down here
+               it has the width to say the whole thing — which league you are
+               in, how many cups you have, and how many more the next league
+               takes — and nothing can ever cross it. -->
+          <div class="wpl-say" id="wpSay"></div>
         </div>
       </header>
       <!-- ============================================================
@@ -17037,27 +17050,48 @@ function renderWeeklyProgress(){
     el.classList.toggle('done',now);
     if(now&&!was){el.classList.add('reached');setTimeout(()=>el.classList.remove('reached'),700);sfx('found');vib([20,30,20]);}
   });
-  /* WHAT IS WRITTEN INSIDE THE TUBE. Always the next line to cross, named in
-     Persian, with the exact number of cups still to go. */
+  /* WHAT THE RAIL ACTUALLY SAYS.
+     «عددهای فارسی بغل هم افتادن و اصلا معلوم نیست چند تا کاپ می‌خواد یا چند تا
+      کاپ داره. باید بنویسه شما در <لیگ فلان> هستی، تا <لیگ بالاتر> فلان کاپ
+      نیاز داری.»
+
+     It used to be one clipped phrase written INSIDE the tube — «۹۸۰ کاپ تا لیگ
+     برنز» — while the token's own «۲۲۰ 🏆» badge rode across the same band. Two
+     Persian numbers side by side, neither labelled, and the one thing a player
+     wants to know — which league am I in — was not written anywhere at all.
+
+     So the tube is left to be a bar, and the sentence moves underneath it where
+     there is room to say all three things plainly: the league you are in now,
+     the cups you have, and how many more the next league takes. Every number
+     has words on both sides of it. */
   { const inside=document.getElementById('wpInside');
-    if(inside){
-      /* A place in a league is a RANK, not a score: the badge stands at the cup
-         count of the last player currently holding that place. Saying which
-         place it is turns «۱٬۱۰۰ کاپ» from a number into a target. It used to be
-         printed under the badge; the badges stand on the bar now, so it travels
-         with the sentence — and only for the line actually being chased, which
-         is the only one that matters. A «~» marks a line the board has not
-         filled yet, so an estimate never reads as a fact. */
+    if(inside&&inside.textContent!=='') inside.textContent='';
+    const say=document.getElementById('wpSay');
+    if(say){
       const lineOf=(k)=>(LEAGUE_LINES||[]).find(l=>l&&l.key===k)||null;
+      const NAME={bronze:'برنز',silver:'نقره‌ای',gold:'طلایی'};
+      const nameOf=(k)=>{ const l=lineOf(k); return pzEsc(String((l&&l.label)||NAME[k]||k)); };
+      /* A place in a league is a RANK, not a score — it says what «۱٬۱۰۰ کاپ»
+         is actually worth. «~» marks a line the board has not filled yet, so an
+         estimate never reads as a fact. */
       const rankOf=(k)=>{ const l=lineOf(k); return (l&&l.rank)?(' · رتبهٔ '+(l.exact?'':'~')+fa(l.rank)):''; };
-      let txt;
-      if(weeklyScore<T.bronze)      txt=fa(T.bronze-weeklyScore)+' کاپ تا لیگ برنز'+rankOf('bronze');
-      else if(weeklyScore<T.silver) txt=fa(T.silver-weeklyScore)+' کاپ تا لیگ نقره‌ای'+rankOf('silver');
-      else if(weeklyScore<T.gold)   txt=fa(T.gold-weeklyScore)+' کاپ تا لیگ طلایی'+rankOf('gold');
-      else                          txt='در لیگ طلایی هستی 👑';
-      if(inside.textContent!==txt) inside.textContent=txt;
-      /* Centred, and it stays readable: the token rides ABOVE the tube rather
-         than inside it, so nothing crosses the words. */
+      let here, next;
+      if(weeklyScore<T.bronze){
+        here='هنوز وارد هیچ لیگی نشده‌ای';
+        next='تا لیگ '+nameOf('bronze')+' <b>'+fa(T.bronze-weeklyScore)+'</b> کاپ دیگر لازم داری'+rankOf('bronze');
+      }else if(weeklyScore<T.silver){
+        here='الان در لیگ '+nameOf('bronze')+' هستی';
+        next='تا لیگ '+nameOf('silver')+' <b>'+fa(T.silver-weeklyScore)+'</b> کاپ دیگر لازم داری'+rankOf('silver');
+      }else if(weeklyScore<T.gold){
+        here='الان در لیگ '+nameOf('silver')+' هستی';
+        next='تا لیگ '+nameOf('gold')+' <b>'+fa(T.gold-weeklyScore)+'</b> کاپ دیگر لازم داری'+rankOf('gold');
+      }else{
+        here='الان در لیگ '+nameOf('gold')+' هستی 👑';
+        next='بالاترین لیگ هفتگی همین است';
+      }
+      const html='<div class="l1">'+here+' · <b>'+fa(weeklyScore)+'</b> کاپ داری</div>'
+                +'<div class="l2">'+next+'</div>';
+      if(say.dataset.h!==html){ say.innerHTML=html; say.dataset.h=html; }
     } }
   /* The old caption under the rail is gone — the sentence is on the bar now.
      Guarded so this stays safe if the element ever comes back. */
