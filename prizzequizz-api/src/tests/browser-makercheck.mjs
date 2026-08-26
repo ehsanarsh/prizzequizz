@@ -89,9 +89,13 @@ async function makePage() {
      running a room, so most of the game could not be written about. */
   ok('and Last Survivor\'s list is not what it reads', lsTopicsAsked === 0, String(lsTopicsAsked));
   ok('a topic with no questions yet is still offered', cats.indexOf('سینما') >= 0, cats.join(' / '));
+  /* Named rather than positional: the card lays the name and the count in a
+     wrapper now, and «the last span» quietly became the wrapper — which still
+     contains the count, so a loose selector would have gone on passing while
+     testing something else. */
   ok('each one says how many questions it has',
-    await page.evaluate(() => (document.querySelector('#qsTopicList .qs-topic span:last-child') || {}).textContent || '') === '۴۰ سؤال',
-    await page.evaluate(() => (document.querySelector('#qsTopicList .qs-topic span:last-child') || {}).textContent || ''));
+    await page.evaluate(() => (document.querySelector('#qsTopicList .qs-topic .tmeta > span') || {}).textContent || '') === '۴۰ سؤال',
+    await page.evaluate(() => (document.querySelector('#qsTopicList .qs-topic .tmeta > span') || {}).textContent || ''));
   /* Nothing is chosen for them: the form is not open yet. */
   ok('no topic is assumed before one is picked', await page.evaluate(() => (0, eval)('QS_CAT')) === '', await page.evaluate(() => (0, eval)('QS_CAT')));
 
@@ -368,6 +372,105 @@ async function makePage() {
   const blue = (s) => /115,\s*217,\s*255|185,\s*240,\s*255|21,\s*151,\s*210/.test(s);
   ok('on the friendly side the back button is blue', blue(free.back), free.back.slice(0, 60));
   ok('and so is the edge of the cards', blue(free.card), free.card);
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
+/* ── THE TOPIC CARDS, AND THE BUTTON THAT CHANGES THE TOPIC ──────────────── */
+/* «کارت‌های موضوعات دو ستون بشه و اندازه‌اش کوچک بشه، ارتفاع هر کدوم نصفِ این
+ * باشه، و هر کارت یه رنگ به‌خصوص داشته باشه.»
+ * «دکمهٔ تغییر موضوع سایزش اصلا با صفحه همخوانی نداره، رنگشم سبز بشه یا آبی.»
+ *
+ * Measured on the narrowest phone the game supports as well as the common one:
+ * the old layout dropped to a SINGLE column under 370px, which put the tallest
+ * possible cards on the screen with the least room for them. */
+for (const width of [390, 360]) {
+  const ctx = await browser.newContext({ viewport: { width, height: 844 }, hasTouch: true, isMobile: true });
+  await ctx.addInitScript(() => {
+    localStorage.setItem('pz_tok', 't'); localStorage.setItem('pz_rtok', 'r');
+    localStorage.setItem('pz_usr', JSON.stringify({ id: 'me', username: 'ehsan', displayName: 'احسان', level: 3 }));
+  });
+  await ctx.route('**/v1/**', (route) => {
+    const p = new URL(route.request().url()).pathname.replace(/^.*\/v1/, '');
+    const send = (d) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, data: d }) });
+    /* Ten topics — as many as the palette has colours, so a scheme that
+       collides has nowhere left to hide. */
+    if (p === '/questions/maker-topics') return send({ topics:
+      ['ورزشی', 'تاریخ', 'علمی', 'سینما و سریال', 'جغرافیا', 'موسیقی', 'ادبیات فارسی', 'فناوری', 'عمومی', 'آشپزی']
+        .map((n, i) => ({ name: n, icon: '📚', image: '', questionCount: 10 + i })) });
+    return send({});
+  });
+  const page = await ctx.newPage();
+  const errs = []; page.on('pageerror', (e) => errs.push(String(e.message || e).slice(0, 200)));
+  await page.goto('http://127.0.0.1:' + PORT + '/');
+  await page.waitForTimeout(5200);
+  console.log('\nthe topic cards at ' + width + 'px:');
+
+  const shown = await page.evaluate(async () => {
+    (0, eval)("go('qstopics')");
+    await (0, eval)('qsLoadTopics')(true);
+    await new Promise((r) => setTimeout(r, 500));
+    const cards = [...document.querySelectorAll('.qs-topic')].filter((c) => c.getBoundingClientRect().height > 0);
+    const box = (e) => { const r = e.getBoundingClientRect(); return { w: Math.round(r.width), h: Math.round(r.height), l: Math.round(r.left) }; };
+    return {
+      n: cards.length,
+      columns: new Set(cards.map((c) => box(c).l)).size,
+      heights: [...new Set(cards.map((c) => box(c).h))],
+      colours: cards.map((c) => getComputedStyle(c).getPropertyValue('--tc').trim()),
+      /* The count has to survive on the card, not be squeezed off it. */
+      countsShown: cards.every((c) => /سؤال/.test(c.textContent || '')),
+      namesShown: cards.every((c) => (c.querySelector('b') || {}).textContent),
+      overflowX: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1
+    };
+  });
+  ok('all ten topics are drawn', shown.n === 10, String(shown.n));
+  ok('in two columns', shown.columns === 2, String(shown.columns) + ' column(s)');
+  /* «ارتفاع هر کدوم به نصف این باشه» — the old card ran about 130px. */
+  ok('and each card is about half the height it was', shown.heights.every((h) => h > 0 && h <= 70), JSON.stringify(shown.heights));
+  ok('every card the same height as its neighbours', shown.heights.length === 1, JSON.stringify(shown.heights));
+  ok('the name is still on the card', shown.namesShown === true);
+  ok('and so is how many questions it has', shown.countsShown === true);
+  /* «هر کارت یه رنگ به‌خصوص داشته باشه» — a repeat on screen reads as a bug,
+     not a scheme. Ten topics, ten colours, no two alike. */
+  ok('each card has a colour of its own', new Set(shown.colours).size === shown.colours.length,
+     new Set(shown.colours).size + ' distinct of ' + shown.colours.length);
+  ok('and they are real colours, not blank', shown.colours.every((c) => /^#[0-9a-fA-F]{6}$/.test(c)), JSON.stringify(shown.colours.slice(0, 3)));
+  ok('nothing hangs off the side of the screen', shown.overflowX === false, String(shown.overflowX));
+
+  /* The colour must be the same on the next visit and on another phone — a
+     colour drawn at random would repaint the whole screen every time. */
+  const again = await page.evaluate(async () => {
+    await (0, eval)('qsLoadTopics')(true);
+    await new Promise((r) => setTimeout(r, 400));
+    return [...document.querySelectorAll('.qs-topic')].filter((c) => c.getBoundingClientRect().height > 0)
+      .map((c) => getComputedStyle(c).getPropertyValue('--tc').trim());
+  });
+  ok('and it is the same colour when the list is drawn again', JSON.stringify(again) === JSON.stringify(shown.colours),
+     JSON.stringify(again.slice(0, 3)) + ' vs ' + JSON.stringify(shown.colours.slice(0, 3)));
+
+  console.log('\nthe «تغییر موضوع» button at ' + width + 'px:');
+  const swap = await page.evaluate(async () => {
+    (0, eval)('qsPickCat')('ورزشی');
+    await new Promise((r) => setTimeout(r, 500));
+    const b = document.querySelector('.qs-swap'), row = document.getElementById('qsChosen');
+    if (!b || !row) return null;
+    const bb = b.getBoundingClientRect(), rb = row.getBoundingClientRect();
+    const cs = getComputedStyle(b);
+    return { w: Math.round(bb.width), h: Math.round(bb.height), rowH: Math.round(rb.height),
+             rowW: Math.round(rb.width), bg: cs.backgroundImage, text: (b.textContent || '').trim(),
+             insideTheRow: bb.top >= rb.top - 2 && bb.bottom <= rb.bottom + 2 };
+  });
+  ok('the button is there', !!swap, JSON.stringify(swap));
+  ok('it says what it does', swap.text === 'تغییر موضوع', swap.text);
+  /* «سایزش اصلا با صفحه همخوانی نداره» — it has to belong to the row it sits
+     in, not tower over it, and not run the width of the screen. */
+  ok('it fits inside its own row', swap.insideTheRow === true, JSON.stringify(swap));
+  ok('no taller than the row', swap.h <= swap.rowH, swap.h + ' vs row ' + swap.rowH);
+  ok('and no wider than half the row', swap.w <= swap.rowW / 2, swap.w + ' vs row ' + swap.rowW);
+  ok('but still big enough to hit', swap.h >= 30 && swap.w >= 60, swap.w + '×' + swap.h);
+  /* «رنگشم سبز بشه یا آبی» — green. */
+  const rgb = (swap.bg.match(/\d+/g) || []).map(Number);
+  ok('and it is green, not grey', rgb.length >= 3 && rgb[1] > rgb[0] + 40 && rgb[1] > rgb[2] + 40, swap.bg.slice(0, 60));
   ok('no script errors', errs.length === 0, errs.join(' | '));
   await ctx.close();
 }

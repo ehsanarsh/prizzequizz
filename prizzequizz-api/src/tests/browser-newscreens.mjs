@@ -903,6 +903,73 @@ ok('no script errors on the new screens', errs.length === 0, errs.join(' | '));
 
 
 
+/* ── EVERY WAY OUT IS RED ────────────────────────────────────────────────── */
+/* «تمامی دکمه‌های بستن در مودال‌ها و صفحه‌ها باید رنگش قرمز بشه.»
+ * The ✕ in every corner already was — one CSS rule names them all. What was
+ * not is the WORD «بستن» on a button inside a sheet, and it is the same button
+ * doing the same thing. Decided from the label in showAaaModal rather than at
+ * each call site, so the next sheet with a «بستن» on it is red without anyone
+ * having to remember to ask. */
+/* This file drives ONE page, opened at the top — so no context of its own. */
+{
+  console.log('\nevery button that closes something:');
+
+  /* «Red» by DOMINANCE, not by a ceiling on green. The game's red runs from a
+     salmon top stop — rgb(255,139,122) — and a flat «green must be under 130»
+     called that not-red while looking straight at it. What makes it read as
+     red is that the red channel is far ahead of the other two. */
+  const red = (bg) => {
+    const c = (String(bg).match(/\d+/g) || []).map(Number);
+    return c.length >= 3 && c[0] > 180 && c[0] > c[1] + 60 && c[0] > c[2] + 60;
+  };
+
+  const shut = await page.evaluate(async () => {
+    (0, eval)('showAaaModal')({ title: 'آزمایش', sub: '', primaryText: 'باشه', secondaryText: 'بستن' });
+    await new Promise((r) => setTimeout(r, 350));
+    const s = document.getElementById('aaaSecondary'), p = document.getElementById('aaaPrimary');
+    return { secondary: getComputedStyle(s).backgroundImage, secondaryCls: s.className,
+             primary: getComputedStyle(p).backgroundImage, primaryCls: p.className };
+  });
+  ok('a «بستن» in a sheet is red', red(shut.secondary), shut.secondaryCls + ' · ' + shut.secondary.slice(0, 50));
+  ok('and the button beside it is left alone', !red(shut.primary), shut.primaryCls + ' · ' + shut.primary.slice(0, 50));
+
+  for (const word of ['انصراف', 'لغو', 'خروج']) {
+    const r = await page.evaluate(async (w) => {
+      (0, eval)('closeAaaModal')(false);
+      await new Promise((x) => setTimeout(x, 200));
+      (0, eval)('showAaaModal')({ title: 'آزمایش', sub: '', primaryText: 'باشه', secondaryText: w });
+      await new Promise((x) => setTimeout(x, 300));
+      return getComputedStyle(document.getElementById('aaaSecondary')).backgroundImage;
+    }, word);
+    ok('«' + word + '» is red too', red(r), r.slice(0, 50));
+  }
+
+  /* A caller that picked its own colour keeps it — the rule fills a gap, it
+     does not overrule a decision somebody already made. */
+  const chosen = await page.evaluate(async () => {
+    (0, eval)('closeAaaModal')(false);
+    await new Promise((r) => setTimeout(r, 200));
+    (0, eval)('showAaaModal')({ title: 'آزمایش', sub: '', primaryText: '', secondaryText: 'بستن', secondaryClass: 'btn-yellow' });
+    await new Promise((r) => setTimeout(r, 300));
+    return document.getElementById('aaaSecondary').className;
+  });
+  ok('a colour the caller chose is not overruled', /btn-yellow/.test(chosen), chosen);
+
+  /* And a word that does NOT close anything must not go red. */
+  const keep = await page.evaluate(async () => {
+    (0, eval)('closeAaaModal')(false);
+    await new Promise((r) => setTimeout(r, 200));
+    (0, eval)('showAaaModal')({ title: 'آزمایش', sub: '', primaryText: 'متوجه شدم', secondaryText: 'بعداً' });
+    await new Promise((r) => setTimeout(r, 300));
+    return { p: getComputedStyle(document.getElementById('aaaPrimary')).backgroundImage,
+             s: getComputedStyle(document.getElementById('aaaSecondary')).backgroundImage };
+  });
+  ok('«متوجه شدم» is not a way out, and is not red', !red(keep.p), keep.p.slice(0, 50));
+  ok('nor is «بعداً»', !red(keep.s), keep.s.slice(0, 50));
+
+  await page.evaluate(() => (0, eval)('closeAaaModal')(false));
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 await browser.close(); server.close();
 process.exit(fail ? 1 : 0);

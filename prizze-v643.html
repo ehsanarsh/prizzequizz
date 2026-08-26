@@ -2759,7 +2759,10 @@ input,textarea,select,[contenteditable="true"],.pz-selectable,.pz-selectable *{
 /* ===== SPIN CLOSE FIX v16 ===== */
 #spinSheet{position:absolute}
 .spin-close{position:absolute;top:14px;left:16px;width:38px;height:38px;border-radius:13px;z-index:6;font-size:16px}
-#spinSheet .spin-bottom-close{margin-top:10px;display:none}
+#spinSheet /* The wheel's own «بستن» — a way out, so red like every other one. */
+.spin-bottom-close{margin-top:10px;display:none;
+  background:linear-gradient(180deg,#FF7A6B,var(--bad-d))!important;color:#fff!important;
+  border-color:#000!important}
 #spinSheet.done .spin-bottom-close{display:flex}
 
 
@@ -3830,24 +3833,53 @@ body,button,input,select,textarea,.tab,#rankTabs .tab,#rankTabs .tab small,.rank
 .qs-loading{font-size:12px;color:var(--muted);font-weight:800;padding:4px 2px}
 /* The topic list the maker opens on: one tap per topic, and the tap IS the way
    in — nothing else on the screen to press. */
-.qs-topics{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.qs-topic{display:flex;flex-direction:column;align-items:center;gap:7px;padding:14px 9px;
-  border:var(--stroke);border-radius:18px;background:var(--ink-2);box-shadow:var(--hard-sm);
-  font-family:inherit;color:var(--paper);cursor:pointer;text-align:center}
+/* ── THE TOPIC CARDS ──────────────────────────────────────────────────────
+   «کارت‌های موضوعات دو ستون بشه و اندازه‌اش هم کوچک بشه، ارتفاع هر کدوم به
+    نصف این باشه، و هر کارت یه رنگ به‌خصوص داشته باشه.»
+
+   They were a column each — icon stacked over the name over the count — which
+   is what made them tall. Laid on their side the same three things take half
+   the height, and two columns fit a phone without either one being cramped.
+   The colour comes from the topic's own NAME, so a topic keeps its colour
+   between visits and between phones; a random one per render would make the
+   screen flicker into a different set of colours every time it opened. */
+.qs-topics{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.qs-topic{display:flex;flex-direction:row;align-items:center;gap:9px;padding:9px 10px;min-height:60px;
+  border:var(--stroke);border-radius:15px;background:var(--ink-2);box-shadow:var(--hard-sm);
+  font-family:inherit;color:var(--paper);cursor:pointer;text-align:start;
+  /* --tc is the topic's own colour, set per card. */
+  border-color:#000;background:linear-gradient(135deg,color-mix(in srgb,var(--tc,#2a2a33) 34%,#16161b),#14141a)}
 .qs-topic:active{transform:translateY(2px);box-shadow:0 0 0 #000}
-.qs-topic .tico{width:52px;height:52px;border-radius:16px;border:2.5px solid #000;background:var(--ink-3);
-  display:grid;place-items:center;font-size:26px;overflow:hidden}
+.qs-topic .tico{width:38px;height:38px;border-radius:12px;border:2px solid #000;
+  background:var(--tc,var(--ink-3));flex-shrink:0;
+  display:grid;place-items:center;font-size:20px;overflow:hidden}
 .qs-topic .tico img{width:100%;height:100%;object-fit:cover}
-.qs-topic b{font-size:12.5px;font-weight:900;line-height:1.5}
-.qs-topic span{font-size:10.5px;color:var(--muted);font-weight:800}
+/* The name and the count stack in what is left, and a long name wraps to two
+   lines rather than pushing the count off the card. */
+.qs-topic .tmeta{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.qs-topic b{font-size:12px;font-weight:900;line-height:1.35;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.qs-topic span{font-size:10px;color:var(--muted);font-weight:800;line-height:1}
 /* The topic already chosen, on the maker itself, with the way back to the list. */
 .qs-chosen{display:flex;align-items:center;gap:10px}
 .qs-chosen .tico{width:42px;height:42px;border-radius:13px;border:2px solid #000;background:var(--ink-3);
   display:grid;place-items:center;font-size:21px;overflow:hidden;flex-shrink:0}
 .qs-chosen .tico img{width:100%;height:100%;object-fit:cover}
 .qs-chosen b{flex:1;min-width:0;font-size:13.5px;font-weight:900}
-.qs-chosen .btn{width:auto;flex-shrink:0;font-size:11.5px;padding:8px 11px;border-radius:12px;box-shadow:var(--hard-sm)}
-@media(max-width:370px){.qs-topics{grid-template-columns:1fr}}
+/* «دکمهٔ تغییر موضوع سایزش اصلا با صفحه همخوانی نداره.»
+   `.btn` is a full-width block with a big touch target — right for the bottom
+   of a form, wrong sitting next to a 42px row, where it towered over the line
+   it belongs to. Sized to the row instead: as tall as the icon beside it, wide
+   enough for its own words and no wider. */
+.qs-chosen .btn.qs-swap{width:auto;flex-shrink:0;flex-grow:0;
+  height:36px;min-height:0;padding:0 12px;
+  font-size:11.5px;line-height:1;border-radius:11px;box-shadow:var(--hard-sm);
+  display:inline-flex;align-items:center;justify-content:center;white-space:nowrap}
+.qs-chosen .btn.qs-swap:active{transform:translateY(2px);box-shadow:0 1px 0 #000}
+/* Two columns stay two columns. Dropping to one on a narrow phone is what put
+   these back to full-height cards on exactly the screens with least room. */
+@media(max-width:370px){.qs-topics{gap:7px}.qs-topic{padding:8px;gap:7px;min-height:54px}
+  .qs-topic .tico{width:34px;height:34px;font-size:18px}.qs-topic b{font-size:11px}}
 .qs-chip{border:2px solid #000;border-radius:999px;background:var(--ink-3);color:var(--paper);
   font-family:inherit;font-size:11.5px;font-weight:900;padding:8px 11px;box-shadow:0 2px 0 #000;cursor:pointer}
 .qs-chip.on{background:linear-gradient(180deg,#FFE24A,#F0A400);color:#141414}
@@ -11071,8 +11103,17 @@ function showAaaModal(opts){
   reward.classList.toggle('show',!!opts.reward);reward.innerHTML=opts.reward||'';
   check.checked=false;checkRow.classList.toggle('show',!!opts.checkbox);checkText.textContent=opts.checkboxText||'دیگر این پیام را نمایش نده';
   actions.style.display=opts.hideActions?'none':'flex';
-  primary.className='btn '+(opts.primaryClass||'btn-primary');
-  secondary.className='btn '+(opts.secondaryClass||'btn-ghost');
+  /* A BUTTON THAT CLOSES IS RED, WHEREVER IT IS.
+     «تمامی دکمه‌های بستن در مودال‌ها و صفحه‌ها باید رنگش قرمز بشه.» The ✕ in
+     every corner already was; the WORD «بستن» inside a sheet was not, and it
+     is the same button. Decided from the label rather than at each call site —
+     the same reason the crosses are named in one CSS rule — so the next sheet
+     with a «بستن» on it is red without anyone remembering to ask.
+     Only when the caller has not chosen a colour of its own. */
+  const _isShut=(t)=>/^\s*(بستن|ببند|خروج|انصراف|لغو)\s*$/.test(String(t||''));
+  const _btnClass=(cls,txt,dflt)=>'btn '+(cls||(_isShut(txt)?'btn-red':dflt));
+  primary.className=_btnClass(opts.primaryClass,opts.primaryText,'btn-primary');
+  secondary.className=_btnClass(opts.secondaryClass,opts.secondaryText,'btn-ghost');
   primary.textContent=opts.primaryText||'متوجه شدم';secondary.textContent=opts.secondaryText||'بعداً';
   /* An EXPLICIT empty label means «this sheet has no primary action» — the
      picker sheets say so and were getting a “متوجه شدم” that did nothing but
@@ -11082,7 +11123,7 @@ function showAaaModal(opts){
   primary.style.display=(opts.primaryText==='')?'none':'flex';
   secondary.style.display=opts.secondaryText?'flex':'none';
   if(tertiary){
-    tertiary.className='btn '+(opts.tertiaryClass||'btn-ghost');
+    tertiary.className=_btnClass(opts.tertiaryClass,opts.tertiaryText,'btn-ghost');
     tertiary.textContent=opts.tertiaryText||'';
     tertiary.style.display=opts.tertiaryText?'flex':'none';
     tertiary.onclick=()=>{ if(opts.onTertiary) opts.onTertiary(); else closeAaaModal(false); };
@@ -13415,6 +13456,37 @@ const QS_DIFF_FA={easy:'آسان',medium:'متوسط',hard:'سخت',veryhard:'خ
    list the operator keeps — minus «تصادفی», which is a way of drawing from the
    others rather than a subject, minus the internal «انتخاب موضوع» bank, and
    minus anything they have switched off for the maker. */
+/* A COLOUR PER TOPIC, AND THE SAME ONE EVERY TIME.
+   «هر کارت یه رنگ به‌خصوص داشته باشه.» Picked from the topic's NAME rather
+   than its position, so «ورزشی» is the same colour on every phone and stays
+   that colour when a new topic is added above it — a colour by index would
+   reshuffle the whole screen the moment the list changed. The palette is the
+   game's own; anything outside it reads as a different app. */
+const QS_COLOURS=['#E0574B','#E08B2C','#D9B520','#5FAE45','#2FA98C','#3C8FD4','#5B6FD6','#8B5BD6','#C74FA0','#B2724A'];
+function qsTopicHash(name){
+  const s=String(name||'');
+  let h=0;
+  for(let i=0;i<s.length;i++) h=(h*31+s.charCodeAt(i))>>>0;
+  return h;
+}
+/* The hash alone handed two of ten topics the same colour — mod on ten slots
+   collides long before the slots run out, and two identical cards on one
+   screen read as a bug rather than a scheme. So the hash picks the PREFERRED
+   colour and a taken one steps to the next free slot: still decided by the
+   name, still the same on every phone, and no repeat while there are colours
+   left. Past that many topics a repeat is arithmetic, not a choice — and the
+   walk at least keeps the repeats apart. */
+function qsTopicColours(names){
+  const used=new Set(), out=[];
+  for(const n of names){
+    let i=qsTopicHash(n)%QS_COLOURS.length;
+    for(let k=0;k<QS_COLOURS.length&&used.has(QS_COLOURS[i]);k++) i=(i+1)%QS_COLOURS.length;
+    out.push(QS_COLOURS[i]); used.add(QS_COLOURS[i]);
+  }
+  return out;
+}
+/* Kept for anywhere that needs one topic's colour on its own. */
+function qsTopicColour(name){ return QS_COLOURS[qsTopicHash(name)%QS_COLOURS.length]; }
 async function qsLoadTopics(force){
   const box=document.getElementById('qsTopicList');
   if(force) QS_CATS=[];
@@ -13429,11 +13501,12 @@ async function qsLoadTopics(force){
   }
   if(!box) return;
   if(!QS_CATS.length){ box.innerHTML='<span class="qs-loading">موضوعی در دسترس نیست — اتصالت را بررسی کن.</span>'; return; }
-  box.innerHTML=QS_CATS.map(c=>
-    '<button type="button" class="qs-topic" data-c="'+frEsc(c.name)+'" onclick="qsPickCat(this.getAttribute(\'data-c\'))">'+
+  const cols=qsTopicColours(QS_CATS.map(c=>c.name));
+  box.innerHTML=QS_CATS.map((c,i)=>
+    '<button type="button" class="qs-topic" data-c="'+frEsc(c.name)+'" style="--tc:'+cols[i]+'" onclick="qsPickCat(this.getAttribute(\'data-c\'))">'+
       '<span class="tico">'+(c.image?'<img src="'+frEsc(c.image)+'" alt="">':frEsc(c.icon))+'</span>'+
-      '<b>'+frEsc(c.name)+'</b>'+
-      '<span>'+fa(c.count)+' سؤال</span>'+
+      '<span class="tmeta"><b>'+frEsc(c.name)+'</b>'+
+      '<span>'+fa(c.count)+' سؤال</span></span>'+
     '</button>').join('');
 }
 /* Picking one IS entering the maker — «موضوع رو از لیست انتخاب کنه بعد وارد
@@ -13453,9 +13526,9 @@ function qsPaintChosen(){
   el.innerHTML=QS_CAT
     ? '<span class="tico">'+(c.image?'<img src="'+frEsc(c.image)+'" alt="">':frEsc(c.icon||'❓'))+'</span>'+
       '<b>'+frEsc(QS_CAT)+'</b>'+
-      '<button type="button" class="btn btn-ghost" onclick="go(\'qstopics\')">تغییر موضوع</button>'
+      '<button type="button" class="btn btn-green qs-swap" onclick="go(\'qstopics\')">تغییر موضوع</button>'
     : '<b style="color:var(--muted);font-weight:800">موضوعی انتخاب نشده</b>'+
-      '<button type="button" class="btn btn-primary" onclick="go(\'qstopics\')">انتخاب موضوع</button>';
+      '<button type="button" class="btn btn-green qs-swap" onclick="go(\'qstopics\')">انتخاب موضوع</button>';
 }
 /* Back from the maker goes to the list it was opened from, not out of the
    feature — the player is one step in, not at the start. */
