@@ -20,12 +20,21 @@ export interface AdminUserListItem {
   riskLevel?: string;
 }
 
+/* SEARCH LOOKS AT EVERY ACCOUNT, NOT THE LAST TWO HUNDRED.
+ *
+ * This used to ask for `list(limit)` — the most recently updated accounts —
+ * and filter those in memory. So the panel could only find somebody who had
+ * played recently, which is close to the opposite of who an operator is
+ * looking for: the account with a complaint against it has usually been quiet.
+ * Typing a real phone number and getting «کاربری نیست» is what that looks like
+ * from the outside.
+ *
+ * The repository does the search now, in the database, over the whole table —
+ * and it knows that ۰۹۱۲…, +98912… and 0912… are one phone number. */
 export async function searchAdminUsers(query = '', limit = 100): Promise<AdminUserListItem[]> {
-  const users = await repositories.users.list(Math.min(1000, Math.max(1, limit)));
-  const q = query.trim().toLowerCase();
-  const filtered = q
-    ? users.filter((u) => [u.id, u.phone, u.username, u.displayName].some((value) => String(value ?? '').toLowerCase().includes(q)))
-    : users;
+  const cap = Math.min(1000, Math.max(1, limit));
+  const q = query.trim();
+  const filtered = q ? await repositories.users.search(q, cap) : await repositories.users.list(cap);
   const rows: AdminUserListItem[] = [];
   for (const user of filtered.slice(0, limit)) {
     const risk = await repositories.devices.getRiskProfile(user.id).catch(() => null);

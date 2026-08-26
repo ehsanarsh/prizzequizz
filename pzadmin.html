@@ -423,21 +423,51 @@ function modal(title,html){const bg=document.createElement('div');bg.className='
    key, so the built screen could never run. Only one of the two is kept. */
 const CONFIG_PAGES={cfg_xp:['xp','تنظیمات XP'],cfg_level:['level','تنظیمات Level'],cfg_cup:['cup','تنظیمات Cup'],cfg_gameplay:['gameplay','گیم‌پلی هر مود'],events:['events','رویدادها'],general:['general','تنظیمات عمومی'],campaign:['campaign','کمپین کاربر جدید']};
 
-/* SEARCH-AS-YOU-TYPE WAS TRIED HERE AND TAKEN BACK OUT.
-   «قسمت سرچ پنل رو به حالت قبل برگردون، الان نمیشه تایپ کرد، با هر حرف یه بار
-    صفحه رفرش میشه.»
+/* SEARCH AS YOU TYPE, THE WAY THE SUPPORT QUEUE ALREADY DOES IT.
+   «هر حرفی می‌زنی اتوماتیک اون چیزایی که اون حرف توش هست رو بیاره.»
 
-   It was built on `render()`, which is the wrong tool: `render()` re-fetches
-   the section and rebuilds the whole page including the toolbar the box lives
-   in. Debouncing it and putting the caret back afterwards made it survivable
-   on paper and unusable in the hand — the page blinked under every pause and
-   typing became something you fought.
+   The first attempt at this was built on `render()` and had to be taken back
+   out: «با هر حرف یه بار صفحه رفرش می‌شه». `render()` re-fetches the section
+   and rebuilds the whole page — including the toolbar the box lives in — so
+   the input the operator was typing into was destroyed under them on every
+   keystroke. Debouncing it and putting the caret back made it survivable on
+   paper and unusable in the hand.
 
-   Doing this properly means repainting only the ROWS — the way the support
-   queue's own filter does, with no fetch and no page rebuild — and that is a
-   different piece of work per section, not one helper over the top. Until
-   then the button and Enter are what they were, which at least does what it
-   says. */
+   The support queue never had that problem, because it repaints ONE container
+   and leaves everything else alone. That is what these do now:
+
+     • the rows already in memory are filtered and repainted instantly — no
+       fetch, no rebuild, and the input is never touched, so the caret and the
+       Persian composition state survive;
+     • and where the answer may not be in memory at all — users, questions —
+       a second, debounced pass asks the server and repaints the same
+       container when it answers. Typing is never waiting on the network.
+
+   `liveSearch` is that pattern in one place, so a section cannot get half of
+   it. */
+function liveSearch(opts){
+  /* opts: {input, box, get, paint, fetch, delay} — `paint` draws into `box`,
+     `fetch` is optional and returns fresh rows for the current text. */
+  const el=$(opts.input); if(!el) return;
+  let timer=null, seq=0;
+  el.oninput=function(){
+    const q=this.value;
+    opts.set(q);
+    opts.paint();                      /* instant, from what is already here */
+    if(!opts.fetch) return;
+    clearTimeout(timer);
+    timer=setTimeout(async()=>{
+      const mine=++seq;
+      try{
+        const rows=await opts.fetch(q);
+        /* A slower earlier request must not overwrite a later answer. */
+        if(mine!==seq) return;
+        opts.got(rows); opts.paint();
+      }catch(e){ /* the local filter is still on screen */ }
+    }, opts.delay||350);
+  };
+  el.onkeydown=function(ev){ if(ev.key==='Enter'){ ev.preventDefault(); clearTimeout(timer); if(opts.fetch){ opts.fetch(this.value).then(r=>{opts.got(r);opts.paint();}).catch(()=>{}); } } };
+}
 async function render(){
   loading();
   // Access guard: block sections this account isn't permitted to see.
@@ -947,21 +977,61 @@ async function renderUsers(){
         '<label>هزینهٔ هر رفرش (سکه)<input type="number" id="oc_cost" min="0" max="1000" value="'+(oc.refreshCost||0)+'" style="width:110px"></label>'+
         '<label>رفرش رایگان روزانه<input type="number" id="oc_free" min="0" max="100" value="'+(oc.freeRefreshesPerDay||0)+'" style="width:110px"></label>'+
         '<button class="btn pri" onclick="saveOnlineCfg()">ذخیره</button></div></div>':'')+
-    '<div class="toolbar"><input id="uq" placeholder="جستجوی نام/یوزرنیم/شناسه/شماره..." value="'+esc(U_Q)+'" onkeydown="if(event.key===\'Enter\'){U_Q=this.value.trim();render();}"><button class="btn" onclick="U_Q=$(\'#uq\').value.trim();render()">جستجو</button></div>'+
+    '<div class="toolbar"><input id="uq" placeholder="جستجو با نام، یوزرنیم، شناسه یا شمارهٔ موبایل…" value="'+esc(U_Q)+'">'+
+      '<span class="note" id="uqnote" style="margin:0 8px;align-self:center"></span></div>'+
     '<div id="ubulk"></div>'+
     '<div class="tbl-wrap"><table><thead><tr><th style="width:34px"><input type="checkbox" id="uselall" onclick="uSelAll(this.checked)"></th>'+
-      ['کاربر','لول/XP','کاپ','صندوق جایزه','وضعیت','عملیات'].map(c=>'<th>'+c+'</th>').join('')+'</tr></thead><tbody>'+
-      (list.length?list.map(u=>'<tr>'+
-        '<td><input type="checkbox" class="usel" value="'+u.id+'" '+(_USEL.has(u.id)?'checked':'')+' onclick="uSelOne(\''+u.id+'\',this.checked)"></td>'+
-        '<td>'+esc(u.username||'')+' <span class="mono" style="color:var(--muted)">'+String(u.id).slice(0,8)+'</span>'+newTag('users',u.createdAt)+'</td>'+
-        '<td>'+fa(u.level)+' / '+fa(u.xp)+'</td><td>'+fa(u.weeklyScore)+'</td>'+
-        '<td><b style="color:var(--ok)">'+fa(u.wallet)+'</b></td>'+
-        '<td><span class="pill '+(u.status==='banned'?'bad':u.status==='limited'?'pend':'ok')+'">'+(u.status||'active')+'</span></td>'+
-        '<td><button class="btn sm info" onclick="userDetail(\''+u.id+'\')">مدیریت</button> '+
-          '<button class="btn sm bad" onclick="askDeleteUser(\''+u.id+'\',\''+jsq(u.username||'')+'\')">حذف</button></td></tr>').join(''):'<tr><td colspan="7" class="empty">کاربری نیست</td></tr>')+
-    '</tbody></table></div>';
+      ['کاربر','لول/XP','کاپ','صندوق جایزه','وضعیت','عملیات'].map(c=>'<th>'+c+'</th>').join('')+'</tr></thead><tbody id="urows"></tbody></table></div>';
+  uPaintRows();
   uBulkBar();
+  /* The input is built once and then left alone — every keystroke repaints
+     `#urows` only, so nothing under the caret is ever replaced. */
+  liveSearch({
+    input:'#uq', set:(v)=>{U_Q=v;}, paint:uPaintRows,
+    got:(rows)=>{ window._UALL=rows; },
+    fetch:async(q)=>{
+      const r=await api('GET','/admin/users?q='+encodeURIComponent(String(q||'').trim())+'&limit=200');
+      return (r.rows||r||[]);
+    }
+  });
   const i=$('#uq'); if(i&&U_Q){i.focus();i.setSelectionRange(i.value.length,i.value.length);}
+}
+/* WHAT MATCHES, WITHOUT ASKING THE SERVER.
+   The same rule the server uses, so the instant answer and the one that
+   arrives a moment later agree with each other rather than flickering between
+   two different ideas of a match. A phone number is compared on its digits
+   alone — ۰۹۱۲…, +98912… and 0912… are one number, and an operator reading a
+   number off a ticket should not have to guess which spelling was stored. */
+function uDigits(v){
+  return String(v==null?'':v).replace(/[۰-۹]/g,d=>String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d)))
+                             .replace(/[٠-٩]/g,d=>String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
+                             .replace(/\D+/g,'');
+}
+function uMatches(u,q){
+  if(!q) return true;
+  const s=q.toLowerCase();
+  if([u.username,u.displayName,u.id,u.phone].some(v=>String(v==null?'':v).toLowerCase().includes(s))) return true;
+  const key=uDigits(q);
+  if(key.length>=4){ const p=uDigits(u.phone); if(p&&p.includes(key.length>10?key.slice(-10):key)) return true; }
+  return false;
+}
+function uPaintRows(){
+  const box=$('#urows'); if(!box) return;
+  const q=String(U_Q||'').trim();
+  const all=window._UALL||[];
+  const list=all.filter(u=>uMatches(u,q));
+  const note=$('#uqnote');
+  if(note) note.textContent=q?(list.length?(fa(list.length)+' کاربر'):'چیزی پیدا نشد'):'';
+  box.innerHTML=(list.length?list.map(u=>'<tr>'+
+    '<td><input type="checkbox" class="usel" value="'+u.id+'" '+(_USEL.has(u.id)?'checked':'')+' onclick="uSelOne(\''+u.id+'\',this.checked)"></td>'+
+    '<td>'+esc(u.username||'')+' <span class="mono" style="color:var(--muted)">'+String(u.id).slice(0,8)+'</span>'+
+      (u.phone?' <span class="mono" style="color:var(--muted)">'+esc(u.phone)+'</span>':'')+newTag('users',u.createdAt)+'</td>'+
+    '<td>'+fa(u.level)+' / '+fa(u.xp)+'</td><td>'+fa(u.weeklyScore)+'</td>'+
+    '<td><b style="color:var(--ok)">'+fa(u.wallet)+'</b></td>'+
+    '<td><span class="pill '+(u.status==='banned'?'bad':u.status==='limited'?'pend':'ok')+'">'+(u.status||'active')+'</span></td>'+
+    '<td><button class="btn sm info" onclick="userDetail(\''+u.id+'\')">مدیریت</button> '+
+      '<button class="btn sm bad" onclick="askDeleteUser(\''+u.id+'\',\''+jsq(u.username||'')+'\')">حذف</button></td></tr>').join('')
+    :'<tr><td colspan="7" class="empty">'+(q?'کاربری با این مشخصات پیدا نشد':'کاربری نیست')+'</td></tr>');
 }
 /* DELETING A PLAYER IS THE ONE ACTION HERE WITH NO UNDO.
    So it asks for the username to be typed out rather than offering a button
@@ -1580,13 +1650,43 @@ async function renderQuestions(){
     '<button class="btn pri" onclick="qAdd()">➕ افزودن</button> <button class="btn ok" onclick="qAdd(\'انتخاب موضوع\')">🎯 سؤال تعیین موضوع</button> <button class="btn info" onclick="qImport()">📥 ورود انبوه</button> <button class="btn" onclick="qSampleJson()">📄 نمونه JSON</button> <button class="btn" onclick="qExport()">CSV</button>')+
     qViewBar(badgeFor('questions'))+
     catTabs+
-    '<div class="toolbar"><input id="qsearch" placeholder="جستجوی متن سوال..." value="'+esc(Q_SEARCH)+'" onkeydown="if(event.key===\'Enter\'){Q_SEARCH=this.value;render();}"><button class="btn" onclick="Q_SEARCH=$(\'#qsearch\').value;render()">جستجو</button>'+
+    '<div class="toolbar"><input id="qsearch" placeholder="جستجو در متن سؤال، گزینه‌ها یا موضوع…" value="'+esc(Q_SEARCH)+'">'+
+      '<span class="note" id="qsnote" style="margin:0 8px;align-self:center"></span>'+
     '<div class="subtabs" style="margin:0">'+['','approved','pending','archived'].map(st=>'<button class="'+(Q_ST===st?'active':'')+'" onclick="Q_ST=\''+st+'\';render()">'+(st===''?'همه وضعیت‌ها':{approved:'تأییدشده',pending:'در انتظار',archived:'بایگانی'}[st])+'</button>').join('')+'</div></div>'+
     '<div id="qbulk"></div>'+
     '<div class="tbl-wrap"><table><thead><tr>'+
       '<th style="width:34px"><input type="checkbox" id="qselall" onclick="qSelAll(this.checked)"></th>'+
-      ['متن','دسته','سختی','پاسخ درست','استفاده','٪ صحیح','وضعیت','عملیات'].map(c=>'<th>'+c+'</th>').join('')+'</tr></thead><tbody>'+
-      (filtered.length?filtered.slice(0,300).map(q=>'<tr>'+
+      ['متن','دسته','سختی','پاسخ درست','استفاده','٪ صحیح','وضعیت','عملیات'].map(c=>'<th>'+c+'</th>').join('')+'</tr></thead><tbody id="qrows"></tbody></table></div>';
+  window._QALL=list;
+  qPaintRows();
+  qBulkBar();
+  qLoadStats();   // fill the real «استفاده» / «٪ صحیح» columns in the background
+  /* The whole bank is already here, so there is nothing to fetch: every
+     keystroke filters what is in memory and repaints one <tbody>. The input is
+     built once by render() and never touched again. */
+  liveSearch({ input:'#qsearch', set:(v)=>{Q_SEARCH=v;}, paint:qPaintRows, got:()=>{} });
+  const qi=$('#qsearch'); if(qi&&Q_SEARCH){qi.focus();qi.setSelectionRange(qi.value.length,qi.value.length);}
+}
+/* «مخصوصا سرچ سوالات» — and it looks in the OPTIONS too. A question is often
+   remembered by its answer rather than its wording, and searching only the
+   stem makes the operator scroll for something the panel could have found. */
+function qMatches(q,s){
+  if(!s) return true;
+  if(String(q.text||'').toLowerCase().includes(s)) return true;
+  if(String(q.category||'').toLowerCase().includes(s)) return true;
+  return (q.options||[]).some(o=>String(o==null?'':o).toLowerCase().includes(s));
+}
+function qPaintRows(){
+  const box=$('#qrows'); if(!box) return;
+  const s=String(Q_SEARCH||'').trim().toLowerCase();
+  const list=window._QALL||[];
+  const filtered=list.filter(q=>(!Q_CAT||q.category===Q_CAT)&&(!Q_ST||q.status===Q_ST)&&qMatches(q,s));
+  const note=$('#qsnote');
+  if(note) note.textContent=s?(filtered.length?(fa(filtered.length)+' سؤال'):'چیزی پیدا نشد'):'';
+  const sub=$('#main .head .sub');
+  if(sub) sub.textContent=fa(filtered.length)+' سوال'+(Q_CAT?' در «'+Q_CAT+'»':'');
+  window._QFILT=filtered.slice(0,300).map(q=>q.id);
+  box.innerHTML=(filtered.length?filtered.slice(0,300).map(q=>'<tr>'+
         '<td><input type="checkbox" class="qsel" value="'+q.id+'" '+(_QSEL.has(q.id)?'checked':'')+' onclick="qSelOne(\''+q.id+'\',this.checked)"></td>'+
         '<td>'+esc(String(q.text||'').slice(0,55))+'</td><td>'+esc(q.category||'—')+'</td>'+
         '<td>'+esc(({easy:'آسان',medium:'متوسط',hard:'سخت'})[q.difficulty]||q.difficulty||'—')+'</td>'+
@@ -1595,12 +1695,7 @@ async function renderQuestions(){
         '<td>'+(_QSTATS[q.id]&&_QSTATS[q.id].correctPercent!=null?'<b style="color:'+(_QSTATS[q.id].correctPercent>=60?'var(--ok)':(_QSTATS[q.id].correctPercent>=35?'var(--gold)':'var(--bad)'))+'">'+fa(_QSTATS[q.id].correctPercent)+'٪</b>':(q.correctRate!=null?fa(Math.round(q.correctRate))+'٪':'—'))+'</td>'+
         '<td><span class="pill '+(q.status==='approved'?'ok':q.status==='archived'||q.status==='rejected'?'bad':'pend')+'">'+esc(q.status)+'</span></td>'+
         '<td>'+(q.status!=='approved'?'<button class="btn sm ok" onclick="qStatus(\''+q.id+'\',\'approved\')">تأیید</button> ':'')+'<button class="btn sm" onclick="qStats(\''+q.id+'\')">📊 آمار</button> <button class="btn sm" onclick="qEdit(\''+q.id+'\')">ویرایش</button> <button class="btn sm bad" onclick="qDelete(\''+q.id+'\')">حذف</button></td>'+
-      '</tr>').join(''):'<tr><td colspan="9" class="empty">سوالی نیست</td></tr>')+
-    '</tbody></table></div>';
-  window._QALL=list; window._QFILT=filtered.slice(0,300).map(q=>q.id);
-  qBulkBar();
-  qLoadStats();   // fill the real «استفاده» / «٪ صحیح» columns in the background
-  const qi=$('#qsearch'); if(qi&&Q_SEARCH){qi.focus();qi.setSelectionRange(qi.value.length,qi.value.length);}
+      '</tr>').join(''):'<tr><td colspan="9" class="empty">'+(s?'سؤالی با این عبارت پیدا نشد':'سوالی نیست')+'</td></tr>');
 }
 /* ── کوییزساز: questions players wrote ─────────────────────────────────
  * Approving one publishes it into the bank AND pays the author, so the button
@@ -2064,13 +2159,37 @@ async function catSave(){
 let AC_Q='';
 async function renderWallet(){
   const d=await api('GET','/admin/wallet/accounts?q='+encodeURIComponent(AC_Q));
+  window._ACALL=(d.rows||[]);
   $('#main').innerHTML=head('مدیریت صندوق جایزه','موجودی کاربران، دفترکل، اصلاح دستی')+
-    '<div class="toolbar"><input id="acq" placeholder="جستجو..." value="'+esc(AC_Q)+'" onkeydown="if(event.key===\'Enter\'){AC_Q=this.value.trim();render();}"><button class="btn" onclick="AC_Q=$(\'#acq\').value.trim();render()">جستجو</button> <button class="btn info" onclick="checkConsistency()">بررسی سازگاری دفترکل</button></div>'+
-    tbl(['کاربر','قابل‌دریافت','بلوکه','عملیات'],(d.rows||[]).map(u=>[
-      esc(u.username||'')+' <span class="mono" style="color:var(--muted)">'+String(u.userId).slice(0,8)+'</span>'+newTag('suspicious',u.lastAt),
-      '<b style="color:var(--ok)">'+fa(u.account.available)+'</b>',fa(u.account.locked),
-      '<button class="btn sm" onclick="viewLedger(\''+u.userId+'\')">دفترکل</button> <button class="btn sm info" onclick="userDetail(\''+u.userId+'\')">مدیریت</button>'
-    ]));
+    '<div class="toolbar"><input id="acq" placeholder="جستجو با نام، شناسه یا شمارهٔ موبایل…" value="'+esc(AC_Q)+'">'+
+      '<span class="note" id="acnote" style="margin:0 8px;align-self:center"></span>'+
+      '<button class="btn info" onclick="checkConsistency()">بررسی سازگاری دفترکل</button></div>'+
+    '<div class="tbl-wrap"><table><thead><tr>'+['کاربر','قابل‌دریافت','بلوکه','عملیات'].map(c=>'<th>'+c+'</th>').join('')+
+    '</tr></thead><tbody id="acrows"></tbody></table></div>';
+  acPaintRows();
+  liveSearch({
+    input:'#acq', set:(v)=>{AC_Q=v;}, paint:acPaintRows,
+    got:(rows)=>{ window._ACALL=rows; },
+    fetch:async(q)=>{
+      const r=await api('GET','/admin/wallet/accounts?q='+encodeURIComponent(String(q||'').trim()));
+      return (r.rows||[]);
+    }
+  });
+  const i=$('#acq'); if(i&&AC_Q){i.focus();i.setSelectionRange(i.value.length,i.value.length);}
+}
+function acPaintRows(){
+  const box=$('#acrows'); if(!box) return;
+  const q=String(AC_Q||'').trim();
+  const rows=(window._ACALL||[]).filter(u=>uMatches({username:u.username,displayName:u.displayName,id:u.userId,phone:u.phone},q));
+  const note=$('#acnote');
+  if(note) note.textContent=q?(rows.length?(fa(rows.length)+' حساب'):'چیزی پیدا نشد'):'';
+  box.innerHTML=(rows.length?rows.map(u=>'<tr>'+
+    '<td>'+esc(u.username||'')+' <span class="mono" style="color:var(--muted)">'+String(u.userId).slice(0,8)+'</span>'+
+      (u.phone?' <span class="mono" style="color:var(--muted)">'+esc(u.phone)+'</span>':'')+newTag('suspicious',u.lastAt)+'</td>'+
+    '<td><b style="color:var(--ok)">'+fa(u.account.available)+'</b></td><td>'+fa(u.account.locked)+'</td>'+
+    '<td><button class="btn sm" onclick="viewLedger(\''+u.userId+'\')">دفترکل</button> '+
+      '<button class="btn sm info" onclick="userDetail(\''+u.userId+'\')">مدیریت</button></td></tr>').join('')
+    :'<tr><td colspan="4" class="empty">'+(q?'حسابی با این مشخصات پیدا نشد':'حسابی نیست')+'</td></tr>');
 }
 async function viewLedger(uid){const d=await api('GET','/admin/wallet/users/'+uid+'/ledger?pageSize=60');modal('دفترکل',tbl(['نوع','مبلغ','مانده بعد','زمان','توضیح'],(d.rows||[]).map(e=>[esc(e.entryType),(e.kind==='credit'||e.kind==='release'?'+':'−')+fa(e.amount),fa(e.availableAfter),fmtDate(e.createdAt),esc(e.description||'')])));}
 async function checkConsistency(){try{const r=await api('GET','/admin/wallet/consistency');toast('بررسی شد: '+fa(r.checked)+' حساب، '+fa((r.mismatches||[]).length)+' مغایرت',(r.mismatches||[]).length?'bad':'ok');}catch(e){toast(e.message,'bad');}}

@@ -1,4 +1,5 @@
 import { db } from './memory.js';
+import { looksLikePhone, phoneKey } from '../utils/phone.js';
 import type { RepositoryBundle, RewardRecord } from './contracts.js';
 import type { AnswerSubmission, BetaAccess, BetaInvite, BetaInviteStatus, CharacterInventory, CharacterItem, CharacterItemStatus, CharacterUnlockEvent, DeviceRecord, DeviceTrustStatus, ErrorReport, ErrorReportStatus, IntegritySignal, IntegrityStatus, Match, MatchEvent, NotificationPreferences, NotificationRecord, PaymentIntent, PaymentIntentStatus, PushSubscriptionRecord, Question, RewardHold, RewardHoldStatus, SupportMessage, SupportTicket, SupportTicketStatus, Transaction, User, UserDeviceBinding, UserRiskProfile } from '../types/domain.js';
 
@@ -26,6 +27,17 @@ export const memoryRepositories: RepositoryBundle = {
     async findById(id: string): Promise<User | null> { return db.users.get(id) ?? null; },
     async findByPhone(phone: string): Promise<User | null> { return [...db.users.values()].find((u) => u.phone === phone) ?? null; },
     async list(limit = 1000): Promise<User[]> { return [...db.users.values()].slice(0, limit); },
+    /* The same rule as the SQL driver, so what an operator can find does not
+       depend on which driver happens to be running. */
+    async search(query: string, limit = 200): Promise<User[]> {
+      const q = String(query ?? '').trim().toLowerCase();
+      if (!q) return [...db.users.values()].slice(0, limit);
+      const key = looksLikePhone(q) ? phoneKey(q) : '';
+      const hit = (u: User) =>
+        [u.id, u.username, u.displayName, u.phone].some((v) => String(v ?? '').toLowerCase().includes(q))
+        || (!!key && String(u.phone ?? '').replace(/\D+/g, '').includes(key));
+      return [...db.users.values()].filter(hit).slice(0, limit);
+    },
     async save(user: User): Promise<void> { db.users.set(user.id, user); },
     async remove(id: string): Promise<void> { db.users.delete(id); },
     async updateLifelines(userId: string, lifelines: Record<string, number>): Promise<void> { const u = db.users.get(userId); if (u) { u.lifelines = lifelines; db.users.set(userId, u); } }

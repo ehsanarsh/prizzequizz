@@ -715,28 +715,55 @@ function run(): void {
      the caret put back it survived on paper and was unusable in the hand.
      What is checked now is that the boxes work the way they did before: a
      button, or Enter. */
-  check('every search box has a way to run it', () => {
+  check('every search box is wired to the live filter', () => {
     for (const [id, state] of [['uq', 'U_Q'], ['qsearch', 'Q_SEARCH'], ['acq', 'AC_Q']] as const) {
       const box = new RegExp('id="' + id + '"');
       assert.ok(box.test(script), 'the search box is gone: ' + id);
-      /* Enter, so the keyboard alone is enough. */
-      const enter = new RegExp('id="' + id + '"[^>]*onkeydown=[^>]*' + state);
-      assert.ok(enter.test(script), 'Enter does not search in ' + id);
-      /* And a button, for the same reason it was put back. The markup is
-         written inside a JS string, so its quotes arrive escaped — matching
-         the two names either side of them is what survives that. */
-      const btn = new RegExp(state + "=\\$\\([^)]*#" + id);
-      assert.ok(btn.test(script), 'there is no search button for ' + id);
+      const wired = new RegExp("liveSearch\\(\\{[\\s\\S]{0,200}?input:'#" + id + "'[\\s\\S]{0,400}?set:\\(v\\)=>\\{" + state + "=v;\\}");
+      assert.ok(wired.test(script), 'this box is not wired to liveSearch: ' + id);
     }
   });
 
-  check('and nothing repaints the page on every keystroke', () => {
-    assert.ok(!script.includes('function liveSearch('), 'the live search is back');
-    assert.ok(!script.includes('function liveRestore('), 'its caret restore is back');
+  /* THE RULE THE FIRST ATTEMPT BROKE. «با هر حرف یه بار صفحه رفرش میشه» — a
+     box that calls render() on input destroys the very element being typed
+     into, along with the caret and any half-composed Persian word. So no
+     search input may reach render(), and every one of them must repaint a
+     container of its own instead. */
+  check('and no search box rebuilds the page as it is typed into', () => {
     for (const id of ['uq', 'qsearch', 'acq']) {
-      const re = new RegExp('id="' + id + '"[^>]*oninput=');
-      assert.ok(!re.test(script), 'this box repaints as it is typed into: ' + id);
+      const inputTag = new RegExp('id="' + id + '"[^>]*>');
+      const tag = (inputTag.exec(script) || [''])[0];
+      assert.ok(!/oninput=/.test(tag), 'the handler is inline again, where render() creeps back in: ' + id);
+      assert.ok(!/onkeydown=[^>]*render\(\)/.test(tag), 'Enter rebuilds the page in ' + id);
     }
+    /* liveSearch itself must never call render(): that is the whole defect. */
+    const fn = /function liveSearch\(opts\)\{[\s\S]*?\n\}/.exec(script);
+    assert.ok(fn, 'liveSearch is gone');
+    assert.ok(!/\brender\(\)/.test(fn![0]), 'liveSearch calls render(), which is what made typing impossible');
+  });
+
+  check('each list has a container of its own to repaint', () => {
+    for (const [rows, painter] of [['urows', 'uPaintRows'], ['qrows', 'qPaintRows'], ['acrows', 'acPaintRows']] as const) {
+      assert.ok(script.includes('id="' + rows + '"'), 'no rows container: ' + rows);
+      assert.ok(script.includes('function ' + painter + '('), 'no painter: ' + painter);
+      const body = new RegExp('function ' + painter + "\\([\\s\\S]*?\\$\\('#" + rows + "'\\)");
+      assert.ok(body.test(script), painter + ' does not paint ' + rows);
+    }
+  });
+
+  /* «در قسمت سرچ کاربران و هر جایی که میخوای کاربر رو سرچ کنی باید بتونیم با
+     شماره موبایل هم سرچ کنیم» — and a phone number is the same number however
+     it was typed. */
+  check('a user can be found by phone number, in any spelling', () => {
+    assert.ok(script.includes('function uMatches('), 'the user matcher is gone');
+    assert.ok(script.includes('function uDigits('), 'nothing normalises the digits');
+    const fn = /function uDigits\(v\)\{[\s\S]*?\n\}/.exec(script);
+    assert.ok(fn && /۰۱۲۳۴۵۶۷۸۹/.test(fn[0]), 'Persian digits are not folded to Latin ones');
+    const m = /function uMatches\(u,q\)\{[\s\S]*?\n\}/.exec(script);
+    assert.ok(m && /u\.phone/.test(m[0]), 'the phone is not searched at all');
+    assert.ok(m && /slice\(-10\)/.test(m[0]), 'the country code is not allowed to differ');
+    /* The wallet screen searches people too, and had the same gap. */
+    assert.ok(/acPaintRows[\s\S]{0,400}uMatches\(/.test(script), 'the wallet search does not use the same rule');
   });
 
   /* The support queue's filter is the one that WORKS this way, and it works

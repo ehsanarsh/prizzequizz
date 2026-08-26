@@ -27,6 +27,11 @@ export interface UserRepository {
   findById(id: string): Promise<User | null>;
   findByPhone(phone: string): Promise<User | null>;
   list(limit?: number): Promise<User[]>;
+  /** Find accounts by id, phone, username or display name — across the WHOLE
+   *  table, not a page of it. `list()` returns the most recently active
+   *  accounts, so filtering that in memory can only ever find somebody who has
+   *  played lately; a support case is usually the opposite of that. */
+  search(query: string, limit?: number): Promise<User[]>;
   save(user: User): Promise<void>;
   /** Persist ONLY the lifeline inventory (kept separate from save() so the main
    *  user write never clobbers it). */
