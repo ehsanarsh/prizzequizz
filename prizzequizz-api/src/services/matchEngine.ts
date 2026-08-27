@@ -8,7 +8,8 @@ import { updateSkillAfterMatch } from './skillRating.js';
 import { notifications } from './notificationService.js';
 import { integrity } from './integrityService.js';
 import { leaderboards } from './leaderboardService.js';
-import { PZ_SCORING, getResultBonus, isoWeekId, levelForXp } from './scoringConfig.js';
+import { PZ_SCORING, getResultBonus, isoWeekId, levelForXp, levelSqlExpr, cupResetsWeekly, paidMultiplier, questionPoints, wrongAnswerPoints, streakBonus, goldenBonusXp, levelRewards } from './scoringConfig.js';
+import { grantTickets } from './ticketService.js';
 import { getPgPool } from '../database/postgres.js';
 import { logger } from './logger.js';
 import { bindHoldsToMatch, refundHolds, spendHolds } from './ticketHoldService.js';
@@ -30,31 +31,101 @@ async function ensureScoringSchema(pool: ReturnType<typeof getPgPool>): Promise<
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS weekly_week VARCHAR(8) NOT NULL DEFAULT ''`);
   _scoringSchemaReady = true;
 }
+/* WHAT A LEVEL IS WORTH, paid the moment it is crossed.
+ *
+ * `level.rewardCoinsPerLevel` and `level.rewardTicketPerLevel` were editable in
+ * the panel long before anything read them. Both ship at 0, so this stays
+ * dormant until an operator sets one — turning the fields on does not hand
+ * every player a backdated pile.
+ *
+ * Crossing is the trigger, not the level itself: XP only ever goes up and it is
+ * added once, so a retry of the same award finds the level already there and
+ * pays nothing. Several levels at once (a big mission payout) pay per level. */
+async function payLevelUp(userId: string, before: number, after: number): Promise<void> {
+  if (!(after > before)) return;
+  const { coins, tickets } = levelRewards();
+  if (coins <= 0 && tickets <= 0) return;
+  const gained = after - before;
+  const coinTotal = coins * gained;
+  const ticketTotal = tickets * gained;
+  if (coinTotal > 0) {
+    const u = await repositories.users.findById(userId);
+    if (u) { u.coins = (Number(u.coins) || 0) + coinTotal; await repositories.users.save(u); }
+  }
+  if (ticketTotal > 0) await grantTickets(userId, 'green', ticketTotal).catch(() => undefined);
+  /* The player has to be told, or the balance just changes on its own — the
+   * same complaint the referral ticket had. */
+  const parts: string[] = [];
+  if (coinTotal > 0) parts.push(`${coinTotal} سکه`);
+  if (ticketTotal > 0) parts.push(`${ticketTotal} بلیط سبز`);
+  await notifications.create({
+    userId,
+    type: 'wallet_update',
+    title: `به لِوِل ${after} رسیدی 🎉`,
+    body: `${parts.join(' و ')} جایزهٔ لِوِل جدیدت به حسابت اضافه شد.`,
+    data: { kind: 'level_up', level: after, levelsGained: gained, coins: coinTotal, tickets: ticketTotal },
+    push: true
+  }).catch(() => undefined);
+}
+
+/* THE AWARD STATEMENT, built rather than written out, and exported so a test
+ * can run it against a real Postgres.
+ *
+ * Two things in it come from the panel and so cannot be a fixed string: the
+ * level curve (level.xpPerLevelBase / level.curve) and whether 🏆 resets with
+ * the week (cup.weeklyReset). Both were previously hardcoded here — a second
+ * copy of settings that also exist in TypeScript, which is exactly how the two
+ * drift apart.
+ *
+ * Params: $1 userId, $2 xp, $3 cup, $4 iso week.
+ * `before` exists because a bare column in RETURNING is the value AFTER the
+ * update, and a level crossing can only be seen by comparing with the one
+ * before it. */
+export function awardScoringSql(): string {
+  const weeklyExpr = cupResetsWeekly()
+    ? 'CASE WHEN weekly_week = $4 THEN weekly_score + $3 ELSE $3 END'
+    : 'weekly_score + $3';
+  return `WITH before AS (SELECT id, xp AS old_xp FROM users WHERE id = $1)
+       UPDATE users SET
+         xp = users.xp + $2,
+         weekly_score = ${weeklyExpr},
+         weekly_week = $4,
+         level = ${levelSqlExpr('users.xp + $2')},
+         updated_at = now()
+       FROM before
+       WHERE users.id = before.id
+       RETURNING users.xp, users.weekly_score, users.level, before.old_xp`;
+}
+
 export async function awardScoring(userId: string, xp: number, cup: number): Promise<{ xp: number; cup: number; level: number }> {
   const week = isoWeekId();
+  /* Weekly reset switched off in the panel → 🏆 is one running total and the
+   * week stamp stops deciding anything. Reading the flag HERE as well as in
+   * effectiveWeeklyScore is not a second copy of the setting: this is the write
+   * side of the same one flag, and leaving it out would zero the column every
+   * Monday no matter what the reader thought. */
   try {
     const pool = getPgPool();
     await ensureScoringSchema(pool);
-    const { rows } = await pool.query(
-      `UPDATE users SET
-         xp = xp + $2,
-         weekly_score = CASE WHEN weekly_week = $4 THEN weekly_score + $3 ELSE $3 END,
-         weekly_week = $4,
-         level = GREATEST(1, floor(sqrt((xp + $2) / 100.0))::int + 1),
-         updated_at = now()
-       WHERE id = $1
-       RETURNING xp, weekly_score, level`,
-      [userId, xp, cup, week]
-    );
+    /* The row's xp BEFORE the update, so a level crossing can be detected in
+     * the same statement that causes it. A bare column in RETURNING is the new
+     * value, hence the CTE. */
+    const { rows } = await pool.query(awardScoringSql(), [userId, xp, cup, week]);
     const r = rows[0];
-    if (r) return { xp: Number(r.xp), cup: Number(r.weekly_score), level: Number(r.level) };
+    if (r) {
+      const out = { xp: Number(r.xp), cup: Number(r.weekly_score), level: Number(r.level) };
+      await payLevelUp(userId, levelForXp(Number(r.old_xp) || 0), out.level).catch(() => undefined);
+      return out;
+    }
   } catch { /* no pg pool (memory driver) → fall back below */ }
   const u = await repositories.users.findById(userId);
   if (!u) return { xp, cup, level: 1 };
+  const beforeLevel = levelForXp(Number(u.xp ?? 0));
   u.xp = Number(u.xp ?? 0) + xp;
   u.weeklyScore = Number(u.weeklyScore ?? 0) + cup; // memory mode: no weekly reset
   u.level = levelForXp(u.xp);
   await repositories.users.save(u);
+  await payLevelUp(userId, beforeLevel, u.level).catch(() => undefined);
   return { xp: u.xp, cup: u.weeklyScore, level: u.level };
 }
 
@@ -254,7 +325,7 @@ async function submitAnswerLocked(input: SubmitAnswerInput): Promise<{ match: Ma
     if (!match.duelPoints) match.duelPoints = {};
     if (!match.duelStreak) match.duelStreak = {};
     if (!match.duelFirstCorrect) match.duelFirstCorrect = {};
-    const mult = match.economyType === 'paid' ? PZ_SCORING.paidMultiplier : 1;
+    const mult = match.economyType === 'paid' ? paidMultiplier() : 1;
     const pts = match.duelPoints[input.userId] ?? { xp: 0, cup: 0 };
     /* Fetched for every answer now, not only the correct ones: the category is
      * what the topic missions count, and a wrong answer still played the topic. */
@@ -265,18 +336,22 @@ async function submitAnswerLocked(input: SubmitAnswerInput): Promise<{ match: Ma
     }
     if (input.correct) {
       const diff = (q && q.difficulty) ? q.difficulty : 'medium';
-      const pq = PZ_SCORING.perQuestion[diff] ?? PZ_SCORING.perQuestion.medium!;
+      const pq = questionPoints(diff);
       pts.xp += pq.xp * mult; pts.cup += pq.cup * mult;
       const s = (match.duelStreak[input.userId] ?? 0) + 1;
       match.duelStreak[input.userId] = s;
-      const sb = PZ_SCORING.streak.find((x) => x.n === s);
+      const sb = streakBonus(s);
       if (sb) { pts.xp += sb.xp * mult; pts.cup += sb.cup * mult; }
       const rk = String(round);
       if (!match.duelFirstCorrect[rk]) { match.duelFirstCorrect[rk] = input.userId; pts.xp += PZ_SCORING.speedFirstCorrect.xp * mult; pts.cup += PZ_SCORING.speedFirstCorrect.cup * mult; }
+      /* Sudden death: past the base length the match is tied and every question
+       * is a «سؤال طلایی». `xp.golden` is the extra it is worth, 0 by default. */
+      if (round >= duelRounds().base) { pts.xp += goldenBonusXp() * mult; }
     } else {
       match.duelStreak[input.userId] = 0;
-      pts.xp += PZ_SCORING.perQuestion.wrong!.xp * mult;
-      pts.cup += PZ_SCORING.perQuestion.wrong!.cup * mult;
+      const wrong = wrongAnswerPoints();
+      pts.xp += wrong.xp * mult;
+      pts.cup += wrong.cup * mult;
     }
     match.duelPoints[input.userId] = pts;
     /* Missions count this answer. Awaited rather than fired-and-forgotten so a
@@ -398,7 +473,7 @@ async function settleDuel(match: Match, winnerUserId: string | undefined, reason
   // Award XP + weekly 🏆cup to BOTH players (server-authoritative → real,
   // cheat-proof leaderboard), atomically with the weekly reset.
   match.duelPointsFinal = {};
-  const outcomeMult = match.economyType === 'paid' ? PZ_SCORING.paidMultiplier : 1;
+  const outcomeMult = match.economyType === 'paid' ? paidMultiplier() : 1;
   for (const p of match.players) {
     if (p.userId.startsWith('bot_')) continue;
     const base = match.duelPoints?.[p.userId] ?? { xp: 0, cup: 0 };

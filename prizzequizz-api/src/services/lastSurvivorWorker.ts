@@ -17,7 +17,7 @@ import {
 import { buildPool, activeUnits, finalSplit } from './lastSurvivorPrize.js';
 import { seenCounts, leastSeen, markSeen } from './questionSeenService.js';
 import { awardScoring } from './matchEngine.js';
-import { PZ_SCORING } from './scoringConfig.js';
+import { PZ_SCORING, paidMultiplier, questionPoints, wrongAnswerPoints } from './scoringConfig.js';
 import { getQuestionDistribution, recordQuestionAnswer } from './questionStatsService.js';
 import * as missions from './missionService.js';
 import { bookHouseRevenue } from './houseRevenueService.js';
@@ -324,13 +324,13 @@ async function advancePhase(room: RoomRow, now: number): Promise<void> {
       // Same per-question XP/cup as the duel (by difficulty, paid multiplier),
       // so Last Survivor feeds XP, level and the weekly cup identically.
       const tier = difficultyForRound(room.round, room.totalRounds);
-      const pq = PZ_SCORING.perQuestion[tier] || PZ_SCORING.perQuestion.easy!;
-      const mult = PZ_SCORING.paidMultiplier;
+      const pq = questionPoints(tier);
+      const mult = paidMultiplier();
       for (const p of players) {
         if (p.status !== 'alive') continue;
         const answered = p.answerRound === room.round;
         const correct = answered && p.answerCorrect === true;
-        const pts = correct ? { xp: pq.xp * mult, cup: pq.cup * mult } : { xp: PZ_SCORING.perQuestion.wrong!.xp * mult, cup: PZ_SCORING.perQuestion.wrong!.cup * mult };
+        const pts = correct ? { xp: pq.xp * mult, cup: pq.cup * mult } : { xp: wrongAnswerPoints().xp * mult, cup: wrongAnswerPoints().cup * mult };
         try { await awardScoring(p.userId, pts.xp, pts.cup); } catch (e) { logger.warn('ls_award_failed', { userId: p.userId, message: (e as Error).message }); }
         /* Last Survivor answers count towards the same missions the duel feeds.
          * A player only reaches round N by answering the first N-1 correctly,
@@ -516,7 +516,7 @@ async function finishRoom(room: RoomRow, now: number): Promise<void> {
 
   // End-of-match outcome XP/cup, same table the duel uses: survivors get the
   // win reward, everyone else the loss reward (so they still climb the league).
-  const winMult = PZ_SCORING.paidMultiplier;
+  const winMult = paidMultiplier();
   for (const p of players) {
     const res = p.status === 'alive' ? PZ_SCORING.result.win! : PZ_SCORING.result.loss!;
     try { await awardScoring(p.userId, res.xp * winMult, res.cup * winMult); } catch (e) { logger.warn('ls_result_award_failed', { userId: p.userId, message: (e as Error).message }); }

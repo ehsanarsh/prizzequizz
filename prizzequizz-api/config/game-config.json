@@ -62,7 +62,7 @@
     "minEntry": 0
   },
   "scoring": {
-    "paidMultiplier": 2,
+    "paidMultiplier": 3,
     "winBonusXp": 40,
     "winBonusCup": 30,
     "drawBonusXp": 15,

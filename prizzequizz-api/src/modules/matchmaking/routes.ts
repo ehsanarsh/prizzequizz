@@ -6,7 +6,9 @@ import { TicketError } from '../../services/ticketService.js';
 import { bindHold, holdTicket, refundHoldById, refundHolds } from '../../services/ticketHoldService.js';
 import { startRun, openRunFor, advance } from '../../services/duelRunService.js';
 import { getInvite } from '../../services/gameInviteService.js';
-import { voidMatchBeforeStart } from '../../services/matchEngine.js';
+import { voidMatchBeforeStart, awardScoring } from '../../services/matchEngine.js';
+import { repositories } from '../../repositories/index.js';
+import { continueBonus, minCupToPlay, effectiveWeeklyScore } from '../../services/scoringConfig.js';
 import type { GameModeId, PlanType } from '../../types/domain.js';
 import { bodyObject, optionalString, requiredString } from '../../utils/validation.js';
 
@@ -83,13 +85,36 @@ export function registerMatchmakingRoutes(router: Router, base: string): void {
       if (inv && inv.status === 'accepted' && (inv.fromUserId === ctx.userId || inv.toUserId === ctx.userId)) pairKey = inv.id;
     }
 
+    /* «حداقل کاپ برای ورود» — a floor on the paid tables only.
+     *
+     * Free play is how a new account earns its first 🏆, so gating that too
+     * would lock a beginner out of the only door that lets them in. Ships at 0,
+     * which is no gate at all. */
+    const cupFloor = minCupToPlay();
+    if (cupFloor > 0 && economyType !== 'free') {
+      const me = await repositories.users.findById(ctx.userId).catch(() => null);
+      const have = effectiveWeeklyScore(me as any);
+      if (have < cupFloor) {
+        return error(ctx.res, 403, 'CUP_TOO_LOW',
+          `برای ورود به مسابقهٔ پولی حداقل ${cupFloor} کاپ لازم است؛ تو ${have} کاپ داری.`);
+      }
+    }
+
     const stakeNow = ladderStake(economyType);
     if (modeId === 'duel' && economyType !== 'free' && stakeNow > 0) {
       try {
         if (ticketTier) await startRun(ctx.userId, ticketTier, stakeNow);
         else {
           const open = await openRunFor(ctx.userId);
-          if (open && open.status === 'won') await advance(open.id);
+          if (open && open.status === 'won') {
+            await advance(open.id);
+            /* «ادامه میدهم» — carrying a win up the ladder instead of banking it
+             * is the risk the panel's «XP/کاپ ادامه دادن» pays for. Awarded on
+             * the advance itself, so it is once per rung and not once per queue
+             * attempt. Both ship at 0. */
+            const cb = continueBonus();
+            if (cb.xp > 0 || cb.cup > 0) await awardScoring(ctx.userId, cb.xp, cb.cup).catch(() => undefined);
+          }
         }
       } catch { /* the run is bookkeeping; it must never block entry */ }
     }

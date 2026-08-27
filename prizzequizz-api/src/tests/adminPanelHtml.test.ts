@@ -841,11 +841,35 @@ function run(): void {
   check('and the ones the server ignores say so', () => {
     const paths = [...cfgFa![1]!.matchAll(/'([a-zA-Z.]+)':\s*\['[^']*','[^']*',([01])/g)]
       .map((m) => [m[1]!, m[2] === '1'] as const);
-    /* Read out of the server's own code: scoringConfig.getResultBonus is the
-       only thing that looks at xp/cup, and matchEngine.duelRounds the only
-       thing that looks at gameplay. */
+    /* Read out of the server's own code. Every entry here names the function
+       that actually reads it — if one is deleted, this list is what says the
+       panel is now lying about it.
+
+         scoringConfig.getResultBonus  → xp.perWin/perLoss/perDraw/multiplier,
+                                         cup.win/loss/draw
+         scoringConfig.questionPoints  → xp.perCorrect
+         scoringConfig.streakBonus     → xp.combo
+         scoringConfig.goldenBonusXp   → xp.golden
+         scoringConfig.continueBonus   → xp.continue, cup.continue
+         scoringConfig.levelForXp
+           + levelSqlExpr              → level.xpPerLevelBase, level.curve
+         matchEngine.payLevelUp        → level.rewardCoinsPerLevel,
+                                         level.rewardTicketPerLevel
+         scoringConfig.cupResetsWeekly → cup.weeklyReset
+         scoringConfig.minCupToPlay    → cup.minEntry
+         scoringConfig.paidMultiplier  → scoring.paidMultiplier
+         matchEngine.duelRounds        → gameplay.duel.baseRounds/maxRounds
+
+       NOT here, on purpose: xp.perMission, xp.dailyLogin, xp.perLevel and
+       cup.perLeague. Their real value is edited in another tab, and a second
+       editable copy of one number is how the two drift apart. */
     const WIRED = new Set(['xp.perWin', 'xp.perLoss', 'xp.perDraw', 'xp.multiplier',
+                           'xp.perCorrect', 'xp.combo', 'xp.golden', 'xp.continue',
                            'cup.win', 'cup.loss', 'cup.draw',
+                           'cup.continue', 'cup.weeklyReset', 'cup.minEntry',
+                           'level.xpPerLevelBase', 'level.curve',
+                           'level.rewardCoinsPerLevel', 'level.rewardTicketPerLevel',
+                           'scoring.paidMultiplier',
                            'gameplay.duel.baseRounds', 'gameplay.duel.maxRounds']);
     for (const [path, wired] of paths) {
       assert.equal(wired, WIRED.has(path),

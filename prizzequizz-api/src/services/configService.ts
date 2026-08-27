@@ -1,4 +1,5 @@
 import { gameConfig } from '../core/config.js';
+import { PZ_SCORING } from './scoringConfig.js';
 import { getPgPool } from '../database/postgres.js';
 import { categoryImageUrls } from './categoryImageService.js';
 import { logger } from './logger.js';
@@ -46,6 +47,31 @@ export function ensureSystemCategories(): void {
   for (const c of ensure) if (!has(c.name)) cats.push({ enabled: true, ...c });
 }
 
+/* ONE-TIME: the paid multiplier nobody ever chose.
+ *
+ * `scoring.paidMultiplier` sat in the config at 2 and was shown in the panel,
+ * while the game multiplied paid XP/cup by the hardcoded 3. Now that the field
+ * is actually read, a saved 2 would quietly cut every paid reward by a third on
+ * the deploy that fixed it — a settings screen that starts lying the moment it
+ * stops being ignored.
+ *
+ * 2 was never a decision: it was a default in a value no code looked at. So it
+ * is moved once to the number players have actually been getting, and the move
+ * is stamped so a later operator who genuinely wants 2 is left alone.
+ *
+ * Anything other than exactly the old default is an operator's own number and
+ * is not touched. */
+export function migratePaidMultiplier(saved: any): boolean {
+  const sc = saved?.scoring;
+  if (!sc || typeof sc !== 'object') return false;
+  if (sc.paidMultiplierMigrated) return false;
+  sc.paidMultiplierMigrated = true;
+  if (Number(sc.paidMultiplier) !== 2) return true;   // stamp only
+  sc.paidMultiplier = PZ_SCORING.paidMultiplier;
+  logger.info('paid_multiplier_migrated', { from: 2, to: PZ_SCORING.paidMultiplier });
+  return true;
+}
+
 /* Load the saved game_config override at boot and merge it over the on-disk
  * defaults (so a config written by an older version still gets any new default
  * keys). No DB / no saved row → keep the on-disk config. */
@@ -58,12 +84,15 @@ export async function loadPersistedConfig(): Promise<void> {
     const { rows } = await pool.query(`SELECT value FROM app_config WHERE key='game_config'`);
     if (rows[0]?.value) {
       const saved = rows[0].value;
+      const migrated = migratePaidMultiplier(saved);
       // defaults first, saved on top → new default keys survive, edits win.
       const merged = deepMerge(structuredClone(gameConfig), saved);
       for (const key of Object.keys(gameConfig)) delete (gameConfig as any)[key];
       Object.assign(gameConfig, merged);
       ensureSystemCategories();   // re-add system categories a saved array may have dropped
       logger.info('game_config_loaded_from_db', { version: gameConfig.version });
+      // Write the migration back so it runs once, not on every boot.
+      if (migrated) await persistConfig('migration');
     }
   } catch (e) {
     logger.warn('game_config_load_failed', { message: e instanceof Error ? e.message : 'unknown' });
