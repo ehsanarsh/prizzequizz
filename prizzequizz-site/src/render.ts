@@ -78,127 +78,23 @@ function href(raw: string, s: SiteSettings): string {
 
 // ------------------------------------------------------------------ style ----
 
-const CSS = `
-:root{--bolt:#FFD21F;--bolt-2:#F5B90D;--ink:#0E0C14;--ink-2:#171523;--ink-3:#211E31;
-  --paper:#F6F3EA;--muted:#9A93AE;--ok:#33D97C;--line:rgba(255,255,255,.10);--max:1080px}
-*{box-sizing:border-box}
-html{scroll-behavior:smooth}
-body{margin:0;background:var(--ink);color:var(--paper);line-height:1.9;
-  font-family:Vazirmatn,'IRANSans','Segoe UI',Tahoma,system-ui,sans-serif;font-size:16px}
-img{max-width:100%;height:auto;display:block}
-a{color:inherit}
-.wrap{max-width:var(--max);margin:0 auto;padding:0 18px}
-/* ---- header ---- */
-header{position:sticky;top:0;z-index:20;background:rgba(14,12,20,.92);
-  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
-.nav{display:flex;align-items:center;gap:14px;height:64px}
-.brand{display:flex;align-items:center;gap:9px;font-weight:900;font-size:18px;text-decoration:none;flex:0 0 auto}
-.brand i{font-style:normal;font-size:24px}
-.nav ul{display:flex;gap:4px;list-style:none;margin:0;padding:0;flex:1;overflow-x:auto;scrollbar-width:none}
-.nav ul::-webkit-scrollbar{display:none}
-.nav a{text-decoration:none;font-size:13.5px;font-weight:800;color:var(--muted);
-  padding:8px 11px;border-radius:11px;white-space:nowrap;transition:color .15s,background .15s}
-.nav a:hover{color:var(--paper);background:rgba(255,255,255,.06)}
-.nav a[aria-current=page]{color:var(--bolt);background:rgba(255,210,31,.10)}
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;text-decoration:none;
-  font-weight:900;font-size:15px;padding:13px 22px;border-radius:16px;border:2.5px solid #000;
-  background:linear-gradient(180deg,#FFE24A,var(--bolt-2));color:#141414;box-shadow:0 5px 0 #000;
-  transition:transform .08s,box-shadow .08s;cursor:pointer}
-.btn:active{transform:translateY(4px);box-shadow:0 1px 0 #000}
-.btn.ghost{background:var(--ink-3);color:var(--paper);box-shadow:0 5px 0 #000}
-.btn.sm{font-size:13.5px;padding:9px 15px;border-radius:13px;box-shadow:0 4px 0 #000}
-.nav .btn{flex:0 0 auto}
-/* ---- sections ---- */
-main{display:block}
-section{padding:52px 0}
-section:first-of-type{padding-top:40px}
-h1,h2,h3{line-height:1.5;margin:0 0 12px;font-weight:900}
-h1{font-size:clamp(27px,5.4vw,44px)}
-h2{font-size:clamp(21px,3.6vw,30px)}
-h3{font-size:18px}
-p{margin:0 0 14px;color:#D7D1E4}
-.lead{font-size:clamp(15px,2.4vw,18.5px);color:#C4BDD6;max-width:62ch}
-.eyebrow{display:inline-block;font-size:11.5px;font-weight:900;letter-spacing:.4px;color:var(--bolt);
-  background:rgba(255,210,31,.11);border:1.5px solid rgba(255,210,31,.32);
-  padding:5px 12px;border-radius:999px;margin-bottom:14px}
-.hero{position:relative;overflow:hidden;border:2.5px solid #000;border-radius:28px;padding:clamp(24px,5vw,52px);
-  background:radial-gradient(120% 130% at 82% -10%,#3A2E6B 0%,#1B1630 46%,#100E1A 100%);box-shadow:0 8px 0 #000}
-.hero::after{content:"";position:absolute;inset-inline-end:-70px;top:-70px;width:260px;height:260px;
-  border-radius:50%;background:radial-gradient(circle,rgba(255,210,31,.18),transparent 66%)}
-.hero .in{position:relative;z-index:1;max-width:66ch}
-.cta-row{display:flex;gap:12px;flex-wrap:wrap;margin-top:22px}
-.grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(232px,1fr))}
-.card{border:2.5px solid #000;border-radius:20px;padding:20px;background:var(--ink-2);box-shadow:0 5px 0 #000}
-.card .ico{font-size:30px;line-height:1;margin-bottom:10px}
-.card h3{margin-bottom:6px}
-.card p{margin:0;font-size:14px;color:#BDB6CE}
-.steps{counter-reset:s;display:grid;gap:12px}
-.step{position:relative;border:2.5px solid #000;border-radius:18px;padding:18px 66px 18px 20px;
-  background:var(--ink-2);box-shadow:0 5px 0 #000}
-.step::before{counter-increment:s;content:counter(s);position:absolute;inset-inline-start:18px;top:16px;
-  width:34px;height:34px;border-radius:11px;border:2.5px solid #000;background:linear-gradient(180deg,#FFE24A,var(--bolt-2));
-  color:#141414;font-weight:900;display:grid;place-items:center;font-size:16px}
-.step h3{margin:0 0 4px}
-.step p{margin:0;font-size:14px;color:#BDB6CE}
-details.faq{border:2.5px solid #000;border-radius:16px;background:var(--ink-2);box-shadow:0 4px 0 #000;
-  margin-bottom:10px;overflow:hidden}
-details.faq summary{cursor:pointer;padding:15px 18px;font-weight:900;font-size:15px;list-style:none;
-  display:flex;justify-content:space-between;gap:12px;align-items:center}
-details.faq summary::-webkit-details-marker{display:none}
-details.faq summary::after{content:"+";color:var(--bolt);font-size:21px;line-height:1;flex:0 0 auto}
-details.faq[open] summary::after{content:"−"}
-details.faq .a{padding:0 18px 16px;color:#C4BDD6;font-size:14.5px}
-.prose h2{margin-top:30px}
-.prose ul{padding-inline-start:20px;color:#D7D1E4}
-.prose li{margin-bottom:7px}
-.cta-band{border:2.5px solid #000;border-radius:24px;padding:clamp(22px,4vw,38px);text-align:center;
-  background:linear-gradient(135deg,#3A2E6B,#171523);box-shadow:0 6px 0 #000}
-.cta-band .cta-row{justify-content:center}
-/* ---- blog ---- */
-.posts{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}
-.post{display:block;text-decoration:none;border:2.5px solid #000;border-radius:20px;overflow:hidden;
-  background:var(--ink-2);box-shadow:0 5px 0 #000;transition:transform .1s}
-.post:hover{transform:translateY(-3px)}
-.post .body{padding:18px}
-.post .cover{width:100%;height:170px;object-fit:cover;border-bottom:2.5px solid #000}
-.post h3{margin:0 0 7px;font-size:17px}
-figure.ph{margin:22px 0}
-figure.ph img{border:2.5px solid #000;border-radius:16px;box-shadow:0 5px 0 #000;width:100%}
-figure.ph figcaption{margin-top:9px;font-size:13px;color:var(--muted);text-align:center}
-.post p{margin:0 0 10px;font-size:13.5px;color:#BDB6CE}
-.meta{font-size:12px;color:var(--muted);font-weight:800}
-.tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}
-.tag{font-size:11.5px;font-weight:900;padding:4px 10px;border-radius:999px;
-  background:var(--ink-3);border:1.5px solid var(--line);color:#C4BDD6}
-.crumbs{font-size:12.5px;color:var(--muted);font-weight:800;margin-bottom:14px}
-.crumbs a{text-decoration:none}
-.crumbs a:hover{color:var(--paper)}
-article.post-body{max-width:70ch}
-article.post-body h2{font-size:22px;margin-top:32px}
-article.post-body h3{font-size:17.5px;margin-top:22px}
-/* ---- footer ---- */
-footer{border-top:1px solid var(--line);padding:38px 0 30px;margin-top:34px;background:#0B0910}
-.fgrid{display:grid;gap:26px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
-footer h4{font-size:14px;font-weight:900;margin:0 0 11px}
-footer ul{list-style:none;margin:0;padding:0}
-footer li{margin-bottom:8px}
-footer a{text-decoration:none;color:var(--muted);font-size:13.5px;font-weight:700}
-footer a:hover{color:var(--paper)}
-.fbot{margin-top:26px;padding-top:18px;border-top:1px solid var(--line);
-  display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;color:var(--muted);font-size:12.5px;font-weight:700}
-.badges{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px}
-.skip{position:absolute;inset-inline-start:-9999px}
-.skip:focus{inset-inline-start:12px;top:12px;z-index:50;background:var(--bolt);color:#141414;
-  padding:10px 15px;border-radius:10px;font-weight:900}
-@media (max-width:720px){
-  .nav{height:auto;padding:10px 0;flex-wrap:wrap}
-  .nav ul{order:3;width:100%;padding-bottom:2px}
-  section{padding:38px 0}
-}
-@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
-`;
+/* THE STYLESHEET IS A FILE NOW.
+ * It used to be inlined into every page — no extra request, but the same 12KB
+ * re-sent with each of the ten pages and again on every edit to any of them.
+ * Linked, it is fetched once and served from cache for the rest of the visit,
+ * and a change to the design no longer rewrites every page's HTML. The pages
+ * are still complete in their first response: nothing here waits on script. */
+const STYLE_HREF = '/site-assets/pq.css';
 
-// ------------------------------------------------------------------ pieces ----
+/* Artwork the design ships with, by bare name; anything the operator uploaded
+ * arrives as a /media/ URL and is passed through untouched. */
+function assetUrl(name: string): string {
+  const v = String(name ?? '').trim();
+  if (!v) return '';
+  if (v.startsWith('/') || /^https?:/i.test(v)) return v;
+  if (!/^[a-zA-Z0-9._-]+$/.test(v)) return '';
+  return '/site-assets/' + v;
+}
 
 function head(o: {
   title: string; description: string; keywords: string; canonical: string;
@@ -226,51 +122,64 @@ ${abs ? `<meta property="og:image" content="${esc(abs)}">` : ''}
 ${abs ? `<meta name="twitter:image" content="${esc(abs)}">` : ''}
 <meta name="theme-color" content="#0E0C14">
 ${o.s.googleVerification /* raw: a verification tag pasted from Search Console */ || ''}
-<style>${CSS}</style>
+<link rel="stylesheet" href="${STYLE_HREF}">
 ${o.ldJson.map((j) => `<script type="application/ld+json">${j}</script>`).join('\n')}`;
 }
 
+/* ── THE HEADER ─────────────────────────────────────────────────────────
+   Menu items are the pages that ask to be in the menu, in the order the panel
+   gives them — the same list as before, in the redesign's shell. The logo is
+   the shipped mark unless the operator uploaded one. */
 function nav(pages: SitePage[], current: string, s: SiteSettings): string {
   const items = pages
     .filter((p) => p.showInNav && p.published)
     .map((p) => {
       const url = pageUrl(p.slug, s);
       const cur = p.slug === current ? ' aria-current="page"' : '';
-      return `<li><a href="${esc(url)}"${cur}>${esc(p.navLabel || p.title)}</a></li>`;
+      return `<li><a href="${esc(url)}" data-nav="${esc(p.slug)}"${cur}>${esc(p.navLabel || p.title)}</a></li>`;
     }).join('');
-  return `<header><div class="wrap"><nav class="nav" aria-label="منوی اصلی">
-  <a class="brand" href="${esc(homeUrl(s))}"><i>${esc(s.logoEmoji || '🎯')}</i>${esc(s.siteName)}</a>
-  <ul>${items}</ul>
-  <a class="btn sm" href="${esc(s.playUrl || '/play')}">🎮 بازی کن</a>
-</nav></div></header>`;
+  const logo = assetUrl(s.ogImage && s.ogImage.startsWith('/media/') ? '' : 'logo.png');
+  return `<header class="site-header"><nav class="nav" aria-label="منوی اصلی">
+  <a class="logo" href="${esc(homeUrl(s))}">${logo ? `<img src="${esc(logo)}" alt="${esc(s.siteName)}">` : ''}<span>${esc(s.siteName)}</span></a>
+  <span class="rule"></span>
+  <ul class="nav-links">${items}</ul>
+  <div class="nav-cta">
+    ${s.ctaLogin ? `<a class="btn-outline" href="${esc(href(s.loginUrl || s.playUrl, s))}">${esc(s.ctaLogin)}</a>` : ''}
+    <a class="btn btn-primary btn-sm" href="${esc(href(s.playUrl, s))}">${esc(s.ctaPlay || 'بازی کن')}</a>
+  </div>
+</nav></header>`;
 }
 
+/* ── THE FOOTER ─────────────────────────────────────────────────────────
+   The columns are the operator's, not the template's. The old footer decided
+   for itself which pages were «قوانین» by matching two slugs — so a third
+   legal page was invisible and a renamed one vanished. Whatever is in the
+   panel is what is drawn; an empty list draws no columns at all. */
 function footer(pages: SitePage[], s: SiteSettings): string {
-  const link = (p: SitePage) => `<li><a href="${esc(pageUrl(p.slug, s))}">${esc(p.navLabel || p.title)}</a></li>`;
-  const legal = pages.filter((p) => ['privacy', 'terms'].includes(p.slug));
-  const rest = pages.filter((p) => p.published && p.showInNav && !['privacy', 'terms', 'home'].includes(p.slug));
+  void pages;
+  const columns = (s.footerColumns ?? []).filter((c) => c && c.title && (c.links ?? []).length)
+    .map((c) => `<div><h4>${esc(c.title)}</h4><ul>${
+      c.links.filter((l) => l && l.label && l.href)
+        .map((l) => `<li><a href="${esc(href(l.href, s))}">${esc(l.label)}</a></li>`).join('')
+    }</ul></div>`).join('');
   const social = [
     s.telegram && `<a href="${esc(s.telegram)}" rel="noopener">تلگرام</a>`,
     s.instagram && `<a href="${esc(s.instagram)}" rel="noopener">اینستاگرام</a>`,
     s.twitter && `<a href="${esc(s.twitter)}" rel="noopener">ایکس</a>`
   ].filter(Boolean).join(' · ');
-  return `<footer><div class="wrap">
+  const logo = assetUrl('logo.png');
+  return `<footer class="site-footer"><div class="wrap">
   <div class="fgrid">
     <div>
-      <h4>${esc(s.siteName)}</h4>
-      <p style="font-size:13.5px;color:var(--muted);margin:0">${esc(s.tagline)}</p>
-      ${social ? `<p style="font-size:13px;margin-top:10px">${social}</p>` : ''}
+      <div class="brand">${logo ? `<img src="${esc(logo)}" alt="">` : ''}<span>${esc(s.siteName)}</span></div>
+      <p>${esc(s.footerAbout || s.tagline)}</p>
+      ${social ? `<p style="margin-top:10px">${social}</p>` : ''}
+      ${s.email ? `<p style="margin-top:10px"><a href="mailto:${esc(s.email)}">${esc(s.email)}</a></p>` : ''}
       ${s.enamadHtml ? `<div class="badges">${s.enamadHtml /* raw: the eNamad badge snippet */}</div>` : ''}
     </div>
-    <div><h4>صفحه‌ها</h4><ul>${rest.map(link).join('')}</ul></div>
-    <div><h4>قوانین</h4><ul>${legal.map(link).join('')}</ul></div>
-    <div><h4>ارتباط</h4><ul>
-      ${s.email ? `<li><a href="mailto:${esc(s.email)}">${esc(s.email)}</a></li>` : ''}
-      ${s.phone ? `<li><a href="tel:${esc(s.phone)}">${esc(s.phone)}</a></li>` : ''}
-      ${s.address ? `<li style="color:var(--muted);font-size:13px">${esc(s.address)}</li>` : ''}
-    </ul></div>
+    ${columns}
   </div>
-  <div class="fbot"><span>${esc(s.footerNote)}</span><span>${esc(s.siteName)}</span></div>
+  <div class="fbot"><span>${esc(s.copyright || s.siteName)}</span><span>${esc(s.footerNote)}</span></div>
 </div></footer>`;
 }
 
@@ -279,50 +188,110 @@ function paragraphs(body: string): string {
     .map((l) => `<p>${esc(l)}</p>`).join('');
 }
 
+/* ── ONE BLOCK ──────────────────────────────────────────────────────────
+   Eleven shapes, and not one of them takes markup from the operator: a title
+   is a title, a list is a list. That is what makes the panel safe to hand to
+   somebody who is not going to think about escaping — and it is why the body
+   of a text block is split on newlines into paragraphs rather than accepting
+   a <p>. */
+function chips(tags?: string[]): string {
+  const t = (tags ?? []).filter(Boolean);
+  return t.length ? `<div class="chips">${t.map((x) => `<span class="chip">${esc(x)}</span>`).join('')}</div>` : '';
+}
+function charImg(name: string | undefined, width: number): string {
+  const u = assetUrl(name || '');
+  return u ? `<img src="${esc(u)}" alt="" style="width:${width}px;flex:0 0 auto">` : '';
+}
+
 function block(b: SiteBlock, s: SiteSettings): string {
   const items = b.items ?? [];
   switch (b.kind) {
+    /* The page hero is drawn by the page, not by a block — but a hero block
+       left over from the old site still has to render rather than vanish. */
     case 'hero':
-      return `<section><div class="wrap"><div class="hero"><div class="in">
-        <h1>${esc(b.title)}</h1>
+      return `<section class="band tight"><div class="wrap">
+        <h2>${esc(b.title)}</h2>
         ${b.subtitle ? `<p class="lead">${esc(b.subtitle)}</p>` : ''}
-        ${(b.ctaText || b.ctaText2) ? `<div class="cta-row">
-          ${b.ctaText ? `<a class="btn" href="${esc(href(b.ctaHref || '', s))}">${esc(b.ctaText)}</a>` : ''}
-          ${b.ctaText2 ? `<a class="btn ghost" href="${esc(href(b.ctaHref2 || '', s))}">${esc(b.ctaText2)}</a>` : ''}
+        ${(b.ctaText || b.ctaText2) ? `<div class="btn-row">
+          ${b.ctaText ? `<a class="btn btn-primary" href="${esc(href(b.ctaHref || '', s))}">${esc(b.ctaText)}</a>` : ''}
+          ${b.ctaText2 ? `<a class="btn btn-ghost" href="${esc(href(b.ctaHref2 || '', s))}">${esc(b.ctaText2)}</a>` : ''}
         </div>` : ''}
-      </div></div></div></section>`;
+      </div></section>`;
+
+    case 'heading':
+      return `<h2 id="${esc(b.anchor || '')}">${esc(b.title)}</h2>`;
+
     case 'text':
-      return `<section><div class="wrap prose" style="max-width:72ch">
-        ${b.title ? `<h2>${esc(b.title)}</h2>` : ''}${paragraphs(b.body || '')}</div></section>`;
+      return `${b.title ? `<h2 id="${esc(b.anchor || '')}">${esc(b.title)}</h2>` : ''}${paragraphs(b.body || '')}`;
+
+    case 'list':
+      return `${b.title ? `<h2 id="${esc(b.anchor || '')}">${esc(b.title)}</h2>` : ''}
+        <ul>${items.map((i2) => `<li>${esc(i2.text || i2.title || '')}</li>`).join('')}</ul>`;
+
     case 'cards':
-      return `<section><div class="wrap">
-        ${b.title ? `<h2>${esc(b.title)}</h2>` : ''}
-        <div class="grid">${items.map((i) => `<div class="card">
-          ${i.icon ? `<div class="ico">${esc(i.icon)}</div>` : ''}
-          <h3>${esc(i.title)}</h3><p>${esc(i.text)}</p></div>`).join('')}</div></div></section>`;
+      return `${b.title ? `<h2 id="${esc(b.anchor || '')}">${esc(b.title)}</h2>` : ''}
+        <div class="grid g3" style="margin:22px 0 34px">${items.map((i2) => {
+          const hi = i2.highlight ? ';background:var(--yellow-tint);border-color:rgba(242,183,5,.3)' : '';
+          return `<div class="card" style="padding:22px${hi}">
+            ${i2.character ? `<div style="display:flex;align-items:flex-end;height:104px">${charImg(i2.character, 82)}</div>` : ''}
+            ${i2.icon ? `<div class="ico">${esc(i2.icon)}</div>` : ''}
+            <h3>${esc(i2.title)}</h3><p>${esc(i2.text)}</p>${chips(i2.tags)}</div>`;
+        }).join('')}</div>`;
+
+    case 'tiles':
+      return `${b.title ? `<h2 id="${esc(b.anchor || '')}">${esc(b.title)}</h2>` : ''}
+        <div class="tiles">${items.map((i2) => {
+          const inner = `<span style="font-size:19px">${esc(i2.icon || '')}</span><b>${esc(i2.title || i2.text || '')}</b>${i2.meta ? `<small>${esc(i2.meta)}</small>` : ''}`;
+          /* A tile with nowhere to go is still a tile — it just is not a link,
+             rather than being a link to '#'. */
+          return i2.href ? `<a class="tile" href="${esc(href(i2.href, s))}">${inner}</a>` : `<span class="tile">${inner}</span>`;
+        }).join('')}</div>`;
+
     case 'steps':
-      return `<section><div class="wrap">
-        ${b.title ? `<h2>${esc(b.title)}</h2>` : ''}
-        <div class="steps">${items.map((i) => `<div class="step">
-          <h3>${esc(i.title)}</h3><p>${esc(i.text)}</p></div>`).join('')}</div></div></section>`;
+      return `${b.title ? `<h2 id="${esc(b.anchor || '')}">${esc(b.title)}</h2>` : ''}
+        <div class="steps" style="margin:26px 0 34px">${items.map((i2, n) => `<div class="step">
+          <span class="n">${esc(fa(n + 1))}</span><h3>${esc(i2.title)}</h3><p>${esc(i2.text)}</p></div>`).join('')}</div>`;
+
     case 'faq':
-      return `<section><div class="wrap" style="max-width:74ch">
-        ${b.title ? `<h2>${esc(b.title)}</h2>` : ''}
-        ${items.map((i) => `<details class="faq"><summary>${esc(i.q)}</summary>
-          <div class="a">${esc(i.a)}</div></details>`).join('')}</div></section>`;
+      return `${b.title ? `<h2 id="${esc(b.anchor || '')}">${esc(b.title)}</h2>` : ''}
+        ${items.map((i2) => `<details class="faq"${i2.open ? ' open' : ''}><summary>${esc(i2.q)}</summary>
+          <div class="a">${esc(i2.a)}</div></details>`).join('')}`;
+
+    case 'callout':
+      return `<div class="callout">${charImg(b.character, 74)}
+        <div><b>${esc(b.title)}</b><p>${esc(b.body || b.subtitle || '')}</p></div></div>`;
+
     case 'stats':
-      return `<section><div class="wrap"><div class="grid">${items.map((i) => `<div class="card" style="text-align:center">
-        <div class="ico">${esc(i.icon)}</div>
-        <h3 style="color:var(--bolt);font-size:26px">${esc(i.value)}</h3>
-        <p>${esc(i.title)}</p></div>`).join('')}</div></div></section>`;
+      return `<div class="stat-row" style="margin:22px 0 30px">${items.map((i2) =>
+        `<div><b>${esc(i2.value)}</b><span>${esc(i2.title || i2.text || '')}</span></div>`).join('')}</div>`;
+
     case 'cta':
-      return `<section><div class="wrap"><div class="cta-band">
-        <h2>${esc(b.title)}</h2>${b.body ? `<p class="lead" style="margin-inline:auto">${esc(b.body)}</p>` : ''}
-        ${b.ctaText ? `<div class="cta-row"><a class="btn" href="${esc(href(b.ctaHref || '', s))}">${esc(b.ctaText)}</a></div>` : ''}
-      </div></div></section>`;
+      return ctaBand({ title: b.title || '', subtitle: b.body || b.subtitle || '',
+        label: b.ctaText || '', hrefRaw: b.ctaHref || '', character: b.character,
+        label2: b.ctaText2 || '', href2: b.ctaHref2 || '' }, s);
+
     default:
       return '';
   }
+}
+
+/* The dark band that closes a page. Used by a `cta` block and by the page's
+   own closing band, so the two can never drift apart. */
+function ctaBand(o: { title: string; subtitle?: string; label: string; hrefRaw: string;
+                      character?: string; label2?: string; href2?: string }, s: SiteSettings): string {
+  if (!o.title && !o.label) return '';
+  const img = assetUrl(o.character || '');
+  return `<section class="band tight"><div class="wrap"><div class="cta-band"><div class="in">
+    <div>
+      <h2>${esc(o.title)}</h2>
+      ${o.subtitle ? `<p>${esc(o.subtitle)}</p>` : ''}
+      ${(o.label || o.label2) ? `<div class="btn-row">
+        ${o.label ? `<a class="btn btn-ink" href="${esc(href(o.hrefRaw, s))}">${esc(o.label)}</a>` : ''}
+        ${o.label2 ? `<a class="btn btn-ghost" href="${esc(href(o.href2 || '', s))}">${esc(o.label2)}</a>` : ''}
+      </div>` : ''}
+    </div>
+    ${img ? `<img src="${esc(img)}" alt="">` : ''}
+  </div></div></div></section>`;
 }
 
 function shell(o: { headHtml: string; body: string }): string {
@@ -393,25 +362,110 @@ export function renderPage(page: SitePage, pages: SitePage[], s: SiteSettings, p
       keywords: page.seoKeywords || s.keywords,
       canonical, ogImage: page.ogImage, noindex: page.noindex, s, ldJson: ld
     }),
-    body: `${nav(pages, page.slug, s)}<main id="main">${page.blocks.map((b) => block(b, s)).join('')}${list}</main>${footer(pages, s)}`
+    body: `${nav(pages, page.slug, s)}<main id="main">${pageHero(page, pages, s)}${pageBody(page, s, list)}${
+      ctaBand({ title: page.cta?.title ?? '', subtitle: page.cta?.subtitle, label: page.cta?.label ?? '',
+                hrefRaw: page.cta?.href ?? '', character: page.cta?.character }, s)
+    }</main>${footer(pages, s)}`
   });
 }
 
+/* ── THE HERO EVERY PAGE NOW HAS ────────────────────────────────────────
+   Breadcrumb, kicker, H1, intro, a fact line, buttons and a character — all of
+   them optional. A page that fills none of them gets its title and nothing
+   else, which is exactly what every page looked like before. */
+function pageHero(page: SitePage, pages: SitePage[], s: SiteSettings): string {
+  void pages;
+  const isHome = page.slug === 'home';
+  const crumbs = isHome ? '' : `<nav class="crumbs" aria-label="مسیر صفحه">
+    <a href="${esc(homeUrl(s))}">${esc(s.labelHome)}</a><i>›</i><b>${esc(page.navLabel || page.title)}</b></nav>`;
+  const meta = (page.metaLine ?? []).filter(Boolean);
+  const buttons = (page.heroButtons ?? []).filter((b) => b.label && b.href);
+  const char = assetUrl(page.heroCharacter || '');
+  return `<div class="hero"><div class="bg-fx"><i class="y1"></i><i class="g1"></i></div><div class="wrap">
+    ${crumbs}
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:40px;padding-bottom:40px">
+      <div>
+        ${page.kicker ? `<span class="kicker">${esc(page.kicker)}</span>` : ''}
+        <h1${page.kicker ? ' style="margin-top:14px"' : ''}>${esc(page.title)}</h1>
+        ${page.intro ? `<p class="lead" style="margin-top:18px">${esc(page.intro)}</p>` : ''}
+        ${meta.length ? `<div class="meta">${meta.map((m, i) =>
+          `<span>${esc(m)}</span>${i < meta.length - 1 ? '<span class="sep"></span>' : ''}`).join('')}</div>` : ''}
+        ${buttons.length ? `<div class="btn-row">${buttons.map((b, i) =>
+          `<a class="btn ${i === 0 ? 'btn-primary' : 'btn-ghost'}" href="${esc(href(b.href, s))}">${esc(b.label)}</a>`).join('')}</div>` : ''}
+      </div>
+      ${char ? `<img src="${esc(char)}" alt="" style="width:150px;flex:0 0 auto;filter:drop-shadow(0 26px 24px rgba(20,21,26,.26))">` : ''}
+    </div>
+  </div></div>`;
+}
+
+/* ── THE BODY, WITH ITS SIDEBAR ─────────────────────────────────────────
+   The contents list is built from the page's own headings — never typed twice.
+   It appears only when the operator asked for it AND there is more than one
+   heading to list: a table of contents with a single entry is furniture. */
+function pageBody(page: SitePage, s: SiteSettings, list: string): string {
+  const headings = page.blocks
+    .filter((b) => (b.kind === 'heading' || (b.title && ['text', 'list', 'cards', 'tiles', 'steps', 'faq'].includes(b.kind))))
+    .map((b) => ({ anchor: b.anchor || '', label: b.title || '' }))
+    .filter((h) => h.anchor && h.label);
+  const wantsToc = page.showToc === true && headings.length > 1;
+  const aside = wantsToc ? `<aside class="aside">
+    <div class="cap">${esc(s.labelToc)}</div>
+    <nav class="toc">${headings.map((h) => `<a href="#${esc(h.anchor)}">${esc(h.label)}</a>`).join('')}</nav>
+    ${page.asideCta ? `<div class="aside-cta">
+      ${assetUrl(page.asideCta.character || '') ? `<img src="${esc(assetUrl(page.asideCta.character || ''))}" alt="">` : ''}
+      <b>${esc(page.asideCta.text)}</b>
+      <a class="btn btn-primary" href="${esc(href(page.asideCta.href, s))}">${esc(page.asideCta.label)}</a>
+    </div>` : ''}
+  </aside>` : '';
+
+  const related = (page.related ?? []).filter((r) => r.title && r.href);
+  const relatedHtml = related.length ? `<div style="padding-top:28px;margin-top:30px;border-top:1px solid var(--line)">
+    <div class="cap">${esc(s.labelRelated)}</div>
+    <div class="related">${related.map((r) =>
+      `<a href="${esc(href(r.href, s))}"><b>${esc(r.title)}</b>${r.meta ? `<small>${esc(r.meta)}</small>` : ''}</a>`).join('')}</div>
+  </div>` : '';
+
+  /* `cta` blocks are full-width bands and must not be boxed inside the prose
+     column with the paragraphs. */
+  const inProse = page.blocks.filter((b) => b.kind !== 'cta' && b.kind !== 'hero');
+  const bands = page.blocks.filter((b) => b.kind === 'cta' || b.kind === 'hero');
+
+  return `<section class="band tight"><div class="wrap${aside ? ' with-aside' : ''}">
+    ${aside}
+    <div class="prose">${inProse.map((b) => block(b, s)).join('')}${list}${relatedHtml}</div>
+  </div></section>${bands.map((b) => block(b, s)).join('')}`;
+}
+
+/* The blog index: the newest article given room, the rest as a list. Drawn
+   inside the page's own prose column, so an operator can still put words above
+   and below it from the panel. */
 function renderPostList(posts: SitePost[], s: SiteSettings): string {
   if (!posts.length) {
-    return `<section><div class="wrap"><div class="card" style="text-align:center">
-      <p style="margin:0">هنوز مقاله‌ای منتشر نشده.</p></div></div></section>`;
+    return `<div class="card" style="text-align:center;padding:32px">
+      <p style="margin:0">${esc(s.labelNoPosts)}</p></div>`;
   }
-  return `<section><div class="wrap"><div class="posts">${posts.map((p) => `
-    <a class="post" href="/blog/${esc(p.slug)}">
-      ${IMG_SRC.test(String(p.cover ?? '')) ? `<img class="cover" src="${esc(p.cover)}" alt="" loading="lazy" decoding="async">` : ''}
-      <div class="body">
-        <div class="meta">${esc(faDate(p.publishedAt))}</div>
-        <h3>${esc(p.title)}</h3>
-        <p>${esc(p.excerpt)}</p>
-        ${p.tags.length ? `<div class="tags">${p.tags.map((t) => `<span class="tag">${esc(t)}</span>`).join('')}</div>` : ''}
-      </div>
-    </a>`).join('')}</div></div></section>`;
+  /* The design's own vocabulary — .feature / .txt / .art — rather than names
+     invented here. A class the stylesheet has never heard of renders as
+     nothing and looks like a layout bug. */
+  const [first, ...rest] = posts;
+  const featured = first ? `<a class="feature" href="/blog/${esc(first.slug)}">
+    <div class="txt">
+      <h2>${esc(first.title)}</h2>
+      ${first.excerpt ? `<p style="margin-top:14px">${esc(first.excerpt)}</p>` : ''}
+      <div class="meta" style="display:flex;align-items:center;gap:12px;margin-top:20px"><span>${esc(faDate(first.publishedAt))}</span>${
+        first.author ? `<span class="sep"></span><span>${esc(first.author)}</span>` : ''}</div>
+      ${first.tags.length ? `<div class="chips">${first.tags.map((t) => `<span class="chip">${esc(t)}</span>`).join('')}</div>` : ''}
+    </div>
+    <div class="art">${IMG_SRC.test(String(first.cover ?? ''))
+      ? `<img src="${esc(first.cover)}" alt="" loading="lazy" decoding="async" style="width:100%;height:100%;object-fit:cover">`
+      : (assetUrl('char-thinking.png') ? `<img src="${esc(assetUrl('char-thinking.png'))}" alt="">` : '')}</div>
+  </a>` : '';
+  const list = rest.length ? `<div class="list-rows">${rest.map((p) => `
+    <a href="/blog/${esc(p.slug)}">
+      <span class="thumb">${IMG_SRC.test(String(p.cover ?? '')) ? `<img src="${esc(p.cover)}" alt="" loading="lazy" decoding="async">` : ''}</span>
+      <div><h3>${esc(p.title)}</h3><div class="meta">${esc(faDate(p.publishedAt))}</div></div>
+    </a>`).join('')}</div>` : '';
+  return featured + list;
 }
 
 /** Article body: a tiny, deliberately limited text format. '## ' is a heading,
@@ -488,34 +542,55 @@ export function renderPost(post: SitePost, pages: SitePage[], s: SiteSettings, m
       keywords: post.seoKeywords || post.tags.join(', ') || s.keywords,
       canonical, ogImage: post.cover, noindex: post.noindex, s, ldJson: ld, type: 'article'
     }),
-    body: `${nav(pages, 'blog', s)}<main id="main"><section><div class="wrap">
-      <div class="crumbs"><a href="${esc(homeUrl(s))}">خانه</a> › <a href="/blog">وبلاگ</a> › ${esc(post.title)}</div>
-      <h1>${esc(post.title)}</h1>
-      <div class="meta">${esc(faDate(post.publishedAt))}${post.author ? ' · ' + esc(post.author) : ''}</div>
-      ${post.tags.length ? `<div class="tags">${post.tags.map((t) => `<span class="tag">${esc(t)}</span>`).join('')}</div>` : ''}
-      ${IMG_SRC.test(String(post.cover ?? '')) ? `<figure class="ph" style="margin-top:20px"><img src="${esc(post.cover)}" alt="${esc(post.title)}"></figure>` : ''}
-      <article class="post-body prose" style="margin-top:22px">${articleBody(post.body)}</article>
-      <div class="cta-band" style="margin-top:34px">
-        <h2>امتحانش کن</h2>
-        <p class="lead" style="margin-inline:auto">همین سؤال‌ها را در دوئل با یک بازیکن واقعی بازی کن.</p>
-        <div class="cta-row"><a class="btn" href="${esc(s.playUrl || '/play')}">🎮 شروع بازی</a></div>
-      </div>
-      ${related.length ? `<h2 style="margin-top:38px">مقاله‌های دیگر</h2>${renderPostList(related, s).replace(/^<section><div class="wrap">|<\/div><\/section>$/g, '')}` : ''}
-    </div></section></main>${footer(pages, s)}`
+    body: `${nav(pages, 'blog', s)}<main id="main">
+      <div class="hero"><div class="bg-fx"><i class="y1"></i><i class="g1"></i></div><div class="wrap">
+        <nav class="crumbs" aria-label="مسیر صفحه">
+          <a href="${esc(homeUrl(s))}">${esc(s.labelHome)}</a><i>›</i>
+          <a href="/blog">${esc(s.labelBlog)}</a><i>›</i><b>${esc(post.title)}</b>
+        </nav>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:40px;padding-bottom:40px"><div>
+          <h1>${esc(post.title)}</h1>
+          ${post.excerpt ? `<p class="lead" style="margin-top:18px">${esc(post.excerpt)}</p>` : ''}
+          <div class="meta">
+            <span>${esc(faDate(post.publishedAt))}</span>
+            ${post.author ? `<span class="sep"></span><span>${esc(post.author)}</span>` : ''}
+          </div>
+          ${post.tags.length ? `<div class="chips">${post.tags.map((t) => `<span class="chip">${esc(t)}</span>`).join('')}</div>` : ''}
+        </div></div>
+      </div></div>
+      <section class="band tight"><div class="wrap">
+        ${IMG_SRC.test(String(post.cover ?? '')) ? `<figure class="ph"><img src="${esc(post.cover)}" alt="${esc(post.title)}"></figure>` : ''}
+        <article class="prose" style="margin-top:22px">${articleBody(post.body)}</article>
+        ${related.length ? `<div style="padding-top:28px;margin-top:30px;border-top:1px solid var(--line)">
+          <div class="cap">${esc(s.labelMoreArticles)}</div>
+          <div class="related">${related.map((r) =>
+            `<a href="/blog/${esc(r.slug)}"><b>${esc(r.title)}</b><small>${esc(faDate(r.publishedAt))}</small></a>`).join('')}</div>
+        </div>` : ''}
+      </div></section>
+      ${ctaBand({ title: s.postCtaTitle, subtitle: s.postCtaSubtitle, label: s.postCtaLabel, hrefRaw: s.playUrl || '/play' }, s)}
+    </main>${footer(pages, s)}`
   });
 }
 
 export function renderNotFound(pages: SitePage[], s: SiteSettings): string {
   return shell({
     headHtml: head({
-      title: `صفحه پیدا نشد | ${s.siteName}`, description: 'این صفحه وجود ندارد.',
+      title: `${s.notFoundTitle} | ${s.siteName}`, description: s.notFoundText,
       keywords: '', canonical: s.baseUrl + '/404', ogImage: '', noindex: true, s, ldJson: []
     }),
-    body: `${nav(pages, '', s)}<main id="main"><section><div class="wrap"><div class="hero"><div class="in">
-      <div class="eyebrow">۴۰۴</div><h1>این صفحه پیدا نشد</h1>
-      <p class="lead">شاید نشانی عوض شده باشد. از منوی بالا یا دکمهٔ زیر ادامه بده.</p>
-      <div class="cta-row"><a class="btn" href="${esc(homeUrl(s))}">خانه</a><a class="btn ghost" href="/blog">وبلاگ</a></div>
-    </div></div></div></section></main>${footer(pages, s)}`
+    body: `${nav(pages, '', s)}<main id="main">
+      <div class="hero"><div class="bg-fx"><i class="y1"></i><i class="g1"></i></div><div class="wrap">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:40px;padding-bottom:40px"><div>
+          <span class="kicker">۴۰۴</span>
+          <h1 style="margin-top:14px">${esc(s.notFoundTitle)}</h1>
+          <p class="lead" style="margin-top:18px">${esc(s.notFoundText)}</p>
+          <div class="btn-row">
+            <a class="btn btn-primary" href="${esc(homeUrl(s))}">${esc(s.notFoundLabel)}</a>
+            <a class="btn btn-ghost" href="/blog">${esc(s.labelBlog)}</a>
+          </div>
+        </div></div>
+      </div></div>
+    </main>${footer(pages, s)}`
   });
 }
 

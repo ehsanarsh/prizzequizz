@@ -20,7 +20,51 @@ import { logger } from './log.js';
 
 // ------------------------------------------------------------------ types ----
 
-export type BlockKind = 'hero' | 'text' | 'cards' | 'steps' | 'faq' | 'cta' | 'stats';
+/* The redesign asks for four shapes the old site had no name for: a section
+ * HEADING the sidebar can link to, a bullet LIST, a CALLOUT with a character
+ * beside it, and a grid of TILES for internal linking. They are kinds rather
+ * than free HTML for the same reason the first seven were: an operator editing
+ * a block cannot break the layout and cannot introduce a tag. */
+export type BlockKind = 'hero' | 'text' | 'cards' | 'steps' | 'faq' | 'cta' | 'stats'
+  | 'heading' | 'list' | 'callout' | 'tiles';
+export const BLOCK_KINDS: BlockKind[] = ['hero', 'text', 'cards', 'steps', 'faq', 'cta', 'stats',
+  'heading', 'list', 'callout', 'tiles'];
+/* What each one is called in the panel, so the operator never meets the English
+ * key. Adding a kind without naming it here is caught by the site's tests. */
+export const BLOCK_LABELS: Record<BlockKind, string> = {
+  hero: 'سربرگ صفحه',
+  heading: 'عنوان بخش',
+  text: 'متن',
+  list: 'فهرست نقطه‌ای',
+  cards: 'کارت‌ها',
+  tiles: 'کاشی‌های لینک',
+  steps: 'مراحل شماره‌دار',
+  faq: 'سؤال و جواب',
+  callout: 'کادر نکته',
+  stats: 'نوار آمار',
+  cta: 'دعوت به بازی'
+};
+
+export interface SiteBlockItem {
+  icon?: string;
+  title?: string;
+  text?: string;
+  q?: string;
+  a?: string;
+  value?: string;
+  /** Tiles and cards can be links; a tile without one is still a tile. */
+  href?: string;
+  /** The small grey line under a tile — «۲۴۰ سؤال», «۱۲ دقیقه». */
+  meta?: string;
+  /** One card in a row can be picked out. */
+  highlight?: boolean;
+  /** A FAQ answer that starts open. */
+  open?: boolean;
+  /** Chips along the bottom of a card. */
+  tags?: string[];
+  /** A character drawn on the card, by asset name or an uploaded /media/ URL. */
+  character?: string;
+}
 
 export interface SiteBlock {
   kind: BlockKind;
@@ -33,7 +77,12 @@ export interface SiteBlock {
   ctaText2?: string;
   ctaHref2?: string;
   image?: string;
-  items?: Array<{ icon?: string; title?: string; text?: string; q?: string; a?: string; value?: string }>;
+  /** The id a heading gets, so the page's own contents list can link to it.
+   *  Derived from the title when the operator leaves it blank. */
+  anchor?: string;
+  /** A character beside a callout, or on a CTA band. */
+  character?: string;
+  items?: SiteBlockItem[];
 }
 
 export interface SitePage {
@@ -48,6 +97,29 @@ export interface SitePage {
   ogImage: string;
   /** Excluded from sitemap.xml and marked noindex. For thin or duplicate pages. */
   noindex: boolean;
+  /* ── the hero, which the redesign gives every page ──────────────────────
+     All optional: a page that fills none of them gets a plain title, which is
+     what every page had before. */
+  /** The small line above the H1 — «راهنما», «قانون». */
+  kicker?: string;
+  /** The paragraph under the H1. */
+  intro?: string;
+  /** A character beside the hero, by asset name or an uploaded /media/ URL. */
+  heroCharacter?: string;
+  /** Buttons in the hero. The first is the primary one. */
+  heroButtons?: Array<{ label: string; href: string }>;
+  /** Small facts on one line under the intro — «۵ دقیقه خواندن», «آخرین
+   *  بروزرسانی: …». */
+  metaLine?: string[];
+  /** The sticky sidebar list of this page's own headings. Off by default: a
+   *  page with two headings does not need a table of contents. */
+  showToc?: boolean;
+  /** The little card under the contents list. */
+  asideCta?: { text: string; label: string; href: string; character?: string };
+  /** Hand-picked internal links at the foot of the body. */
+  related?: Array<{ title: string; meta?: string; href: string }>;
+  /** The dark band at the very bottom. */
+  cta?: { title: string; subtitle?: string; label: string; href: string; character?: string };
   blocks: SiteBlock[];
   published: boolean;
   updatedAt: string;
@@ -104,6 +176,42 @@ export interface SiteSettings {
   googleVerification: string;
   enamadHtml: string;
   footerNote: string;
+  /* ── the shell the redesign draws around every page ─────────────────────
+     Every one of these is a string an operator can edit; none of them is
+     written into the template. A blank one removes what it labels rather than
+     printing an empty box. */
+  /** The line under the logo in the footer. */
+  footerAbout: string;
+  /** The bottom line — «© ۱۴۰۳ پرایز کوئیز». */
+  copyright: string;
+  /** The footer's link columns. The grid divides whatever it is given. */
+  footerColumns: Array<{ title: string; links: Array<{ label: string; href: string }> }>;
+  /** The two buttons in the header. */
+  ctaPlay: string;
+  ctaLogin: string;
+  loginUrl: string;
+  /** Where «همهٔ موضوع‌ها» and «راهنمای بازی» point from the home page. */
+  topicsUrl: string;
+  howToPlayUrl: string;
+  /* ── THE WORDS THE TEMPLATE ITSELF SAYS ──────────────────────────────
+     «تمام متن‌هاشو من از site-admin بتونم تنظیم کنم.» Every one of these was
+     written into the template: the breadcrumb's «خانه», the sidebar's «در این
+     صفحه», the band at the foot of an article. They read as part of the
+     furniture until somebody wants to change one, and then they are a deploy.
+     A blank value removes what it labels — the article band disappears rather
+     than printing an empty heading. */
+  labelHome: string;
+  labelToc: string;
+  labelRelated: string;
+  labelBlog: string;
+  labelNoPosts: string;
+  labelMoreArticles: string;
+  postCtaTitle: string;
+  postCtaSubtitle: string;
+  postCtaLabel: string;
+  notFoundTitle: string;
+  notFoundText: string;
+  notFoundLabel: string;
   /** Turns the whole public site off (503) without touching the game. */
   enabled: boolean;
   updatedAt: string;
@@ -156,6 +264,7 @@ async function createSchemaOnce(pool: ReturnType<typeof getPgPool>): Promise<voi
     og_image TEXT NOT NULL DEFAULT '',
     noindex BOOLEAN NOT NULL DEFAULT false,
     blocks JSONB NOT NULL DEFAULT '[]',
+    design JSONB NOT NULL DEFAULT '{}',
     published BOOLEAN NOT NULL DEFAULT true,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now())`);
   await pool.query(`CREATE TABLE IF NOT EXISTS site_posts (
@@ -175,6 +284,43 @@ async function createSchemaOnce(pool: ReturnType<typeof getPgPool>): Promise<voi
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now())`);
   await pool.query(`CREATE TABLE IF NOT EXISTS site_settings (
     id TEXT PRIMARY KEY, data JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT now())`);
+
+  /* SAID TWICE ON PURPOSE.
+     `CREATE TABLE IF NOT EXISTS` does exactly nothing to a table that already
+     exists — it does not look at the columns. So a column added after the
+     first release reaches a brand-new database and no other, and the live site
+     goes on running against a table without it: every read of that column
+     errors, and the page it belongs to breaks in a way no test on a fresh
+     database can reproduce.
+     Every column here that COULD have been added later is repeated as an
+     ALTER. Postgres only allows that for a column with a DEFAULT or a nullable
+     one, which is the same set — a NOT NULL column with no default was there
+     on day one and needs no migration. */
+  for (const [table, col] of [
+    ['site_pages', `design JSONB NOT NULL DEFAULT '{}'`],
+    ['site_pages', `nav_label TEXT NOT NULL DEFAULT ''`],
+    ['site_pages', `show_in_nav BOOLEAN NOT NULL DEFAULT true`],
+    ['site_pages', `nav_order INT NOT NULL DEFAULT 50`],
+    ['site_pages', `seo_title TEXT NOT NULL DEFAULT ''`],
+    ['site_pages', `seo_description TEXT NOT NULL DEFAULT ''`],
+    ['site_pages', `seo_keywords TEXT NOT NULL DEFAULT ''`],
+    ['site_pages', `og_image TEXT NOT NULL DEFAULT ''`],
+    ['site_pages', `noindex BOOLEAN NOT NULL DEFAULT false`],
+    ['site_pages', `blocks JSONB NOT NULL DEFAULT '[]'`],
+    ['site_pages', `published BOOLEAN NOT NULL DEFAULT true`],
+    ['site_posts', `excerpt TEXT NOT NULL DEFAULT ''`],
+    ['site_posts', `cover TEXT NOT NULL DEFAULT ''`],
+    ['site_posts', `body TEXT NOT NULL DEFAULT ''`],
+    ['site_posts', `author TEXT NOT NULL DEFAULT ''`],
+    ['site_posts', `tags JSONB NOT NULL DEFAULT '[]'`],
+    ['site_posts', `seo_title TEXT NOT NULL DEFAULT ''`],
+    ['site_posts', `seo_description TEXT NOT NULL DEFAULT ''`],
+    ['site_posts', `seo_keywords TEXT NOT NULL DEFAULT ''`],
+    ['site_posts', `noindex BOOLEAN NOT NULL DEFAULT false`],
+    ['site_posts', `published BOOLEAN NOT NULL DEFAULT true`]
+  ] as const) {
+    await pool.query(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS ${col}`);
+  }
 }
 
 // ----------------------------------------------------------------- memory ----
@@ -208,6 +354,33 @@ export const SETTINGS_DEFAULTS: SiteSettings = {
   googleVerification: '',
   enamadHtml: '',
   footerNote: 'تمامی حقوق برای پرایز کوئیز محفوظ است.',
+  footerAbout: 'مسابقهٔ آنلاین اطلاعات عمومی، با بازیکن‌های واقعی و جایزهٔ واقعی.',
+  copyright: '© پرایز کوئیز',
+  /* A starting point, not a fixture: every row is editable and the whole list
+     can be emptied, which removes the columns rather than printing headings
+     with nothing under them. */
+  footerColumns: [
+    { title: 'بازی', links: [{ label: 'راهنمای بازی', href: '/how-to-play' }, { label: 'دانلود بازی', href: '/download' }] },
+    { title: 'پرایز کوئیز', links: [{ label: 'دربارهٔ ما', href: '/about' }, { label: 'وبلاگ', href: '/blog' }, { label: 'تماس با ما', href: '/contact' }] },
+    { title: 'قوانین', links: [{ label: 'حریم خصوصی', href: '/privacy' }, { label: 'قوانین و مقررات', href: '/terms' }, { label: 'سؤالات متداول', href: '/faq' }] }
+  ],
+  ctaPlay: 'بازی کن',
+  ctaLogin: 'ورود',
+  loginUrl: '/play',
+  topicsUrl: '/topics',
+  howToPlayUrl: '/how-to-play',
+  labelHome: 'خانه',
+  labelToc: 'در این صفحه',
+  labelRelated: 'بیشتر بخوان',
+  labelBlog: 'وبلاگ',
+  labelNoPosts: 'هنوز مقاله‌ای منتشر نشده.',
+  labelMoreArticles: 'مقاله‌های دیگر',
+  postCtaTitle: 'امتحانش کن',
+  postCtaSubtitle: 'همین سؤال‌ها را در دوئل با یک بازیکن واقعی بازی کن.',
+  postCtaLabel: 'شروع بازی',
+  notFoundTitle: 'این صفحه پیدا نشد',
+  notFoundText: 'شاید نشانی را اشتباه وارد کرده‌ای، یا این صفحه برداشته شده.',
+  notFoundLabel: 'برگرد به خانه',
   enabled: true,
   updatedAt: new Date().toISOString()
 };
@@ -501,17 +674,55 @@ function seedPosts(): SitePost[] {
 
 // ------------------------------------------------------------------- read ----
 
+/* The redesign's page-level extras — hero, sidebar, related links, the closing
+ * band. One JSON column rather than nine, because they arrive and leave
+ * together and several of them are lists: nine columns would be nine
+ * migrations for one feature. A row written before the column existed reads
+ * back as {} and the page renders exactly as it used to. */
 function rowToPage(r: any): SitePage {
+  const d = (r.design && typeof r.design === 'object' && !Array.isArray(r.design)) ? r.design : {};
   return {
     slug: String(r.slug), title: String(r.title ?? ''), navLabel: String(r.nav_label ?? r.title ?? ''),
     showInNav: r.show_in_nav !== false, navOrder: Number(r.nav_order ?? 50),
     seoTitle: String(r.seo_title ?? ''), seoDescription: String(r.seo_description ?? ''),
     seoKeywords: String(r.seo_keywords ?? ''), ogImage: String(r.og_image ?? ''),
     noindex: !!r.noindex,
+    ...cleanDesign(d),
     blocks: Array.isArray(r.blocks) ? r.blocks : [],
     published: r.published !== false,
     updatedAt: r.updated_at ? new Date(r.updated_at).toISOString() : now()
   };
+}
+
+/** The page-level design fields, taken apart safely. Anything malformed is
+ *  dropped rather than rendered — this is admin-authored JSON. */
+export function cleanDesign(d: any): Pick<SitePage, 'kicker' | 'intro' | 'heroCharacter' | 'heroButtons' | 'metaLine' | 'showToc' | 'asideCta' | 'related' | 'cta'> {
+  const str = (v: unknown, max = 400) => String(v ?? '').trim().slice(0, max);
+  const arr = (v: unknown) => (Array.isArray(v) ? v : []);
+  const out: any = {};
+  if (str(d.kicker, 80)) out.kicker = str(d.kicker, 80);
+  if (str(d.intro, 600)) out.intro = str(d.intro, 600);
+  if (str(d.heroCharacter, 200)) out.heroCharacter = str(d.heroCharacter, 200);
+  const buttons = arr(d.heroButtons).map((b: any) => ({ label: str(b?.label, 60), href: str(b?.href, 300) }))
+    .filter((b: any) => b.label && b.href).slice(0, 3);
+  if (buttons.length) out.heroButtons = buttons;
+  const meta = arr(d.metaLine).map((x: any) => str(x, 80)).filter(Boolean).slice(0, 4);
+  if (meta.length) out.metaLine = meta;
+  if (d.showToc === true) out.showToc = true;
+  const ac = d.asideCta;
+  if (ac && str(ac.text, 200) && str(ac.label, 60) && str(ac.href, 300)) {
+    out.asideCta = { text: str(ac.text, 200), label: str(ac.label, 60), href: str(ac.href, 300),
+      ...(str(ac.character, 200) ? { character: str(ac.character, 200) } : {}) };
+  }
+  const rel = arr(d.related).map((x: any) => ({ title: str(x?.title, 120), meta: str(x?.meta, 120), href: str(x?.href, 300) }))
+    .filter((x: any) => x.title && x.href).slice(0, 6);
+  if (rel.length) out.related = rel;
+  const c = d.cta;
+  if (c && str(c.title, 160) && str(c.label, 60) && str(c.href, 300)) {
+    out.cta = { title: str(c.title, 160), subtitle: str(c.subtitle, 300), label: str(c.label, 60), href: str(c.href, 300),
+      ...(str(c.character, 200) ? { character: str(c.character, 200) } : {}) };
+  }
+  return out;
 }
 function rowToPost(r: any): SitePost {
   return {
@@ -610,20 +821,37 @@ export function normaliseSlug(raw: string): string {
   return s;
 }
 
+/* An id for a heading, so the contents list can link to it. Latin slug when
+ * the title is Latin; Persian headings get a stable numbered id instead,
+ * because a percent-encoded Persian fragment in a URL is unreadable and some
+ * clients mangle it. */
+function anchorFor(title: string, i: number): string {
+  const latin = String(title || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  return latin || ('bx-' + (i + 1));
+}
+
 const cleanBlocks = (raw: any): SiteBlock[] => {
   if (!Array.isArray(raw)) return [];
-  const KINDS: BlockKind[] = ['hero', 'text', 'cards', 'steps', 'faq', 'cta', 'stats'];
+  /* BLOCK_KINDS, not a second list written out here. The two had already
+     drifted once: a kind added to the type was accepted by the editor, saved,
+     and then dropped on the way to the database with nothing said. */
   return raw
-    .filter((b) => b && KINDS.includes(b.kind))
-    .map((b) => ({
+    .filter((b) => b && BLOCK_KINDS.includes(b.kind))
+    .map((b, i) => ({
       kind: b.kind as BlockKind,
       title: String(b.title ?? ''), subtitle: String(b.subtitle ?? ''), body: String(b.body ?? ''),
       ctaText: String(b.ctaText ?? ''), ctaHref: String(b.ctaHref ?? ''),
       ctaText2: String(b.ctaText2 ?? ''), ctaHref2: String(b.ctaHref2 ?? ''),
       image: String(b.image ?? ''),
+      anchor: String(b.anchor ?? '').replace(/[^a-zA-Z0-9_-]/g, '') || anchorFor(b.title ?? '', i),
+      character: String(b.character ?? ''),
       items: Array.isArray(b.items) ? b.items.slice(0, 40).map((it: any) => ({
         icon: String(it?.icon ?? ''), title: String(it?.title ?? ''), text: String(it?.text ?? ''),
-        q: String(it?.q ?? ''), a: String(it?.a ?? ''), value: String(it?.value ?? '')
+        q: String(it?.q ?? ''), a: String(it?.a ?? ''), value: String(it?.value ?? ''),
+        href: String(it?.href ?? ''), meta: String(it?.meta ?? ''),
+        character: String(it?.character ?? ''),
+        highlight: it?.highlight === true, open: it?.open === true,
+        tags: Array.isArray(it?.tags) ? it.tags.slice(0, 6).map((t: any) => String(t ?? '')).filter(Boolean) : []
       })) : []
     }));
 };
@@ -641,20 +869,24 @@ export async function savePage(input: Partial<SitePage> & { slug: string }): Pro
     seoTitle: String(input.seoTitle ?? ''), seoDescription: String(input.seoDescription ?? ''),
     seoKeywords: String(input.seoKeywords ?? ''), ogImage: String(input.ogImage ?? ''),
     noindex: !!input.noindex,
+    ...cleanDesign(input),
     blocks: cleanBlocks(input.blocks),
     published: input.published !== false,
     updatedAt: now()
   };
+  /* The same fields the row carries, so what is written is what comes back. */
+  const design = cleanDesign(page);
   const pool = pg();
   if (pool) {
     await ensureSchema(pool);
     await pool.query(
-      `INSERT INTO site_pages(slug,title,nav_label,show_in_nav,nav_order,seo_title,seo_description,seo_keywords,og_image,noindex,blocks,published,updated_at)
-       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,now())
+      `INSERT INTO site_pages(slug,title,nav_label,show_in_nav,nav_order,seo_title,seo_description,seo_keywords,og_image,noindex,blocks,design,published,updated_at)
+       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,now())
        ON CONFLICT (slug) DO UPDATE SET title=$2,nav_label=$3,show_in_nav=$4,nav_order=$5,seo_title=$6,
-         seo_description=$7,seo_keywords=$8,og_image=$9,noindex=$10,blocks=$11,published=$12,updated_at=now()`,
+         seo_description=$7,seo_keywords=$8,og_image=$9,noindex=$10,blocks=$11,design=$12,published=$13,updated_at=now()`,
       [page.slug, page.title, page.navLabel, page.showInNav, page.navOrder, page.seoTitle,
-       page.seoDescription, page.seoKeywords, page.ogImage, page.noindex, JSON.stringify(page.blocks), page.published]);
+       page.seoDescription, page.seoKeywords, page.ogImage, page.noindex, JSON.stringify(page.blocks),
+       JSON.stringify(design), page.published]);
   } else {
     if (!_memPages) _memPages = [];
     const i = _memPages.findIndex((p) => p.slug === slug);

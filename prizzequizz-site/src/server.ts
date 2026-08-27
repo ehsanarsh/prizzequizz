@@ -16,6 +16,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
 import { deleteMedia, getMediaBytes, listMedia, saveMedia, updateMedia } from './media.js';
+import { getAsset } from './assets.js';
 import {
   SiteError, deletePage, deletePost, getPage, getPost, getSettings,
   listPages, listPosts, savePage, savePost, saveSettings
@@ -164,6 +165,25 @@ export async function handle(req: IncomingMessage, res: ServerResponse): Promise
   if (path === '/site-health') { json(res, 200, { status: 'ok', service: 'prizzequizz-site' }); return; }
 
   if (await adminRoutes(req, res, path)) return;
+
+  /* THE DESIGN'S OWN FILES — the stylesheet and the characters it is drawn
+   * around. Not content, never edited from the panel, and identical for every
+   * visitor: served from disk with a strong ETag so a repeat visit is a 304
+   * rather than a megabyte. Cached for an hour rather than a year, because
+   * unlike /media/ these names are reused when the design changes. */
+  if (path.startsWith('/site-assets/')) {
+    const asset = getAsset(decodeURIComponent(path.slice('/site-assets/'.length)));
+    if (!asset) { fail(res, 404, 'NOT_FOUND', 'فایل یافت نشد.'); return; }
+    if (req.headers['if-none-match'] === asset.etag) { res.statusCode = 304; res.end(); return; }
+    res.statusCode = 200;
+    res.setHeader('content-type', asset.type);
+    res.setHeader('content-length', String(asset.body.length));
+    res.setHeader('etag', asset.etag);
+    res.setHeader('cache-control', 'public, max-age=3600');
+    res.setHeader('x-content-type-options', 'nosniff');
+    res.end(req.method === 'HEAD' ? undefined : asset.body);
+    return;
+  }
 
   /* Public, and immutable: an id is minted per upload and never reused, so the
    * bytes behind a URL can never change and a year of caching is safe. */
