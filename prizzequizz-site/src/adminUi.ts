@@ -12,6 +12,9 @@
  * be able to break a layout or paste a script, and should not have to know
  * what a <div> is.
  */
+import { BLOCK_LABELS } from './content.js';
+import { listCharacters } from './assets.js';
+
 export function adminHtml(): string {
   return `<!doctype html><html lang="fa" dir="rtl"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -320,8 +323,16 @@ function pickBtn(id){ return '<button type="button" class="btn sm pickBtn" style
 function wirePickers(){ document.querySelectorAll('.pickBtn').forEach((el)=>{ el.onclick=()=>pick(el.getAttribute('data-for')); }); }
 
 /* ---------- pages ---------- */
-const BLOCK_LABEL={hero:'سربرگ بزرگ',text:'متن',cards:'کارت‌ها',steps:'مرحله‌ها',faq:'پرسش و پاسخ',cta:'دعوت به اقدام',stats:'آمار'};
-const ITEM_KINDS=['cards','steps','faq','stats'];
+/* Injected from content.ts rather than written out again here. This was the
+   THIRD copy of the block-kind list in the project, and the copies had already
+   drifted: a kind added to the type showed up in the editor, saved, and was
+   dropped on the way to the database with nothing said. One list, and the
+   buttons below are built from whatever is in it. */
+const BLOCK_LABEL=${JSON.stringify(BLOCK_LABELS)};
+/* The artwork on disk, read at boot — so a character added to the design
+   shows up in this list without anybody editing the panel. */
+const CHARACTERS=${JSON.stringify(listCharacters())};
+const ITEM_KINDS=['cards','steps','faq','stats','list','tiles'];
 
 function render(){
   if(TAB==='pages') renderPages();
@@ -364,6 +375,54 @@ function pageEditor(p,i){
       '<div class="f"><label>کلیدواژه‌ها (با ویرگول)</label><input id="pg_seoKeywords_'+i+'" value="'+esc(p.seoKeywords||'')+'"></div>'+
       '<div class="f"><label>تصویر اشتراک‌گذاری (og:image)</label><input id="pg_ogImage_'+i+'" class="mono" value="'+esc(p.ogImage||'')+'">'+pickBtn('pg_ogImage_'+i)+'</div>'+
     '</div>'+
+    /* ── the hero and the trimmings the redesign gives every page ──────
+       All optional. A page that fills none of them looks exactly as it did
+       before the redesign, which is the point: nothing here is required to
+       have a working page. */
+    '<div class="card" style="background:var(--panel2)"><h3>سربرگ صفحه</h3>'+
+      '<p class="sub">همه اختیاری‌اند. خالی که باشند، صفحه فقط عنوانش را نشان می‌دهد.</p>'+
+      '<div class="grid2">'+f('نوشتهٔ کوچک بالای عنوان','kicker')+
+        '<div class="f"><label>کاراکتر کنار عنوان</label><select id="pg_heroCharacter_'+i+'">'+
+        '<option value="">— بدون کاراکتر —</option>'+
+        CHARACTERS.map((c)=>'<option value="'+esc(c)+'"'+(p.heroCharacter===c?' selected':'')+'>'+esc(c.replace(/^char-|\.(png|webp)$/g,''))+'</option>').join('')+
+        '</select></div>'+
+      '</div>'+
+      '<div class="f"><label>مقدمه</label><textarea id="pg_intro_'+i+'" style="min-height:60px">'+esc(p.intro||'')+'</textarea></div>'+
+      '<div class="f"><label>خطِ نکته‌ها — هر خط یک مورد</label><textarea id="pg_meta_'+i+'" style="min-height:52px">'+esc((p.metaLine||[]).join('\\n'))+'</textarea>'+
+        '<p class="sub" style="margin:4px 0 0">مثلاً «۵ دقیقه خواندن» یا «آخرین بروزرسانی: مهر ۱۴۰۳».</p></div>'+
+      '<label style="margin:0"><input type="checkbox" id="pg_toc_'+i+'" '+(p.showToc?'checked':'')+' style="width:auto"> فهرست عنوان‌ها کنار صفحه نشان داده شود</label>'+
+      '<p class="sub">فهرست از روی عنوان‌های خودِ صفحه ساخته می‌شود؛ جایی نباید دوباره بنویسی. با کمتر از دو عنوان نشان داده نمی‌شود.</p>'+
+    '</div>'+
+    '<div class="card" style="background:var(--panel2)"><h3>کارت کنار فهرست</h3>'+
+      '<p class="sub">کارت کوچکی زیر فهرستِ عنوان‌ها. اگر متنش خالی باشد نمایش داده نمی‌شود.</p>'+
+      '<div class="f"><label>متن</label><input id="pg_aside_text_'+i+'" value="'+esc((p.asideCta||{}).text||'')+'"></div>'+
+      '<div class="grid2">'+
+        '<div class="f"><label>متن دکمه</label><input id="pg_aside_label_'+i+'" value="'+esc((p.asideCta||{}).label||'')+'"></div>'+
+        '<div class="f"><label>لینک دکمه</label><input id="pg_aside_href_'+i+'" value="'+esc((p.asideCta||{}).href||'')+'"></div>'+
+      '</div>'+
+      '<div class="f"><label>کاراکتر</label><select id="pg_aside_character_'+i+'">'+
+        '<option value="">— بدون کاراکتر —</option>'+
+        CHARACTERS.map((c)=>'<option value="'+esc(c)+'"'+((p.asideCta||{}).character===c?' selected':'')+'>'+esc(c.replace(/^char-|\.(png|webp)$/g,''))+'</option>').join('')+
+      '</select></div>'+
+    '</div>'+
+    '<div class="card" style="background:var(--panel2)"><h3>لینک‌های مرتبط</h3>'+
+      '<p class="sub">پای صفحه. هر خط یکی، به این شکل: <b>عنوان | نشانی | زیرنویس</b> — زیرنویس اختیاری است.</p>'+
+      '<div class="f"><textarea id="pg_rel_'+i+'" class="mono" style="min-height:70px">'+
+        esc((p.related||[]).map((r)=>[r.title,r.href,r.meta].filter(Boolean).join(' | ')).join('\\n'))+'</textarea></div>'+
+    '</div>'+
+    '<div class="card" style="background:var(--panel2)"><h3>باند پایان صفحه</h3>'+
+      '<p class="sub">نوار تیرهٔ آخر صفحه. عنوان که خالی باشد، اصلاً نمایش داده نمی‌شود.</p>'+
+      '<div class="f"><label>عنوان</label><input id="pg_cta_title_'+i+'" value="'+esc((p.cta||{}).title||'')+'"></div>'+
+      '<div class="f"><label>زیرعنوان</label><input id="pg_cta_subtitle_'+i+'" value="'+esc((p.cta||{}).subtitle||'')+'"></div>'+
+      '<div class="grid2">'+
+        '<div class="f"><label>متن دکمه</label><input id="pg_cta_label_'+i+'" value="'+esc((p.cta||{}).label||'')+'"></div>'+
+        '<div class="f"><label>لینک دکمه</label><input id="pg_cta_href_'+i+'" value="'+esc((p.cta||{}).href||'')+'"></div>'+
+      '</div>'+
+      '<div class="f"><label>کاراکتر</label><select id="pg_cta_character_'+i+'">'+
+        '<option value="">— بدون کاراکتر —</option>'+
+        CHARACTERS.map((c)=>'<option value="'+esc(c)+'"'+((p.cta||{}).character===c?' selected':'')+'>'+esc(c.replace(/^char-|\.(png|webp)$/g,''))+'</option>').join('')+
+      '</select></div>'+
+    '</div>'+
     '<h3 style="margin:16px 0 8px">بلوک‌های محتوا</h3>'+
     (p.blocks||[]).map((b,bi)=>blockEditor(b,i,bi)).join('')+
     '<div class="row" style="margin:10px 0">'+
@@ -377,25 +436,49 @@ function blockEditor(b,i,bi){
   const id=(k)=>'bk_'+i+'_'+bi+'_'+k;
   const t=(lbl,k)=>'<div class="f"><label>'+lbl+'</label><input id="'+id(k)+'" value="'+esc(b[k]||'')+'"></div>';
   let inner='';
+  /* A character on a card or a callout: the artwork the design ships, or
+     anything already uploaded. Named, so nobody has to remember a filename. */
+  const charPick=(elId,val)=>'<div class="f"><label>کاراکتر</label><select id="'+elId+'">'+
+    '<option value="">— بدون کاراکتر —</option>'+
+    CHARACTERS.map((c)=>'<option value="'+esc(c)+'"'+(val===c?' selected':'')+'>'+esc(c.replace(/^char-|\.(png|webp)$/g,''))+'</option>').join('')+
+    '</select></div>';
+
   if(b.kind==='hero'||b.kind==='cta'){
     inner=t('عنوان','title')+(b.kind==='hero'?t('زیرعنوان','subtitle'):'<div class="f"><label>متن</label><textarea id="'+id('body')+'" style="min-height:60px">'+esc(b.body||'')+'</textarea></div>')+
       '<div class="grid2">'+t('متن دکمه','ctaText')+t('لینک دکمه','ctaHref')+'</div>'+
-      (b.kind==='hero'?'<div class="grid2">'+t('متن دکمهٔ دوم','ctaText2')+t('لینک دکمهٔ دوم','ctaHref2')+'</div>':'');
+      '<div class="grid2">'+t('متن دکمهٔ دوم','ctaText2')+t('لینک دکمهٔ دوم','ctaHref2')+'</div>'+
+      (b.kind==='cta'?charPick(id('character'),b.character||''):'');
   } else if(b.kind==='text'){
     inner=t('عنوان','title')+'<div class="f"><label>متن — هر خط یک پاراگراف</label><textarea id="'+id('body')+'">'+esc(b.body||'')+'</textarea></div>';
+  } else if(b.kind==='heading'){
+    inner=t('عنوان','title')+
+      '<p class="sub">عنوان بخش. در فهرستِ کنارِ صفحه هم همین نوشته می‌آید.</p>';
+  } else if(b.kind==='callout'){
+    inner=t('عنوان','title')+
+      '<div class="f"><label>متن</label><textarea id="'+id('body')+'" style="min-height:60px">'+esc(b.body||'')+'</textarea></div>'+
+      charPick(id('character'),b.character||'');
   } else if(ITEM_KINDS.indexOf(b.kind)>=0){
     inner=t('عنوان بخش','title')+
       (b.items||[]).map((it,ii)=>{
         const iid=(k)=>'it_'+i+'_'+bi+'_'+ii+'_'+k;
+        const del='<button class="btn bad sm" onclick="delItem('+i+','+bi+','+ii+')">حذف</button></div>';
         if(b.kind==='faq') return '<div class="item"><div class="f"><label>پرسش</label><input id="'+iid('q')+'" value="'+esc(it.q||'')+'"></div>'+
           '<div class="f"><label>پاسخ</label><textarea id="'+iid('a')+'" style="min-height:56px">'+esc(it.a||'')+'</textarea></div>'+
-          '<button class="btn bad sm" onclick="delItem('+i+','+bi+','+ii+')">حذف</button></div>';
+          '<label style="margin:0"><input type="checkbox" id="'+iid('open')+'" '+(it.open?'checked':'')+' style="width:auto"> از اول باز باشد</label>'+del;
+        if(b.kind==='list') return '<div class="item"><div class="f"><label>خط</label><input id="'+iid('text')+'" value="'+esc(it.text||'')+'"></div>'+del;
+        if(b.kind==='tiles') return '<div class="item">'+
+          '<div class="grid2"><div class="f"><label>آیکون (ایموجی)</label><input id="'+iid('icon')+'" value="'+esc(it.icon||'')+'"></div>'+
+          '<div class="f"><label>عنوان</label><input id="'+iid('title')+'" value="'+esc(it.title||'')+'"></div></div>'+
+          '<div class="grid2"><div class="f"><label>زیرنویس کوچک</label><input id="'+iid('meta')+'" value="'+esc(it.meta||'')+'"></div>'+
+          '<div class="f"><label>لینک</label><input id="'+iid('href')+'" value="'+esc(it.href||'')+'"></div></div>'+del;
         return '<div class="item">'+
           (b.kind!=='steps'?'<div class="f"><label>آیکون (ایموجی)</label><input id="'+iid('icon')+'" value="'+esc(it.icon||'')+'" style="width:90px"></div>':'')+
           '<div class="f"><label>عنوان</label><input id="'+iid('title')+'" value="'+esc(it.title||'')+'"></div>'+
           (b.kind==='stats'?'<div class="f"><label>عدد</label><input id="'+iid('value')+'" value="'+esc(it.value||'')+'"></div>':
             '<div class="f"><label>متن</label><textarea id="'+iid('text')+'" style="min-height:56px">'+esc(it.text||'')+'</textarea></div>')+
-          '<button class="btn bad sm" onclick="delItem('+i+','+bi+','+ii+')">حذف</button></div>';
+          (b.kind==='cards'?charPick(iid('character'),it.character||'')+
+            '<label style="margin:0"><input type="checkbox" id="'+iid('highlight')+'" '+(it.highlight?'checked':'')+' style="width:auto"> این کارت برجسته باشد</label>':'')+
+          del;
       }).join('')+
       '<button class="btn sm" onclick="addItem('+i+','+bi+')">＋ مورد جدید</button>';
   }
@@ -414,13 +497,39 @@ function syncPage(i){
   });
   const sh=document.getElementById('pg_show_'+i), pu=document.getElementById('pg_pub_'+i), nx=document.getElementById('pg_nox_'+i);
   if(sh)p.showInNav=sh.checked; if(pu)p.published=pu.checked; if(nx)p.noindex=nx.checked;
+  /* The page's own hero and trimmings. */
+  ['kicker','intro','heroCharacter'].forEach((k)=>{
+    const el=document.getElementById('pg_'+k+'_'+i); if(el) p[k]=el.value;
+  });
+  const toc=document.getElementById('pg_toc_'+i); if(toc) p.showToc=toc.checked;
+  const ml=document.getElementById('pg_meta_'+i);
+  if(ml) p.metaLine=ml.value.split('\\n').map((x)=>x.trim()).filter(Boolean);
+  const grab=(prefix,keys)=>{
+    const o={}; let any=false;
+    keys.forEach((k)=>{ const el=document.getElementById(prefix+k+'_'+i); if(el){ o[k]=el.value; if(el.value.trim()) any=true; } });
+    return any?o:null;
+  };
+  p.cta=grab('pg_cta_',['title','subtitle','label','href','character']);
+  p.asideCta=grab('pg_aside_',['text','label','href','character']);
+  const rel=document.getElementById('pg_rel_'+i);
+  if(rel){
+    /* One link per line: «عنوان | نشانی | زیرنویس». A line that is not that is
+       skipped rather than saved as a link to nowhere. */
+    p.related=rel.value.split('\\n').map((line)=>{
+      const bits=line.split('|').map((x)=>x.trim());
+      return (bits[0]&&bits[1])?{title:bits[0],href:bits[1],meta:bits[2]||''}:null;
+    }).filter(Boolean);
+  }
   (p.blocks||[]).forEach((b,bi)=>{
-    ['title','subtitle','body','ctaText','ctaHref','ctaText2','ctaHref2'].forEach((k)=>{
+    ['title','subtitle','body','ctaText','ctaHref','ctaText2','ctaHref2','character'].forEach((k)=>{
       const el=document.getElementById('bk_'+i+'_'+bi+'_'+k); if(el) b[k]=el.value;
     });
     (b.items||[]).forEach((it,ii)=>{
-      ['icon','title','text','q','a','value'].forEach((k)=>{
+      ['icon','title','text','q','a','value','href','meta','character'].forEach((k)=>{
         const el=document.getElementById('it_'+i+'_'+bi+'_'+ii+'_'+k); if(el) it[k]=el.value;
+      });
+      ['open','highlight'].forEach((k)=>{
+        const el=document.getElementById('it_'+i+'_'+bi+'_'+ii+'_'+k); if(el) it[k]=el.checked;
       });
     });
   });
@@ -531,21 +640,75 @@ function renderSeo(){
       '<div class="f"><label>تگ تأیید گوگل سرچ کنسول</label><textarea id="st_googleVerification" class="mono" style="min-height:56px">'+esc(s.googleVerification||'')+'</textarea></div>'+
       '<div class="f"><label>کد نماد اعتماد الکترونیکی (اینماد)</label><textarea id="st_enamadHtml" class="mono" style="min-height:80px">'+esc(s.enamadHtml||'')+'</textarea></div>'+
     '</div>'+
-    '<div class="card"><h3>پانویس و وضعیت</h3>'+
-      f('متن پانویس','footerNote')+
+    '<div class="card"><h3>هدر و دکمه‌ها</h3>'+
+      '<p class="sub">نوشتهٔ روی دکمه‌های بالای هر صفحه. اگر «ورود» را خالی بگذاری، آن دکمه اصلاً نمایش داده نمی‌شود.</p>'+
+      '<div class="grid2">'+f('متن دکمهٔ بازی','ctaPlay')+f('متن دکمهٔ ورود','ctaLogin')+'</div>'+
+      '<div class="grid2">'+f('نشانی ورود','loginUrl')+f('نشانی راهنمای بازی','howToPlayUrl')+'</div>'+
+      f('نشانی فهرست موضوع‌ها','topicsUrl')+
+    '</div>'+
+    /* ── the words the template used to say for itself ──────────────────
+       Each of these was written into the page. They read as furniture right
+       up until somebody wants one changed, and then they were a deploy. */
+    '<div class="card"><h3>واژه‌های ثابت سایت</h3>'+
+      '<p class="sub">این‌ها نوشته‌هایی هستند که خودِ قالب می‌گوید — نه محتوای صفحه. هرکدام را خالی بگذاری، همان تکه حذف می‌شود.</p>'+
+      '<div class="grid2">'+f('«خانه» در مسیر صفحه','labelHome')+f('«وبلاگ» در مسیر صفحه','labelBlog')+'</div>'+
+      '<div class="grid2">'+f('عنوان فهرستِ کنار صفحه','labelToc')+f('عنوان لینک‌های مرتبط','labelRelated')+'</div>'+
+      '<div class="grid2">'+f('وقتی مقاله‌ای نیست','labelNoPosts')+f('عنوان «مقاله‌های دیگر»','labelMoreArticles')+'</div>'+
+    '</div>'+
+    '<div class="card"><h3>باند پایان مقاله‌ها</h3>'+
+      '<p class="sub">نوار تیره‌ای که پای هر مقالهٔ وبلاگ می‌آید. عنوان که خالی باشد، اصلاً نمایش داده نمی‌شود.</p>'+
+      '<div class="grid2">'+f('عنوان','postCtaTitle')+f('متن دکمه','postCtaLabel')+'</div>'+
+      f('زیرعنوان','postCtaSubtitle')+
+    '</div>'+
+    '<div class="card"><h3>صفحهٔ «پیدا نشد» (۴۰۴)</h3>'+
+      '<div class="grid2">'+f('عنوان','notFoundTitle')+f('متن دکمه','notFoundLabel')+'</div>'+
+      f('متن','notFoundText')+
+    '</div>'+
+    '<div class="card"><h3>فوتر</h3>'+
+      f('متن زیر لوگو','footerAbout')+
+      '<div class="grid2">'+f('کپی‌رایت','copyright')+f('متن پانویس','footerNote')+'</div>'+
+      '<div class="f"><label>ستون‌های فوتر</label>'+
+        '<textarea id="st_footerColumns" class="mono" style="min-height:150px">'+esc(footerColumnsText(s.footerColumns))+'</textarea>'+
+        '<p class="sub" style="margin:4px 0 0">هر ستون با یک خطِ <b>=عنوان ستون</b> شروع می‌شود و زیرش هر لینک یک خط: <b>نام | نشانی</b>. تعداد ستون‌ها آزاد است؛ خالی که باشد، فوتر ستونی ندارد.</p>'+
+      '</div>'+
+    '</div>'+
+    '<div class="card"><h3>وضعیت</h3>'+
       '<label style="margin:0"><input type="checkbox" id="st_enabled" '+(s.enabled!==false?'checked':'')+' style="width:auto"> سایت روشن باشد</label>'+
       '<p class="sub">خاموش‌کردن سایت هیچ اثری روی بازی ندارد — دو سرویس جدا هستند.</p>'+
     '</div>'+
     '<button class="btn pri" onclick="saveSeo()">💾 ذخیرهٔ تنظیمات</button>';
 }
+/* «=عنوان» starts a column, «نام | نشانی» is a link under it. Text rather than
+   a nested editor because a footer is three columns of four links and a
+   textarea is faster to fix than eight buttons. */
+function footerColumnsText(cols){
+  return (cols||[]).map((c)=>'='+(c.title||'')+'\\n'+(c.links||[]).map((l)=>(l.label||'')+' | '+(l.href||'')).join('\\n')).join('\\n\\n');
+}
+function parseFooterColumns(text){
+  const out=[]; let cur=null;
+  String(text||'').split('\\n').forEach((raw)=>{
+    const line=raw.trim();
+    if(!line) return;
+    if(line[0]==='='){ cur={title:line.slice(1).trim(),links:[]}; out.push(cur); return; }
+    if(!cur){ cur={title:'',links:[]}; out.push(cur); }
+    const bits=line.split('|').map((x)=>x.trim());
+    if(bits[0]&&bits[1]) cur.links.push({label:bits[0],href:bits[1]});
+  });
+  return out.filter((c)=>c.title&&c.links.length);
+}
+
 async function saveSeo(){
   const s={};
-  ['siteName','tagline','baseUrl','keywords','logoEmoji','ogImage','playUrl','homePath','androidUrl','iosUrl',
-   'bazaarUrl','myketUrl','email','phone','address','telegram','instagram','twitter','footerNote']
-    .forEach((k)=>{ const el=document.getElementById('st_'+k); if(el) s[k]=el.value; });
-  ['description','googleVerification','enamadHtml'].forEach((k)=>{
-    const el=document.getElementById('st_'+k); if(el) s[k]=el.value; });
-  const en=document.getElementById('st_enabled'); if(en) s.enabled=en.checked;
+  /* EVERY st_ field on the page, not a list written out again here. The list
+     had already been left behind once: a setting added to the form was edited,
+     saved, and silently thrown away because its key was not in this array. */
+  document.querySelectorAll('[id^="st_"]').forEach((el)=>{
+    const k=el.id.slice(3);
+    if(k==='footerColumns') return;              // parsed below
+    if(el.type==='checkbox') s[k]=el.checked; else s[k]=el.value;
+  });
+  const fc=document.getElementById('st_footerColumns');
+  if(fc) s.footerColumns=parseFooterColumns(fc.value);
   try{ await api('PUT','settings',s); toast('ذخیره شد ✅'); await loadAll(); }catch(e){ toast(e.message,true); }
 }
 

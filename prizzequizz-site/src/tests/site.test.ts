@@ -16,11 +16,13 @@
  * Run: npx tsx src/tests/site.test.ts */
 import assert from 'node:assert/strict';
 import {
+  BLOCK_KINDS,
   SETTINGS_DEFAULTS, SiteError, deletePage, getSettings, listPages, listPosts,
   normaliseSlug, savePage, savePost, saveSettings, _resetSiteMemory
 } from '../content.js';
 import { esc, faDate, renderPage, renderPost, renderRobots, renderSitemap } from '../render.js';
 import { adminHtml } from '../adminUi.js';
+import { getAsset, listCharacters } from '../assets.js';
 import { MEDIA_MAX_BYTES, deleteMedia, getMediaBytes, listMedia, saveMedia, _resetMedia } from '../media.js';
 
 let passed = 0, failed = 0;
@@ -594,6 +596,129 @@ async function run(): Promise<void> {
     const fn = /async function uploadMedia\(\)\{[\s\S]*?\n\}/.exec(script)![0];
     assert.match(fn, /toWebp\(f\)/, 'uploadMedia must convert before posting');
     assert.doesNotMatch(fn, /data:\s*await readAsDataUrl\(f\)/, 'the raw-file upload is gone');
+  });
+
+  /* ══ THE REDESIGN ═══════════════════════════════════════════════════════
+     «طوری تنظیم کن همش کار کنه و طوری باشه که تمام متن‌هاشو من از site-admin
+      بتونم تنظیم کنم و تغییر بدم.»
+
+     Two things can quietly go wrong when a design is dropped onto a site, and
+     neither one shows up as an error: copy gets written into the template
+     where nobody can reach it, and the markup asks for class names the
+     stylesheet has never heard of. Both render perfectly and are wrong. */
+
+  await check('every setting has a field in the panel', () => {
+    const html = adminHtml();
+    const js = /<script>([\s\S]*?)<\/script>/.exec(html)?.[1] ?? '';
+    assert.ok(js.length > 1000, 'the panel carries no script');
+    /* Fields are declared either through the f('label','key') helper or with
+       an id written out; both count, nothing else does. */
+    const viaHelper = new Set([...js.matchAll(/f\('[^']*','([A-Za-z0-9]+)'/g)].map((x) => x[1]!));
+    const viaId = new Set([...js.matchAll(/id="st_([A-Za-z0-9]+)"/g)].map((x) => x[1]!));
+    const editable = new Set([...viaHelper, ...viaId]);
+    const missing = Object.keys(SETTINGS_DEFAULTS).filter((k) => !editable.has(k) && k !== 'updatedAt');
+    assert.deepEqual(missing, [], 'these can only be changed by a deploy: ' + missing.join(', '));
+  });
+
+  await check('and the panel script actually parses', () => {
+    const js = /<script>([\s\S]*?)<\/script>/.exec(adminHtml())?.[1] ?? '';
+    new Function(js);          // throws a SyntaxError if it does not
+  });
+
+  await check('every block kind can be added from the panel', () => {
+    const js = /<script>([\s\S]*?)<\/script>/.exec(adminHtml())?.[1] ?? '';
+    const m = /const BLOCK_LABEL=(\{.*?\});/.exec(js);
+    assert.ok(m, 'the panel has no block list');
+    const labels = JSON.parse(m![1]!) as Record<string, string>;
+    /* The panel used to keep its own copy of this list. A kind added to the
+       type showed up in the editor, saved, and was dropped on the way to the
+       database with nothing said. */
+    assert.deepEqual(Object.keys(labels).sort(), [...BLOCK_KINDS].sort(),
+      'the panel and the content model disagree about what a block can be');
+    for (const [kind, label] of Object.entries(labels)) {
+      assert.ok(/[آ-ی]/.test(label), kind + ' has no Persian name');
+    }
+  });
+
+  await check('a new block kind survives being saved', async () => {
+    _resetSiteMemory();
+    await savePage({
+      slug: 'kinds', title: 'انواع',
+      blocks: [{ kind: 'callout', title: 'نکته', body: 'متن' },
+               { kind: 'tiles', title: 'کاشی', items: [{ title: 'الف', href: '/a', meta: '۱۰' }] },
+               { kind: 'list', title: 'فهرست', items: [{ text: 'یک' }] },
+               { kind: 'heading', title: 'سرفصل' }] as any
+    });
+    const page = (await listPages()).find((p) => p.slug === 'kinds')!;
+    assert.deepEqual(page.blocks.map((b) => b.kind), ['callout', 'tiles', 'list', 'heading'],
+      'a kind was dropped between the editor and the store');
+    const tile = page.blocks[1]!.items![0]!;
+    assert.equal(tile.href, '/a', 'a tile lost its link');
+    assert.equal(tile.meta, '۱۰', 'a tile lost its caption');
+  });
+
+  await check('the page hero and its trimmings survive being saved', async () => {
+    _resetSiteMemory();
+    await savePage({
+      slug: 'hero', title: 'سربرگ',
+      kicker: 'راهنما', intro: 'مقدمه', heroCharacter: 'char-hero.png',
+      metaLine: ['۵ دقیقه', 'مهر ۱۴۰۳'], showToc: true,
+      asideCta: { text: 'بزن بریم', label: 'بازی', href: '/play' },
+      related: [{ title: 'قوانین', href: '/terms', meta: 'خواندنی' }],
+      cta: { title: 'شروع کن', subtitle: 'همین حالا', label: 'بازی', href: '/play' }
+    } as any);
+    const page = (await listPages()).find((p) => p.slug === 'hero')!;
+    assert.equal(page.kicker, 'راهنما');
+    assert.equal(page.intro, 'مقدمه');
+    assert.equal(page.showToc, true);
+    assert.deepEqual(page.metaLine, ['۵ دقیقه', 'مهر ۱۴۰۳']);
+    assert.equal(page.asideCta?.label, 'بازی');
+    assert.equal(page.related?.[0]?.href, '/terms');
+    assert.equal(page.cta?.title, 'شروع کن');
+  });
+
+  await check('every class the site renders is one the stylesheet defines', async () => {
+    _resetSiteMemory();
+    const pages = await listPages(); const posts = await listPosts(); const s = await getSettings();
+    const html = [
+      ...pages.map((p) => renderPage(p, pages, s, posts)),
+      ...(posts.length ? [renderPost(posts[0]!, pages, s, posts)] : [])
+    ].join('\n');
+    const css = getAsset('pq.css');
+    assert.ok(css, 'the stylesheet is not being served');
+    const defined = new Set([...css!.body.toString('utf8').matchAll(/\.([a-zA-Z][\w-]*)/g)].map((m) => m[1]!));
+    const used = new Set<string>();
+    for (const m of html.matchAll(/class="([^"]+)"/g)) for (const c of m[1]!.split(/\s+/)) if (c) used.add(c);
+    const unknown = [...used].filter((c) => !defined.has(c)).sort();
+    /* A class the stylesheet has never heard of renders as nothing — the page
+       looks broken and no error is raised anywhere. */
+    assert.deepEqual(unknown, [], 'these have no styling: ' + unknown.join(', '));
+  });
+
+  await check('the design ships its stylesheet and its characters', () => {
+    assert.ok(getAsset('pq.css'), 'no stylesheet');
+    assert.ok(getAsset('logo.png'), 'no logo');
+    assert.ok(listCharacters().length >= 8, 'only ' + listCharacters().length + ' characters');
+    /* A static route that serves whatever the URL asks for is how one reads
+       /etc/passwd. */
+    assert.equal(getAsset('../../etc/passwd'), null, 'the asset route escapes its folder');
+    assert.equal(getAsset('pq.css/../../secret'), null, 'the asset route escapes its folder');
+    assert.equal(getAsset('server.ts'), null, 'the asset route serves source files');
+  });
+
+  await check('the pages still carry their SEO after the redesign', async () => {
+    _resetSiteMemory();
+    const pages = await listPages(); const posts = await listPosts(); const s = await getSettings();
+    for (const p of pages) {
+      const html = renderPage(p, pages, s, posts);
+      assert.equal(count(html, /<title>/g), 1, p.slug + ' has no title');
+      assert.equal(count(html, /<link rel="canonical"/g), 1, p.slug + ' has no canonical');
+      assert.equal(count(html, /<meta name="description"/g), 1, p.slug + ' has no description');
+      assert.ok(/<meta property="og:title"/.test(html), p.slug + ' lost its og tags');
+      assert.ok(/lang="fa" dir="rtl"/.test(html), p.slug + ' lost its direction');
+    }
+    const home = renderPage(pages.find((p) => p.slug === 'home')!, pages, s, posts);
+    assert.ok(ldBlocks(home).length >= 2, 'the home page lost its structured data');
   });
 
   console.log(`[site] ${passed} passed, ${failed} failed`);
