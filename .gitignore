@@ -10,6 +10,11 @@ dist/
 # already in this history, which is thirteen copies too many.
 pz-dist-contents.tgz
 
+# The site bundle, packaged for deploy: `prizzequizz-site/dist` plus the
+# design's `assets/`. Same story as pz-dist-contents.tgz — regenerated from
+# source on every deploy, and 1.2MB of binary that changes wholesale each time.
+pz-site-contents.tgz
+
 # The hand-off bundle: a full `git bundle --all`, rebuilt for every delivery.
 # Committing it would store a copy of the whole repository inside the
 # repository, and a new 12MB blob every time one is sent.
