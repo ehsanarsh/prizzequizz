@@ -15,6 +15,12 @@ pz-dist-contents.tgz
 # source on every deploy, and 1.2MB of binary that changes wholesale each time.
 pz-site-contents.tgz
 
+# The same bundle packed the way the SERVER actually reads it — with the
+# `dist/` prefix, because the container runs `node /app/dist/server.js` and a
+# flat extract lands a level too high and is silently ignored. See
+# deploy/UPDATE.md. Build artifact either way; not committed.
+pz-site-dist.tgz
+
 # The hand-off bundle: a full `git bundle --all`, rebuilt for every delivery.
 # Committing it would store a copy of the whole repository inside the
 # repository, and a new 12MB blob every time one is sent.
