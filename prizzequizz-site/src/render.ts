@@ -119,6 +119,27 @@ function assetUrl(name: string): string {
   return '/site-assets/' + v;
 }
 
+/* THE LOGO, in one place.
+ *
+ * It used to be `assetUrl(s.ogImage.startsWith('/media/') ? '' : 'logo.png')`,
+ * which tied the header's logo to whether the social-share image happened to be
+ * an upload — two unrelated things. On any install where the operator had
+ * uploaded an OG image the header simply had no logo, which is what «اصلا
+ * لوگوی بازی وجود نداره» was.
+ *
+ * `onerror` is not decoration either: the real logo lives in the picture
+ * library, and a URL into a library is a thing that can be deleted. The shipped
+ * mark is always on disk, so a missing upload costs a nicer logo rather than
+ * leaving a broken-image icon in the header of every page. */
+const FALLBACK_LOGO = '/site-assets/logo.png';
+function logoImg(s: SiteSettings, style: string, cls = ''): string {
+  const src = assetUrl(s.logoUrl || 'logo.png') || FALLBACK_LOGO;
+  const onerr = src === FALLBACK_LOGO ? ''
+    : ` onerror="this.onerror=null;this.src='${FALLBACK_LOGO}'"`;
+  return `<img${cls ? ` class="${esc(cls)}"` : ''} src="${esc(src)}" alt="${esc(s.siteName)}"`
+    + `${style ? ` style="${style}"` : ''}${onerr}>`;
+}
+
 function head(o: {
   title: string; description: string; keywords: string; canonical: string;
   ogImage: string; noindex: boolean; s: SiteSettings; ldJson: string[]; type?: string;
@@ -163,9 +184,8 @@ function nav(pages: SitePage[], current: string, s: SiteSettings): string {
       const cur = p.slug === current ? ' aria-current="page"' : '';
       return `<li><a href="${esc(url)}" data-nav="${esc(p.slug)}"${cur}>${esc(p.navLabel || p.title)}</a></li>`;
     }).join('');
-  const logo = assetUrl(s.ogImage && s.ogImage.startsWith('/media/') ? '' : 'logo.png');
   return `<header class="site-header"><nav class="nav" aria-label="منوی اصلی">
-  <a class="logo" href="${esc(homeUrl(s))}">${logo ? `<img src="${esc(logo)}" alt="${esc(s.siteName)}">` : ''}<span>${esc(s.siteName)}</span></a>
+  <a class="logo" href="${esc(homeUrl(s))}">${logoImg(s, '')}<span>${esc(s.siteName)}</span></a>
   <span class="rule"></span>
   <ul class="nav-links">${items}</ul>
   <div class="nav-cta">
@@ -192,11 +212,11 @@ function footer(pages: SitePage[], s: SiteSettings): string {
     s.instagram && `<a href="${esc(s.instagram)}" rel="noopener">اینستاگرام</a>`,
     s.twitter && `<a href="${esc(s.twitter)}" rel="noopener">ایکس</a>`
   ].filter(Boolean).join(' · ');
-  const logo = assetUrl('logo.png');
+
   return `<footer class="site-footer"><div class="wrap">
   <div class="fgrid">
     <div>
-      <div class="brand">${logo ? `<img src="${esc(logo)}" alt="">` : ''}<span>${esc(s.siteName)}</span></div>
+      <div class="brand">${logoImg(s, '')}<span>${esc(s.siteName)}</span></div>
       <p>${esc(s.footerAbout || s.tagline)}</p>
       ${social ? `<p style="margin-top:10px">${social}</p>` : ''}
       ${s.email ? `<p style="margin-top:10px"><a href="mailto:${esc(s.email)}">${esc(s.email)}</a></p>` : ''}
@@ -500,6 +520,22 @@ function pageHero(page: SitePage, pages: SitePage[], s: SiteSettings, live: Live
      the words on one side, the game's live numbers on the other. Every other
      page keeps the simple centred hero with its character. */
   const panels = isHome ? livePanels(live, s) : '';
+  /* THE LOGO, BIG, ON THE HOME PAGE.
+   *
+   * «در بهترین جای صفحات باید به صورت بزرگ دیده بشه» — and the best place on a
+   * marketing site is the first thing above the headline, not a 40px mark in
+   * the corner. Only the home page: repeating it at this size on every inner
+   * page would push the actual subject of the page below the fold.
+   *
+   * The height is a setting, and 0 turns it off — an operator whose logo is a
+   * wide wordmark rather than a badge will want a different number, and that
+   * should not be a deploy. */
+  const bigH = Math.max(0, Math.round(Number(s.logoHeroHeight) || 0));
+  const heroLogo = (isHome && bigH > 0)
+    ? logoImg(s, `height:clamp(${Math.round(bigH * 0.62)}px,9vw,${bigH}px);width:auto;`
+        + 'max-width:100%;display:block;margin-bottom:18px;'
+        + 'filter:drop-shadow(0 18px 22px rgba(20,21,26,.18))')
+    : '';
   const layout = panels
     ? 'class="hero-split"'
     : 'style="display:flex;align-items:center;justify-content:space-between;gap:40px;padding-bottom:40px"';
@@ -507,8 +543,9 @@ function pageHero(page: SitePage, pages: SitePage[], s: SiteSettings, live: Live
     ${crumbs}
     <div ${layout}>
       <div>
+        ${heroLogo}
         ${page.kicker ? `<span class="kicker">${esc(page.kicker)}</span>` : ''}
-        <h1${page.kicker ? ' style="margin-top:14px"' : ''}>${esc(page.title)}</h1>
+        <h1${(page.kicker || heroLogo) ? ' style="margin-top:14px"' : ''}>${esc(page.title)}</h1>
         ${page.intro ? `<p class="lead" style="margin-top:18px">${esc(page.intro)}</p>` : ''}
         ${meta.length ? `<div class="meta">${meta.map((m, i) =>
           `<span>${esc(m)}</span>${i < meta.length - 1 ? '<span class="sep"></span>' : ''}`).join('')}</div>` : ''}

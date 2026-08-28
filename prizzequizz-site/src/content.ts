@@ -218,6 +218,15 @@ export interface SiteSettings {
      but everything wrapped around them is, including switching a panel off
      by clearing its title.
      `liveWinnerVerb` is a sentence with two slots: {name} and {mode}. */
+  /* ── THE LOGO ────────────────────────────────────────────────────────
+     A setting, not a file baked into the template, because the mark that
+     ships with the design is a placeholder and the real one is something the
+     operator uploaded. Either a /media/… URL from the picture library or the
+     bare name of a shipped asset; empty falls back to the shipped mark so the
+     header is never left with a hole in it. */
+  logoUrl: string;
+  /** How tall the big logo is on the home page, in pixels. 0 hides it. */
+  logoHeroHeight: number;
   liveLeaderTitle: string;
   liveLeaderPeriod: string;
   livePulseLabel: string;
@@ -398,6 +407,8 @@ export const SETTINGS_DEFAULTS: SiteSettings = {
   postCtaTitle: 'امتحانش کن',
   postCtaSubtitle: 'همین سؤال‌ها را در دوئل با یک بازیکن واقعی بازی کن.',
   postCtaLabel: 'شروع بازی',
+  logoUrl: '/media/mt6bmqa0-gu24xve1',
+  logoHeroHeight: 120,
   liveLeaderTitle: 'صدرنشین‌های این هفته',
   liveLeaderPeriod: 'هفتگی',
   livePulseLabel: 'مسابقه‌های امروز',
@@ -1095,6 +1106,14 @@ export async function saveSettings(patch: Partial<SiteSettings>): Promise<SiteSe
   /* A trailing slash here would produce canonical URLs with a double slash,
    * which search engines treat as a different page. */
   next.baseUrl = String(next.baseUrl ?? '').trim().replace(/\/+$/, '');
+  /* The panel posts every field as a string — it reads them out of inputs — so
+   * the one numeric setting has to be made a number HERE rather than trusted.
+   * Bounded as well as coerced: a mistyped height is a logo that fills the
+   * whole first screen, and the person who typed it is looking at the panel,
+   * not at the page. */
+  const h = Math.round(Number(next.logoHeroHeight));
+  next.logoHeroHeight = Number.isFinite(h) ? Math.max(0, Math.min(400, h)) : SETTINGS_DEFAULTS.logoHeroHeight;
+  next.logoUrl = String(next.logoUrl ?? '').trim().slice(0, 400);
   /* Must stay a site-relative path: it is pasted straight into href and into
    * canonical URLs, so an absolute or scheme-bearing value would point the
    * site's own home somewhere else entirely. */

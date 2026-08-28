@@ -728,6 +728,77 @@ async function run(): Promise<void> {
     assert.ok(ldBlocks(home).length >= 2, 'the home page lost its structured data');
   });
 
+  /* ── THE LOGO ──────────────────────────────────────────────────────────
+   *
+   * It went missing on the live site and the reason was a condition that tied
+   * the header's logo to the social-share image: an operator who uploaded an OG
+   * picture lost the logo on every page. Two unrelated things, one `&&`.
+   */
+  await check('the header logo does not depend on the social-share image', async () => {
+    const pages = await listPages(true);
+    const home = pages.find((p) => p.slug === 'home')!;
+    const withOg = { ...SETTINGS_DEFAULTS, ogImage: '/media/whatever-they-uploaded' };
+    const html = renderPage(home, pages, withOg as any, []);
+    const header = html.slice(0, html.indexOf('</header>'));
+    assert.ok(/<img[^>]+src="[^"]+"[^>]*>/.test(header), 'uploading an OG image removed the logo');
+  });
+
+  await check('the logo comes from its own setting, and reaches header and footer', async () => {
+    const pages = await listPages(true);
+    const home = pages.find((p) => p.slug === 'home')!;
+    const s2 = { ...SETTINGS_DEFAULTS, logoUrl: '/media/my-own-logo' };
+    const html = renderPage(home, pages, s2 as any, []);
+    const header = html.slice(0, html.indexOf('</header>'));
+    const footer = html.slice(html.lastIndexOf('<footer'));
+    assert.ok(header.includes('/media/my-own-logo'), 'the header uses something other than the setting');
+    assert.ok(footer.includes('/media/my-own-logo'), 'the footer uses something other than the setting');
+  });
+
+  await check('the shipped logo is what an empty setting falls back to', async () => {
+    const pages = await listPages(true);
+    const home = pages.find((p) => p.slug === 'home')!;
+    const html = renderPage(home, pages, { ...SETTINGS_DEFAULTS, logoUrl: '' } as any, []);
+    const header = html.slice(0, html.indexOf('</header>'));
+    /* The SRC, not just the string anywhere in the page — the fallback URL also
+       appears inside the onerror handler, so `includes` would pass on a header
+       whose image has src="" and never loads anything. */
+    const src = /<img[^>]*\ssrc="([^"]*)"/.exec(header)?.[1];
+    assert.equal(src, '/site-assets/logo.png', 'an empty logo setting left the header bare');
+  });
+
+  await check('a logo URL that 404s falls back instead of showing a broken image', async () => {
+    const pages = await listPages(true);
+    const home = pages.find((p) => p.slug === 'home')!;
+    const html = renderPage(home, pages, { ...SETTINGS_DEFAULTS, logoUrl: '/media/deleted' } as any, []);
+    assert.ok(/onerror="[^"]*\/site-assets\/logo\.png/.test(html), 'no fallback if the upload is gone');
+  });
+
+  await check('the home page shows the logo big, and the inner pages do not', async () => {
+    const pages = await listPages(true);
+    const home = pages.find((p) => p.slug === 'home')!;
+    const inner = pages.find((p) => p.slug === 'about')!;
+    const big = (h: string) => /height:clamp\(\d+px,9vw,\d+px\)/.test(h);
+    assert.ok(big(renderPage(home, pages, SETTINGS_DEFAULTS, [])), 'the home page has no big logo');
+    assert.ok(!big(renderPage(inner, pages, SETTINGS_DEFAULTS, [])),
+      'an inner page repeats the big logo and pushes its own subject down');
+  });
+
+  await check('the big logo’s height is the operator’s number, and 0 turns it off', async () => {
+    const pages = await listPages(true);
+    const home = pages.find((p) => p.slug === 'home')!;
+    const at = (n: number) => renderPage(home, pages, { ...SETTINGS_DEFAULTS, logoHeroHeight: n } as any, []);
+    assert.ok(at(140).includes('9vw,140px'), 'the height setting is ignored');
+    assert.ok(!/height:clamp\(/.test(at(0)), '0 did not switch the big logo off');
+  });
+
+  await check('a mistyped height cannot fill the screen, and the header logo survives it', async () => {
+    const saved = await saveSettings({ logoHeroHeight: 99999 as any });
+    assert.ok(saved.logoHeroHeight <= 400, 'an absurd height was stored as typed');
+    const asText = await saveSettings({ logoHeroHeight: '96' as any });
+    assert.equal(asText.logoHeroHeight, 96, 'the panel posts strings; it was not made a number');
+    await saveSettings({ logoHeroHeight: SETTINGS_DEFAULTS.logoHeroHeight });
+  });
+
   /* ── THE DEPLOY CONFIG ─────────────────────────────────────────────────
    *
    * nginx picks the FIRST matching regex location in file order, and the

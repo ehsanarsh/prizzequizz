@@ -664,6 +664,12 @@ function renderSeo(){
        The numbers in these come from the live database and are deliberately
        NOT editable — an operator who could type the leaderboard could publish
        a leaderboard that is not true. The words around them are all here. */
+    '<div class="card"><h3>لوگو</h3>'+
+      '<p class="sub">نشانی تصویر لوگو — یا از کتابخانهٔ تصاویر (مثل <b>/media/…</b>) یا نام یکی از فایل‌های همراهِ طراحی. خالی که باشد، لوگوی پیش‌فرضِ طراحی می‌آید. اگر نشانی پیدا نشود، خودش به همان پیش‌فرض برمی‌گردد تا جای خالی نماند.</p>'+
+      f('نشانی لوگو','logoUrl')+
+      '<div class="grid2">'+f('ارتفاع لوگوی بزرگ صفحهٔ اصلی (پیکسل)','logoHeroHeight')+'</div>'+
+      '<p class="sub" style="margin:4px 0 0">لوگو در سربرگ و فوتر همیشه می‌آید؛ این عدد فقط برای نسخهٔ بزرگِ بالای صفحهٔ اصلی است. ۰ یعنی نسخهٔ بزرگ نمایش داده نشود.</p>'+
+    '</div>'+
     '<div class="card"><h3>پنل‌های زندهٔ صفحهٔ اصلی</h3>'+
       '<p class="sub">اعدادِ این بخش‌ها مستقیم از دیتابیس بازی خوانده می‌شوند و قابل تایپ نیستند — فقط نوشته‌های دورشان. عنوان هر بخش را خالی بگذاری، همان بخش حذف می‌شود. تا وقتی داده‌ای نباشد (مثلاً هفتهٔ اول)، خودشان نمایش داده نمی‌شوند.</p>'+
       '<div class="grid2">'+f('عنوان جدول صدرنشین‌ها','liveLeaderTitle')+f('دورهٔ جدول','liveLeaderPeriod')+'</div>'+
