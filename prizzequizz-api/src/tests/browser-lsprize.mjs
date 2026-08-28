@@ -108,16 +108,35 @@ const hero1 = await page.evaluate((after) => {
   const h = document.getElementById('lsPotHero');
   if (!h) return { none: true };
   const num = h.querySelector('.lph-num');
-  return { none: false, fs: getComputedStyle(num).fontSize, start: num.textContent,
+  /* The element is sized for the figure it is climbing to, so that is what to
+     measure. scrollWidth, NOT the rectangle: the card enters on a scale(.35)
+     animation and a measured rectangle taken during it is a third of the real
+     width — which is exactly the reading that made this look broken when it
+     was not. */
+  const was = num.textContent;
+  num.textContent = (0, eval)('lsFa')(after);
+  const finalW = num.scrollWidth;
+  num.textContent = was;
+  /* Height tells one line from two. A wrapped figure measures just as wide as
+     a fitted one, so width alone cannot see the difference — and a prize
+     announcement broken across two lines is not the thing that was asked for. */
+  num.textContent = (0, eval)('lsFa')(after);
+  const finalH = num.offsetHeight;
+  num.textContent = was;
+  return { none: false, fs: getComputedStyle(num).fontSize, start: was, finalW, finalH,
            label: (h.querySelector('.lph-lbl') || {}).textContent || '',
-           w: Math.round(num.getBoundingClientRect().width) };
+           w: num.scrollWidth };
 }, AFTER_ONE);
 ok('the big number arrives in the middle of the screen', hero1.none === false, hero1.none ? 'no hero' : hero1.start);
 /* The player's own take, not the room's pot — «اولین حقی که می‌بره». */
 ok('and it is the player’s own share that is announced', hero1.label === 'سهم تو', hero1.label);
 ok('it opens on what they were already owed', hero1.start === faNum(ENTRY_SHARE), hero1.start + ' vs ' + faNum(ENTRY_SHARE));
-ok('big from the very first announcement', px(hero1.fs) >= 46, hero1.fs);
-ok('it fits the screen', hero1.w <= 390, hero1.w + 'px');
+/* «عدد باید بیاد کل صفحه رو بگیره» — not merely large: across the phone. */
+ok('it takes the width of the screen', hero1.finalW >= 390 * 0.82, hero1.finalW + 'px of 390px');
+ok('without falling off either edge', hero1.finalW <= 390, hero1.finalW + 'px');
+ok('big from the very first announcement', px(hero1.fs) >= 90, hero1.fs);
+ok('on one line, not broken across two', hero1.finalH <= px(hero1.fs) * 1.35,
+  hero1.finalH + 'px tall at ' + hero1.fs);
 
 /* It climbs, turns green, blinks three times, and only then flies home. */
 await page.waitForTimeout(2600);
@@ -159,7 +178,7 @@ for (const e of [1, 2, 3, 4]) {
     const h = document.getElementById('lsPotHero');
     const num = h && h.querySelector('.lph-num');
     return { open: num ? num.textContent : '', fs: num ? parseFloat(getComputedStyle(num).fontSize) : 0,
-             w: num ? Math.round(num.getBoundingClientRect().width) : 0 };
+             w: num ? num.scrollWidth : 0 };
   }, { e, share });
   rounds.push({ e, share, ...got });
   /* Let each announcement finish before the next elimination lands. */
@@ -171,9 +190,66 @@ ok('every elimination announces a bigger figure than the last',
 ok('and each one opens where the previous one ended',
   rounds.slice(1).every((r, i) => r.open === faNum(rounds[i].share)),
   rounds.map((r) => r.open).join(' | '));
-ok('the type never changes size', rounds.every((r) => r.fs === rounds[0].fs),
-  rounds.map((r) => r.fs + 'px').join(' '));
 ok('and never runs off the edge of the phone', rounds.every((r) => r.w <= 390), rounds.map((r) => r.w).join(','));
+
+/* A figure with far more digits must be fitted down, not clipped — that is the
+   whole reason the size is measured rather than declared. */
+const huge = await page.evaluate(() => {
+  (0, eval)('lsPotReset()');
+  window.__s.stats.eliminated = 0; window.__s.me.currentShare = 9000000;
+  (0, eval)('lsLive')(window.__s);
+  window.__s.stats.eliminated = 1; window.__s.me.currentShare = 12750000;
+  (0, eval)('lsLive')(window.__s);
+  const h = document.getElementById('lsPotHero');
+  const num = h && h.querySelector('.lph-num');
+  if (!num) return { none: true };
+  num.textContent = (0, eval)('lsFa')(12750000);
+  return { none: false, w: num.scrollWidth, h: num.offsetHeight, fs: parseFloat(getComputedStyle(num).fontSize) };
+});
+ok('a much longer figure is still on the screen', huge.none === false && huge.w <= 390, huge.none ? 'no hero' : huge.w + 'px');
+ok('and it takes the screen just the same', huge.w >= 390 * 0.82, huge.w + 'px');
+ok('while staying an announcement, not a label', huge.fs >= 38, huge.fs + 'px');
+ok('and a long figure stays on one line too', huge.h <= huge.fs * 1.35, huge.h + 'px tall at ' + huge.fs + 'px');
+
+/* The figures come from toLocaleString('fa-IR'), and which separator that
+   produces is the device's locale data, not ours: a phone whose ICU groups with
+   a SPACE gives a number the browser is free to break in half. Nothing in this
+   suite would ever produce one, so it is fed in deliberately. */
+const spaced = await page.evaluate(() => {
+  const h = document.getElementById('lsPotHero');
+  const num = h && h.querySelector('.lph-num');
+  if (!num) return { none: true };
+  num.textContent = '۱۲ ۷۵۰ ۰۰۰';
+  return { none: false, h: num.offsetHeight, fs: parseFloat(getComputedStyle(num).fontSize) };
+});
+ok('a figure grouped with spaces is not broken across lines',
+  spaced.none === false && spaced.h <= spaced.fs * 1.35,
+  spaced.none ? 'no hero' : spaced.h + 'px tall at ' + spaced.fs + 'px');
+await page.waitForFunction(() => !document.getElementById('lsPotHero'), null, { timeout: 12000 });
+
+console.log('and then it goes to its corner:');
+const corner = await page.evaluate(async () => {
+  (0, eval)('lsPotReset()');
+  window.__s.stats.eliminated = 0; window.__s.me.currentShare = 45000;
+  (0, eval)('lsLive')(window.__s);
+  window.__s.stats.eliminated = 1; window.__s.me.currentShare = 52000;
+  (0, eval)('lsLive')(window.__s);
+  const h = document.getElementById('lsPotHero');
+  const card = h && h.querySelector('.lph-card');
+  const slot = document.getElementById('lsMyShare');
+  if (!card || !slot) return { none: true };
+  const a = card.getBoundingClientRect(), s = slot.getBoundingClientRect();
+  /* Wait for the flight home, then read where it was heading. */
+  await new Promise((r) => setTimeout(r, 5200));
+  return { none: false, startedCentred: Math.abs((a.left + a.width / 2) - 195) < 60,
+           slotLeft: Math.round(s.left), slotHalf: s.left + s.width / 2 < 195,
+           gone: !document.getElementById('lsPotHero'),
+           landed: (document.getElementById('lsMyShare') || {}).textContent };
+});
+ok('it starts in the middle of the screen', corner.none === false && corner.startedCentred, corner.none ? 'no hero' : 'ok');
+ok('and its place is the left corner', corner.slotHalf, 'slot at x=' + corner.slotLeft);
+ok('the big number is gone once it has landed', corner.gone);
+ok('and the figure stays there', corner.landed === faNum(52000), corner.landed);
 
 console.log('the continue/withdraw sheet comes after the announcement, not over it:');
 /* The loop above left an announcement mid-flight; it has to finish before this

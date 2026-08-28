@@ -15,14 +15,14 @@
 در `/site-admin` → تب «تنظیمات سئو» → **نشانی سایت**، دامنهٔ واقعی را با
 `https://` و بدون `/` آخر بنویس؛ مثلاً:
 
-    https://prizzequizz.com
+    https://prizequiz.ir
 
 این یک فیلد، مبنای هر URL در `sitemap.xml` و هر `canonical` است. اگر اشتباه
 باشد، گوگل صفحه‌ها را زیر دامنهٔ اشتباه می‌بیند و هیچ‌کدام ایندکس نمی‌شوند.
 
 بعد از ذخیره، بررسی کن:
 
-    curl -s https://prizzequizz.com/sitemap.xml | head -20
+    curl -s https://prizequiz.ir/sitemap.xml | head -20
 
 باید نشانی‌ها با همان دامنه شروع شوند.
 
@@ -30,7 +30,7 @@
 
 1. به <https://search.google.com/search-console> برو و با حساب گوگل وارد شو.
 2. **Add property** → ستون سمت چپ، **Domain** را انتخاب کن (نه URL prefix).
-3. دامنه را بدون `https://` بنویس: `prizzequizz.com`
+3. دامنه را بدون `https://` بنویس: `prizequiz.ir`
 4. گوگل یک رکورد **TXT** می‌دهد، چیزی شبیه:
    `google-site-verification=xxxxxxxxxxxxxxxxxxxx`
 5. در پنل ثبت دامنه‌ات (همان‌جا که DNS دامنه را مدیریت می‌کنی) یک رکورد TXT
@@ -39,7 +39,7 @@
 
 اگر خواستی مطمئن شوی رکورد نشسته:
 
-    dig +short TXT prizzequizz.com
+    dig +short TXT prizequiz.ir
 
 روش Domain هم `http` و هم `https`، و هم `www` و هم بدون `www` را با هم پوشش
 می‌دهد — که برای این سرور دقیقاً همان چیزی است که می‌خواهی.
@@ -47,24 +47,36 @@
 ### اگر به DNS دسترسی نداری
 
 آن‌وقت property را از نوع **URL prefix** بساز، ولی نشانی را
-`https://prizzequizz.com/home` بده (نه ریشه). بعد تگ HTML را که گوگل می‌دهد،
+`https://prizequiz.ir/home` بده (نه ریشه). بعد تگ HTML را که گوگل می‌دهد،
 کامل — با `<meta ...>` — در `/site-admin` → «تنظیمات سئو» → **تگ تأیید گوگل
 سرچ کنسول** بگذار و ذخیره کن. آن تگ در `<head>` همهٔ صفحه‌های سایت می‌نشیند.
 بررسی:
 
-    curl -s https://prizzequizz.com/home | grep -i google-site-verification
+    curl -s https://prizequiz.ir/home | grep -i google-site-verification
 
 ## قدم ۳ — sitemap را بفرست
 
-در Search Console → منوی چپ → **Sitemaps** → در کادر بنویس:
+**نکته: `sitemap.xml` را از هیچ‌جا نمی‌گیری و جایی آپلود نمی‌کنی.** خودِ سایت
+آن را در لحظه از روی صفحه‌ها و مقاله‌های منتشرشده می‌سازد و روی این نشانی
+سرو می‌کند:
+
+    https://prizequiz.ir/sitemap.xml
+
+قبل از فرستادن، یک بار خودت بازش کن و ببین XML برمی‌گرداند:
+
+    curl -s https://prizequiz.ir/sitemap.xml | head -20
+
+در Search Console → «نقشه‌های سایت» → کادر «آدرس نقشه سایت را وارد کنید» فقط
+همین را بنویس (دامنه خودش جلوی کادر هست، پس نشانی کامل لازم نیست):
 
     sitemap.xml
 
-و **Submit**. وضعیتش باید بعد از چند دقیقه «Success» شود.
+و **ارسال** را بزن. بعد از چند دقیقه وضعیتش باید «موفق / Success» شود و
+«صفحه‌های کشف شده» عددی بزرگ‌تر از صفر نشان دهد.
 
 ## قدم ۴ — robots.txt را چک کن
 
-    curl -s https://prizzequizz.com/robots.txt
+    curl -s https://prizequiz.ir/robots.txt
 
 باید خط `Sitemap:` با دامنهٔ درست داشته باشد و صفحه‌های سایت `Disallow` نشده
 باشند. اگر چیز دیگری برگشت (مثلاً robots.txt قدیمی خودِ بازی)، یعنی nginx
@@ -78,7 +90,7 @@
 بالای Search Console یک کادر جست‌وجو هست (**URL Inspection**). نشانی کامل
 خانهٔ سایت را در آن بزن:
 
-    https://prizzequizz.com/home
+    https://prizequiz.ir/home
 
 بعد **Request Indexing**. همین کار را برای دو سه صفحهٔ مهم‌تر هم بکن. این
 کار جای sitemap را نمی‌گیرد، ولی اولین صفحه‌ها را سریع‌تر وارد صف می‌کند.
@@ -92,7 +104,7 @@
 
 برای اینکه ببینی گوگل چه چیزی از تو دارد:
 
-    site:prizzequizz.com
+    site:prizequiz.ir
 
 را در خودِ گوگل جست‌وجو کن.
 

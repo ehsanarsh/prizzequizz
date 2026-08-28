@@ -5711,17 +5711,26 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
    needs is to be enormous. */
 .ls-pot-hero .lph-card{display:flex;flex-direction:column;align-items:center;gap:2px;
   animation:lphIn .38s cubic-bezier(.2,1.35,.35,1) both}
-.ls-pot-hero .lph-lbl{font-size:12.5px;font-weight:900;color:#e9e2d2;letter-spacing:.4px;
+.ls-pot-hero .lph-lbl{font-size:clamp(13px,4vw,18px);font-weight:900;color:#e9e2d2;letter-spacing:.4px;
   text-shadow:0 2px 6px rgba(0,0,0,.9);opacity:.9}
-/* ONE SIZE, AND IT IS BIG FROM THE FIRST ANNOUNCEMENT. Sized off the screen so
-   a wide phone gets a bigger number than a narrow one, and clamped so a long
-   figure never runs off either. It does not change with the round: the growth
-   the player is meant to feel is in the number itself. */
-.ls-pot-hero .lph-num{font-size:clamp(46px,17vw,80px);font-weight:900;line-height:1.02;color:#FFE24A;
+/* IT TAKES THE WHOLE SCREEN. «عدد باید بیاد کل صفحه رو بگیره، موشن‌هاش اجرا
+   بشه، بعد بره اون گوشهٔ سمت چپ سر جاش بمونه.» So this is the starting size,
+   deliberately larger than any figure needs: lsPotHeroFit measures the final
+   value and settles on the largest size that still fits the phone edge to
+   edge, once, before the climb starts — so the digits never resize while they
+   are counting. One size for the whole match; what grows is the figure. */
+.ls-pot-hero .lph-num{font-size:min(30vw,170px);font-weight:900;line-height:1.02;color:#FFE24A;
+  /* NO `white-space:nowrap` HERE, and it is not an oversight. The card is a
+     column flex with align-items:center, so this element is laid out at its
+     max-content width and has no narrower box to wrap into — it overflows
+     instead, which is what makes scrollWidth below the true width of the text.
+     A nowrap was tried here and removed: nothing, including a figure grouped
+     with spaces, could be made to break. The one-line assertions in
+     browser-lsprize hold that property whatever the reason for it. */
   letter-spacing:-1px;
   /* Readable over whatever the room is showing behind it, without a panel. */
   text-shadow:0 4px 0 #000,0 0 10px rgba(0,0,0,.95),0 0 34px rgba(255,226,74,.55)}
-.ls-pot-hero .lph-add{font-style:normal;font-size:22px;font-weight:900;color:#6be08a;
+.ls-pot-hero .lph-add{font-style:normal;font-size:clamp(22px,7vw,34px);font-weight:900;color:#6be08a;
   line-height:1.2;text-shadow:0 3px 0 #000,0 0 16px rgba(107,224,138,.6);
   /* Rises and fades as the number below it climbs — the money arriving. */
   animation:lphAdd 1.5s cubic-bezier(.2,.7,.3,1) both}
@@ -5732,10 +5741,11 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
   100%{opacity:0;transform:translateY(-22px)}}
 /* A glow behind it so a big number stays legible on a bright room without
    putting a panel back. */
-.ls-pot-hero::before{content:"";position:absolute;left:50%;top:50%;width:min(78vw,340px);height:200px;
+.ls-pot-hero::before{content:"";position:absolute;left:50%;top:50%;width:140%;height:min(62vh,420px);
   transform:translate(-50%,-50%);border-radius:50%;pointer-events:none;
   background:radial-gradient(closest-side,rgba(0,0,0,.72),rgba(0,0,0,0))}
-@media(max-width:370px){.ls-pot-hero .lph-num{font-size:clamp(40px,16vw,72px)}}
+/* No narrow-screen override: the size is a share of the screen and is then
+   fitted to it in JS, so a small phone is already handled by both. */
 .ls-pot-hero.lph-green .lph-num{color:#6be08a;
   text-shadow:0 4px 0 #000,0 0 10px rgba(0,0,0,.95),0 0 38px rgba(107,224,138,.7);
   animation:lphBlink .52s steps(1,end) 3}
@@ -9127,6 +9137,10 @@ function lsPotHero(id,from,to){
       '<span class="lph-lbl">'+(LS_HERO_LABEL[id]||'صندوق جایزه')+'</span></div>';
     host.appendChild(wrap);
     const num=wrap.querySelector('.lph-num');
+    /* Sized for the biggest thing it will ever show — the number it is climbing
+       TO. Fitting to the opening value instead would mean the digits growing a
+       little every frame and the whole line reflowing as the separator lands. */
+    lsPotHeroFit(num,lsFa(to),wrap.getBoundingClientRect().width||host.getBoundingClientRect().width);
     const H={wrap:wrap,num:num,shown:from,to:to,id:id,t0:Date.now()};
     _lsHero=H;
     const dur=2200, t0=performance.now();
@@ -9145,6 +9159,30 @@ function lsPotHero(id,from,to){
     };
     H.raf=requestAnimationFrame(step);
   }catch(e){ lsPotHeroSettle(id,to); }
+}
+/* AS BIG AS THE SCREEN WILL TAKE, AND NO BIGGER.
+   The CSS size is an upper bound; how wide a figure actually is depends on how
+   many digits it has, so the only way to fill the screen without falling off
+   it is to measure. Done once, on the final value, before anything moves. */
+function lsPotHeroFit(num,finalText,hostW){
+  try{
+    const was=num.textContent;
+    num.textContent=finalText;
+    const room=Math.max(160,(hostW||360)*0.92);
+    const size=parseFloat(getComputedStyle(num).fontSize)||100;
+    /* scrollWidth, not getBoundingClientRect: the card arrives on a scale(.35)
+       entry animation, and a measured RECTANGLE during it is a third of the
+       truth. scrollWidth is the laid-out text and ignores the transform. */
+    const w=num.scrollWidth||1;
+    /* BOTH WAYS. Shrinking alone left a short figure sitting well inside the
+       screen it was supposed to take; a four-digit share and an eight-digit one
+       should both reach the edges. The floor keeps a very long number an
+       announcement rather than a label; the ceiling keeps a very short one from
+       becoming a poster. */
+    const want=Math.round(size*room/w);
+    num.style.fontSize=Math.max(38,Math.min(200,want))+'px';
+    num.textContent=was;
+  }catch(e){}
 }
 /* «و بعد بره سر جای خودش اون بالا» — to wherever the small figure is NOW, which
    is looked up at this moment because the room may have redrawn underneath. */
