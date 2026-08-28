@@ -21,7 +21,7 @@ import assert from 'node:assert/strict';
 import {
   LEAGUE_DEFAULTS, getLeagueConfig, closeSeason, currentSeasonId, kickoffFor, listOpenRooms, listQualifiers,
   drawRound, listRooms, listSeats, reportRoomResult, setLeagueConfig, weekResetAt,
-  activeSeasonId, enterLeague, previousSeasonId, LEAGUE_DOORS_MINUTES, _resetLeague
+  activeSeasonId, enterLeague, myLeague, previousSeasonId, LEAGUE_DOORS_MINUTES, _resetLeague
 } from '../services/leagueService.js';
 import { isoWeekId } from '../services/scoringConfig.js';
 import { repositories } from '../repositories/index.js';
@@ -138,6 +138,42 @@ async function run(): Promise<void> {
     assert.notEqual(await activeSeasonId(), currentSeasonId());
   });
 
+  /* WHERE THE HEADER'S CHIP GETS ITS FACTS. The big ticket beside the wallet,
+     and everything the tap explains — which tier, how many, and «شروع مسابقه»
+     — all come out of myLeague. Reading the current ISO week here on match day
+     finds no qualifier at all, so a player who spent a week earning a seat is
+     told they have none and the chip never appears. */
+  await check('the league screen reads the season being played, not this week', async () => {
+    const who = result.qualifiers[0]!.userId;
+    const mine = await myLeague(who);
+    assert.equal(mine.seasonId, closingSeason, 'myLeague is looking at ' + mine.seasonId);
+    assert.notEqual(mine.seasonId, currentSeasonId(), 'it fell back to the empty current week');
+    assert.equal(mine.qualifiedTier, result.qualifiers[0]!.tier,
+      'a qualifier holding a ticket is shown as holding no seat, so no chip is drawn');
+  });
+
+  await check('and it hands the chip a real ticket and a real kickoff to print', async () => {
+    /* NOT qualifiers[0] — that one walked through the door above, and walking
+       in spends the ticket. The chip is for the player still holding one. */
+    const who = result.qualifiers[1]!.userId;
+    const mine = await myLeague(who);
+    assert.ok(Number(mine.tickets[mine.qualifiedTier!]) > 0,
+      'the header would count zero tickets and draw nothing');
+    assert.equal(tehran(mine.kickoffAt).slice(11), '21:00', tehran(mine.kickoffAt));
+    assert.equal(new Date(mine.kickoffAt + 210 * 60_000).getUTCDay(), 5, 'kickoff is not on a Friday');
+    assert.ok(mine.doorsOpenAt < mine.kickoffAt, 'the doors open after the whistle');
+    assert.ok(mine.tiers.some((t) => t.key === mine.qualifiedTier),
+      'the tier the ticket is for is not among the tiers the modal names');
+  });
+
+  /* Somebody who never qualified must not be handed a chip. */
+  await check('a player with no seat is told so, on the same day', async () => {
+    const mine = await myLeague('lg-nobody');
+    assert.equal(mine.qualifiedTier, null);
+    assert.equal(mine.canEnter, false);
+    assert.ok(mine.enterBlockedReason.length > 0, 'refused with no reason given');
+  });
+
   await check('previousSeasonId is exactly one ISO week back, new year included', async () => {
     for (const day of ['2026-08-28T09:00:00Z', '2026-01-05T09:00:00Z', '2026-01-01T09:00:00Z']) {
       const d = new Date(day);
@@ -182,6 +218,21 @@ async function run(): Promise<void> {
     const again = await closeSeason(closingSeason);
     assert.equal(again.ticketsGranted, 0, 'a second close handed out tickets again');
     assert.equal((await listRooms(closingSeason)).length, before, 'a second close drew the rooms again');
+  });
+
+  /* THE OTHER HALF OF THE WEEK, and the reason this is «resolved» rather than
+     «always a week back». Mid-week, before the Friday, the season being played
+     IS the current one; a rule that simply looked backwards would send the
+     screen — and the header's chip — to a week that is already over. This is
+     last because closing the current week changes the answer for everything
+     above it. */
+  await check('mid-week, the season being played is this week, not the one before', async () => {
+    await closeSeason(currentSeasonId());
+    assert.equal(await activeSeasonId(), currentSeasonId(),
+      'the current week has qualifiers of its own and is still being skipped');
+    const who = (await listQualifiers(currentSeasonId()))[0]!.userId;
+    assert.equal((await myLeague(who)).seasonId, currentSeasonId(),
+      'the league screen is a week behind for everyone, all week');
   });
 
   await check('today really is a Friday, which is what all of this is for', async () => {

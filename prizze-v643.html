@@ -7218,6 +7218,27 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
  * height already carries one — without it this rule does nothing at all. */
 #home .wpl-track{height:64px!important}
 #home .wpl-say{margin-top:1px;line-height:1.3}
+
+/* THE LEAGUE TICKET IN THE HEADER.
+ *
+ * Deliberately out of scale with the wallet pills beside it: a player who has
+ * just won one has to notice that something arrived. The row grows by about
+ * eight pixels to hold it — the header is still far shorter than the 210px it
+ * was — and only for the players who actually hold a ticket, which is a handful
+ * of people for a few days a week.
+ *
+ * No font-size here either. The chip is bigger; the number inside it is the
+ * same size as every other number in the row, so nothing collides. */
+#home .pzh-pill.p-league{padding:1px 10px;border-width:2px;border-radius:14px;gap:7px;
+  box-shadow:0 0 0 1px rgba(0,0,0,.55),0 4px 14px -4px currentColor;animation:pzLgTk 2.4s ease-in-out infinite}
+#home .pzh-pill.p-league img.pz-lgtk{width:26px;height:26px;object-fit:contain;
+  filter:drop-shadow(0 2px 4px rgba(0,0,0,.6))}
+/* The SAME size as every other number in the row. The chip is what grows; the
+   text is not, or the row's numbers stop lining up — «نه فونتاش تو هم بره». */
+#home .pzh-pill.p-league b{font-size:11.5px}
+img.pz-lgtk-big{width:74px;height:74px;object-fit:contain;filter:drop-shadow(0 8px 14px rgba(0,0,0,.5))}
+@keyframes pzLgTk{0%,100%{transform:translateY(0)}50%{transform:translateY(-1.5px)}}
+@media (prefers-reduced-motion:reduce){#home .pzh-pill.p-league{animation:none}}
 </style>
 
   <!-- Report-question bottom sheet -->
@@ -10579,6 +10600,13 @@ function pzArtLegacy(el, tries, onDone){
    time, and a name nobody has uploaded yet still behaves itself. */
 const PZ_IMG_URLS={
   'logo':         '/media/mt6bmqa0-gu24xve1',
+  /* The weekly-league tickets. The tier key is `gold`; the file it was drawn
+     as is called yellow-ticket — the name follows the picture, the key follows
+     the league. If an address ever stops resolving the chip falls back to its
+     emoji rather than leaving an empty box in the header. */
+  'ticket-gold':   '/media/msi8j437-fjpjdxhw',
+  'ticket-silver': '/media/msi8j3tw-kvvo991j',
+  'ticket-bronze': '/media/msi8j0pj-tsi3h19h',
   'medal-gold':   '/media/mt69rmlc-jwpizbiq',
   'medal-silver': '/media/mt69rmwy-r9kfd8cc',
   'medal-bronze': '/media/mt69rloa-nb98jwyc'
@@ -14808,9 +14836,18 @@ function renderHeaderTickets(){
      a permanent «۰» beside the others would be an advert for a shop shelf that
      does not exist — and when it IS there, it is the most valuable thing in the
      header and wears its own colour. */
+  /* A LEAGUE TICKET IS NOT ONE OF THE OTHERS.
+     It cannot be bought, it is the whole reward for a week of play, and it is
+     gone if it is not used at one particular hour on one particular night. So
+     it is drawn bigger than the rest and carries its own picture — «تا کاربر
+     بفهمه یه چیز جدید اومده اونجا». Tapping it explains all of that, and says
+     when the match is. */
+  const bigPill=(t,n)=>'<span class="pzh-pill p-league" style="border-color:'+t.color+';background:linear-gradient(180deg,'+t.color+'55,'+t.color+'22),linear-gradient(180deg,#2b2c36,#191a22)" onclick="pzTicketInfo(\''+t.key+'\')" title="'+t.name+'">'
+    +pzArtHTML('ticket-'+t.key,'pz-lgtk',t.icon)
+    +'<b style="color:'+t.color+'">'+fa(n)+'</b></span>';
   const league=LEAGUE_TICKET_DEFS.filter(t=>Number((mTickets&&mTickets[t.key])||0)>0);
   el.innerHTML=TICKET_DEFS.map(t=>pill(t,mTickets[t.key]||0,'🎫')).join('')+
-               league.map(t=>pill(t,mTickets[t.key]||0,t.icon)).join('');
+               league.map(t=>bigPill(t,mTickets[t.key]||0)).join('');
 }
 /* WHAT THIS TICKET IS, WHERE IT IS USED, WHEN, AND WHAT IT PAYS.
    Everything a player can be told without guessing: how many they hold, the two
@@ -14889,7 +14926,8 @@ async function pzLeagueTicketInfo(key){
       '</div>'+
     '</div>';
   showAaaModal({
-    iconHTML:'<div style="font-size:44px;line-height:1">'+t.icon+'</div>',
+    iconHTML:'<div style="font-size:44px;line-height:1;display:grid;place-items:center">'
+      +pzArtHTML('ticket-'+key,'pz-lgtk-big',t.icon)+'</div>',
     title:t.name, sub:sub,
     primaryText:'رفتن به لیگ', primaryClass:'btn-yellow',
     secondaryText:'بستن',

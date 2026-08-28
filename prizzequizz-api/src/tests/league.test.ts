@@ -634,6 +634,19 @@ async function run(): Promise<void> {
 
   await check('the screen is told whether the button may be pressed, and why not', async () => {
     await fresh();
+    /* THE CLOCK HAS TO BE PINNED, NOT HOPED FOR. With the shipped Friday
+       kickoff «the doors are still shut» is true six days a week and false for
+       the ten minutes before the whistle — so this case passed all week and
+       failed on Friday night, which is the one night the league runs. Kickoff
+       is moved to tomorrow, which is never inside the door window whatever day
+       the suite is run on. The Persian week counts Saturday as 0. */
+    const cfg0 = await getLeagueConfig();
+    const tehranNow = new Date(Date.now() + cfg0.kickoff.tzOffsetMinutes * 60_000);
+    const tomorrow = (tehranNow.getUTCDay() + 2) % 7;
+    await setLeagueConfig({ kickoff: { ...cfg0.kickoff, dayOfWeek: tomorrow } });
+    assert.ok(kickoffFor(await getLeagueConfig()) - Date.now() > 12 * 3600_000,
+      'kickoff was not moved out of the door window, so this case proves nothing');
+
     const ids = await board(50);
     await closeSeason(isoWeekId());
     const out = await myLeague(ids[49]!);
@@ -641,8 +654,9 @@ async function run(): Promise<void> {
     assert.match(out.enterBlockedReason, /جدول لیگ نیستی/);
     /* A qualifier is only stopped by the clock. */
     const inside = await myLeague(ids[0]!);
-    assert.equal(inside.canEnter, false, 'kickoff is days away');
+    assert.equal(inside.canEnter, false, 'kickoff is a day away and the doors are shut');
     assert.match(inside.enterBlockedReason, /زمان ورود/);
+    await setLeagueConfig({ kickoff: cfg0.kickoff });
   });
 
   console.log(`[league] ${passed} passed, ${failed} failed`);

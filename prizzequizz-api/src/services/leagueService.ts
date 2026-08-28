@@ -931,7 +931,10 @@ export interface MyLeague {
 
 export async function myLeague(userId: string): Promise<MyLeague> {
   const cfg = await getLeagueConfig();
-  const seasonId = currentSeasonId();
+  /* The season being PLAYED. This is what tells the screen — and now the chip
+   * in the header — whether the player holds a seat and when the match is; on
+   * match day the current ISO week holds neither. */
+  const seasonId = await activeSeasonId();
   const board = await weeklyBoard(Math.max(...cfg.tiers.map((t) => t.toRank), 200));
   const idx = board.findIndex((r) => r.userId === userId);
   const rank = idx >= 0 ? idx + 1 : null;
