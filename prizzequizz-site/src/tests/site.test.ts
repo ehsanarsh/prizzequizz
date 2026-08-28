@@ -15,6 +15,9 @@
  *
  * Run: npx tsx src/tests/site.test.ts */
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   BLOCK_KINDS,
   SETTINGS_DEFAULTS, SiteError, deletePage, getSettings, listPages, listPosts,
@@ -616,7 +619,11 @@ async function run(): Promise<void> {
     const viaHelper = new Set([...js.matchAll(/f\('[^']*','([A-Za-z0-9]+)'/g)].map((x) => x[1]!));
     const viaId = new Set([...js.matchAll(/id="st_([A-Za-z0-9]+)"/g)].map((x) => x[1]!));
     const editable = new Set([...viaHelper, ...viaId]);
-    const missing = Object.keys(SETTINGS_DEFAULTS).filter((k) => !editable.has(k) && k !== 'updatedAt');
+    /* `updatedAt` is a timestamp and `designBackfilled` is the stamp on a
+       one-time migration — a panel switch that re-runs a migration is a switch
+       somebody eventually presses. Everything else is the operator's. */
+    const NOT_SETTINGS = new Set(['updatedAt', 'designBackfilled']);
+    const missing = Object.keys(SETTINGS_DEFAULTS).filter((k) => !editable.has(k) && !NOT_SETTINGS.has(k));
     assert.deepEqual(missing, [], 'these can only be changed by a deploy: ' + missing.join(', '));
   });
 
@@ -719,6 +726,35 @@ async function run(): Promise<void> {
     }
     const home = renderPage(pages.find((p) => p.slug === 'home')!, pages, s, posts);
     assert.ok(ldBlocks(home).length >= 2, 'the home page lost its structured data');
+  });
+
+  /* ── THE DEPLOY CONFIG ─────────────────────────────────────────────────
+   *
+   * nginx picks the FIRST matching regex location in file order, and the
+   * shipped config has one that catches every `.png` and `.woff2`. The site's
+   * own files live under /site-assets/ and end in exactly those extensions, so
+   * without a `^~` prefix block ahead of it the stylesheet loads and the font
+   * and every character silently 404 — the site then looks like a different
+   * design rather than a broken one, which is the hardest kind of bug to spot
+   * from a screenshot.
+   *
+   * This ran on a live server. It is checked here because the config is a file
+   * somebody edits by hand, and nothing else would notice it going missing. */
+  await check('the deploy config serves /site-assets/ ahead of the static regex', () => {
+    const here = dirname(fileURLToPath(import.meta.url));
+    let conf = '';
+    for (const rel of ['../../../deploy/site-nginx.conf', '../../deploy/site-nginx.conf',
+                       '../../../../deploy/site-nginx.conf']) {
+      try { conf = readFileSync(resolve(here, rel), 'utf8'); break; } catch { /* next */ }
+    }
+    assert.ok(conf, 'deploy/site-nginx.conf not found');
+    const site = conf.indexOf('location ^~ /site-assets/');
+    const regex = conf.search(/location\s+~\*/);
+    assert.ok(site >= 0, 'no ^~ /site-assets/ block — the font and characters will 404 behind nginx');
+    assert.ok(regex < 0 || site < regex,
+      'the static regex location comes first, so it wins and /site-assets/ never reaches the site');
+    assert.ok(/location \^~ \/site-assets\/[\s\S]{0,240}?proxy_pass/.test(conf),
+      'the /site-assets/ block does not proxy to the site');
   });
 
   console.log(`[site] ${passed} passed, ${failed} failed`);

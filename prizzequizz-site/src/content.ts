@@ -228,6 +228,10 @@ export interface SiteSettings {
   liveStatMatches: string;
   liveStatToday: string;
   liveStatWeek: string;
+  /* Bookkeeping, not a setting: the stamp that says the one-time design
+     backfill has run. It is not offered in the panel — a switch that re-runs a
+     migration is a switch somebody eventually presses. */
+  designBackfilled?: boolean;
   /** Turns the whole public site off (503) without touching the game. */
   enabled: boolean;
   updatedAt: string;
@@ -800,12 +804,89 @@ async function seedOnce(): Promise<void> {
   if (pool) {
     await ensureSchema(pool);
     const { rows } = await pool.query(`SELECT count(*)::int AS n FROM site_pages`);
-    if (Number(rows[0]?.n ?? 0) > 0) return;
-  } else if (_memPages && _memPages.length) return;
+    if (Number(rows[0]?.n ?? 0) > 0) { await backfillShippedDesign(); return; }
+  } else if (_memPages && _memPages.length) { await backfillShippedDesign(); return; }
   else { _memPages = []; _memPosts = []; }
   for (const p of seedPages()) await savePage(p);
   for (const p of seedPosts()) await savePost(p);
+  /* A store seeded from this version already IS the current design, so the
+     backfill has nothing to do and must never run over it later. */
+  await saveSettings({ designBackfilled: true });
   logger.info('site_content_seeded', { pages: seedPages().length, posts: seedPosts().length });
+}
+
+/* Every stored page, WITHOUT going through listPages — which calls the seeder,
+ * which calls this, which would never return. */
+async function rawPages(): Promise<SitePage[]> {
+  const pool = pg();
+  if (!pool) return (_memPages ?? []).slice();
+  const { rows } = await pool.query(`SELECT * FROM site_pages`);
+  return rows.map(rowToPage);
+}
+
+/* WHAT A SITE THAT IS ALREADY LIVE GETS FROM A NEW DESIGN.
+ *
+ * The seed above only ever runs into an EMPTY store, which is right — nobody
+ * wants a deploy to overwrite the words they wrote. But it also means a design
+ * that ships new slots reaches exactly nobody who already installed the site:
+ * the character artwork was added to every shipped page and, on the live
+ * server, not one of those pages had a character, because the rows were written
+ * before the fields existed.
+ *
+ * So the new SLOTS are filled in, and nothing else is touched:
+ *
+ *   • only pages whose slug is one this project ships;
+ *   • only fields that are currently EMPTY — a character an operator chose, or
+ *     cleared on purpose, is left exactly as it is;
+ *   • blocks are matched by their title, so a card somebody renamed or wrote
+ *     themselves is never assumed to be the shipped one;
+ *   • a page that needs no change is not written at all, so this costs nothing
+ *     on every boot after the first.
+ *
+ * It is deliberately additive and dull. The alternative — re-seeding, or a
+ * «restore defaults» button somebody eventually presses by accident — throws
+ * away the operator's work to fix a picture. */
+export async function backfillShippedDesign(): Promise<void> {
+  /* ONCE, EVER. Not «once per boot», and not «whenever a slot looks empty».
+   *
+   * An operator who clears a character is indistinguishable afterwards from a
+   * page that never had one — cleanDesign drops empty strings, so both come
+   * back with the key absent. Running this repeatedly would therefore undo that
+   * operator's choice on every deploy, quietly, forever. Stamping it means the
+   * design arrives once on an install that predates it, and from that moment
+   * every slot belongs to whoever is editing the site. */
+  const s = await getSettings();
+  if (s.designBackfilled) return;
+  const shipped = seedPages();
+  const stored = await rawPages();
+  let touched = 0;
+  for (const src of shipped) {
+    const cur = stored.find((p) => p.slug === src.slug);
+    if (!cur) continue;
+    let changed = false;
+    const fill = <K extends keyof SitePage>(k: K) => {
+      const has = cur[k];
+      const empty = has === undefined || has === null || has === ''
+        || (Array.isArray(has) && has.length === 0);
+      if (empty && src[k] !== undefined) { (cur as any)[k] = src[k]; changed = true; }
+    };
+    fill('heroCharacter'); fill('kicker'); fill('intro'); fill('heroButtons');
+
+    /* Characters inside blocks. Matched on the title the operator can see, so a
+     * renamed card keeps whatever it has and a new card is never guessed at. */
+    for (const sb of src.blocks ?? []) {
+      const cb = (cur.blocks ?? []).find((b) => b.kind === sb.kind && b.title === sb.title);
+      if (!cb) continue;
+      if (sb.character && !cb.character) { cb.character = sb.character; changed = true; }
+      for (const si of sb.items ?? []) {
+        const ci = (cb.items ?? []).find((i) => i.title === si.title);
+        if (ci && si.character && !ci.character) { ci.character = si.character; changed = true; }
+      }
+    }
+    if (changed) { await savePage(cur); touched++; }
+  }
+  await saveSettings({ designBackfilled: true });
+  logger.info('site_design_backfilled', { pages: touched });
 }
 
 export async function listPages(includeUnpublished = false): Promise<SitePage[]> {
