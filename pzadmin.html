@@ -5195,16 +5195,33 @@ async function saveAntiCheat(){
 async function renderSuspicious(){
   const d=await api('GET','/admin/suspicious').catch(()=>({rows:[]}));
   const rows=d.rows||[];
+  const openN=Number(d.openSignals||0);
+  const trusted=d.trusted||[];
   window._SUSP=rows;
   $('#main').innerHTML=head('کاربران مشکوک','فهرست کاملِ هشدارها — شناسه، دلیل، امتیاز ریسک، زمان و جزئیات؛ با امکانِ رسیدگی',
+    '<button class="btn sm" onclick="suspTrustPick()">✅ کاربر مورد اعتماد</button>'+
+    '<button class="btn sm bad" onclick="suspClearAll()">🧹 پاک کردن همهٔ ریسک‌ها</button>'+
     '<button class="btn sm" onclick="render()">↻ بروزرسانی</button>')+
-    '<div class="note">این فهرست از سیگنال‌های تقلبِ باز، سرعتِ غیرعادیِ تراکنش و درخواست‌های ناموفقِ دریافت جایزه ساخته می‌شود و بر اساسِ امتیازِ ریسک مرتب شده است. با «رسیدگی» هر هشدار را تأیید (تقلب) یا رد (بی‌خطر) کن؛ پس از رسیدگی، کاربر از فهرست خارج می‌شود.</div>'+
+    /* «کل سیگنال‌ها ۲۰۰ تاست و وقتی یکی رو رسیدگی میکنم سیگنال به کاربر دیگه
+       منتقل میشه» — it never moved. The list reads a page of open signals, so
+       closing one lets the next one in. Saying the real number out loud is what
+       makes that make sense. */
+    '<div class="note">این فهرست از سیگنال‌های تقلبِ باز، سرعتِ غیرعادیِ تراکنش و درخواست‌های ناموفقِ دریافت جایزه ساخته می‌شود و بر اساسِ امتیازِ ریسک مرتب شده است. با «رسیدگی» هر هشدار را تأیید (تقلب) یا رد (بی‌خطر) کن؛ پس از رسیدگی، کاربر از فهرست خارج می‌شود.<br>'+
+      '<b>'+fa(openN)+'</b> سیگنالِ باز روی <b>'+fa(rows.length)+'</b> کاربر. با رسیدگی به یکی، سیگنالِ بعدی وارد فهرست می‌شود — جابه‌جا نشده، فقط بیشتر از چیزی است که یک‌جا نمایش داده می‌شود. برای تمام‌کردنِ همه با هم «پاک کردن همهٔ ریسک‌ها» را بزن.</div>'+
+    (trusted.length?'<div class="card" style="margin-bottom:12px"><h3>کاربران مورد اعتماد ('+fa(trusted.length)+')</h3>'+
+      '<p class="sub">برای این‌ها هیچ سیگنال تازه‌ای ثبت نمی‌شود و در فهرست بالا نمی‌آیند.</p>'+
+      tbl(['کاربر','یادداشت','عملیات'],trusted.map(t=>[
+        esc(t.displayName||t.username||'')+' <span class="mono" style="color:var(--muted)">'+String(t.userId).slice(0,8)+'</span>',
+        esc(t.note||'—'),
+        '<button class="btn sm" onclick="suspUntrust(\''+t.userId+'\')">حذف از فهرست</button>'
+      ]))+'</div>':'')+
     tbl(['کاربر','دلیل','امتیاز ریسک','آخرین رویداد','تعداد سیگنال','عملیات'],rows.map((u,i)=>[
       esc(u.username||'')+' <span class="mono" style="color:var(--muted)">'+String(u.userId).slice(0,8)+'</span>'+newTag('suspicious',u.lastAt),
       (u.reasons||[]).map(r=>'<span class="pill '+(String(r).match(/BURST|CRITICAL|multi/i)?'bad':'pend')+'">'+esc(reasonFa(r))+'</span>').join(' '),
       '<b style="color:'+(u.riskScore>=70?'var(--bad)':u.riskScore>=40?'var(--gold)':'var(--muted)')+';font-size:15px">'+fa(u.riskScore||0)+'</b>',
       fmtDate(u.lastAt),fa((u.signals||[]).length),
-      '<button class="btn sm info" onclick="suspDetail('+i+')">جزئیات و رسیدگی</button>'
+      '<button class="btn sm info" onclick="suspDetail('+i+')">جزئیات و رسیدگی</button>'+
+      ' <button class="btn sm ok" onclick="suspTrust(\''+u.userId+'\',\''+esc(String(u.username||'')).replace(/'/g,'')+'\')">✅ مورد اعتماد</button>'
     ]));
 }
 function reasonFa(r){return ({high_velocity:'سرعتِ بالای تراکنش',failed_withdrawals:'دریافت جایزهٔ ناموفق',REPEATED_QUESTION_ANSWER:'پاسخِ تکراری',ANSWER_BURST:'پاسخِ رگباری',IMPOSSIBLE_ANSWER_TIME:'زمانِ غیرممکن',MULTI_ACCOUNT:'چندحسابی',DEVICE_SHARED_BY_MULTIPLE_USERS:'اشتراکِ دستگاه'}[r])||r;}
@@ -5221,6 +5238,54 @@ function suspDetail(i){
     '<h3 style="font-size:14px;margin:6px 0">سیگنال‌ها و رویدادها</h3>'+sig);
 }
 async function suspResolve(sid,status,i){try{await api('PATCH','/admin/integrity/signals/'+sid+'/status',{status});toast(status==='confirmed'?'به‌عنوان تقلب تأیید شد':'بی‌خطر علامت خورد','ok');document.querySelectorAll('.modal-bg').forEach(m=>m.remove());await renderSuspicious();}catch(e){toast(e.message,'bad');}}
+/* CLEARING THEM ALL. Confirmation-gated because it closes evidence, and
+   evidence does not come back. */
+async function suspClearAll(){
+  if(!confirm('همهٔ سیگنال‌های بازِ تقلب «بی‌خطر» علامت می‌خورند و فهرست خالی می‌شود.\n\nاین کار برگشت‌پذیر نیست. ادامه؟'))return;
+  try{const r=await api('POST','/admin/integrity/signals/bulk-status',{status:'dismissed',confirm:'CLEAR'});
+    toast(fa(r.count||0)+' سیگنال پاک شد','ok');await renderSuspicious();}catch(e){toast(e.message,'bad');}
+}
+/* Trusting an account also closes the signals it already collected — otherwise
+   the operator marks it trusted and still has to clear the old ones by hand. */
+async function suspTrust(uid,uname){
+  const note=prompt('یادداشت (اختیاری) — مثلاً «حساب تستِ خودم»:', uname?('حساب '+uname):'');
+  if(note===null)return;
+  try{const r=await api('POST','/admin/trusted',{userId:uid,note});
+    toast('کاربر مورد اعتماد شد'+(r.cleared?' و '+fa(r.cleared)+' سیگنالش پاک شد':''),'ok');
+    document.querySelectorAll('.modal-bg').forEach(m=>m.remove());await renderSuspicious();}catch(e){toast(e.message,'bad');}
+}
+async function suspUntrust(uid){
+  if(!confirm('این کاربر دوباره مثل بقیه بررسی شود؟'))return;
+  try{await api('DELETE','/admin/trusted/'+uid);toast('از فهرست حذف شد','ok');await renderSuspicious();}catch(e){toast(e.message,'bad');}
+}
+/* Any user, not only one already on the suspicious list — «به هر کاربری که دلم
+   خواست بتونم انتخاب کنم». Searched by name, username or phone, like every
+   other user search in the panel. */
+async function suspTrustPick(){
+  modal('انتخاب کاربر مورد اعتماد',
+    '<div class="field"><label>جست‌وجوی کاربر</label><input id="tpq" placeholder="نام، نام کاربری یا شمارهٔ موبایل" oninput="suspTrustSearch()"></div>'+
+    '<div id="tpres" class="sub">حداقل ۲ حرف بنویس…</div>');
+  setTimeout(()=>{const el=$('#tpq');if(el)el.focus();},60);
+}
+let _tpT=null;
+function suspTrustSearch(){
+  clearTimeout(_tpT);
+  _tpT=setTimeout(async()=>{
+    const q=(($('#tpq')||{}).value||'').trim();
+    const box=$('#tpres'); if(!box)return;
+    if(q.length<2){box.className='sub';box.innerHTML='حداقل ۲ حرف بنویس…';return;}
+    try{
+      const d=await api('GET','/admin/users?q='+encodeURIComponent(q)+'&limit=20');
+      const list=(d.rows||d.users||d||[]);
+      box.className='';
+      box.innerHTML=list.length?tbl(['کاربر','شناسه',''],list.slice(0,20).map(u=>[
+        esc(u.displayName||u.username||''),
+        '<span class="mono" style="color:var(--muted)">'+String(u.id||'').slice(0,8)+'</span>',
+        '<button class="btn sm ok" onclick="suspTrust(\''+(u.id||'')+'\',\''+esc(String(u.username||'')).replace(/'/g,'')+'\')">مورد اعتماد</button>'
+      ])):'<div class="empty">کاربری پیدا نشد.</div>';
+    }catch(e){box.className='sub';box.innerHTML=esc(e.message||'خطا');}
+  },220);
+}
 async function suspBan(uid){if(!confirm('این کاربر بن شود؟'))return;const reason=prompt('علت بن:')||'فعالیت مشکوک';try{await api('PATCH','/admin/users/'+uid+'/status',{status:'banned',reason});toast('کاربر بن شد','ok');document.querySelectorAll('.modal-bg').forEach(m=>m.remove());render();}catch(e){toast(e.message,'bad');}}
 
 /* ================= RESET TOOLS (per-area, confirmation-gated) ================= */

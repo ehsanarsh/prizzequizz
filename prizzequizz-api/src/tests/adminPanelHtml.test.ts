@@ -930,6 +930,44 @@ function run(): void {
       'the excluded amount is not shown, so an operator cannot tell it was left out on purpose');
   });
 
+  /* ── کاربران مشکوک ─────────────────────────────────────────────────────
+   *
+   * Three complaints, one screen: two hundred signals with no way to finish
+   * them, a signal that seemed to jump to another player when one was closed,
+   * and no way to say «this account is mine, stop watching it».
+   *
+   * The jump was never real — the list reads a page of open signals, so closing
+   * one lets the next in. That is only obvious if the screen says how many
+   * there actually are, which is why the count is checked here too. */
+  check('the suspicious screen can clear the whole backlog at once', () => {
+    assert.ok(/suspClearAll/.test(script), 'no bulk-clear action');
+    assert.ok(script.includes('bulk-status'), 'the bulk-clear endpoint is not called');
+    assert.ok(/confirm:'CLEAR'/.test(script), 'bulk clear is not confirmation-gated');
+    assert.ok(/confirm\(/.test(script.slice(script.indexOf('async function suspClearAll'), script.indexOf('async function suspClearAll') + 400)),
+      'it clears evidence without asking');
+  });
+
+  check('and says how many open signals there really are', () => {
+    assert.ok(script.includes('openSignals'), 'the real total is never read');
+    assert.ok(script.includes('سیگنالِ باز روی'), 'the screen does not say the total out loud');
+    assert.ok(script.includes('جابه‌جا نشده'), 'nothing explains why a new user appears when one is closed');
+  });
+
+  check('any user can be marked trusted, not only one already on the list', () => {
+    assert.ok(/suspTrustPick/.test(script), 'no way to pick an arbitrary user');
+    assert.ok(/suspTrustSearch/.test(script), 'the picker cannot search');
+    assert.ok(script.includes("'/admin/trusted'"), 'the trust endpoint is not called');
+  });
+
+  check('a trusted user can be taken off the list again', () => {
+    assert.ok(/suspUntrust/.test(script), 'trusting is one-way');
+    assert.ok(script.includes("'/admin/trusted/'"), 'the untrust endpoint is not called');
+  });
+
+  check('the trusted list is shown, so it is not a setting nobody can see', () => {
+    assert.ok(script.includes('کاربران مورد اعتماد'), 'the trusted list is never rendered');
+  });
+
 console.log(`[adminPanelHtml] ${passed} passed, ${failed} failed`);
   if (failed) process.exit(1);
 }

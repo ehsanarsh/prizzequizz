@@ -2,6 +2,7 @@
  * the enriched suspicious-users list, and per-area RESET tools — all reading the
  * DB as the single source of truth, all atomic, all audited by the caller. */
 import { getPgPool } from '../database/postgres.js';
+import { isTrusted } from './trustedUserService.js';
 import { repositories } from '../repositories/index.js';
 import { calculateUserRisk } from './deviceRiskService.js';
 import { getAccount } from './walletLedgerService.js';
@@ -117,6 +118,11 @@ export async function suspiciousUsers(): Promise<any[]> {
   // enrich with username + risk score
   const out = [];
   for (const e of map.values()) {
+    /* A trusted account is not a suspect. New signals are never written for one
+     * (integrityService.save), but the ones recorded before it was trusted are
+     * still on file — and the operator marked the account trusted precisely so
+     * they would stop having to look at them. */
+    if (await isTrusted(e.userId).catch(() => false)) continue;
     const u = await repositories.users.findById(e.userId).catch(() => null);
     const risk = await calculateUserRisk(e.userId).catch(() => null) as any;
     out.push({ ...e, username: u?.username ?? e.userId, reasons: [...new Set(e.reasons)], riskScore: risk?.riskScore ?? 0 });

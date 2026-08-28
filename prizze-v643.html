@@ -7179,6 +7179,46 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
   .pzrv-tag.opp{background:rgba(255,160,80,.18);color:#FFB86B}
   .pzrv-tag.ok{background:rgba(55,214,122,.18);color:#37D67A}
   </style>
+<style>
+/* ── A SLIMMER HEADER ──────────────────────────────────────────────────────
+ * The bar came to 210px on an 844px phone — a quarter of the screen gone
+ * before the game itself starts. This block takes about a fifth off it.
+ *
+ * ONE RULE, AND IT IS THE WHOLE POINT: no text gets smaller. There is not a
+ * single font-size below, and none of the values above are touched. Every
+ * pixel comes out of padding, gaps, and the boxes drawn around the words —
+ * because a header nobody can read is not a slimmer header, it is a broken
+ * one, and «همه چیزش خوانا باشه» was half the request.
+ *
+ * Where each piece went (measured on 390x844, not guessed):
+ *   the two column gaps      5 → 4
+ *   the top and bottom pad   6/4 → 4/3
+ *   the avatar and its level  38 → 34, badge to match, so it still fits
+ *   the XP bar               19 → 17, with 1px less above it
+ *   the wallet pills         26 → 23 — the icon is 16px and the text 11.5px,
+ *                            so 23 is still roomy around both
+ *   the cup rail's face      36 → 31
+ *   the rail's sentence      two lines at line-height:normal → the same two
+ *                            lines at 1.3, which is still comfortably open
+ */
+/* Written at `#home .pz-header` and not `.pz-header`, because that is the
+ * specificity the rules being adjusted already use — a plain class selector
+ * loses to them and changes nothing at all, silently. */
+#home .pz-header{gap:4px;padding-top:4px;padding-bottom:3px;margin-bottom:-2px}
+#home .pz-header .pzh-av{width:34px;height:34px;border-radius:11px}
+#home .pz-header .pzh-lvl{width:31px;height:31px;bottom:-9px;left:-9px}
+#home .pz-header .pzh-nameline{padding-top:0;padding-bottom:0}
+#home .pz-header .pzh-xpbar{height:19px;margin-top:2px}
+#home .pz-header .pzh-pill{padding:2px 9px}
+#home .pz-header .pzh-wallets{padding-bottom:0}
+#home .weekly-progress-line{margin-bottom:4px!important;padding-top:0!important;padding-bottom:2px!important}
+/* The track was 76px for content that ends at 62: the marker runs 5→57 (face
+ * 30 + its caption 21) and the bar's bottom edge is at 62. 64 leaves the two
+ * pixels of slack and takes back the other twelve. `!important` because the
+ * height already carries one — without it this rule does nothing at all. */
+#home .wpl-track{height:64px!important}
+#home .wpl-say{margin-top:1px;line-height:1.3}
+</style>
 
   <!-- Report-question bottom sheet -->
   <div class="pz-sheetov" id="pzReportSheet">

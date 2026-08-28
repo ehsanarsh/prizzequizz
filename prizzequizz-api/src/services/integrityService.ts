@@ -2,6 +2,7 @@ import { repositories } from '../repositories/index.js';
 import type { AnswerSubmission, IntegritySeverity, IntegritySignal, IntegritySignalType, IntegrityStatus, Match } from '../types/domain.js';
 import { id } from '../utils/id.js';
 import { logger } from './logger.js';
+import { isTrusted } from './trustedUserService.js';
 
 export interface InspectAnswerInput {
   match: Match;
@@ -116,6 +117,39 @@ export class IntegrityService {
     return repositories.integrity.updateStatus(id, status, reviewedBy);
   }
 
+  /* CLOSING THEM ALL, instead of two hundred clicks.
+   *
+   * The list only ever showed the first 200 open signals, so resolving one let
+   * the next one in and it looked as though the signal had jumped to another
+   * player. It had not — there were simply more than fitted. One at a time was
+   * never going to finish.
+   *
+   * `userId` narrows it to a single player; without it, every open signal is
+   * closed. Loops until the source is empty rather than doing one pass, because
+   * a page is capped at 500 and the whole point is to leave none behind. */
+  async bulkUpdateStatus(opts: { status: IntegrityStatus; userId?: string; reviewedBy: string }): Promise<number> {
+    let done = 0;
+    for (let page = 0; page < 40; page++) {
+      const open = await repositories.integrity.list({ status: 'open', userId: opts.userId, limit: 500 } as any);
+      if (!open.length) break;
+      for (const s of open) {
+        const r = await repositories.integrity.updateStatus(s.id, opts.status, opts.reviewedBy).catch(() => null);
+        if (r) done++;
+      }
+      /* Nothing moved: the driver ignored the update rather than ran out of
+       * rows. Stopping beats spinning forty times over the same page. */
+      if (done === 0) break;
+    }
+    logger.warn('integrity_signals_bulk_resolved', { status: opts.status, userId: opts.userId ?? 'all', count: done });
+    return done;
+  }
+
+  /** How many open signals there are — the real number, not a page of them. */
+  async openCount(userId?: string): Promise<number> {
+    const rows = await repositories.integrity.list({ status: 'open', userId, limit: 500 } as any);
+    return rows.length;
+  }
+
   async diagnostics(): Promise<IntegrityDiagnostics> {
     const signals = await repositories.integrity.list({ limit: 500 });
     const avgRiskScore = signals.length ? Math.round(signals.reduce((sum, signal) => sum + signal.riskScore, 0) / signals.length) : 0;
@@ -147,7 +181,21 @@ export class IntegrityService {
     };
   }
 
+  /* THE ONE PLACE A SIGNAL BECOMES A RECORD.
+   *
+   * Every detector in this file — and recordReplay, and anything added later —
+   * ends up here, which is why the trusted-user check lives here and nowhere
+   * else. Checking in each detector would mean the next detector somebody adds
+   * quietly reintroduces the noise.
+   *
+   * Nothing is written for a trusted user. Writing and then hiding would leave
+   * the table growing forever behind a filter, which is the shape the «۲۰۰
+   * سیگنال» complaint already had. */
   private async save(signal: IntegritySignal): Promise<void> {
+    if (await isTrusted(signal.userId).catch(() => false)) {
+      logger.info('integrity_signal_skipped_trusted', { userId: signal.userId, type: signal.type });
+      return;
+    }
     await repositories.integrity.save(signal);
     logger.warn('integrity_signal', { id: signal.id, matchId: signal.matchId, userId: signal.userId, type: signal.type, severity: signal.severity, riskScore: signal.riskScore });
   }

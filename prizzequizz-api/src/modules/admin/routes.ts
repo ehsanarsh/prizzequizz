@@ -18,6 +18,7 @@ import { getOtpSettings, setOtpSettings } from '../../services/withdrawOtpServic
 import { getSmsConfig, smsIsLive } from '../../services/smsService.js';
 import { listReports, reportCounts, setReportStatus } from '../../services/questionReportService.js';
 import { RESET_AREAS, type ResetArea, dashboardMetrics, financeSummary, finishedMatches, resetArea, runningMatches, suspiciousUsers } from '../../services/adminOpsService.js';
+import { listTrusted, trust, untrust } from '../../services/trustedUserService.js';
 import { currentMatchOf } from '../../services/matchEngine.js';
 import { getAccount } from '../../services/walletLedgerService.js';
 import { matchmakingQueue } from '../../services/matchmakingQueue.js';
@@ -1401,7 +1402,72 @@ export function registerAdminRoutes(router: Router, base: string): void {
   // Full suspicious-users list with detail + resolve is wired to integrity.
   router.add('GET', `${base}/admin/suspicious`, async (ctx) => {
     if (!requireAdmin(ctx)) return;
-    json(ctx.res, 200, { rows: await suspiciousUsers() });
+    /* `openSignals` is the REAL number of open signals, not the size of the
+     * page the list happens to show. Without it, resolving one and watching a
+     * different player appear looks like the signal moved. */
+    const [rows, openSignals, trusted] = await Promise.all([
+      suspiciousUsers(),
+      integrity.openCount().catch(() => 0),
+      listTrusted().catch(() => [])
+    ]);
+    json(ctx.res, 200, { rows, openSignals, trusted });
+  });
+
+  /* CLEARING THEM IN ONE GO.
+   *
+   * Confirmation-gated like the reset tools: it closes evidence, and evidence
+   * does not come back. `userId` narrows it to one player; without it, every
+   * open signal is closed. */
+  router.add('POST', `${base}/admin/integrity/signals/bulk-status`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    const b = (ctx.body ?? {}) as any;
+    const status = String(b.status ?? 'dismissed') as IntegrityStatus;
+    if (!['reviewing', 'dismissed', 'confirmed'].includes(status)) {
+      return error(ctx.res, 422, 'INTEGRITY_STATUS_INVALID', 'Invalid integrity signal status.');
+    }
+    if (b.confirm !== 'CLEAR') return error(ctx.res, 428, 'CONFIRM_REQUIRED', 'برای پاک‌سازی گروهی باید confirm=CLEAR ارسال شود.');
+    const userId = b.userId ? String(b.userId) : undefined;
+    const count = await integrity.bulkUpdateStatus({ status, userId, reviewedBy: ctx.userId ?? 'system' });
+    audit(ctx.userId, 'INTEGRITY_SIGNALS_BULK_STATUS', 'integrity_signal', userId ?? 'all', { status, count });
+    json(ctx.res, 200, { ok: true, count });
+  });
+
+  /* THE TRUST LIST. A user on it is never flagged again — see
+   * trustedUserService for why that is a source-level skip and not a filter. */
+  router.add('GET', `${base}/admin/trusted`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    const rows = await listTrusted();
+    /* The panel shows names, not uuids: an operator picking their own test
+     * accounts out of a list of ids is how the wrong account gets trusted. */
+    const named = await Promise.all(rows.map(async (t) => {
+      const u = await repositories.users.findById(t.userId).catch(() => null);
+      return { ...t, username: u?.username ?? '', displayName: (u as any)?.displayName ?? '' };
+    }));
+    json(ctx.res, 200, { rows: named });
+  });
+
+  router.add('POST', `${base}/admin/trusted`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    const b = (ctx.body ?? {}) as any;
+    const userId = String(b.userId ?? '').trim();
+    if (!userId) return error(ctx.res, 422, 'USER_ID_REQUIRED', 'شناسهٔ کاربر لازم است.');
+    const u = await repositories.users.findById(userId).catch(() => null);
+    if (!u) return error(ctx.res, 404, 'USER_NOT_FOUND', 'چنین کاربری وجود ندارد.');
+    const rec = await trust(userId, String(b.note ?? ''), ctx.userId ?? '');
+    /* Trusting an account and leaving its old signals on the suspicious list
+     * would mean doing the job twice. They are closed here, in the same click. */
+    const cleared = b.clearExisting === false ? 0
+      : await integrity.bulkUpdateStatus({ status: 'dismissed', userId, reviewedBy: ctx.userId ?? 'system' }).catch(() => 0);
+    audit(ctx.userId, 'USER_TRUSTED', 'user', userId, { note: rec.note, cleared });
+    json(ctx.res, 200, { ok: true, ...rec, cleared });
+  });
+
+  router.add('DELETE', `${base}/admin/trusted/:id`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    const ok = await untrust(ctx.params.id!);
+    if (!ok) return error(ctx.res, 404, 'NOT_TRUSTED', 'این کاربر در فهرست نیست.');
+    audit(ctx.userId, 'USER_UNTRUSTED', 'user', ctx.params.id!, {});
+    json(ctx.res, 200, { ok: true });
   });
 
   // Per-area RESET — destructive, requires an explicit confirm token, audited.

@@ -41,7 +41,12 @@ function run(): void {
   check('the column adds itself rather than waiting for a migration', () => {
     assert.match(repo, /ALTER TABLE users ADD COLUMN IF NOT EXISTS gender/,
       'nothing in the running code creates the column');
-    assert.match(repo, /async save\(user: User\)[\s\S]{0,400}ensureGenderColumn\(\)/,
+    /* The BODY of save(), not «within N characters of it». The character
+       window was a proxy for «inside the function», and it broke the day a
+       comment was added above the first statement — a test that fails when
+       somebody explains the code is a test that teaches people not to. */
+    const body = repo.slice(repo.indexOf('async save(user: User)'), repo.indexOf('async remove(id: string)'));
+    assert.ok(body.includes('ensureGenderColumn()'),
       'and save() must consult it before writing that column');
   });
 

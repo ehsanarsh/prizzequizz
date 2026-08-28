@@ -115,18 +115,39 @@ export const postgresRepositories: RepositoryBundle = {
       );
       return rows.map(userFromRow);
     },
+    /* A PLACEHOLDER MUST NEVER WIN AGAINST A REAL NAME.
+     *
+     * «چند کاربر که ثبت نام کردن و مشخصات خودشون رو دادن، تو پنل نام رو بازیکن
+     *  جدید نوشته و آی‌دی رو user_1783807103051.»
+     *
+     * This statement writes the WHOLE row, and about thirty places across the
+     * services read a user, change one balance, and save it back. Any of them
+     * holding a copy fetched BEFORE the player finished signing up will, on
+     * save, put that copy's name back — and the copy's name is the placeholder
+     * the account was created with. The player's own name is gone, silently,
+     * and only for whoever happened to be mid-request at the wrong moment,
+     * which is why it hit some accounts and not others.
+     *
+     * The narrow fix is here rather than in thirty call sites: an incoming
+     * value that is the placeholder SHAPE cannot overwrite a stored value that
+     * is not. Nothing legitimate is blocked — the client only accepts a
+     * username of 3-20 letters/digits, and `user_` followed by ten or more
+     * digits is a millisecond timestamp, not something a person types. Renaming
+     * to a real name still works, because a real name is not the placeholder. */
     async save(user: User): Promise<void> {
       const values = [user.id,user.phone,user.username,user.displayName,user.plan,user.coins,user.hearts,user.wallet,user.xp,user.level,user.weeklyScore,user.role ?? 'user',user.status ?? 'active',user.banReason ?? null,user.bannedAt ?? null];
+      const KEEP_NAME = `username = case when $3 ~ '^user_[0-9]{10,}$' and users.username !~ '^user_[0-9]{10,}$' then users.username else $3 end,`
+        + ` display_name = case when $4 = 'بازیکن جدید' and coalesce(users.display_name,'') <> '' and users.display_name <> 'بازیکن جدید' then users.display_name else $4 end,`;
       if (await ensureGenderColumn()) {
         await pool().query(`insert into users(id,phone,username,display_name,plan,coins,hearts,wallet_balance,xp,level,weekly_score,role,status,ban_reason,banned_at,gender,updated_at)
           values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,now())
-          on conflict(id) do update set phone=$2, username=$3, display_name=$4, plan=$5, coins=$6, hearts=$7, wallet_balance=$8, xp=$9, level=$10, weekly_score=$11, role=$12, status=$13, ban_reason=$14, banned_at=$15, gender=$16, updated_at=now()`,
+          on conflict(id) do update set phone=$2, ${KEEP_NAME} plan=$5, coins=$6, hearts=$7, wallet_balance=$8, xp=$9, level=$10, weekly_score=$11, role=$12, status=$13, ban_reason=$14, banned_at=$15, gender=$16, updated_at=now()`,
           [...values, user.gender ?? null]);
         return;
       }
       await pool().query(`insert into users(id,phone,username,display_name,plan,coins,hearts,wallet_balance,xp,level,weekly_score,role,status,ban_reason,banned_at,updated_at)
         values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,now())
-        on conflict(id) do update set phone=$2, username=$3, display_name=$4, plan=$5, coins=$6, hearts=$7, wallet_balance=$8, xp=$9, level=$10, weekly_score=$11, role=$12, status=$13, ban_reason=$14, banned_at=$15, updated_at=now()`,
+        on conflict(id) do update set phone=$2, ${KEEP_NAME} plan=$5, coins=$6, hearts=$7, wallet_balance=$8, xp=$9, level=$10, weekly_score=$11, role=$12, status=$13, ban_reason=$14, banned_at=$15, updated_at=now()`,
         values);
     },
     async remove(id: string): Promise<void> { await pool().query('delete from users where id=$1', [id]); },
