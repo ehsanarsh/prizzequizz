@@ -2,9 +2,14 @@
  *
  * «در قسمت آخرین بازمانده تا لحظهٔ حذف مبلغ جایزه رو کسی ندونه، یعنی جایزه با
  *  اولین حذفی نمایش داده بشه، عین فیلم بازی مرکب: در موقع هر حذف عدد بزرگ نوشته
- *  بشه و با حذف‌های بیشتر بزرگ‌تر بشه، و در انتها آروم آروم وایسته و سه بار
- *  چشمک بزنه و پنجرهٔ ادامه یا برداشت بیاد، و بعد از ادامه همون عدد سوال قبلی
- *  بیاد و با هر حذف مبلغ بزرگ‌تر بشه.»
+ *  بشه، و در انتها آروم آروم وایسته و سه بار چشمک بزنه و پنجرهٔ ادامه یا برداشت
+ *  بیاد.»  و بعد: «منظورم از بزرگ‌تر شدن یعنی بیشتر شدن عدد نه بزرگ‌تر شدن
+ *  سایز — از اول باید بزرگ بیاد و اولین حقی باشه که می‌بره؛ اگه با بلیط قرمزه
+ *  عدد بعد از کسر کارمزد می‌شه ۴۵۰۰۰ تومن، و با هر حذف اون عدد بیشتر می‌شه.»
+ *
+ * So the type is one size from the first announcement to the last, and the
+ * figure announced is the player's own take — opening on what they were already
+ * owed and climbing to what the elimination made it worth.
  *
  * The part that is easy to get wrong is not the animation — it is the leak. A
  * figure that is masked by lsLive but printed by the builder is on screen for a
@@ -18,6 +23,9 @@ import http from 'node:http'; import fs from 'node:fs'; import path from 'node:p
 const ROOT = '/home/user/prizzequizz';
 let pass = 0, fail = 0;
 const ok = (n, c, extra = '') => { if (c) { pass++; console.log('  ok   ' + n + (extra ? '  [' + extra + ']' : '')); } else { fail++; console.log('  FAIL ' + n + (extra ? '  [' + extra + ']' : '')); } };
+const px = (v) => Math.round(parseFloat(v) * 10) / 10;
+/* The game's own formatting, reproduced here only to build expectations. */
+const faNum = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '٬').replace(/[0-9]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[+d]);
 
 const server = http.createServer((q, r) => {
   const f = path.join(ROOT, q.url === '/' ? 'prizze-v643.html' : decodeURIComponent(q.url.split('?')[0]));
@@ -42,10 +50,13 @@ await page.goto(`http://127.0.0.1:${PORT}/`, { waitUntil: 'domcontentloaded' });
 await page.waitForTimeout(5400);
 
 const POT = 740000;
+/* A red ticket's take after commission, and what it becomes once one player is
+   out — the exact figures from the report. */
+const ENTRY_SHARE = 45000, AFTER_ONE = 52000;
 const snap = (elim, phase) => ({
   room: { id: 'r1', status: 'running', phase, round: elim + 1, totalRounds: 12, capacity: 20,
           grossPool: POT, phaseEndsAt: Date.now() + 30000, serverNow: Date.now(), chatEnabled: true },
-  me: { userId: 'u1', status: 'alive', units: 1, currentShare: 120000, decisionThisRound: null },
+  me: { userId: 'u1', status: 'alive', units: 1, currentShare: elim ? AFTER_ONE : ENTRY_SHARE, decisionThisRound: null },
   stats: { alive: 20 - elim, eliminated: elim, cashedOut: 0, remainingPot: POT },
   players: [{ userId: 'u1', status: 'alive', units: 1 }], votes: 0
 });
@@ -90,65 +101,79 @@ ok('all three show the mask instead', built.masked);
 console.log('the first elimination turns the lights on:');
 /* Read in the SAME turn that fires it: the climb is 2.2s long, so anything
    that waits first is reading the middle of it and not the start. */
-const hero1 = await page.evaluate(() => {
+const hero1 = await page.evaluate((after) => {
   window.__s.stats.eliminated = 1; window.__s.stats.alive = 19;
+  window.__s.me.currentShare = after;
   (0, eval)('lsLive')(window.__s);
   const h = document.getElementById('lsPotHero');
   if (!h) return { none: true };
   const num = h.querySelector('.lph-num');
-  return { none: false, k: h.style.getPropertyValue('--lph-k'), fs: getComputedStyle(num).fontSize,
-           start: num.textContent, w: Math.round(num.getBoundingClientRect().width) };
-});
+  return { none: false, fs: getComputedStyle(num).fontSize, start: num.textContent,
+           label: (h.querySelector('.lph-lbl') || {}).textContent || '',
+           w: Math.round(num.getBoundingClientRect().width) };
+}, AFTER_ONE);
 ok('the big number arrives in the middle of the screen', hero1.none === false, hero1.none ? 'no hero' : hero1.start);
-ok('and it opens on nothing, so the whole pot is seen arriving', hero1.start === '۰', hero1.start);
+/* The player's own take, not the room's pot — «اولین حقی که می‌بره». */
+ok('and it is the player’s own share that is announced', hero1.label === 'سهم تو', hero1.label);
+ok('it opens on what they were already owed', hero1.start === faNum(ENTRY_SHARE), hero1.start + ' vs ' + faNum(ENTRY_SHARE));
+ok('big from the very first announcement', px(hero1.fs) >= 46, hero1.fs);
 ok('it fits the screen', hero1.w <= 390, hero1.w + 'px');
 
 /* It climbs, turns green, blinks three times, and only then flies home. */
 await page.waitForTimeout(2600);
-const green = await page.evaluate((pot) => {
+const green = await page.evaluate((want) => {
   const h = document.getElementById('lsPotHero');
   if (!h) return { gone: true };
   const num = h.querySelector('.lph-num');
   const cs = getComputedStyle(num);
-  return { gone: false, txt: num.textContent, want: (0, eval)('lsFa')(pot),
+  return { gone: false, txt: num.textContent, want: (0, eval)('lsFa')(want),
            green: h.classList.contains('lph-green'), anim: cs.animationName,
            count: cs.animationIterationCount };
-}, POT);
-ok('it climbs to the real figure', green.txt === green.want, green.txt + ' vs ' + green.want);
+}, AFTER_ONE);
+ok('it climbs to what the elimination made it worth', green.txt === green.want, green.txt + ' vs ' + green.want);
 ok('turns green', green.green === true);
 ok('and blinks exactly three times', green.anim === 'lphBlink' && green.count === '3', green.anim + ' × ' + green.count);
 
 await page.waitForTimeout(2800);
-const landed = await page.evaluate((pot) => ({
+const landed = await page.evaluate((want) => ({
   hero: !!document.getElementById('lsPotHero'),
-  small: (document.getElementById('lsRemain') || {}).textContent,
-  want: (0, eval)('lsFa')(pot)
-}), POT);
+  small: (document.getElementById('lsMyShare') || {}).textContent,
+  want: (0, eval)('lsFa')(want)
+}), AFTER_ONE);
 ok('then it goes home', landed.hero === false);
-ok('and the small figure has the number now', landed.small === landed.want, landed.small + ' vs ' + landed.want);
+ok('and the small «سهم تو» has the number now', landed.small === landed.want, landed.small + ' vs ' + landed.want);
 
-console.log('every elimination is louder than the last:');
-const sizes = [];
-for (const n of [2, 5, 9]) {
-  const got = await page.evaluate((e) => {
-    (0, eval)('lsPotReset()');
-    window.__s.stats.eliminated = 0; (0, eval)('lsLive')(window.__s);
-    window.__s.stats.eliminated = e; window.__s.stats.alive = 20 - e;
-    window.__s.stats.remainingPot = 740000 + e * 1000;
+console.log('what grows is the figure, not the type:');
+/* Round after round: every elimination hands the survivors more, so every
+   announcement opens where the last one ended and climbs past it. The type is
+   the same size throughout — that was the misreading this replaced. */
+const rounds = [];
+await page.evaluate(() => { (0, eval)('lsPotReset()'); window.__s.stats.eliminated = 0; (0, eval)('lsLive')(window.__s); });
+let share = ENTRY_SHARE;
+for (const e of [1, 2, 3, 4]) {
+  share = Math.round(share * 1.18);
+  const got = await page.evaluate((x) => {
+    window.__s.stats.eliminated = x.e; window.__s.stats.alive = 20 - x.e;
+    window.__s.me.currentShare = x.share;
     (0, eval)('lsLive')(window.__s);
     const h = document.getElementById('lsPotHero');
     const num = h && h.querySelector('.lph-num');
-    return { k: h ? Number(h.style.getPropertyValue('--lph-k')) : 0,
-             fs: num ? parseFloat(getComputedStyle(num).fontSize) : 0,
+    return { open: num ? num.textContent : '', fs: num ? parseFloat(getComputedStyle(num).fontSize) : 0,
              w: num ? Math.round(num.getBoundingClientRect().width) : 0 };
-  }, n);
-  sizes.push({ n, ...got });
-  await page.waitForTimeout(150);
+  }, { e, share });
+  rounds.push({ e, share, ...got });
+  /* Let each announcement finish before the next elimination lands. */
+  await page.waitForFunction(() => !document.getElementById('lsPotHero'), null, { timeout: 12000 });
 }
-ok('the number grows with the body count', sizes[0].fs < sizes[1].fs && sizes[1].fs < sizes[2].fs,
-  sizes.map((x) => x.n + '→' + x.fs + 'px').join('  '));
-ok('but never off the edge of the phone', sizes.every((x) => x.w <= 390), sizes.map((x) => x.w).join(','));
-ok('and the growth is capped, not unbounded', sizes[2].k <= 1.55, 'k=' + sizes[2].k);
+ok('every elimination announces a bigger figure than the last',
+  rounds.every((r, i) => i === 0 || r.share > rounds[i - 1].share),
+  rounds.map((r) => r.share).join(' → '));
+ok('and each one opens where the previous one ended',
+  rounds.slice(1).every((r, i) => r.open === faNum(rounds[i].share)),
+  rounds.map((r) => r.open).join(' | '));
+ok('the type never changes size', rounds.every((r) => r.fs === rounds[0].fs),
+  rounds.map((r) => r.fs + 'px').join(' '));
+ok('and never runs off the edge of the phone', rounds.every((r) => r.w <= 390), rounds.map((r) => r.w).join(','));
 
 console.log('the continue/withdraw sheet comes after the announcement, not over it:');
 /* The loop above left an announcement mid-flight; it has to finish before this
@@ -168,9 +193,11 @@ const order = await page.evaluate(() => {
   /* THE REAL ORDER: somebody goes out, the number is announced, and only then
      does the room reach the cash-out phase. */
   (0, eval)('lsPotReset()'); drop();
-  s.room.phase = 'elimination'; s.stats.eliminated = 0;
+  s.room.phase = 'elimination'; s.stats.eliminated = 0; s.me.currentShare = 45000;
   (0, eval)('lsLive')(s);
-  s.stats.eliminated = 1; s.stats.alive = 19;
+  /* Somebody goes out, so the survivors' take goes up — which is the thing
+     being announced. Leaving the share unchanged would mean nothing to say. */
+  s.stats.eliminated = 1; s.stats.alive = 19; s.me.currentShare = 52000;
   (0, eval)('lsLive')(s);                       // the announcement starts
   s.room.phase = 'cashout';
   (0, eval)('lsOverlays')(s);                   // and the sheet asks to go up
@@ -195,10 +222,11 @@ const honest = await page.evaluate(() => {
   (0, eval)('lsPotReset()');
   const s = window.__s;
   s.stats.eliminated = 0; s.room.phase = 'cashout'; s.me.decisionThisRound = null;
+  s.me.currentShare = 45000;
   document.getElementById('lsCashPop') && document.getElementById('lsCashPop').remove();
   (0, eval)('lsOverlays')(s);
   const c = document.getElementById('lsCashPop');
-  return { txt: (c ? c.textContent : '').replace(/\s+/g, ' '), share: (0, eval)('lsFa')(120000) };
+  return { txt: (c ? c.textContent : '').replace(/\s+/g, ' '), share: (0, eval)('lsFa')(45000) };
 });
 ok('a player deciding is told the real number, never «؟؟؟»',
   honest.txt.includes(honest.share) && !honest.txt.includes('؟؟؟'), honest.txt.slice(0, 70));

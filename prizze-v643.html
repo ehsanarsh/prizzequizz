@@ -5713,10 +5713,11 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
   animation:lphIn .38s cubic-bezier(.2,1.35,.35,1) both}
 .ls-pot-hero .lph-lbl{font-size:12.5px;font-weight:900;color:#e9e2d2;letter-spacing:.4px;
   text-shadow:0 2px 6px rgba(0,0,0,.9);opacity:.9}
-/* The base is a share of the screen rather than a fixed 64px, because it is now
-   multiplied: --lph-k climbs with the number of players out. The clamp is what
-   keeps the loudest announcement of a long match inside a narrow phone. */
-.ls-pot-hero .lph-num{font-size:clamp(40px,calc(16vw * var(--lph-k,1)),104px);font-weight:900;line-height:1.02;color:#FFE24A;
+/* ONE SIZE, AND IT IS BIG FROM THE FIRST ANNOUNCEMENT. Sized off the screen so
+   a wide phone gets a bigger number than a narrow one, and clamped so a long
+   figure never runs off either. It does not change with the round: the growth
+   the player is meant to feel is in the number itself. */
+.ls-pot-hero .lph-num{font-size:clamp(46px,17vw,80px);font-weight:900;line-height:1.02;color:#FFE24A;
   letter-spacing:-1px;
   /* Readable over whatever the room is showing behind it, without a panel. */
   text-shadow:0 4px 0 #000,0 0 10px rgba(0,0,0,.95),0 0 34px rgba(255,226,74,.55)}
@@ -5734,7 +5735,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
 .ls-pot-hero::before{content:"";position:absolute;left:50%;top:50%;width:min(78vw,340px);height:200px;
   transform:translate(-50%,-50%);border-radius:50%;pointer-events:none;
   background:radial-gradient(closest-side,rgba(0,0,0,.72),rgba(0,0,0,0))}
-@media(max-width:370px){.ls-pot-hero .lph-num{font-size:clamp(36px,calc(14.5vw * var(--lph-k,1)),84px)}}
+@media(max-width:370px){.ls-pot-hero .lph-num{font-size:clamp(40px,16vw,72px)}}
 .ls-pot-hero.lph-green .lph-num{color:#6be08a;
   text-shadow:0 4px 0 #000,0 0 10px rgba(0,0,0,.95),0 0 38px rgba(107,224,138,.7);
   animation:lphBlink .52s steps(1,end) 3}
@@ -8991,32 +8992,55 @@ let _lsPotRoom=null;
    be told how much money. Drama does not get to make that decision blind. */
 const LS_POT_MASK='؟؟؟';
 const _lsPotMasked={};
+/* Followed while it is hidden, shown to nobody. The reveal has to open on what
+   the player was ALREADY owed — «اولین حقی که می‌بره» — and that figure was on
+   the last snapshot before anyone went out; without keeping it, the first
+   announcement would have to start at zero and the growth being celebrated
+   would be invisible. */
+const _lsPotHidden={};
 function lsPotRevealed(snap){
   try{ return Number((snap&&snap.stats&&snap.stats.eliminated)||0)>0; }catch(e){ return true; }
 }
 /* What a freshly-built screen should print in a prize slot. */
 function lsPotText(snap,val){ return lsPotRevealed(snap)?lsFa(val):LS_POT_MASK; }
-function lsPotReset(){ for(const k in _lsPotShown) delete _lsPotShown[k]; for(const k in _lsPotMasked) delete _lsPotMasked[k]; _lsPotRoom=null; }
+/* WHICH FIGURE THE BIG NUMBER IS.
+   «اولین حقی باشه که می‌بره — اگه با بلیط قرمزه، عدد بعد از کسر کارمزد می‌شه
+    ۴۵۰۰۰ تومن، و با هر حذف اون عدد بیشتر می‌شه.»
+   So the announcement is the player's OWN take, not the room's pot: the money
+   they would walk away with if they stopped now. It opens on what that was
+   before this elimination — their entry entitlement, the first thing they were
+   ever owed — and climbs to what it is worth now. Somebody with no stake left
+   (a spectator, or a player already out) has no take to announce, so for them
+   it falls back to the pot, which is the thing they are still watching.
+   Nothing about how either figure is CALCULATED is touched here; both come
+   from the server exactly as they always did. */
+function lsHeroId(){
+  try{
+    if(lsSnap&&lsMyShare(lsSnap)!=null&&document.getElementById('lsMyShare')) return 'lsMyShare';
+  }catch(e){}
+  return 'lsRemain';
+}
+const LS_HERO_LABEL={lsMyShare:'سهم تو',lsRemain:'صندوق جایزه'};
+function lsPotReset(){ for(const k in _lsPotShown) delete _lsPotShown[k]; for(const k in _lsPotMasked) delete _lsPotMasked[k]; for(const k in _lsPotHidden) delete _lsPotHidden[k]; _lsPotRoom=null; }
 function lsPotPaint(id,val,revealed){
   const el=document.getElementById(id); if(!el) return;
   const v=Math.max(0,Math.round(Number(val)||0));
   /* A different room is a different pot; never animate across rooms. */
   const room=lsSnap&&lsSnap.room&&lsSnap.room.id;
-  if(room!==_lsPotRoom){ _lsPotRoom=room; for(const k in _lsPotShown) delete _lsPotShown[k]; for(const k in _lsPotMasked) delete _lsPotMasked[k]; }
+  if(room!==_lsPotRoom){ _lsPotRoom=room; for(const k in _lsPotShown) delete _lsPotShown[k]; for(const k in _lsPotMasked) delete _lsPotMasked[k]; for(const k in _lsPotHidden) delete _lsPotHidden[k]; }
 
   /* Still dark. Nothing is remembered while it is, so the reveal has a clean
      zero to climb from rather than a figure it silently already knew. */
   if(revealed===false){
-    _lsPotMasked[id]=true;
+    _lsPotMasked[id]=true; _lsPotHidden[id]=v;
     if(el._lsPotRaf){ cancelAnimationFrame(el._lsPotRaf); el._lsPotRaf=null; }
     el._lsPotRun=null; delete _lsPotShown[id];
     el.textContent=LS_POT_MASK;
     return;
   }
-  /* THE MOMENT THE LIGHTS COME ON. It was masked and now it is not, so the
-     climb starts at nothing — the whole pot arrives at once, which is the
-     first elimination's announcement. */
-  if(_lsPotMasked[id]){ delete _lsPotMasked[id]; _lsPotShown[id]=0; }
+  /* THE MOMENT THE LIGHTS COME ON. It opens on the figure the player already
+     had coming to them and climbs to what this elimination made it worth. */
+  if(_lsPotMasked[id]){ delete _lsPotMasked[id]; _lsPotShown[id]=Math.max(0,Number(_lsPotHidden[id])||0); }
 
   const prev=_lsPotShown[id];
   if(prev===undefined||v<=prev||el._lsPotRun===v){
@@ -9041,7 +9065,7 @@ function lsPotGrow(el,from,to){
      The pot is the only figure that gets this — it is the one the elimination
      was FOR. The small number holds its old value until the big one lands on
      it, so the same total is never in two places at once. */
-  if(el.id==='lsRemain'&&lsPotHeroOn()){ lsPotHero(el.id,start,to); return; }
+  if(el.id===lsHeroId()&&lsPotHeroOn()){ lsPotHero(el.id,start,to); return; }
   const dur=2200, t0=performance.now();
   el.classList.remove('ls-pot-done'); el.classList.add('ls-pot-up');
   /* «حق حذف‌شده‌ها واریز اون صندوق بشه» — what was added, said out loud. */
@@ -9085,12 +9109,10 @@ function lsPotHero(id,from,to){
     const host=document.querySelector('.phone')||document.body;
     const wrap=document.createElement('div');
     wrap.className='ls-pot-hero'; wrap.id='lsPotHero';
-    /* «با حذف‌های بیشتر بزرگ‌تر بشه» — every elimination is worth more than the
-       one before it, so every announcement is louder than the one before it.
-       The step is small and the ceiling is low: this has to grow visibly over
-       a match of twelve rounds without the last one running off the screen. */
-    const gone=Math.max(1,Number((lsSnap&&lsSnap.stats&&lsSnap.stats.eliminated)||1));
-    wrap.style.setProperty('--lph-k',Math.min(1.55,1+(gone-1)*0.07).toFixed(3));
+    /* «منظورم از بزرگ‌تر شدن یعنی بیشتر شدن عدد نه بزرگ‌تر شدن سایز — از اول
+       باید بزرگ بیاد.» So the type does not grow: it is as big as it will ever
+       be on the very first announcement, and stays that size for the rest of
+       the match. What grows is the figure. */
     /* «اصلا حس هیجان به کاربر نمیده — الان داخل یه کادر فقط نوشته میشه. باید
        فقط اون عدد بیاد جلو وسط بزرگ، با موشن اضافه بشه، بعد ثابت بشه، بعد با
        موشن بره سر جای خودش.»
@@ -9102,7 +9124,7 @@ function lsPotHero(id,from,to){
     wrap.innerHTML='<div class="lph-card">'+
       (to>from?'<i class="lph-add">+'+lsFa(to-from)+'</i>':'')+
       '<b class="lph-num">'+lsFa(from)+'</b>'+
-      '<span class="lph-lbl">صندوق جایزه</span></div>';
+      '<span class="lph-lbl">'+(LS_HERO_LABEL[id]||'صندوق جایزه')+'</span></div>';
     host.appendChild(wrap);
     const num=wrap.querySelector('.lph-num');
     const H={wrap:wrap,num:num,shown:from,to:to,id:id,t0:Date.now()};
