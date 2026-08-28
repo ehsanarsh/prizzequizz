@@ -15,6 +15,7 @@
  *
  * Run: npx tsx src/tests/site.test.ts */
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -24,7 +25,7 @@ import {
   normaliseSlug, savePage, savePost, saveSettings, _resetSiteMemory
 } from '../content.js';
 import { esc, faDate, renderPage, renderPost, renderRobots, renderSitemap } from '../render.js';
-import { adminHtml } from '../adminUi.js';
+import { adminBuild, adminHtml } from '../adminUi.js';
 import { getAsset, listCharacters } from '../assets.js';
 import { MEDIA_MAX_BYTES, deleteMedia, getMediaBytes, listMedia, saveMedia, _resetMedia } from '../media.js';
 
@@ -873,6 +874,34 @@ async function run(): Promise<void> {
        panel shows a picture that will never appear. */
     assert.equal(assetHref('../secret.png'), '');
     assert.equal(assetHref('a b.png'), '');
+  });
+
+  /* THE STAMP THAT SAYS WHICH BUILD IS RUNNING. A deploy that did not land
+     looks exactly like one that did — the panel opens and works and is the old
+     one. This is the only thing that separates «the change did not work» from
+     «the change never arrived», so it has to be real: present, and different
+     for a different panel. */
+  await check('the panel says which build it is, in the page and in the header', () => {
+    const build = adminBuild();
+    assert.match(build, /^[0-9a-f]{8}$/, 'the build stamp is not a stamp: ' + build);
+    const html = adminHtml();
+    assert.ok(!html.includes('__BUILD__'), 'the placeholder was left in the page');
+    /* Both places an operator can read it: the gate, before logging in, and the
+       header, after. */
+    assert.ok(html.split(build).length - 1 >= 2,
+      'the build stamp should appear on the gate AND in the header');
+    assert.ok(html.includes('نسخهٔ پنل'), 'nothing tells the operator what the number is');
+
+    const src = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), '../adminUi.ts'), 'utf8');
+    assert.ok(src.includes('__BUILD__'), 'the stamp is not substituted from the source any more');
+    /* A STAMP THAT NEVER MOVES IS WORSE THAN NONE — it would confirm a stale
+       deploy as a fresh one, which is the exact question it exists to answer.
+       So this walks it backwards: put the placeholder back where the stamp was
+       printed, and the hash of THAT page has to be the stamp. A fixed string
+       cannot survive it, because the page it came from does not hash to it. */
+    const restored = html.split(build).join('__BUILD__');
+    assert.equal(createHash('sha1').update(restored).digest('hex').slice(0, 8), build,
+      'the stamp is not derived from the panel, so it cannot tell a stale deploy from a fresh one');
   });
 
   console.log(`[site] ${passed} passed, ${failed} failed`);

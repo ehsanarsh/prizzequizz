@@ -12,10 +12,28 @@
  * be able to break a layout or paste a script, and should not have to know
  * what a <div> is.
  */
+import { createHash } from 'node:crypto';
 import { BLOCK_LABELS } from './content.js';
 import { listCharacters } from './assets.js';
 
+/* WHICH BUILD OF THE PANEL IS ACTUALLY RUNNING.
+ *
+ * A deploy that did not land looks exactly like a deploy that did: the page
+ * opens, everything works, and it is the old one. There was no way to tell —
+ * not from the page, not from a curl — so «the panel is unchanged» could not be
+ * separated from «the new files never reached the server».
+ *
+ * The stamp is a hash of the panel's own source, so it needs no version number
+ * anybody has to remember to bump: change one character in this file and it
+ * changes. It is shown in the header and sent as a response header, so it can
+ * be read with or without logging in. */
+export function adminBuild(): string {
+  return createHash('sha1').update(adminSource()).digest('hex').slice(0, 8);
+}
 export function adminHtml(): string {
+  return adminSource().split('__BUILD__').join(adminBuild());
+}
+function adminSource(): string {
   return `<!doctype html><html lang="fa" dir="rtl"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
@@ -78,13 +96,14 @@ main{max-width:1000px;margin:0 auto;padding:18px}
     <div class="f"><label>کلید مدیریت</label><input id="key" type="password" class="mono" autocomplete="off"></div>
     <button class="btn pri" style="width:100%" onclick="enter()">ورود</button>
     <p class="sub" id="gateErr" style="color:var(--bad);margin-top:10px"></p>
+    <p class="sub" style="margin-top:8px">نسخهٔ پنل: <span class="mono">__BUILD__</span> — اگر بعد از نصب عوض نشده، فایل‌های تازه به سرور نرسیده‌اند.</p>
   </div>
 </div>
 
 <div id="app" style="display:none">
 <header>
   <b>محتوا و سئو</b>
-  <span class="sub" style="margin:0">سایت معرفی — جدا از بازی</span>
+  <span class="sub" style="margin:0">سایت معرفی — جدا از بازی · نسخهٔ پنل <span class="mono">__BUILD__</span></span>
   <span style="flex:1"></span>
   <a class="btn sm" id="viewSite" href="/home" target="_blank" rel="noopener">دیدن سایت</a>
   <button class="btn sm" onclick="loadAll()">↻ تازه‌سازی</button>

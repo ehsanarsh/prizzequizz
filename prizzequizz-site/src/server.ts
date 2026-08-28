@@ -23,7 +23,7 @@ import {
 } from './content.js';
 import { renderNotFound, renderPage, renderPost, renderRobots, renderSitemap } from './render.js';
 import { homeLive } from './live.js';
-import { adminHtml } from './adminUi.js';
+import { adminBuild, adminHtml } from './adminUi.js';
 import { logger } from './log.js';
 
 const PORT = Number(process.env.SITE_PORT ?? 8090);
@@ -204,6 +204,10 @@ export async function handle(req: IncomingMessage, res: ServerResponse): Promise
     /* The page itself is public; every byte of DATA behind it needs the key,
      * which the operator pastes once. Serving the shell without the key means
      * no secret ever sits in a URL or a bookmark. */
+    /* Which build this is, readable without logging in — so «the panel did not
+       change» can be told apart from «the new files never reached the server»
+       with one curl instead of a guess. */
+    res.setHeader('x-site-build', adminBuild());
     html(res, 200, adminHtml(), 'no-store');
     return;
   }
