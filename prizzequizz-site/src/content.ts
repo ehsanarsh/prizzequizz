@@ -212,6 +212,22 @@ export interface SiteSettings {
   notFoundTitle: string;
   notFoundText: string;
   notFoundLabel: string;
+  /* ── THE LIVE PANELS ─────────────────────────────────────────────────
+     The words around the game's real numbers. The numbers themselves come
+     from the database and are not editable — that is the point of them —
+     but everything wrapped around them is, including switching a panel off
+     by clearing its title.
+     `liveWinnerVerb` is a sentence with two slots: {name} and {mode}. */
+  liveLeaderTitle: string;
+  liveLeaderPeriod: string;
+  livePulseLabel: string;
+  livePulseUnit: string;
+  livePulsePlayers: string;
+  liveWinnerVerb: string;
+  liveStatPlayers: string;
+  liveStatMatches: string;
+  liveStatToday: string;
+  liveStatWeek: string;
   /** Turns the whole public site off (503) without touching the game. */
   enabled: boolean;
   updatedAt: string;
@@ -378,6 +394,16 @@ export const SETTINGS_DEFAULTS: SiteSettings = {
   postCtaTitle: 'امتحانش کن',
   postCtaSubtitle: 'همین سؤال‌ها را در دوئل با یک بازیکن واقعی بازی کن.',
   postCtaLabel: 'شروع بازی',
+  liveLeaderTitle: 'صدرنشین‌های این هفته',
+  liveLeaderPeriod: 'هفتگی',
+  livePulseLabel: 'مسابقه‌های امروز',
+  livePulseUnit: 'از نیمه‌شب تا الان',
+  livePulsePlayers: 'بازیکن روی جدول این هفته',
+  liveWinnerVerb: '{name} برندهٔ {mode} شد',
+  liveStatPlayers: 'بازیکن',
+  liveStatMatches: 'مسابقهٔ انجام‌شده',
+  liveStatToday: 'مسابقهٔ امروز',
+  liveStatWeek: 'بازیکن فعال این هفته',
   notFoundTitle: 'این صفحه پیدا نشد',
   notFoundText: 'شاید نشانی را اشتباه وارد کرده‌ای، یا این صفحه برداشته شده.',
   notFoundLabel: 'برگرد به خانه',
@@ -397,16 +423,28 @@ function seedPages(): SitePage[] {
   return [
     P({
       slug: 'home', title: 'پرایز کوئیز', navLabel: 'خانه', navOrder: 1,
+      /* The artwork the design is built around. Every one of these is a plain
+         editable field — an operator can swap the character, or clear it and
+         get the plain card back — but they SHIP filled, because a design whose
+         illustrations only appear once somebody fills in eighteen empty boxes
+         is a design nobody ever sees. */
+      kicker: 'بازی آنلاین اطلاعات عمومی',
+      heroCharacter: 'char-hero.png',
+      heroButtons: [
+        { label: '🎮 شروع بازی', href: '{play}' },
+        { label: '📥 دانلود بازی', href: '/download' }
+      ],
+      intro: 'با بازیکن‌های واقعی دوئل کن، در «آخرین بازمانده» تا آخر بمان و رکورد بزن — همه به فارسی.',
       seoTitle: 'پرایز کوئیز | بازی آنلاین اطلاعات عمومی با جایزه',
       seoDescription: 'با بازیکن‌های واقعی دوئل کن، در «آخرین بازمانده» تا آخر بمان و رکورد بزن. بازی مسابقه‌ای فارسی، رایگان و جایزه‌دار.',
       seoKeywords: 'بازی اطلاعات عمومی, مسابقه آنلاین, کوییز فارسی, بازی جایزه دار',
       blocks: [
         { kind: 'hero', title: 'بدان، جواب بده، ببر', subtitle: 'مسابقهٔ آنلاین اطلاعات عمومی با بازیکن‌های واقعی. دوئل زنده، آخرین بازمانده، ثبت رکورد — همه به فارسی.', ctaText: '🎮 شروع بازی', ctaHref: '{play}', ctaText2: '📥 دانلود بازی', ctaHref2: '/download' },
         { kind: 'cards', title: 'چه حالت‌هایی داری؟', items: [
-          { icon: '⚔️', title: 'دوئل', text: 'رودررو با یک بازیکن واقعی. هر دو یک سؤال می‌بینید و سرعت و دقت تعیین می‌کند چه کسی می‌برد.' },
-          { icon: '🏝️', title: 'آخرین بازمانده', text: 'همه با هم شروع می‌کنند و هر جواب غلط یک نفر را حذف می‌کند. هر که بیشتر بماند، سهم بیشتری می‌برد.' },
-          { icon: '🏅', title: 'ثبت رکورد', text: 'تا آخرین قلب جواب بده و رکورد بزن. هر موضوع جدول رکورد جداگانهٔ خودش را دارد.' },
-          { icon: '🎯', title: 'مأموریت‌ها', text: 'روزانه، هفتگی و دستاوردهای بلندمدت. هر مأموریت جایزهٔ خودش را دارد.' }
+          { icon: '⚔️', title: 'دوئل', character: 'char-cyclops.png', text: 'رودررو با یک بازیکن واقعی. هر دو یک سؤال می‌بینید و سرعت و دقت تعیین می‌کند چه کسی می‌برد.' },
+          { icon: '🏝️', title: 'آخرین بازمانده', character: 'char-crown.png', text: 'همه با هم شروع می‌کنند و هر جواب غلط یک نفر را حذف می‌کند. هر که بیشتر بماند، سهم بیشتری می‌برد.' },
+          { icon: '🏅', title: 'ثبت رکورد', character: 'char-winner.png', text: 'تا آخرین قلب جواب بده و رکورد بزن. هر موضوع جدول رکورد جداگانهٔ خودش را دارد.' },
+          { icon: '🎯', title: 'مأموریت‌ها', character: 'char-scholar.png', text: 'روزانه، هفتگی و دستاوردهای بلندمدت. هر مأموریت جایزهٔ خودش را دارد.' }
         ] },
         { kind: 'steps', title: 'در سه قدم شروع کن', items: [
           { title: 'ثبت‌نام با شمارهٔ موبایل', text: 'یک کد پیامکی، بدون رمز و بدون فرم طولانی.' },
@@ -419,11 +457,13 @@ function seedPages(): SitePage[] {
           { icon: '⚖️', title: 'امتیازدهی روی سرور', text: 'امتیاز و رکورد را سرور می‌شمارد، نه گوشی — جدول‌ها واقعی‌اند.' },
           { icon: '💳', title: 'برداشت شفاف', text: 'موجودی و گردش حساب همیشه در دسترس است و برداشت به حساب خودت واریز می‌شود.' }
         ] },
-        { kind: 'cta', title: 'همین حالا شروع کن', body: 'ثبت‌نام رایگان است و اولین بازی‌ات چند ثانیه با تو فاصله دارد.', ctaText: 'بزن بریم', ctaHref: '{play}' }
+        { kind: 'callout', title: 'رایگان هم می‌شود بازی کرد', character: 'char-free.png', body: 'حالت دوستانه ورودی ندارد: با قلب بازی می‌کنی، رکورد می‌زنی و تمرین می‌کنی. رقابت اصلی هر وقت خواستی، همان‌جاست.' },
+        { kind: 'cta', title: 'همین حالا شروع کن', body: 'ثبت‌نام رایگان است و اولین بازی‌ات چند ثانیه با تو فاصله دارد.', ctaText: 'بزن بریم', ctaHref: '{play}', character: 'char-cheer.png' }
       ]
     }),
     P({
       slug: 'download', title: 'دانلود بازی', navOrder: 2,
+      heroCharacter: 'char-free.png',
       seoTitle: 'دانلود پرایز کوئیز | نسخهٔ اندروید و وب',
       seoDescription: 'پرایز کوئیز را روی اندروید نصب کن یا بدون نصب در مرورگر بازی کن. نصب سریع، حجم کم، بدون نیاز به رمز.',
       seoKeywords: 'دانلود بازی اطلاعات عمومی, دانلود کوییز فارسی, نصب پرایز کوئیز',
@@ -445,6 +485,7 @@ function seedPages(): SitePage[] {
     }),
     P({
       slug: 'about', title: 'دربارهٔ ما', navOrder: 3,
+      heroCharacter: 'char-king.png',
       seoTitle: 'دربارهٔ پرایز کوئیز | ما که هستیم',
       seoDescription: 'پرایز کوئیز را یک تیم ایرانی می‌سازد؛ یک بازی مسابقه‌ای منصفانه و فارسی که در آن دانستن، برنده شدن است.',
       seoKeywords: 'درباره پرایز کوئیز, تیم پرایز کوئیز, بازی ایرانی',
@@ -462,6 +503,7 @@ function seedPages(): SitePage[] {
     }),
     P({
       slug: 'how-to-play', title: 'راهنمای بازی', navOrder: 4,
+      heroCharacter: 'char-scholar.png',
       seoTitle: 'آموزش بازی پرایز کوئیز | قوانین و راهنمای کامل',
       seoDescription: 'راهنمای کامل پرایز کوئیز: دوئل، آخرین بازمانده، ثبت رکورد، قلب‌ها، بلیت‌ها، کمک‌ها و نحوهٔ امتیازدهی.',
       seoKeywords: 'آموزش بازی اطلاعات عمومی, قوانین کوییز, راهنمای پرایز کوئیز',
@@ -494,6 +536,7 @@ function seedPages(): SitePage[] {
     }),
     P({
       slug: 'faq', title: 'سؤالات متداول', navOrder: 5,
+      heroCharacter: 'char-thinking.png',
       seoTitle: 'سؤالات متداول پرایز کوئیز',
       seoDescription: 'پاسخ پرسش‌های پرتکرار دربارهٔ ثبت‌نام، جایزه، برداشت وجه، بلیت و امنیت حساب در پرایز کوئیز.',
       seoKeywords: 'سوالات متداول پرایز کوئیز, برداشت جایزه, ثبت نام کوییز',
@@ -519,6 +562,7 @@ function seedPages(): SitePage[] {
     }),
     P({
       slug: 'contact', title: 'تماس با ما', navOrder: 6,
+      heroCharacter: 'char-cheer.png',
       seoTitle: 'تماس با پرایز کوئیز | پشتیبانی',
       seoDescription: 'راه‌های ارتباط با پشتیبانی پرایز کوئیز: ایمیل، پیام در بازی و شبکه‌های اجتماعی.',
       seoKeywords: 'تماس با پرایز کوئیز, پشتیبانی کوییز',
@@ -534,6 +578,7 @@ function seedPages(): SitePage[] {
     }),
     P({
       slug: 'privacy', title: 'حریم خصوصی', navOrder: 7,
+      heroCharacter: 'char-wizard-blue.png',
       seoTitle: 'سیاست حریم خصوصی | پرایز کوئیز',
       seoDescription: 'چه اطلاعاتی از شما جمع‌آوری می‌کنیم، چرا، چقدر نگه می‌داریم و شما چه حقی نسبت به آن دارید.',
       seoKeywords: 'حریم خصوصی, سیاست حفظ اطلاعات',
@@ -550,6 +595,7 @@ function seedPages(): SitePage[] {
     }),
     P({
       slug: 'terms', title: 'قوانین و مقررات', navOrder: 8,
+      heroCharacter: 'char-wizard-purple.png',
       seoTitle: 'قوانین و مقررات استفاده | پرایز کوئیز',
       seoDescription: 'شرایط استفاده از پرایز کوئیز: حساب کاربری، مسابقه‌ها، جوایز، پرداخت، برداشت و موارد تخلف.',
       seoKeywords: 'قوانین پرایز کوئیز, شرایط استفاده',
@@ -567,6 +613,7 @@ function seedPages(): SitePage[] {
     }),
     P({
       slug: 'blog', title: 'وبلاگ', navOrder: 9,
+      heroCharacter: 'char-sunglasses.png',
       seoTitle: 'وبلاگ پرایز کوئیز | سؤال، ترفند و معرفی بازی',
       seoDescription: 'مقاله‌های پرایز کوئیز: مجموعه سؤالات اطلاعات عمومی، معرفی بهترین بازی‌های آنلاین و ترفندهای برد.',
       seoKeywords: 'وبلاگ اطلاعات عمومی, مقاله بازی آنلاین, سوالات اطلاعات عمومی',

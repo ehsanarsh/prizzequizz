@@ -22,6 +22,7 @@ import {
   listPages, listPosts, savePage, savePost, saveSettings
 } from './content.js';
 import { renderNotFound, renderPage, renderPost, renderRobots, renderSitemap } from './render.js';
+import { homeLive } from './live.js';
 import { adminHtml } from './adminUi.js';
 import { logger } from './log.js';
 
@@ -232,7 +233,11 @@ export async function handle(req: IncomingMessage, res: ServerResponse): Promise
   const slug = path === '/' ? 'home' : decodeURIComponent(path.slice(1));
   const page = pages.find((p: any) => p.slug === slug);
   if (!page) { html(res, 404, renderNotFound(pages, settings), 'no-store'); return; }
-  html(res, 200, renderPage(page, pages, settings, posts));
+  /* Only the home page shows live panels, so only the home page pays for the
+     lookup — and homeLive caches, so a busy minute is a handful of queries.
+     It never throws: a failure returns nulls and the blocks are omitted. */
+  const live = slug === 'home' ? await homeLive() : undefined;
+  html(res, 200, renderPage(page, pages, settings, posts, live));
 }
 
 export function createSiteServer() {

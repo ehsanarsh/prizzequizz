@@ -660,6 +660,20 @@ function renderSeo(){
       '<div class="grid2">'+f('عنوان','postCtaTitle')+f('متن دکمه','postCtaLabel')+'</div>'+
       f('زیرعنوان','postCtaSubtitle')+
     '</div>'+
+    /* ── the panels that read the game itself ───────────────────────────
+       The numbers in these come from the live database and are deliberately
+       NOT editable — an operator who could type the leaderboard could publish
+       a leaderboard that is not true. The words around them are all here. */
+    '<div class="card"><h3>پنل‌های زندهٔ صفحهٔ اصلی</h3>'+
+      '<p class="sub">اعدادِ این بخش‌ها مستقیم از دیتابیس بازی خوانده می‌شوند و قابل تایپ نیستند — فقط نوشته‌های دورشان. عنوان هر بخش را خالی بگذاری، همان بخش حذف می‌شود. تا وقتی داده‌ای نباشد (مثلاً هفتهٔ اول)، خودشان نمایش داده نمی‌شوند.</p>'+
+      '<div class="grid2">'+f('عنوان جدول صدرنشین‌ها','liveLeaderTitle')+f('دورهٔ جدول','liveLeaderPeriod')+'</div>'+
+      '<div class="grid2">'+f('عنوان کارت تیره','livePulseLabel')+f('زیرنویس کارت تیره','livePulseUnit')+'</div>'+
+      f('برچسب تعداد بازیکن روی کارت تیره','livePulsePlayers')+
+      f('جملهٔ نوار برندگان','liveWinnerVerb')+
+      '<p class="sub" style="margin:4px 0 0">در این جمله <b>{name}</b> جای نام برنده و <b>{mode}</b> جای اسم حالت بازی می‌نشیند.</p>'+
+      '<div class="grid2">'+f('برچسب «بازیکن»','liveStatPlayers')+f('برچسب «مسابقهٔ انجام‌شده»','liveStatMatches')+'</div>'+
+      '<div class="grid2">'+f('برچسب «مسابقهٔ امروز»','liveStatToday')+f('برچسب «بازیکن فعال هفته»','liveStatWeek')+'</div>'+
+    '</div>'+
     '<div class="card"><h3>صفحهٔ «پیدا نشد» (۴۰۴)</h3>'+
       '<div class="grid2">'+f('عنوان','notFoundTitle')+f('متن دکمه','notFoundLabel')+'</div>'+
       f('متن','notFoundText')+

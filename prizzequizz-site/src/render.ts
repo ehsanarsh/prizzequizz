@@ -15,6 +15,7 @@
  * to paste — those are documented at their admin route and are owner-only.
  */
 import type { SiteBlock, SitePage, SitePost, SiteSettings } from './content.js';
+import { faNum, type LeaderRow, type LiveStats, type WinnerRow } from './live.js';
 
 export function esc(s: unknown): string {
   return String(s ?? '').replace(/[&<>"']/g, (c) =>
@@ -86,6 +87,28 @@ function href(raw: string, s: SiteSettings): string {
  * are still complete in their first response: nothing here waits on script. */
 const STYLE_HREF = '/site-assets/pq.css';
 
+/* THE FONT.
+ *
+ * The design system asks for Vazirmatn and nothing was loading it, so every
+ * page fell through the stack to Tahoma — which is why the site looked like a
+ * different site from the one that was designed.
+ *
+ * Self-hosted, not Google Fonts: the audience is in Iran, where fonts.gstatic
+ * is unreliable and often simply does not resolve. A stylesheet that half the
+ * visitors cannot fetch is a worse dependency than 108KB served from the same
+ * origin as the page.
+ *
+ * ONE variable file covers 100–900. The design leans on 600/700/800/900 for
+ * headings, buttons and numbers, and three static cuts would have cost more
+ * bytes than the variable one does.
+ *
+ * `font-display:swap` so the words are readable while it arrives, and a
+ * preload so the swap happens almost immediately rather than after the
+ * stylesheet has been parsed and the font discovered. */
+const FONT_HREF = '/site-assets/vazirmatn.woff2';
+const FONT_CSS = `@font-face{font-family:'Vazirmatn';src:url('${FONT_HREF}') format('woff2');`
+  + `font-weight:100 900;font-style:normal;font-display:swap;}`;
+
 /* Artwork the design ships with, by bare name; anything the operator uploaded
  * arrives as a /media/ URL and is passed through untouched. */
 function assetUrl(name: string): string {
@@ -122,6 +145,8 @@ ${abs ? `<meta property="og:image" content="${esc(abs)}">` : ''}
 ${abs ? `<meta name="twitter:image" content="${esc(abs)}">` : ''}
 <meta name="theme-color" content="#0E0C14">
 ${o.s.googleVerification /* raw: a verification tag pasted from Search Console */ || ''}
+<link rel="preload" href="${FONT_HREF}" as="font" type="font/woff2" crossorigin>
+<style>${FONT_CSS}</style>
 <link rel="stylesheet" href="${STYLE_HREF}">
 ${o.ldJson.map((j) => `<script type="application/ld+json">${j}</script>`).join('\n')}`;
 }
@@ -228,15 +253,21 @@ function block(b: SiteBlock, s: SiteSettings): string {
       return `${b.title ? `<h2 id="${esc(b.anchor || '')}">${esc(b.title)}</h2>` : ''}
         <ul>${items.map((i2) => `<li>${esc(i2.text || i2.title || '')}</li>`).join('')}</ul>`;
 
-    case 'cards':
+    case 'cards': {
+      /* The column count follows the card count. Four cards in a three-column
+         grid leaves one on a row of its own with a hole beside it, which reads
+         as a layout bug rather than a choice — and four mode cards is the
+         shape the home page actually ships with. */
+      const cols = items.length % 4 === 0 ? 'g4' : (items.length % 3 === 0 ? 'g3' : (items.length === 2 ? 'g2' : 'g3'));
       return `${b.title ? `<h2 id="${esc(b.anchor || '')}">${esc(b.title)}</h2>` : ''}
-        <div class="grid g3" style="margin:22px 0 34px">${items.map((i2) => {
+        <div class="grid ${cols}" style="margin:22px 0 34px">${items.map((i2) => {
           const hi = i2.highlight ? ';background:var(--yellow-tint);border-color:rgba(242,183,5,.3)' : '';
           return `<div class="card" style="padding:22px${hi}">
             ${i2.character ? `<div style="display:flex;align-items:flex-end;height:104px">${charImg(i2.character, 82)}</div>` : ''}
             ${i2.icon ? `<div class="ico">${esc(i2.icon)}</div>` : ''}
             <h3>${esc(i2.title)}</h3><p>${esc(i2.text)}</p>${chips(i2.tags)}</div>`;
         }).join('')}</div>`;
+    }
 
     case 'tiles':
       return `${b.title ? `<h2 id="${esc(b.anchor || '')}">${esc(b.title)}</h2>` : ''}
@@ -335,7 +366,12 @@ function crumbLd(s: SiteSettings, trail: Array<{ name: string; url: string }>): 
   };
 }
 
-export function renderPage(page: SitePage, pages: SitePage[], s: SiteSettings, posts: SitePost[] = []): string {
+export interface LiveData {
+  leaderboard: LeaderRow[] | null; winners: WinnerRow[] | null; stats: LiveStats | null;
+}
+const NO_LIVE: LiveData = { leaderboard: null, winners: null, stats: null };
+
+export function renderPage(page: SitePage, pages: SitePage[], s: SiteSettings, posts: SitePost[] = [], live: LiveData = NO_LIVE): string {
   const url = pageUrl(page.slug, s);
   const canonical = s.baseUrl + url;
   const ld: string[] = [];
@@ -362,18 +398,97 @@ export function renderPage(page: SitePage, pages: SitePage[], s: SiteSettings, p
       keywords: page.seoKeywords || s.keywords,
       canonical, ogImage: page.ogImage, noindex: page.noindex, s, ldJson: ld
     }),
-    body: `${nav(pages, page.slug, s)}<main id="main">${pageHero(page, pages, s)}${pageBody(page, s, list)}${
+    body: `${nav(pages, page.slug, s)}<main id="main">${pageHero(page, pages, s, live)}${
+      page.slug === 'home' ? ticker(live, s) + statRow(live, s) : ''
+    }${pageBody(page, s, list)}${
       ctaBand({ title: page.cta?.title ?? '', subtitle: page.cta?.subtitle, label: page.cta?.label ?? '',
                 hrefRaw: page.cta?.href ?? '', character: page.cta?.character }, s)
     }</main>${footer(pages, s)}`
   });
 }
 
+/* ── THE GAME'S OWN NUMBERS, IN THE DESIGN'S PANELS ─────────────────────
+ *
+ * These are the blocks the design drew and the site could not fill: the
+ * leaderboard, who just won, how busy the game is. They read the live
+ * database (see live.ts) and they follow one rule without exception —
+ *
+ *   NO DATA MEANS NO BLOCK.
+ *
+ * Not a zero, not «به‌زودی», not a plausible-looking example row. A public page
+ * that shows invented winners is lying about a real product to real people, and
+ * the placeholder always outlives the intention to replace it. An empty
+ * leaderboard renders nothing at all and the hero quietly falls back to the
+ * character illustration, which is a design the page already has.
+ */
+function leaderPanel(rows: LeaderRow[] | null, s: SiteSettings): string {
+  if (!rows || rows.length < 3) return '';   // one or two names is not a board
+  return `<div class="panel">
+    <div class="panel-h"><span>${esc(s.liveLeaderTitle)}</span><span style="font-size:11px;color:var(--muted)">${esc(s.liveLeaderPeriod)}</span></div>
+    <div class="lb">${rows.map((r) => `<div class="row${r.rank === 1 ? ' first' : ''}">
+        <span>${esc(fa(r.rank))}</span><span>${esc(r.name)}</span><span class="n">${esc(faNum(r.score))}</span>
+      </div>`).join('')}</div>
+  </div>`;
+}
+
+/* The dark tile beside the board. The design put a prize countdown here; the
+ * honest version of it is the thing the site can actually know — how many
+ * players are on this week's board and how many matches ran today. */
+function pulsePanel(st: LiveStats | null, s: SiteSettings): string {
+  if (!st || st.matchesToday <= 0) return '';
+  return `<div class="dark"><div class="in">
+    <div class="cap">${esc(s.livePulseLabel)}</div>
+    <div class="big">${esc(faNum(st.matchesToday))}</div>
+    <div class="sub">${esc(s.livePulseUnit)}</div>
+    ${st.playersThisWeek > 0 ? `<div class="clock"><span style="font-family:inherit;font-weight:700">${
+      esc(faNum(st.playersThisWeek))} ${esc(s.livePulsePlayers)}</span></div>` : ''}
+  </div></div>`;
+}
+
+function livePanels(live: LiveData, s: SiteSettings): string {
+  const lb = leaderPanel(live.leaderboard, s);
+  const pulse = pulsePanel(live.stats, s);
+  if (!lb && !pulse) return '';
+  /* One panel alone gets the full width rather than sitting in half a grid
+     looking like something failed to load. */
+  const pair = lb && pulse
+    ? `<div class="grid" style="grid-template-columns:1.35fr 1fr;gap:14px">${lb}${pulse}</div>`
+    : lb + pulse;
+  return `<div class="grid" style="gap:14px">${pair}</div>`;
+}
+
+/* The marquee of who just won. Two copies of the list, because the CSS
+ * animation slides one width and relies on the second to cover the gap. */
+function ticker(live: LiveData, s: SiteSettings): string {
+  const w = live.winners ?? [];
+  if (w.length < 3) return '';
+  const one = w.map((x) => `<span>${esc(s.liveWinnerVerb.replace('{name}', x.name).replace('{mode}', x.mode))}</span><i>◆</i>`).join('');
+  return `<div class="ticker"><div class="run">${one}${one}</div></div>`;
+}
+
+/* The stat band. Only the counts that are actually true get a tile, so a brand
+ * new install shows two rather than four zeroes. */
+function statRow(live: LiveData, s: SiteSettings): string {
+  const st = live.stats;
+  if (!st) return '';
+  const tiles: Array<[number, string]> = [
+    [st.playersTotal, s.liveStatPlayers],
+    [st.matchesTotal, s.liveStatMatches],
+    [st.matchesToday, s.liveStatToday],
+    [st.playersThisWeek, s.liveStatWeek]
+  ];
+  const shown = tiles.filter(([v, label]) => v > 0 && label);
+  if (shown.length < 2) return '';
+  return `<section class="band tight"><div class="wrap"><div class="stat-row"${
+    shown.length !== 4 ? ` style="grid-template-columns:repeat(${shown.length},1fr)"` : ''
+  }>${shown.map(([v, label]) => `<div><b>${esc(faNum(v))}</b><span>${esc(label)}</span></div>`).join('')}</div></div></section>`;
+}
+
 /* ── THE HERO EVERY PAGE NOW HAS ────────────────────────────────────────
    Breadcrumb, kicker, H1, intro, a fact line, buttons and a character — all of
    them optional. A page that fills none of them gets its title and nothing
    else, which is exactly what every page looked like before. */
-function pageHero(page: SitePage, pages: SitePage[], s: SiteSettings): string {
+function pageHero(page: SitePage, pages: SitePage[], s: SiteSettings, live: LiveData = NO_LIVE): string {
   void pages;
   const isHome = page.slug === 'home';
   const crumbs = isHome ? '' : `<nav class="crumbs" aria-label="مسیر صفحه">
@@ -381,9 +496,16 @@ function pageHero(page: SitePage, pages: SitePage[], s: SiteSettings): string {
   const meta = (page.metaLine ?? []).filter(Boolean);
   const buttons = (page.heroButtons ?? []).filter((b) => b.label && b.href);
   const char = assetUrl(page.heroCharacter || '');
+  /* THE HOME HERO IS A SPLIT, and that is the design's whole first impression:
+     the words on one side, the game's live numbers on the other. Every other
+     page keeps the simple centred hero with its character. */
+  const panels = isHome ? livePanels(live, s) : '';
+  const layout = panels
+    ? 'class="hero-split"'
+    : 'style="display:flex;align-items:center;justify-content:space-between;gap:40px;padding-bottom:40px"';
   return `<div class="hero"><div class="bg-fx"><i class="y1"></i><i class="g1"></i></div><div class="wrap">
     ${crumbs}
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:40px;padding-bottom:40px">
+    <div ${layout}>
       <div>
         ${page.kicker ? `<span class="kicker">${esc(page.kicker)}</span>` : ''}
         <h1${page.kicker ? ' style="margin-top:14px"' : ''}>${esc(page.title)}</h1>
@@ -393,7 +515,7 @@ function pageHero(page: SitePage, pages: SitePage[], s: SiteSettings): string {
         ${buttons.length ? `<div class="btn-row">${buttons.map((b, i) =>
           `<a class="btn ${i === 0 ? 'btn-primary' : 'btn-ghost'}" href="${esc(href(b.href, s))}">${esc(b.label)}</a>`).join('')}</div>` : ''}
       </div>
-      ${char ? `<img src="${esc(char)}" alt="" style="width:150px;flex:0 0 auto;filter:drop-shadow(0 26px 24px rgba(20,21,26,.26))">` : ''}
+      ${panels || (char ? `<img src="${esc(char)}" alt="" style="width:150px;flex:0 0 auto;filter:drop-shadow(0 26px 24px rgba(20,21,26,.26))">` : '')}
     </div>
   </div></div>`;
 }

@@ -5,9 +5,12 @@
  * site can never eat a connection the game needed, and `pg_stat_activity`
  * shows at a glance which process is responsible for what.
  *
- * The site only ever touches its own three tables — site_pages, site_posts,
- * site_settings. It reads nothing from the game's schema and writes nothing to
- * it, which is what makes it safe to run beside a live game.
+ * The site WRITES only its own three tables — site_pages, site_posts,
+ * site_settings. It also READS a few of the game's (users, matches) to show the
+ * real leaderboard and recent winners on the home page; every one of those
+ * statements is a SELECT inside a READ ONLY transaction with its own timeout,
+ * and they all live in live.ts. Nothing here writes to the game's schema, which
+ * is what makes it safe to run beside a live game.
  */
 import pg from 'pg';
 
