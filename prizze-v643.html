@@ -1680,7 +1680,13 @@ input,textarea,select,[contenteditable="true"],.pz-selectable,.pz-selectable *{
 .ls-quickchat{position:absolute;inset-inline-start:14px;top:12px;
   font-size:12.5px;padding:8px 14px;border-radius:13px;z-index:2}
 
-.qcp-sheet{position:absolute;inset:0;z-index:60;display:none;background:rgba(0,0,0,.5);backdrop-filter:blur(2px)}
+/* ABOVE THE ROOM'S OWN SHEETS. At 60 it sat under Last Survivor's cash-out
+   sheet (800), so a phrase list opened inside a match was behind a panel the
+   player could not see past and could not scroll — «پنجرهٔ چتی که باز کردم
+   اسکرول نمی‌شه تا جمله انتخاب کنم». A sheet the player deliberately opened
+   belongs on top of one the room put there. The one thing it must NOT cover is
+   a question, and it does not: lsReadyGate closes it before the gate goes up. */
+.qcp-sheet{position:absolute;inset:0;z-index:810;display:none;background:rgba(0,0,0,.5);backdrop-filter:blur(2px)}
 .qcp-sheet.show{display:block}
 .qcp-panel{position:absolute;left:0;right:0;bottom:0;max-height:74%;display:flex;flex-direction:column;
   background:var(--ink-2);border-top:var(--stroke);border-radius:24px 24px 0 0;box-shadow:0 -10px 34px rgba(0,0,0,.5);
@@ -5707,7 +5713,10 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
   animation:lphIn .38s cubic-bezier(.2,1.35,.35,1) both}
 .ls-pot-hero .lph-lbl{font-size:12.5px;font-weight:900;color:#e9e2d2;letter-spacing:.4px;
   text-shadow:0 2px 6px rgba(0,0,0,.9);opacity:.9}
-.ls-pot-hero .lph-num{font-size:64px;font-weight:900;line-height:1.02;color:#FFE24A;
+/* The base is a share of the screen rather than a fixed 64px, because it is now
+   multiplied: --lph-k climbs with the number of players out. The clamp is what
+   keeps the loudest announcement of a long match inside a narrow phone. */
+.ls-pot-hero .lph-num{font-size:clamp(40px,calc(16vw * var(--lph-k,1)),104px);font-weight:900;line-height:1.02;color:#FFE24A;
   letter-spacing:-1px;
   /* Readable over whatever the room is showing behind it, without a panel. */
   text-shadow:0 4px 0 #000,0 0 10px rgba(0,0,0,.95),0 0 34px rgba(255,226,74,.55)}
@@ -5725,7 +5734,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
 .ls-pot-hero::before{content:"";position:absolute;left:50%;top:50%;width:min(78vw,340px);height:200px;
   transform:translate(-50%,-50%);border-radius:50%;pointer-events:none;
   background:radial-gradient(closest-side,rgba(0,0,0,.72),rgba(0,0,0,0))}
-@media(max-width:370px){.ls-pot-hero .lph-num{font-size:52px}}
+@media(max-width:370px){.ls-pot-hero .lph-num{font-size:clamp(36px,calc(14.5vw * var(--lph-k,1)),84px)}}
 .ls-pot-hero.lph-green .lph-num{color:#6be08a;
   text-shadow:0 4px 0 #000,0 0 10px rgba(0,0,0,.95),0 0 38px rgba(107,224,138,.7);
   animation:lphBlink .52s steps(1,end) 3}
@@ -6004,6 +6013,14 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
       .ls-cash .go{background:linear-gradient(180deg,#4ff09a,#1eaf5f);color:#04160B}
       .ls-cash .out{background:linear-gradient(180deg,#FFE24A,var(--bolt-2));color:#141414}
       .ls-wait-decided{text-align:center;color:#c9c2b3;font-size:13px;padding:18px}
+      /* ONCE DECIDED, THIS IS A STATUS LINE. It kept the full-width fixed bar
+         it had when it held two buttons, so it went on swallowing every touch
+         along the bottom of the screen — including the bottom of any list the
+         player opened over it. It has nothing left to be tapped. */
+      .ls-cash.decided{pointer-events:none}
+      /* And while the phrase list is open it steps out of the way entirely,
+         rather than covering the last row of sentences. */
+      body.qcp-open .ls-cash.decided{display:none}
       .ls-end{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:30px;text-align:center}
       .ls-end .cup{font-size:64px}
       .ls-end h2{color:#FFE24A;font-size:24px;font-weight:900;margin:10px 0 4px}
@@ -6247,7 +6264,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
       <div class="grow center" style="width:100%">
         <div class="chip" style="margin-bottom:6px">🎯 حق انتخاب با توئه!</div>
         <h1 style="font-size:20px;font-weight:900;margin-bottom:4px">موضوع مسابقه رو انتخاب کن</h1>
-        <p style="color:var(--muted);font-size:12px;margin-bottom:16px">اگه انتخاب نکنی، حق انتخاب می‌ره به حریف · <b style="color:var(--gold)" id="tpCount">۸</b> ثانیه</p>
+        <p class="tp-clock">اگه انتخاب نکنی، حق انتخاب می‌ره به حریف<b id="tpCount">۸</b><i>ثانیه</i></p>
         <div class="topic-grid" id="topicGrid"></div>
         <div id="tpOppChoice" style="display:none;margin-top:12px;padding:10px 16px;background:rgba(255,100,100,.12);border:1.5px solid var(--red);border-radius:12px;font-size:13px;font-weight:800;color:var(--red);text-align:center"></div>
       </div>
@@ -7239,6 +7256,62 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
 img.pz-lgtk-big{width:74px;height:74px;object-fit:contain;filter:drop-shadow(0 8px 14px rgba(0,0,0,.5))}
 @keyframes pzLgTk{0%,100%{transform:translateY(0)}50%{transform:translateY(-1.5px)}}
 @media (prefers-reduced-motion:reduce){#home .pzh-pill.p-league{animation:none}}
+
+/* ══ CLOCKS YOU CAN READ ═══════════════════════════════════════════════════
+ *
+ * «همهٔ تایمرهای ریزی که در صفحات آخرین بازمانده هست بزرگ بشن و خوانا دیده
+ *  بشن» — and they were small in three different ways, so there are three
+ *  rules rather than one. None of them changes a layout: every clock keeps the
+ *  slot it already had, it just fills it.
+ *
+ * Written at ID strength on purpose. The rules being overridden are themselves
+ * ID-anchored or live inside a media query, and a plain class here would lose
+ * silently — which has already cost one round of this work. */
+
+/* 1) THE WAITING ROOM. «تا شروع» sat at the same 18px as the player count
+      beside it, which is fine for a number that does not move and useless for
+      one that does. */
+.ls-hd-row .c b#lsTimer{font-size:25px;line-height:1.15;color:#FFE24A;
+  font-variant-numeric:tabular-nums;letter-spacing:.5px}
+.ls-hd-row .c b#lsTimer + span{font-size:11px;color:#e6dcc6}
+
+/* 2) THE DASHBOARD between rounds. This one was 11px — the size of a caption —
+      and it is the only thing on that screen telling you how long you have. */
+#lsGame .ls-top .ls-ttl p{font-size:13px;color:#d9d2c2}
+#lsGame .ls-top .ls-ttl p #lsTimer{font-size:20px;font-weight:900;color:#FFE24A;
+  font-variant-numeric:tabular-nums;margin:0 3px;display:inline-block;vertical-align:-2px}
+
+/* 3) THE ANSWER CLOCK. Scoped to the room: the duel is not being changed here,
+      and its own timer is where the player already expects it. */
+/* The row has to be TALLER than the circle in it. At 56px it was not — the
+   62px circle hung 3px out of its own row, top and bottom, onto the question
+   above and the options below. (The old 50px row held a 50px circle: flush,
+   with nothing to spare, which is how enlarging it went wrong quietly.)
+   One size for every phone: the bars either side are elastic and give way, so
+   a 320px screen fits this as comfortably as a 430px one — measured, not
+   assumed. A narrow-screen override was tried here and removed: it changed
+   nothing any screen could show. */
+#lsGame .pzm-timer{height:70px}
+#lsGame .pzm-timer-bar{height:13px}
+#lsGame .pzm-timer-circle{width:62px;height:62px;font-size:28px;border-width:4px}
+
+/* ══ THE DUEL'S TOPIC CLOCK ════════════════════════════════════════════════
+ * «تایمر انتخاب موضوع در دوئل و حتی متنش هم بولدتر بشه و با رنگ زیباتر و
+ *  شاداب‌تر» — it was grey 12px with a gold digit lost in the middle of it, on
+ *  the one screen where a few seconds decide whether you pick the subject or
+ *  your opponent does. The sentence is brighter and heavier; the number is a
+ *  chip of its own that beats once a second, so the hurry is visible without
+ *  reading anything. */
+#topic-pick .tp-clock{display:flex;align-items:center;justify-content:center;gap:7px;
+  flex-wrap:wrap;margin-bottom:16px;font-size:13.5px;font-weight:800;color:#ffe9b0}
+#topic-pick .tp-clock b{min-width:38px;padding:3px 10px;border-radius:12px;
+  font-size:20px;font-weight:900;color:#2a1d00;font-variant-numeric:tabular-nums;
+  background:linear-gradient(180deg,#ffe86a,#ffc21f);border:2px solid #000;
+  box-shadow:0 3px 0 #000,0 0 16px rgba(255,210,31,.45);
+  animation:tpBeat 1s ease-in-out infinite}
+#topic-pick .tp-clock i{font-style:normal;font-weight:800;color:#ffd97a}
+@keyframes tpBeat{0%,100%{transform:scale(1)}50%{transform:scale(1.09)}}
+@media (prefers-reduced-motion:reduce){#topic-pick .tp-clock b{animation:none}}
 </style>
 
   <!-- Report-question bottom sheet -->
@@ -8134,6 +8207,7 @@ async function lsLeave(to,skipAsk){
   }
   try{ if(pzRt&&pzRt.ws&&pzRt.ws.readyState===1&&roomId) pzRt.ws.send(JSON.stringify({type:'client:leave_ls_room',payload:{roomId:roomId}})); }catch(e){}
   lsStopPoll(); lsWatching=false; ['lsColorPick','lsDead','lsCashPop'].forEach(id=>{const e=document.getElementById(id);if(e)e.remove();});
+  try{ lsWatchCountdownStop(); lsWatchRoom=null; }catch(e){}
   lsRoomId=null; lsSnap=null; lsLastKey='';
   try{ lsPotReset(); }catch(e){}
   /* The room's music belongs to the room. Leaving it silences it — and this is
@@ -8406,6 +8480,8 @@ async function lsDoJoin(topic,color){
   lsInviteRoom=null;
   const snap=r.data; if(!snap||!snap.room){ toast('خطا در ورود'); return; }
   lsRoomId=snap.room.id; lsLastKey=''; lsDeadDismissed=false; lsChatSeen=0; lsEndShown=false; _lsGoneShown=false; lsForfeited=0; lsReadyShownRound='';
+  /* A new match: no offer from the last one is still counting down. */
+  try{ lsWatchCountdownStop(); lsWatchRoom=null; lsWatchExpired=false; }catch(e){}
   try{ lsChatWatchStop(); lsChatWatchStart(); }catch(e){}
   try{ if(typeof mTickets!=='undefined'&&mTickets[color]!=null){mTickets[color]=Math.max(0,mTickets[color]-1);renderHeaderTickets();} }catch(e){}
   showScreen('lsGame'); lsRender(snap); lsStartPoll();
@@ -8879,8 +8955,9 @@ function lsLive(snap){
   /* The pot and the player's own share are the two numbers that GROW when
      somebody goes out, so they are not set — they are counted up. */
   try{ lsChatBadgePaint(); }catch(e){}          /* the tabs are redrawn often */
-  lsPotPaint('lsRemain',s.remainingPot);
-  { const mine=lsMyShare(snap); if(mine!=null) lsPotPaint('lsMyShare',mine); }
+  const revealed=lsPotRevealed(snap);
+  lsPotPaint('lsRemain',s.remainingPot,revealed);
+  { const mine=lsMyShare(snap); if(mine!=null) lsPotPaint('lsMyShare',mine,revealed); }
   const vf=document.getElementById('lsVoteFill'), vt=document.getElementById('lsVoteTxt');
   if(vf&&r.status==='waiting'){ const pct=snap.players.length?Math.round(snap.votes*100/snap.players.length):0; vf.style.width=pct+'%'; if(vt)vt.textContent='شروع با همین تعداد — '+lsFa(pct)+'٪ ('+lsFa(snap.votes)+'/'+lsFa(snap.players.length)+')'; }
   // refresh waiting grid + dashboard grids in place
@@ -8901,13 +8978,45 @@ function lsLive(snap){
    only the journey between them happens here. */
 const _lsPotShown={};
 let _lsPotRoom=null;
-function lsPotReset(){ for(const k in _lsPotShown) delete _lsPotShown[k]; _lsPotRoom=null; }
-function lsPotPaint(id,val){
+/* ── NOBODY KNOWS THE PRIZE UNTIL SOMEBODY GOES OUT ───────────────────────
+   «تا لحظهٔ حذف مبلغ جایزه رو کسی ندونه، یعنی جایزه با اولین حذفی نمایش داده
+    بشه — عین فیلم بازی مرکب.»
+   Until the first elimination in this room the headline prize is not a number
+   at all; it is a row of question marks. The first person out is what turns
+   the lights on, and the figure does not simply appear — it climbs from zero
+   in the middle of the screen, so the whole pot is seen arriving.
+
+   The cash-out sheet is deliberately NOT masked. It is the one place the
+   figure is not decoration: a player deciding whether to take the money has to
+   be told how much money. Drama does not get to make that decision blind. */
+const LS_POT_MASK='؟؟؟';
+const _lsPotMasked={};
+function lsPotRevealed(snap){
+  try{ return Number((snap&&snap.stats&&snap.stats.eliminated)||0)>0; }catch(e){ return true; }
+}
+/* What a freshly-built screen should print in a prize slot. */
+function lsPotText(snap,val){ return lsPotRevealed(snap)?lsFa(val):LS_POT_MASK; }
+function lsPotReset(){ for(const k in _lsPotShown) delete _lsPotShown[k]; for(const k in _lsPotMasked) delete _lsPotMasked[k]; _lsPotRoom=null; }
+function lsPotPaint(id,val,revealed){
   const el=document.getElementById(id); if(!el) return;
   const v=Math.max(0,Math.round(Number(val)||0));
   /* A different room is a different pot; never animate across rooms. */
   const room=lsSnap&&lsSnap.room&&lsSnap.room.id;
-  if(room!==_lsPotRoom){ _lsPotRoom=room; for(const k in _lsPotShown) delete _lsPotShown[k]; }
+  if(room!==_lsPotRoom){ _lsPotRoom=room; for(const k in _lsPotShown) delete _lsPotShown[k]; for(const k in _lsPotMasked) delete _lsPotMasked[k]; }
+
+  /* Still dark. Nothing is remembered while it is, so the reveal has a clean
+     zero to climb from rather than a figure it silently already knew. */
+  if(revealed===false){
+    _lsPotMasked[id]=true;
+    if(el._lsPotRaf){ cancelAnimationFrame(el._lsPotRaf); el._lsPotRaf=null; }
+    el._lsPotRun=null; delete _lsPotShown[id];
+    el.textContent=LS_POT_MASK;
+    return;
+  }
+  /* THE MOMENT THE LIGHTS COME ON. It was masked and now it is not, so the
+     climb starts at nothing — the whole pot arrives at once, which is the
+     first elimination's announcement. */
+  if(_lsPotMasked[id]){ delete _lsPotMasked[id]; _lsPotShown[id]=0; }
 
   const prev=_lsPotShown[id];
   if(prev===undefined||v<=prev||el._lsPotRun===v){
@@ -8964,6 +9073,9 @@ function lsPotHeroOn(){
    one with the same ease-out the small one used, turns green, blinks three
    times, holds — and only then flies into the slot it belongs in. */
 let _lsHero=null;
+/* Long enough for the climb, the three blinks and the flight home (about four
+   and a half seconds), and no longer. */
+const LS_HERO_MAX_WAIT=7000;
 function lsPotHero(id,from,to){
   try{
     /* A second elimination while this one is still on screen: the one being
@@ -8973,6 +9085,12 @@ function lsPotHero(id,from,to){
     const host=document.querySelector('.phone')||document.body;
     const wrap=document.createElement('div');
     wrap.className='ls-pot-hero'; wrap.id='lsPotHero';
+    /* «با حذف‌های بیشتر بزرگ‌تر بشه» — every elimination is worth more than the
+       one before it, so every announcement is louder than the one before it.
+       The step is small and the ceiling is low: this has to grow visibly over
+       a match of twelve rounds without the last one running off the screen. */
+    const gone=Math.max(1,Number((lsSnap&&lsSnap.stats&&lsSnap.stats.eliminated)||1));
+    wrap.style.setProperty('--lph-k',Math.min(1.55,1+(gone-1)*0.07).toFixed(3));
     /* «اصلا حس هیجان به کاربر نمیده — الان داخل یه کادر فقط نوشته میشه. باید
        فقط اون عدد بیاد جلو وسط بزرگ، با موشن اضافه بشه، بعد ثابت بشه، بعد با
        موشن بره سر جای خودش.»
@@ -8987,7 +9105,7 @@ function lsPotHero(id,from,to){
       '<span class="lph-lbl">صندوق جایزه</span></div>';
     host.appendChild(wrap);
     const num=wrap.querySelector('.lph-num');
-    const H={wrap:wrap,num:num,shown:from,to:to,id:id};
+    const H={wrap:wrap,num:num,shown:from,to:to,id:id,t0:Date.now()};
     _lsHero=H;
     const dur=2200, t0=performance.now();
     const step=(now)=>{
@@ -9021,7 +9139,10 @@ function lsPotHeroLand(H){
     card.style.transform='translate('+Math.round(dx)+'px,'+Math.round(dy)+'px) scale('+sc.toFixed(3)+')';
     card.style.opacity='.05';
   }catch(e){}
-  setTimeout(()=>{ if(_lsHero===H) _lsHero=null; try{ H.wrap.remove(); }catch(e){} lsPotHeroSettle(H.id,H.to); },740);
+  setTimeout(()=>{ if(_lsHero===H) _lsHero=null; try{ H.wrap.remove(); }catch(e){} lsPotHeroSettle(H.id,H.to);
+    /* The announcement is over; whatever was waiting behind it goes up now
+       rather than on the next four-second poll. */
+    try{ if(lsSnap&&!_lsHero) lsOverlays(lsSnap); }catch(e){} },740);
 }
 /* The small figure takes the number over, and flashes once so the eye follows
    the handover. */
@@ -9205,7 +9326,7 @@ function lsDashStrip(snap){ const s=snap.stats; const r=snap.room;
      answering. Rebuilt with the strip, which is redrawn on every phase change —
      so it steps forward exactly once per question. */
   const bar=`<div class="pzsb-host ls">${pzStepBarHTML({steps:r.totalRounds||12,current:r.round||0})}</div>`;
-  return bar+`<div style="display:flex;justify-content:space-between;padding:10px 16px;background:rgba(0,0,0,.25)"><span style="color:#6be08a;font-size:12px;font-weight:800">زنده <b id="lsAlive">${lsFa(s.alive)}</b></span><span style="color:#ff8a8a;font-size:12px;font-weight:800">حذف <b id="lsElim">${lsFa(s.eliminated)}</b></span><span style="color:#FFE24A;font-size:12px;font-weight:800">جایزه <b id="lsRemain">${lsFa(s.remainingPot)}</b></span></div>`; }
+  return bar+`<div style="display:flex;justify-content:space-between;padding:10px 16px;background:rgba(0,0,0,.25)"><span style="color:#6be08a;font-size:12px;font-weight:800">زنده <b id="lsAlive">${lsFa(s.alive)}</b></span><span style="color:#ff8a8a;font-size:12px;font-weight:800">حذف <b id="lsElim">${lsFa(s.eliminated)}</b></span><span style="color:#FFE24A;font-size:12px;font-weight:800">جایزه <b id="lsRemain">${lsPotText(snap,s.remainingPot)}</b></span></div>`; }
 /* THE PLAYER'S OWN SHARE.
    The board showed the whole pot and nothing else, so a player in a room of
    forty had to do the division in their head to know what the round was worth
@@ -9220,8 +9341,8 @@ function lsMyShare(snap){
   return v>0?v:0;
 }
 function lsDashCells(snap){ const s=snap.stats; const mine=lsMyShare(snap);
-  return `<div class="ls-stat big"><b id="lsRemain">${lsFa(s.remainingPot)}</b><span>مبلغ باقی‌ماندهٔ جایزه (ت)</span></div>`+
-  (mine==null?'':`<div class="ls-stat mine"><b id="lsMyShare">${lsFa(mine)}</b><span>سهم تو (ت)</span></div>`)+`
+  return `<div class="ls-stat big"><b id="lsRemain">${lsPotText(snap,s.remainingPot)}</b><span>مبلغ باقی‌ماندهٔ جایزه (ت)</span></div>`+
+  (mine==null?'':`<div class="ls-stat mine"><b id="lsMyShare">${lsPotText(snap,mine)}</b><span>سهم تو (ت)</span></div>`)+`
   <div class="ls-stat"><b id="lsAlive">${lsFa(s.alive)}</b><span>باقی‌مانده</span></div>
   <div class="ls-stat"><b id="lsElim">${lsFa(s.eliminated)}</b><span>حذف‌شده</span></div>
   <div class="ls-stat"><b id="lsCash">${lsFa(s.cashedOut)}</b><span>برداشت‌کرده</span></div>
@@ -9236,9 +9357,9 @@ function lsDashHtml(snap,compact){
     const mine=lsMyShare(snap);
     return `<div class="ls-dash-mini"><div class="c"><b id="lsAlive">${lsFa(s.alive)}</b><span>باقی‌مانده</span></div>`+
       `<div class="c"><b id="lsElim">${lsFa(s.eliminated)}</b><span>حذف‌شده</span></div>`+
-      `<div class="c gold"><b id="lsRemain">${lsFa(s.remainingPot)}</b><span>کل جایزه (ت)</span></div>`+
+      `<div class="c gold"><b id="lsRemain">${lsPotText(snap,s.remainingPot)}</b><span>کل جایزه (ت)</span></div>`+
       (mine==null?`<div class="c"><b id="lsCash">${lsFa(s.cashedOut)}</b><span>برداشت</span></div>`
-                : `<div class="c mine"><b id="lsMyShare">${lsFa(mine)}</b><span>سهم تو (ت)</span></div>`)+
+                : `<div class="c mine"><b id="lsMyShare">${lsPotText(snap,mine)}</b><span>سهم تو (ت)</span></div>`)+
       `</div>`;
   }
   return `<div class="ls-top" style="padding-bottom:0"><div class="ls-ttl" style="text-align:center;width:100%"><h1>داشبورد مسابقه</h1><p>مرحله ${lsFa(r.round)} از ${lsFa(r.totalRounds)} · <span id="lsTimer">${lsTimer(snap)}</span></p></div></div><div class="ls-dash" id="lsDashGrid">${lsDashCells(snap)}</div>`;
@@ -9287,6 +9408,20 @@ function lsQuestionHtml(snap,locked){
 let lsReadyShownRound='';
 function lsReadyGate(snap){
   const r=snap.room;
+  /* NOT FOR SOMEBODY WHOSE OWN MATCH IS OVER.
+     The gate is drawn by lsBuild, and lsBuild runs BEFORE the checks that send
+     an eliminated or cashed-out player to their result screen — so the round
+     after you went out, this countdown went up and the result screen was then
+     drawn underneath it. «مودال تایمر همون روم میاد رو صفحه»: a timer for a
+     question you cannot answer, in a room you have left.
+     A SPECTATOR still gets it. They asked to be in the room, and the gate is
+     what stops a second device reading the question early. */
+  const out=!!(snap.me&&snap.me.status&&snap.me.status!=='alive');
+  if(!lsWatching&&(lsEndShown||out)) return;
+  /* «در تمام مراحل این صفحات باید چت خیلی روان باشه به غیر از پخش سوال.» The
+     phrase list is welcome everywhere else in the room; it does not get to sit
+     over a question that is about to be asked. */
+  try{ qcClose(); }catch(e){}
   /* KEYED ON THE QUESTION, NOT JUST THE ROUND. A ready snapshot can arrive
      before the question does — the card is empty, the gate goes up, and then
      the question lands and the card is rebuilt. Keyed on the round alone, the
@@ -10077,11 +10212,19 @@ function lsOverlays(snap){
      them straight back out to the result screen, one second after they asked to
      watch. */
   if(me&&me.status==='eliminated'&&snap.room.phase!=='elimination'&&!lsEndShown&&!lsWatching){ lsFinish(snap); return; }
+  /* «در انتها آروم آروم وایسته و سه بار چشمک بزنه و پنجرهٔ ادامه یا برداشت
+     بیاد» — the sheet is what comes AFTER the announcement, not over it. While
+     the big number is still on screen nothing is drawn on top of it; the hero
+     calls back here the moment it has landed, so the sheet is never merely
+     late. The clock is a safety net, not the mechanism: an announcement that
+     somehow never finishes must not cost the player their decision. */
+  if(_lsHero&&(Date.now()-(_lsHero.t0||0))<LS_HERO_MAX_WAIT) return;
   // cash-out popup (only alive players, only in cashout phase)
   let cash=document.getElementById('lsCashPop');
   if(snap.room.phase==='cashout'&&me&&me.status==='alive'){
     const decided=me.decisionThisRound;
     if(!cash){ cash=document.createElement('div'); cash.id='lsCashPop'; cash.className='ls-cash'; g.appendChild(cash); }
+    cash.classList.toggle('decided',!!decided);
     if(decided){ cash.innerHTML=`<div class="ls-wait-decided">${decided==='cashout'?'برداشت ثبت شد ✅':'ادامه می‌دهی 💪'} — منتظر بقیه…</div>`; }
     else {
       // Same shape as the duel's checkpoint sheet: what you've won now, what
@@ -10096,7 +10239,7 @@ function lsOverlays(snap){
     }
   } else if(cash){ cash.remove(); }
 }
-async function lsDecide(d){ if(!lsRoomId||!lsSnap)return; await pzApi('POST','/last-survivor/rooms/'+lsRoomId+'/decision',{round:lsSnap.room.round,decision:d}); try{vib(20);}catch(e){} const c=document.getElementById('lsCashPop'); if(c)c.innerHTML=`<div class="ls-wait-decided">${d==='cashout'?'برداشت ثبت شد ✅':'ادامه می‌دهی 💪'} — منتظر بقیه…</div>`; }
+async function lsDecide(d){ if(!lsRoomId||!lsSnap)return; await pzApi('POST','/last-survivor/rooms/'+lsRoomId+'/decision',{round:lsSnap.room.round,decision:d}); try{vib(20);}catch(e){} const c=document.getElementById('lsCashPop'); if(c){ c.classList.add('decided'); c.innerHTML=`<div class="ls-wait-decided">${d==='cashout'?'برداشت ثبت شد ✅':'ادامه می‌دهی 💪'} — منتظر بقیه…</div>`; } }
 
 /* Finish → LS's OWN result screen. It reuses the app's result screen and the
    duel's VICTORY animation, but is NOT routed through the duel's endGame(),
@@ -10170,6 +10313,7 @@ function lsWatchBar(snap){
 function lsWatchMatch(){
   const room=lsWatchRoom;
   if(!room||lsWatchRoomDone) return;
+  lsWatchCountdownStop();                 // the offer was taken; stop counting it down
   lsWatching=true; _lsWatchEndShown=false;
   lsRoomId=room; lsLastKey=''; lsReadyShownRound='';
   try{ showScreen('lsGame'); }catch(e){}
@@ -10180,11 +10324,49 @@ function lsWatchMatch(){
 /* Out of the room again, back to the result screen that was already built. The
    player's own outcome never changed — watching cannot win or lose anything. */
 function lsStopWatching(){
-  lsWatching=false;
-  try{ lsStopPoll(); }catch(e){}
-  lsRoomId=null;
+  /* The ten seconds are long gone by now, and this is the player saying they
+     have seen enough — so the room is left rather than kept open for a second
+     visit that would start the pushes again. */
+  lsWatchExpired=true;
+  lsLeaveWatchRoom();
   try{ showScreen('result'); }catch(e){}
   try{ lsRefreshWatchBtn(); }catch(e){}
+}
+/* TEN SECONDS TO DECIDE, THEN THE ROOM IS LET GO OF.
+   «اگه تا ده ثانیه تماشای مسابقه رو نزنه دیگه اتومات از روم خارج بشه و دکمه
+   تماشای ادامه مسابقه براش غیرفعال بشه و همون تایمر ۱۰ ثانیه‌ای روی دکمه
+   باشد.» Staying subscribed to a room you are out of is what put that room's
+   countdown on your result screen; the offer to watch is the only reason to
+   stay, so it lasts exactly as long as it is worth making — and the seconds are
+   counted ON the button, where an offer that is running out is visible rather
+   than silently gone. */
+const LS_WATCH_SECONDS=10;
+let lsWatchTimer=null, lsWatchLeft=0, lsWatchExpired=false;
+function lsWatchCountdownStop(){ if(lsWatchTimer){ clearInterval(lsWatchTimer); lsWatchTimer=null; } lsWatchLeft=0; }
+function lsWatchCountdownStart(){
+  lsWatchCountdownStop();
+  lsWatchExpired=false;
+  lsWatchLeft=LS_WATCH_SECONDS;
+  lsRefreshWatchBtn();
+  lsWatchTimer=setInterval(function(){
+    lsWatchLeft--;
+    if(lsWatchLeft<=0){ lsWatchCountdownStop(); lsWatchExpired=true; lsLeaveWatchRoom(); }
+    lsRefreshWatchBtn();
+  },1000);
+}
+/* OUT OF THE ROOM FOR GOOD. Stopping the poll was never enough: the socket
+   subscription is what keeps ls:ready and ls:question arriving, and nothing
+   ever dropped it. This is the line that actually ends the match for a player
+   who has finished it. */
+function lsLeaveWatchRoom(){
+  const room=lsWatchRoom;
+  lsWatchRoom=null;
+  lsWatchCountdownStop();
+  try{ if(room&&typeof pzRt!=='undefined'&&pzRt&&pzRt.ws&&pzRt.ws.readyState===1)
+    pzRt.ws.send(JSON.stringify({type:'client:leave_ls_room',payload:{roomId:room}})); }catch(e){}
+  try{ lsStopPoll(); }catch(e){}
+  lsWatching=false;
+  lsRoomId=null; lsSnap=null; lsLastKey='';
 }
 /* The button on the result screen. It is offered only while there is something
    left to watch: once the room has finished — which is what being the LAST one
@@ -10194,7 +10376,13 @@ function lsRefreshWatchBtn(){
   const over=!lsWatchRoom||lsWatchRoomDone;
   b.style.display='';
   b.disabled=!!over;
-  b.textContent=over?'👁️ مسابقه تمام شد':'👁️ تماشای ادامهٔ مسابقه';
+  /* Three different endings, three different sentences. «مسابقه تمام شد» for a
+     room that finished, «مهلت تماشا تمام شد» for an offer that ran out — saying
+     the match ended when it is still being played is a lie the player can see
+     through by asking a friend in the room. */
+  b.textContent = over
+    ? (lsWatchExpired?'👁️ مهلت تماشا تمام شد':'👁️ مسابقه تمام شد')
+    : (lsWatchLeft>0?'👁️ تماشای ادامهٔ مسابقه ('+lsFa(lsWatchLeft)+')':'👁️ تماشای ادامهٔ مسابقه');
   b.classList.toggle('btn-ghost',!!over);
   b.classList.toggle('btn-blue',!over);
 }
@@ -10216,6 +10404,7 @@ function lsRoomGone(noOpp){
   if(_lsGoneShown) return;
   _lsGoneShown=true;
   try{ lsStopPoll(); }catch(e){}
+  try{ lsWatchCountdownStop(); lsWatchRoom=null; }catch(e){}
   lsWatching=false;
   lsRoomId=null; lsSnap=null; lsLastKey='';
   ['lsColorPick','lsDead','lsCashPop'].forEach(id=>{const e=document.getElementById(id);if(e)e.remove();});
@@ -10328,12 +10517,16 @@ function lsFinish(snap){
   try{
     lsWatchRoom=finishedRoom||null;
     lsWatchRoomDone=!!(snap.room&&(snap.room.status==='finished'||snap.room.phase==='finished'));
+    lsWatchExpired=false;
+    /* «چه برداشت و چه بازنده» — both are out of a room that carries on without
+       them, and both are offered the same ten seconds. A winner and the last one
+       out are not: their room is over, there is nothing to go back to. */
+    const canWatch=!!finishedRoom&&!lsWatchRoomDone&&(me.status==='eliminated'||me.status==='cashed_out');
     const wb=$id('lsWatchBtn');
-    if(wb){
-      const canWatch=!!finishedRoom&&me.status==='eliminated';
-      wb.style.display=canWatch?'':'none';
-      if(canWatch) lsRefreshWatchBtn();
-    }
+    if(wb) wb.style.display=canWatch?'':'none';
+    /* Nothing to watch means nothing to stay for: the room is dropped now
+       rather than left subscribed and pushing. */
+    if(canWatch) lsWatchCountdownStart(); else lsLeaveWatchRoom();
   }catch(e){}
   try{ const ds=$id('resultDuelScore'); if(ds)ds.style.display='none'; }catch(e){}
   /* The question you went out on + the CORRECT answer, shown right here so
@@ -15482,6 +15675,7 @@ async function qcLoadPacks(force){
 function qcOpen(){
   const sh=document.getElementById('qcpSheet'); if(!sh) return;
   sh.classList.add('show'); sh.setAttribute('aria-hidden','false');
+  try{ document.body.classList.add('qcp-open'); }catch(e){}
   try{ sfx('blip'); }catch(e){}
   if(QC_PACKS){ qcRender(); }
   else{
@@ -15493,6 +15687,7 @@ function qcOpen(){
 function qcClose(){
   const sh=document.getElementById('qcpSheet'); if(!sh) return;
   sh.classList.remove('show'); sh.setAttribute('aria-hidden','true');
+  try{ document.body.classList.remove('qcp-open'); }catch(e){}
 }
 function qcCur(){
   if(!QC_PACKS||!QC_PACKS.length) return null;
