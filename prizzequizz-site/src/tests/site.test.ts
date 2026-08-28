@@ -20,7 +20,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   BLOCK_KINDS,
-  SETTINGS_DEFAULTS, SiteError, deletePage, getSettings, listPages, listPosts,
+  SETTINGS_DEFAULTS, SiteError, deletePage, deletePost, getSettings, listPages, listPosts,
   normaliseSlug, savePage, savePost, saveSettings, _resetSiteMemory
 } from '../content.js';
 import { esc, faDate, renderPage, renderPost, renderRobots, renderSitemap } from '../render.js';
@@ -277,6 +277,11 @@ async function run(): Promise<void> {
     assert.ok(!html.includes('<script>alert(1)'), 'a script tag survived the article body');
     assert.ok(!html.includes('<b>bold</b>'), 'raw HTML survived a list item');
     assert.ok(html.includes('&lt;script&gt;'), 'it should be shown as text');
+    /* Cleaned up like every other fixture here. Against the memory driver a
+       leftover post vanishes with the process; against a real database it
+       stays, and the next run fails on «both articles ship with a body long
+       enough to rank» — a fixture stub is not an article. */
+    await deletePost('xss-post');
   });
 
   await check('JSON-LD cannot be broken out of by the title', async () => {
@@ -286,6 +291,7 @@ async function run(): Promise<void> {
     const blocks = ldBlocks(html);
     assert.ok(blocks.length >= 1, 'JSON-LD should still parse');
     assert.ok(!/<script>alert\(1\)<\/script>\s*<\/head>/.test(html), 'broke out of the JSON-LD block');
+    await deletePost('ld-test');
   });
 
   // ------------------------------------------------------------ the model ----
@@ -371,12 +377,20 @@ async function run(): Promise<void> {
   });
 
   await check('an oversized upload is refused before it is stored', async () => {
+    /* _resetMedia() empties the in-memory library only. Run against a real
+       database it clears nothing, so «the library is empty» was really «no
+       earlier case in this file stored anything» — true on one driver and false
+       on the other. What this case is actually about is that the refused upload
+       did not land, so that is what it now asks. */
     _resetMedia();
+    const before = (await listMedia()).length;
     const huge = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff]), Buffer.alloc(MEDIA_MAX_BYTES + 1000)]);
     await assert.rejects(
       () => saveMedia({ data: huge.toString('base64'), filename: 'big.jpg' }),
       (e: any) => e.code === 'MEDIA_TOO_LARGE');
-    assert.equal((await listMedia()).length, 0, 'nothing was stored');
+    const after = await listMedia();
+    assert.equal(after.length, before, 'the refused upload was stored anyway');
+    assert.ok(!after.some((m) => m.filename === 'big.jpg'), 'big.jpg is in the library');
   });
 
   await check('the bytes come back exactly as they went in', async () => {
@@ -826,6 +840,39 @@ async function run(): Promise<void> {
       'the static regex location comes first, so it wins and /site-assets/ never reaches the site');
     assert.ok(/location \^~ \/site-assets\/[\s\S]{0,240}?proxy_pass/.test(conf),
       'the /site-assets/ block does not proxy to the site');
+  });
+
+  /* THE PANEL PREVIEWS A PICTURE; THE SITE DRAWS IT. Two pieces of code turn a
+     stored value into a URL — assetHref() in the panel and assetUrl() in the
+     renderer — and a preview that disagrees with the page is worse than none:
+     the operator picks something, sees it, publishes, and the page is blank.
+     The panel's REAL function is loaded here and held against what the renderer
+     actually emitted for the same value. */
+  await check('what the panel previews is what the page draws', async () => {
+    const script = /<script>([\s\S]*?)<\/script>/.exec(adminHtml())![1]!;
+    const from = script.indexOf('function assetHref');
+    assert.ok(from > 0, 'assetHref is not in the panel source any more');
+    const to = script.indexOf('function setPicked');
+    const assetHref = new Function(script.slice(from, to) + '\nreturn assetHref;')() as (v: string) => string;
+
+    for (const value of ['char-thinking.png', '/media/abc-123', 'https://cdn.example.com/x.png', '']) {
+      await savePage({ slug: 'char-test', title: 'تست کاراکتر', heroCharacter: value, blocks: [] } as any);
+      const all = await listPages();
+      const html = renderPage(all.find((p2) => p2.slug === 'char-test')!, all, await getSettings(), []);
+      const want = assetHref(value);
+      if (!want) {
+        assert.ok(!/char-thinking|\/media\/abc-123|cdn\.example/.test(html),
+          'an empty character still put an image on the page');
+      } else {
+        assert.ok(html.includes('src="' + want + '"'),
+          'the panel would preview ' + want + ' but the page does not use it: ' + value);
+      }
+    }
+    await deletePage('char-test');
+    /* A value the renderer refuses must be refused in the preview too, or the
+       panel shows a picture that will never appear. */
+    assert.equal(assetHref('../secret.png'), '');
+    assert.equal(assetHref('a b.png'), '');
   });
 
   console.log(`[site] ${passed} passed, ${failed} failed`);

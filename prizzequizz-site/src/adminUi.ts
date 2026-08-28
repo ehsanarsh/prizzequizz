@@ -164,8 +164,13 @@ function tab(t){ TAB=t; ['pages','posts','media','seo'].forEach((x)=>$('#t-'+x).
 function bytesLabel(n){ return n>=1048576 ? (n/1048576).toFixed(1)+' MB' : Math.max(1,Math.round(n/1024))+' KB'; }
 
 function renderMedia(){
-  $('#app').innerHTML=
-    '<div class="note">تصویرهای سایت اینجا نگه‌داری می‌شوند. بعد از آپلود، دکمهٔ «انتخاب» کنار هر فیلد تصویر همین‌ها را نشان می‌دهد — لازم نیست آدرس را دستی بنویسی.<br>'+
+  /* #body, NOT #app. Writing the media tab into #app replaced the whole shell —
+     header, tab bar and all — so once you opened «تصویرها» there was no tab to
+     click and no way back short of reloading the page. Every other tab draws
+     into #body, below the tabs, and switching tab is how you leave. */
+  $('#body').innerHTML=
+    '<div class="note">تصویرهای سایت اینجا نگه‌داری می‌شوند. بعد از آپلود، دکمهٔ «انتخاب» کنار هر فیلد تصویر همین‌ها را نشان می‌دهد — لازم نیست آدرس را دستی بنویسی. '+
+    'فیلدهای «کاراکتر» هم همین‌ها را نشان می‌دهند: می‌توانی به جای کاراکترهای همراهِ طراحی، عکس خودت را انتخاب کنی.<br>'+
     'قالب‌های مجاز: PNG، JPG، GIF، WebP، ICO — تا ۳ مگابایت.<br>'+
     'هر تصویری که آپلود کنی خودکار به <b>WebP</b> تبدیل می‌شود تا سبک‌ترین حالت ممکن ذخیره شود — '+
     'فایل ICO و GIF متحرک دست‌نخورده می‌مانند، و اگر نسخهٔ WebP از اصل بزرگ‌تر شود همان اصل نگه داشته می‌شود.</div>'+
@@ -296,31 +301,95 @@ function copyUrl(id){
   catch(e){ prompt('نشانی تصویر:',m.url); }
 }
 
-/* The picker every image field gets: no typing, no leaving the page. */
-function pick(inputId){
-  if(!MEDIA.length){ toast('اول از تب «تصویرها» آپلود کن.',1); return; }
+/* THE SAME RULE THE SITE USES, so what the panel previews is what the page
+   draws. A bare filename is one of the design's own files under /site-assets/;
+   anything starting with «/» or «http» is a picture the operator uploaded and
+   is passed through untouched. This mirrors assetUrl() in render.ts — a test
+   holds the two together, because a preview that disagrees with the page is
+   worse than no preview. */
+function assetHref(v){
+  v=String(v==null?'':v).trim();
+  if(!v) return '';
+  if(v.charAt(0)==='/'||/^https?:/i.test(v)) return v;
+  if(!/^[a-zA-Z0-9._-]+$/.test(v)) return '';
+  return '/site-assets/'+v;
+}
+/* Put a chosen picture into its field and show it, so it is obvious what will
+   appear on the page — a bare filename in a box tells the operator nothing. */
+function setPicked(inputId,url){
+  const t=$('#'+inputId); if(!t) return;
+  t.value=url;
+  const prev=document.querySelector('[data-prev="'+inputId+'"]');
+  if(prev) prev.innerHTML=url
+    ? '<img src="'+esc(assetHref(url))+'" alt="" style="max-width:100%;max-height:100%;object-fit:contain">'
+    : 'ندارد';
+  const clr=document.querySelector('.charClr[data-for="'+inputId+'"]');
+  if(clr) clr.style.display=url?'':'none';
+  const cap=document.querySelector('[data-cap="'+inputId+'"]');
+  if(cap) cap.textContent=url||'چیزی انتخاب نشده';
+}
+/* One tile in the picker. */
+function pickTile(url,label){
+  return '<div class="item" style="margin:0;cursor:pointer" data-u="'+esc(url)+'">'+
+    '<img src="'+esc(assetHref(url))+'" alt="" loading="lazy" style="width:100%;height:90px;object-fit:contain;background:#0c0f16;border-radius:7px">'+
+    '<div style="font-size:11px;color:var(--muted);margin-top:6px;word-break:break-all">'+esc(label)+'</div></div>';
+}
+/* The picker every image field gets: no typing, no leaving the page.
+   withChars adds the design's own artwork above the uploads — that is what a
+   character field offers. Before this, a character could ONLY be one of the
+   shipped files: a picture uploaded from the «تصویرها» tab was not in the list
+   and there was nowhere to type its address, so it could not be used at all. */
+function pick(inputId,withChars){
+  const chars=withChars?CHARACTERS:[];
+  if(!MEDIA.length&&!chars.length){ toast('اول از تب «تصویرها» آپلود کن.',1); return; }
+  const grid=(html)=>'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px">'+html+'</div>';
+  const head=(txt,n)=>'<div class="row" style="margin:14px 0 8px"><b>'+txt+'</b><span class="pill">'+n+'</span></div>';
   const box=document.createElement('div');
   box.style.cssText='position:fixed;inset:0;background:#000a;z-index:50;display:grid;place-items:center;padding:18px';
   box.innerHTML='<div style="background:var(--panel);border:1.5px solid var(--line);border-radius:14px;padding:16px;max-width:760px;width:100%;max-height:82vh;overflow:auto">'+
-    '<div class="row" style="justify-content:space-between;margin-bottom:11px"><b>انتخاب تصویر</b>'+
+    '<div class="row" style="justify-content:space-between;margin-bottom:11px"><b>'+(withChars?'انتخاب کاراکتر یا تصویر':'انتخاب تصویر')+'</b>'+
     '<button class="btn sm" id="pkX">بستن</button></div>'+
-    '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px">'+
-      MEDIA.map((m)=>'<div class="item" style="margin:0;cursor:pointer" data-u="'+esc(m.url)+'">'+
-        '<img src="'+esc(m.url)+'" alt="" style="width:100%;height:90px;object-fit:contain;background:#0c0f16;border-radius:7px">'+
-        '<div style="font-size:11px;color:var(--muted);margin-top:6px;word-break:break-all">'+esc(m.filename)+'</div></div>').join('')+
-    '</div>'+
-    '<div class="row" style="margin-top:12px"><button class="btn sm bad" id="pkClr">خالی کردن این فیلد</button></div></div>';
+    (chars.length?head('کاراکترهای همراه طراحی',chars.length)+
+      grid(chars.map((c)=>pickTile(c,c.replace(/^char-|\.(png|webp)$/g,''))).join('')):'')+
+    (MEDIA.length?head('تصویرهایی که آپلود کرده‌ای',MEDIA.length)+
+      grid(MEDIA.map((m)=>pickTile(m.url,m.filename)).join(''))
+      :'<p class="sub" style="margin-top:12px">هنوز تصویری آپلود نکرده‌ای. از تب «تصویرها» آپلود کن تا همین‌جا بیاید.</p>')+
+    '<div class="row" style="margin-top:14px"><button class="btn sm bad" id="pkClr">خالی کردن این فیلد</button></div></div>';
   const close=()=>box.remove();
   box.addEventListener('click',(e)=>{ if(e.target===box) close(); });
   box.querySelector('#pkX').onclick=close;
-  box.querySelector('#pkClr').onclick=()=>{ const el=$('#'+inputId); if(el) el.value=''; close(); };
-  box.querySelectorAll('[data-u]').forEach((el)=>{ el.onclick=()=>{ const t=$('#'+inputId); if(t) t.value=el.getAttribute('data-u'); close(); }; });
+  box.querySelector('#pkClr').onclick=()=>{ setPicked(inputId,''); close(); };
+  box.querySelectorAll('[data-u]').forEach((el)=>{ el.onclick=()=>{ setPicked(inputId,el.getAttribute('data-u')); close(); }; });
   document.body.appendChild(box);
 }
 /* Rendered next to an image input. */
 function pickBtn(id){ return '<button type="button" class="btn sm pickBtn" style="margin-top:6px" data-for="'+id+'">انتخاب از تصویرها</button>'; }
-/* Every pickBtn on the page, wired after whichever tab drew it. */
-function wirePickers(){ document.querySelectorAll('.pickBtn').forEach((el)=>{ el.onclick=()=>pick(el.getAttribute('data-for')); }); }
+/* A CHARACTER FIELD. It was a dropdown of the shipped char-*.png files and
+   nothing else. Now it is the picker every other picture uses, with the design's
+   artwork and the operator's uploads side by side, and the choice shown as a
+   thumbnail rather than a filename nobody can picture. The value still lives in
+   an input, so every reader of this form is unchanged. */
+function charField(elId,val,label){
+  val=String(val==null?'':val);
+  return '<div class="f"><label>'+esc(label||'کاراکتر')+'</label>'+
+    '<div class="row" style="align-items:center;gap:9px">'+
+      '<span class="charPrev" data-prev="'+esc(elId)+'" style="width:54px;height:54px;flex:0 0 auto;display:grid;place-items:center;'+
+        'background:#0c0f16;border:1.5px solid var(--line);border-radius:9px;overflow:hidden;font-size:10.5px;color:var(--muted)">'+
+        (val?'<img src="'+esc(assetHref(val))+'" alt="" style="max-width:100%;max-height:100%;object-fit:contain">':'ندارد')+'</span>'+
+      '<input type="hidden" id="'+esc(elId)+'" value="'+esc(val)+'">'+
+      '<div style="flex:1;min-width:0">'+
+        '<div class="row"><button type="button" class="btn sm charBtn" data-for="'+esc(elId)+'">انتخاب کاراکتر یا تصویر</button>'+
+        '<button type="button" class="btn sm bad charClr" data-for="'+esc(elId)+'"'+(val?'':' style="display:none"')+'>برداشتن</button></div>'+
+        '<div class="sub" data-cap="'+esc(elId)+'" style="margin:5px 0 0;word-break:break-all;font-size:11px">'+esc(val||'چیزی انتخاب نشده')+'</div>'+
+      '</div>'+
+    '</div></div>';
+}
+/* Every picker on the page, wired after whichever tab drew it. */
+function wirePickers(){
+  document.querySelectorAll('.pickBtn').forEach((el)=>{ el.onclick=()=>pick(el.getAttribute('data-for'),false); });
+  document.querySelectorAll('.charBtn').forEach((el)=>{ el.onclick=()=>pick(el.getAttribute('data-for'),true); });
+  document.querySelectorAll('.charClr').forEach((el)=>{ el.onclick=()=>setPicked(el.getAttribute('data-for'),''); });
+}
 
 /* ---------- pages ---------- */
 /* Injected from content.ts rather than written out again here. This was the
@@ -382,10 +451,7 @@ function pageEditor(p,i){
     '<div class="card" style="background:var(--panel2)"><h3>سربرگ صفحه</h3>'+
       '<p class="sub">همه اختیاری‌اند. خالی که باشند، صفحه فقط عنوانش را نشان می‌دهد.</p>'+
       '<div class="grid2">'+f('نوشتهٔ کوچک بالای عنوان','kicker')+
-        '<div class="f"><label>کاراکتر کنار عنوان</label><select id="pg_heroCharacter_'+i+'">'+
-        '<option value="">— بدون کاراکتر —</option>'+
-        CHARACTERS.map((c)=>'<option value="'+esc(c)+'"'+(p.heroCharacter===c?' selected':'')+'>'+esc(c.replace(/^char-|\.(png|webp)$/g,''))+'</option>').join('')+
-        '</select></div>'+
+        charField('pg_heroCharacter_'+i,p.heroCharacter||'','کاراکتر کنار عنوان')+
       '</div>'+
       '<div class="f"><label>مقدمه</label><textarea id="pg_intro_'+i+'" style="min-height:60px">'+esc(p.intro||'')+'</textarea></div>'+
       '<div class="f"><label>خطِ نکته‌ها — هر خط یک مورد</label><textarea id="pg_meta_'+i+'" style="min-height:52px">'+esc((p.metaLine||[]).join('\\n'))+'</textarea>'+
@@ -400,10 +466,7 @@ function pageEditor(p,i){
         '<div class="f"><label>متن دکمه</label><input id="pg_aside_label_'+i+'" value="'+esc((p.asideCta||{}).label||'')+'"></div>'+
         '<div class="f"><label>لینک دکمه</label><input id="pg_aside_href_'+i+'" value="'+esc((p.asideCta||{}).href||'')+'"></div>'+
       '</div>'+
-      '<div class="f"><label>کاراکتر</label><select id="pg_aside_character_'+i+'">'+
-        '<option value="">— بدون کاراکتر —</option>'+
-        CHARACTERS.map((c)=>'<option value="'+esc(c)+'"'+((p.asideCta||{}).character===c?' selected':'')+'>'+esc(c.replace(/^char-|\.(png|webp)$/g,''))+'</option>').join('')+
-      '</select></div>'+
+      charField('pg_aside_character_'+i,(p.asideCta||{}).character||'')+
     '</div>'+
     '<div class="card" style="background:var(--panel2)"><h3>لینک‌های مرتبط</h3>'+
       '<p class="sub">پای صفحه. هر خط یکی، به این شکل: <b>عنوان | نشانی | زیرنویس</b> — زیرنویس اختیاری است.</p>'+
@@ -418,10 +481,7 @@ function pageEditor(p,i){
         '<div class="f"><label>متن دکمه</label><input id="pg_cta_label_'+i+'" value="'+esc((p.cta||{}).label||'')+'"></div>'+
         '<div class="f"><label>لینک دکمه</label><input id="pg_cta_href_'+i+'" value="'+esc((p.cta||{}).href||'')+'"></div>'+
       '</div>'+
-      '<div class="f"><label>کاراکتر</label><select id="pg_cta_character_'+i+'">'+
-        '<option value="">— بدون کاراکتر —</option>'+
-        CHARACTERS.map((c)=>'<option value="'+esc(c)+'"'+((p.cta||{}).character===c?' selected':'')+'>'+esc(c.replace(/^char-|\.(png|webp)$/g,''))+'</option>').join('')+
-      '</select></div>'+
+      charField('pg_cta_character_'+i,(p.cta||{}).character||'')+
     '</div>'+
     '<h3 style="margin:16px 0 8px">بلوک‌های محتوا</h3>'+
     (p.blocks||[]).map((b,bi)=>blockEditor(b,i,bi)).join('')+
@@ -437,11 +497,8 @@ function blockEditor(b,i,bi){
   const t=(lbl,k)=>'<div class="f"><label>'+lbl+'</label><input id="'+id(k)+'" value="'+esc(b[k]||'')+'"></div>';
   let inner='';
   /* A character on a card or a callout: the artwork the design ships, or
-     anything already uploaded. Named, so nobody has to remember a filename. */
-  const charPick=(elId,val)=>'<div class="f"><label>کاراکتر</label><select id="'+elId+'">'+
-    '<option value="">— بدون کاراکتر —</option>'+
-    CHARACTERS.map((c)=>'<option value="'+esc(c)+'"'+(val===c?' selected':'')+'>'+esc(c.replace(/^char-|\.(png|webp)$/g,''))+'</option>').join('')+
-    '</select></div>';
+     anything already uploaded — both offered in the same picker. */
+  const charPick=(elId,val)=>charField(elId,val||'');
 
   if(b.kind==='hero'||b.kind==='cta'){
     inner=t('عنوان','title')+(b.kind==='hero'?t('زیرعنوان','subtitle'):'<div class="f"><label>متن</label><textarea id="'+id('body')+'" style="min-height:60px">'+esc(b.body||'')+'</textarea></div>')+
