@@ -286,6 +286,36 @@ async function ensureSchema(pool: ReturnType<typeof getPgPool>): Promise<boolean
 /** The season a set of standings belongs to: the ISO week they were earned in. */
 export function currentSeasonId(): string { return isoWeekId(); }
 
+/* THE SEASON THE PLAYERS ARE ACTUALLY IN.
+ *
+ * `currentSeasonId()` is the ISO week it is right now. That is the right answer
+ * for the cup board and the wrong one for everything about the league, because
+ * a season closes at the END of its own week and is PLAYED on the Friday of the
+ * next one:
+ *
+ *   2026-W35 closes Sunday night → its qualifiers hold tickets for
+ *   Friday 2026-09-04, which is 2026-W36.
+ *
+ * On that Friday `currentSeasonId()` is W36. The qualifiers are filed under
+ * W35. So `listQualifiers(currentSeasonId())` was empty and every single
+ * qualifier who pressed «ورود» was told «این هفته در جدول لیگ نیستی» — nobody
+ * could enter, no room was ever created, and the match simply did not happen.
+ * Nothing threw; a league nobody entered looks the same as a quiet week.
+ *
+ * The season in play is the most recent one that has qualifiers: this week's if
+ * it has been closed already, otherwise last week's. */
+export function previousSeasonId(from = new Date()): string {
+  return isoWeekId(new Date(from.getTime() - 7 * 86_400_000));
+}
+
+export async function activeSeasonId(now = new Date()): Promise<string> {
+  const cur = isoWeekId(now);
+  if ((await listQualifiers(cur)).length) return cur;
+  const prev = previousSeasonId(now);
+  if ((await listQualifiers(prev)).length) return prev;
+  return cur;
+}
+
 /** How long before kickoff a room can be entered. Kept here so the screen and
  *  the worker cannot disagree about when the doors open. */
 export const LEAGUE_DOORS_MINUTES = 10;
@@ -643,7 +673,8 @@ export interface EnterResult {
 export async function enterLeague(userId: string, now = Date.now()): Promise<EnterResult> {
   const cfg = await getLeagueConfig();
   if (!cfg.enabled) throw new LeagueError('LEAGUE_OFF', 'لیگ هفتگی خاموش است.');
-  const seasonId = currentSeasonId();
+  /* The season being PLAYED, which on match day is not the current week. */
+  const seasonId = await activeSeasonId(new Date(now));
 
   /* Already seated? Then this is a second tap, not a second entry. */
   const rooms = await listRooms(seasonId);
@@ -747,6 +778,40 @@ export async function listRooms(seasonId: string, tier?: string, round?: number)
   return memRooms
     .filter((r) => r.seasonId === seasonId && (!tier || r.tier === tier) && (round == null || r.round === round))
     .sort((a, b) => a.round - b.round || a.roomNo - b.roomNo);
+}
+
+/* EVERY ROOM STILL WAITING TO BE PLAYED, WHATEVER SEASON IT BELONGS TO.
+ *
+ * The worker used to ask for `listRooms(currentSeasonId())`, and that is wrong
+ * by exactly one week, every week:
+ *
+ *   • the standings are frozen in the last minutes of the ISO week, so the
+ *     season that closes is the week that is ending — say 2026-W35;
+ *   • its kickoff is the following Friday, 2026-09-04, which falls in 2026-W36;
+ *   • on that Friday `currentSeasonId()` is 2026-W36, and the rooms are filed
+ *     under 2026-W35.
+ *
+ * So the worker looked in an empty season and the match never started. Nothing
+ * threw and nothing was logged — the list was simply empty, which is also what
+ * a quiet week looks like.
+ *
+ * Opening a room is a question about the clock, not about the calendar. This
+ * returns what is unfinished; the caller compares `startsAt` to now. */
+export async function listOpenRooms(): Promise<LeagueRoom[]> {
+  const pool = pg();
+  if (pool && await ensureSchema(pool)) {
+    try {
+      const { rows } = await pool.query(
+        `SELECT * FROM league_rooms WHERE status <> 'finished' ORDER BY starts_at, round, room_no LIMIT 500`);
+      return rows.map((r: any) => ({
+        id: String(r.id), seasonId: String(r.season_id), tier: String(r.tier), round: Number(r.round),
+        roomNo: Number(r.room_no), status: String(r.status) as RoomStatus, startsAt: Number(r.starts_at),
+        winnerUserId: r.winner_user_id ? String(r.winner_user_id) : null
+      }));
+    } catch (e) { logger.warn('league_open_rooms_read_failed', { message: (e as Error).message }); }
+  }
+  return memRooms.filter((r) => r.status !== 'finished')
+    .sort((a, b) => a.startsAt - b.startsAt || a.round - b.round || a.roomNo - b.roomNo);
 }
 
 export async function listSeats(roomId: string): Promise<Seat[]> {

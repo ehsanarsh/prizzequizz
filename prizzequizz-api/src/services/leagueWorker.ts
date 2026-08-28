@@ -11,7 +11,7 @@
  */
 import { logger } from './logger.js';
 import {
-  currentSeasonId, listRooms, listQualifiers, closeSeason, getLeagueConfig,
+  currentSeasonId, listOpenRooms, listQualifiers, closeSeason, getLeagueConfig,
   weekResetAt, voidTicketsAfterKickoff, LEAGUE_CLOSE_LEAD_MS, LEAGUE_DOORS_MINUTES
 } from './leagueService.js';
 import { openForLeagueRoom, start as wtaStart, _room } from './wtaService.js';
@@ -53,8 +53,12 @@ export async function leagueTick(now = Date.now()): Promise<void> {
    * were holding, rather than carrying it around until the week rolls over. */
   try { await voidTicketsAfterKickoff(now); }
   catch (e) { logger.warn('league_ticket_expiry_failed', { message: (e as Error).message }); }
+  /* NOT `listRooms(currentSeasonId())`. A season closes at the end of its own
+   * ISO week and plays on the Friday of the NEXT one, so the season id on the
+   * day of the match is never the season the rooms belong to — see
+   * listOpenRooms. Whether a room opens is a question about its clock. */
   let rooms;
-  try { rooms = await listRooms(currentSeasonId()); }
+  try { rooms = await listOpenRooms(); }
   catch (e) { logger.warn('league_tick_list_failed', { message: (e as Error).message }); return; }
 
   for (const room of rooms) {

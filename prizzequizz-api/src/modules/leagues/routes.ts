@@ -5,8 +5,7 @@ import { recordAdmin } from '../../services/adminAuditService.js';
 import {
   getLeagueConfig, setLeagueConfig, cutLines, myLeague, closeSeason, drawRound,
   listQualifiers, listRooms, listSeats, reportRoomResult, currentSeasonId, enterLeague,
-  LeagueError
-} from '../../services/leagueService.js';
+  LeagueError, activeSeasonId} from '../../services/leagueService.js';
 import {
   openForLeagueRoom, join as wtaJoin, answer as wtaAnswer, pick as wtaPick,
   snapshot as wtaSnapshot, start as wtaStart, WtaError
@@ -60,7 +59,9 @@ export function registerLeagueRoutes(router: Router, base: string): void {
    * arrives early is seated whether or not anyone else has arrived yet. */
   router.add('POST', `${base}/leagues/rooms/:id/join`, async (ctx) => {
     if (!ctx.userId) return error(ctx.res, 401, 'UNAUTHORIZED', 'ابتدا وارد شو.');
-    const rooms = await listRooms(currentSeasonId());
+    /* The season being PLAYED, not the current ISO week — on match day they
+       are different, and looking in the current week finds no room at all. */
+    const rooms = await listRooms(await activeSeasonId());
     const room = rooms.find((r) => r.id === ctx.params.id);
     if (!room) return error(ctx.res, 404, 'ROOM_NOT_FOUND', 'این اتاق پیدا نشد.');
     await openForLeagueRoom(room);
@@ -106,7 +107,10 @@ export function registerLeagueRoutes(router: Router, base: string): void {
 
   router.add('GET', `${base}/admin/leagues/config`, async (ctx) => {
     if (!requireAdmin(ctx, { tab: 'leagues' })) return;
-    const season = currentSeasonId();
+    /* Shows the season in play, so the panel and the players are looking at
+       the same week — the panel used to show an empty current week while the
+       qualifiers sat under the one before it. */
+    const season = await activeSeasonId();
     json(ctx.res, 200, {
       config: await getLeagueConfig(),
       cutLines: await cutLines(),
@@ -155,7 +159,9 @@ export function registerLeagueRoutes(router: Router, base: string): void {
    * on the night. */
   router.add('POST', `${base}/admin/leagues/rooms/:id/start`, async (ctx) => {
     if (!requireAdmin(ctx, { tab: 'leagues' })) return;
-    const rooms = await listRooms(currentSeasonId());
+    /* The season being PLAYED, not the current ISO week — on match day they
+       are different, and looking in the current week finds no room at all. */
+    const rooms = await listRooms(await activeSeasonId());
     const room = rooms.find((r) => r.id === ctx.params.id);
     if (!room) return error(ctx.res, 404, 'ROOM_NOT_FOUND', 'این اتاق پیدا نشد.');
     await openForLeagueRoom(room);
@@ -166,7 +172,7 @@ export function registerLeagueRoutes(router: Router, base: string): void {
 
   router.add('GET', `${base}/admin/leagues/rooms`, async (ctx) => {
     if (!requireAdmin(ctx, { tab: 'leagues' })) return;
-    const seasonId = String(ctx.query.get('season') || currentSeasonId());
+    const seasonId = String(ctx.query.get('season') || await activeSeasonId());
     const rooms = await listRooms(seasonId);
     json(ctx.res, 200, {
       season: seasonId,

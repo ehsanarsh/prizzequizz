@@ -15361,6 +15361,41 @@ setTimeout(()=>{ try{renderHeaderTickets();}catch(e){} },300);
 let acStrikes=0;
 const GAME_SCREENS=['q-screen','duel','wta'];
 function inGame(){const a=document.querySelector('.screen.active');return !!a&&GAME_SCREENS.includes(a.id);}
+/* ── ONE TAP TO SEND, NOT TWO ─────────────────────────────────────────────
+ *
+ * «وقتی تو چت چیزی می‌نویسی و دکمهٔ send رو می‌زنی باید دوبار تاچ کنی: تاچ اول
+ *  کیبورد رو پایین می‌بره، تاچ دوم ارسال می‌کنه.»
+ *
+ * The first tap was never reaching the button. Touching anything outside a
+ * focused input blurs it, the on-screen keyboard slides away, and the layout
+ * reflows — on a phone that is 250-300px of the page moving upward while the
+ * finger is still going down. By the time the tap resolves into a click, the
+ * button is no longer under it, so nothing is sent. The second tap works
+ * because the keyboard is already gone and the layout has stopped moving.
+ *
+ * The fix is to not blur in the first place: preventing the default of
+ * `mousedown` cancels the focus change, so the keyboard stays put, the layout
+ * stays still, and the click lands on the button it was aimed at. The input
+ * keeps the caret too, which is what the send handlers already assume when they
+ * call focus() afterwards.
+ *
+ * `mousedown` and not `touchstart`: preventing a touchstart cancels the
+ * compatibility events INCLUDING the click, which would mean the button never
+ * fires at all. mousedown is the one that stops focus without stopping the tap.
+ *
+ * Delegated, once, rather than an attribute on each of the five composers —
+ * the sixth one somebody adds gets this for free instead of shipping the bug
+ * again. */
+document.addEventListener('mousedown',(e)=>{
+  const t=e.target; if(!t||!t.closest) return;
+  if(t.closest('.chat-send button, .chat-send .btn, .ls-chat-in button, .sup-chat-send button, [data-keepfocus]')){
+    /* Only while something is actually being typed into — otherwise this would
+       swallow the focus ring for anybody navigating by keyboard. */
+    const a=document.activeElement;
+    if(a&&(a.tagName==='INPUT'||a.tagName==='TEXTAREA')) e.preventDefault();
+  }
+},true);
+
 document.addEventListener('visibilitychange',()=>{if(document.hidden&&inGame())triggerCheat();});
 ['contextmenu','copy','cut'].forEach(ev=>document.addEventListener(ev,e=>{if(inGame())e.preventDefault();}));
 document.addEventListener('selectstart',e=>{if(inGame())e.preventDefault();});
