@@ -8520,7 +8520,7 @@ async function lsDoJoin(topic,color){
   if(!r||r.ok===false){ toast((r&&r.error&&r.error.message)||'ورود ناموفق بود'); return; }
   lsInviteRoom=null;
   const snap=r.data; if(!snap||!snap.room){ toast('خطا در ورود'); return; }
-  lsRoomId=snap.room.id; lsLastKey=''; lsDeadDismissed=false; lsChatSeen=0; lsEndShown=false; _lsGoneShown=false; lsForfeited=0; lsReadyShownRound='';
+  lsRoomId=snap.room.id; lsLastKey=''; lsDeadDismissed=false; lsChatSeen=0; lsEndShown=false; _lsGoneShown=false; lsForfeited=0; lsReadyShownRound=''; _lsWaitedForPay=false;
   /* A new match: no offer from the last one is still counting down. */
   try{ lsWatchCountdownStop(); lsWatchRoom=null; lsWatchExpired=false; }catch(e){}
   try{ lsChatWatchStop(); lsChatWatchStart(); }catch(e){}
@@ -8999,6 +8999,13 @@ function lsLive(snap){
   const revealed=lsPotRevealed(snap);
   lsPotPaint('lsRemain',s.remainingPot,true);
   { const mine=lsMyShare(snap); if(mine!=null) lsPotPaint('lsMyShare',mine,revealed); }
+  /* AND IT IS ANNOUNCED EVERY ROUND. lsPotPaint only announces a figure that
+     GREW, which is right for money arriving — but a round where nobody went out
+     leaves the share unchanged, and the player still asked to be shown it. So
+     the end of each round announces whatever it is now, once. It runs AFTER the
+     paint, because a growth the paint announced marks the round as said. */
+  try{ lsAnnounceShare(snap,revealed); }catch(e){}
+
   const vf=document.getElementById('lsVoteFill'), vt=document.getElementById('lsVoteTxt');
   if(vf&&r.status==='waiting'){ const pct=snap.players.length?Math.round(snap.votes*100/snap.players.length):0; vf.style.width=pct+'%'; if(vt)vt.textContent='شروع با همین تعداد — '+lsFa(pct)+'٪ ('+lsFa(snap.votes)+'/'+lsFa(snap.players.length)+')'; }
   // refresh waiting grid + dashboard grids in place
@@ -9019,6 +9026,28 @@ function lsLive(snap){
    only the journey between them happens here. */
 const _lsPotShown={};
 let _lsPotRoom=null;
+/* The round whose share has already been announced, so the once-a-round
+   announcement is once a round and not once a poll. */
+let _lsSaidRound='';
+function lsAnnounceShare(snap,revealed){
+  if(!revealed||!lsPotHeroOn()) return;
+  const r=snap&&snap.room; if(!r) return;
+  /* The end of a round, which is where the figure has just settled. */
+  if(['elimination','dashboard','cashout'].indexOf(String(r.phase||''))<0) return;
+  const key=(r.id||'')+':'+r.round;
+  /* Once per round, not once per poll. A round whose share GREW has already
+     been announced by lsPotPaint, which stamps this same key — so the two can
+     never talk over each other. */
+  if(_lsSaidRound===key) return;
+  const mine=lsMyShare(snap);
+  if(mine==null) return;                 // no stake left, nothing of theirs to announce
+  const id=lsHeroId();
+  if(id!=='lsMyShare'||!document.getElementById('lsMyShare')) return;
+  _lsSaidRound=key;
+  /* Opens and closes on the same figure, and that is the point: the
+     announcement is «this is yours», not only «this grew». */
+  lsPotHero('lsMyShare',mine,mine);
+}
 /* ── NOBODY KNOWS THE PRIZE UNTIL SOMEBODY GOES OUT ───────────────────────
    «تا لحظهٔ حذف مبلغ جایزه رو کسی ندونه، یعنی جایزه با اولین حذفی نمایش داده
     بشه — عین فیلم بازی مرکب.»
@@ -9048,7 +9077,25 @@ const _lsPotMasked={};
    would be invisible. */
 const _lsPotHidden={};
 function lsPotRevealed(snap){
-  try{ return Number((snap&&snap.stats&&snap.stats.eliminated)||0)>0; }catch(e){ return true; }
+  /* «موشن عدد سهم تو باید بعد از هر سوال بیاد حتی اگه کسی حذف نشده باشه — الان
+     وقتی کسی حذف نشده ؟؟؟ نشون می‌ده و بعدش میاد جایزت انقدره.»
+     So the lights come on when the FIRST QUESTION HAS BEEN PLAYED, not when the
+     first player goes out. A round where everybody answers correctly is still a
+     round: the figure is real, the player is about to be asked whether to take
+     it, and «؟؟؟» beside that question is just a screen that has not caught up.
+     Before the first question is graded there is genuinely nothing to tell —
+     that is the only thing still held back. */
+  try{
+    const r=snap&&snap.room;
+    if(!r) return true;
+    if(Number(snap.stats&&snap.stats.eliminated||0)>0) return true;
+    /* Graded means: past the question — the elimination phase or later — or a
+       later round, or the room is over. */
+    const played=Number(r.round||0)>1
+      ||['elimination','dashboard','cashout','finished'].indexOf(String(r.phase||''))>=0
+      ||r.status==='finished';
+    return !!played;
+  }catch(e){ return true; }
 }
 /* What a freshly-built screen should print in the «سهم تو» slot. */
 function lsShareText(snap,val){ return lsPotRevealed(snap)?lsFa(val):LS_POT_MASK; }
@@ -9070,7 +9117,7 @@ function lsHeroId(){
   return 'lsRemain';
 }
 const LS_HERO_LABEL={lsMyShare:'سهم تو',lsRemain:'صندوق جایزه'};
-function lsPotReset(){ for(const k in _lsPotShown) delete _lsPotShown[k]; for(const k in _lsPotMasked) delete _lsPotMasked[k]; for(const k in _lsPotHidden) delete _lsPotHidden[k]; _lsPotRoom=null; }
+function lsPotReset(){ _lsSaidRound=''; for(const k in _lsPotShown) delete _lsPotShown[k]; for(const k in _lsPotMasked) delete _lsPotMasked[k]; for(const k in _lsPotHidden) delete _lsPotHidden[k]; _lsPotRoom=null; }
 function lsPotPaint(id,val,revealed){
   const el=document.getElementById(id); if(!el) return;
   const v=Math.max(0,Math.round(Number(val)||0));
@@ -9099,6 +9146,9 @@ function lsPotPaint(id,val,revealed){
   }
   lsPotGrow(el,prev,v);
   _lsPotShown[id]=v;
+  /* A growth IS the round's announcement; saying it twice would talk over
+     itself. */
+  try{ if(id==='lsMyShare'&&lsSnap&&lsSnap.room) _lsSaidRound=(lsSnap.room.id||'')+':'+lsSnap.room.round; }catch(e){}
 }
 /* One climb. Cancels any climb already running on that element, so a second
    elimination landing mid-animation continues from where the eye is rather
@@ -10514,6 +10564,8 @@ function lsRefreshWatchBtn(){
 }
 let lsWatchRoomDone=false;
 let lsEndShown=false;
+/* One re-fetch, once per match — see lsFinish. */
+let _lsWaitedForPay=false;
 /* The order the server eliminated this round's players in, and the wipeout
    settlement if the room ended with nobody left. */
 let lsElimOrder=null, lsWipeout=null;
@@ -10563,6 +10615,22 @@ function lsFinish(snap){
     if(snap&&snap.room&&snap.room.status==='finished'){ lsRoomGone(!!snap.room.noOpponents); return; }
     lsPollNow(); return;
   }
+  /* THE PAYMENT AND THE NEWS OF IT ARRIVE SEPARATELY.
+     The ls:ended push says the room wiped out; the snapshot carries what this
+     player was actually paid. Finalising on a snapshot whose payoutCash has not
+     caught up printed «+۰» beside a message saying the prize had been shared —
+     which is how a real payment was reported as nothing. So when the room says
+     money was split and this player's figure is still zero, wait for the
+     snapshot that has it. Capped, because a player who genuinely got nothing
+     must not be left on a spinner. */
+  if(!_lsWaitedForPay){
+    const w=(snap.room&&snap.room.wipeout)||lsWipeout||null;
+    if(w&&Number(w.paidCount||0)>0&&Number(snap.me.payoutCash||0)===0){
+      _lsWaitedForPay=true;
+      setTimeout(()=>{ try{ lsPollNow(); }catch(e){} },700);
+      return;
+    }
+  }
   lsEndShown=true;
   lsStopPoll();
   /* WHICH GAME THIS RESULT IS FOR.
@@ -10582,7 +10650,10 @@ function lsFinish(snap){
      is (it settles the money) and says so both on the ls:ended push and on the
      snapshot, so a client that reconnected can still explain it. */
   const wipe=(snap.room&&snap.room.wipeout)||lsWipeout||null;
-  const iAmLastOut=!!(wipe&&wipe.lastUserId&&wipe.lastUserId===me.userId);
+  /* EVERYBODY WHO WENT OUT TOGETHER IS PAID NOW, so «was it me?» is no longer a
+     question about one id — it is simply whether this player was paid. The old
+     `lastUserId` test is gone with the rule it belonged to. */
+  const iAmWiped=!!(wipe&&mine>0);
   /* Grabbed BEFORE the reset below wipes it: the review needs the room this
      match was played in, and by the end of this function there is no other
      record of which one that was. */
@@ -10600,12 +10671,12 @@ function lsFinish(snap){
   /* ONE word for a win, however it was won. «جایزه‌ت رو برداشتی» and «برنده
      شدی» were two headlines for the same outcome, and the second one is the
      one players read as winning. */
-  if(title) title.textContent = iAmLastOut ? 'آخرین نفر تو بودی 🎖️'
+  if(title) title.textContent = iAmWiped ? 'همه حذف شدند — سهمت پرداخت شد 🤝'
                                   : (won ? 'برنده شدی! 🏆'
                                   : (noWinner?'کسی زنده نموند 💀':'باختی!'));
   if(sub){
-    sub.textContent = iAmLastOut
-      ? ('چون همه اشتباه جواب دادند، جایزه بین '+lsFa(wipe.splitAmong)+' نفرِ باقی‌ماندهٔ مرحلهٔ قبل تقسیم شد و سهم تو پرداخت شد.')
+    sub.textContent = iAmWiped
+      ? ('چون همه اشتباه جواب دادند، '+lsFa(Number(wipe.percent||0))+'٪ از جایزه بین '+lsFa(wipe.splitAmong)+' نفری که با هم حذف شدند تقسیم شد و سهم تو پرداخت شد.')
       : (won
         ? (cashedOut?'سهمت پرداخت و به صندوق جایزه‌ات واریز شد':pzWinLine())
         : (noWinner?'همهٔ بازیکنان باقی‌مانده جواب را غلط دادند، پس این دور برنده‌ای نداشت و جایزه به کسی تعلق نگرفت.'
@@ -10618,15 +10689,17 @@ function lsFinish(snap){
   if(amt){
     const box=amt.parentElement;
     /* The last player out IS paid, so their figure is shown like any other. */
-    if(won||iAmLastOut){ countStop(amt); amt.textContent='+'+lsFa(mine); if(box){ box.style.display=''; box.style.color='var(--ok)'; } }
+    /* A figure is shown when there IS one. «+۰» is not a prize, it is a bug
+       report — so a zero falls through to the same blank slot a loser gets. */
+    if(mine>0){ countStop(amt); amt.textContent='+'+lsFa(mine); if(box){ box.style.display=''; box.style.color='var(--ok)'; } }
     else   { countStop(amt); amt.textContent=''; if(box){ box.style.display='none'; box.style.color=''; } }
   }
-  try{ renderResultBoard(won||iAmLastOut); }catch(e){}
+  try{ renderResultBoard(won||iAmWiped); }catch(e){}
   /* The same character the duel shows. Without this the slot fell through to
      the mascot, which is the player's own profile picture. */
-  try{ pzResultCharacter(won||iAmLastOut); }catch(e){}
+  try{ pzResultCharacter(won||iAmWiped); }catch(e){}
   try{ const _t=document.getElementById('resultTitle');
-       if(_t){ _t.classList.toggle('win',!!(won||iAmLastOut)); _t.classList.toggle('lose',!(won||iAmLastOut)); } }catch(e){}
+       if(_t){ _t.classList.toggle('win',!!(won||iAmWiped)); _t.classList.toggle('lose',!(won||iAmWiped)); } }catch(e){}
   /* LS has no bot rematch, but it DOES have a match worth looking back at — so
      the review button keeps its place, in the same spot the duel puts it, and
      only the rematch beside it goes away. */

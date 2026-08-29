@@ -469,7 +469,7 @@ async function finishRoom(room: RoomRow, now: number): Promise<void> {
    * "Last to go out" is not the animation's opinion: it is the last id in
    * eliminationOrder for that round, the same order the client was told to play
    * and the same one recomputed here. */
-  let wipeout: { lastUserId: string; share: number; splitAmong: number } | null = null;
+  let wipeout: { splitAmong: number; paidCount: number; percent: number; paid: number } | null = null;
   let paidFromWipeout = 0;
   /* WHY A WIPE-OUT DID NOT PAY, WHEN IT DID NOT PAY.
    *
@@ -496,36 +496,50 @@ async function finishRoom(room: RoomRow, now: number): Promise<void> {
       });
     }
     if (lastRound.length > 0) {
-      const order = eliminationOrder(room.id, room.round, lastRound.map((p) => p.userId));
-      const lastId = order[order.length - 1]!;
-      /* Split by units among everyone who was still in, exactly as a normal
-       * final split would have done — so the figure the player receives is the
-       * share they would have had, not an invented consolation. */
+      /* EVERYONE WHO WENT OUT TOGETHER IS PAID, NOT ONE OF THEM.
+       *
+       * «اگه دو نفر کنار هم بازی کنن و دوتاشونم اشتباه جواب بدن، به یکی می‌ده
+       *  جایزه به یکی نمی‌ده و این بده. می‌خوام درصدی از پات رو واقعاً تقسیم
+       *  کنیم بین کاربرا و درصدی هم خودمون برداریم.»
+       *
+       * The old rule paid the single last player out their full share and kept
+       * the rest. With two players that is one winner and one person who
+       * answered exactly as badly and got nothing — indistinguishable, from
+       * where they sit, from the game being broken. So the pot is now split by
+       * the operator's percentage: that slice goes to ALL of them, by the same
+       * units every other split uses, and the house keeps the remainder. */
+      const pct = Math.max(0, Math.min(100, Number(room.config?.economy?.wipeoutPlayerPercent ?? 50)));
+      const toPlayers = Math.floor((remaining * pct) / 100);
       const asAlive = lastRound.map((p) => ({ userId: p.userId, color: p.color, units: p.units, status: 'alive' as const, payoutCash: p.payoutCash }));
-      const split = finalSplit(asAlive, remaining);
-      const share = Math.max(0, split[lastId] ?? 0);
-      const winner = lastRound.find((p) => p.userId === lastId);
-      /* finalSplit only counts players with units above zero. A last-one-out
-         carrying no units is therefore given nothing — which may well be right,
-         but it must not be invisible: without this the whole pot is forfeited
-         and the room simply reports that nobody survived. */
-      if (winner && share <= 0) {
-        noPay('the last player out computed a zero share', {
-          userId: lastId, units: winner.units, splitAmong: lastRound.length,
-          unitsInRound: lastRound.reduce((n, p) => n + (p.units || 0), 0)
-        });
+      const split = finalSplit(asAlive, toPlayers);
+      if (toPlayers <= 0) {
+        noPay('the operator’s share for a wipe-out is zero', { percent: pct, splitAmong: lastRound.length });
       }
-      if (winner && share > 0) {
-        try {
-          await payout(winner.userId, share, room.id, room.round, 'final');
-          winner.payoutCash += share; winner.lastSeenAt = now;
-          await savePlayer(winner);
-          paidFromWipeout = share;
-          wipeout = { lastUserId: lastId, share, splitAmong: lastRound.length };
-          logger.info('ls_wipeout_last_paid', { roomId: room.id, round: room.round, userId: lastId, share, splitAmong: lastRound.length });
-        } catch (e) {
-          logger.error('ls_wipeout_payout_failed', { roomId: room.id, userId: lastId, message: (e as Error).message });
+      let paidCount = 0;
+      for (const p of lastRound) {
+        const share = Math.max(0, split[p.userId] ?? 0);
+        /* finalSplit only counts players with units above zero, so a tier
+         * carrying none is given nothing. That may well be right, but it must
+         * not be invisible. */
+        if (share <= 0) {
+          if (toPlayers > 0) noPay('a player in the wipe-out computed a zero share', { userId: p.userId, units: p.units, percent: pct });
+          continue;
         }
+        try {
+          await payout(p.userId, share, room.id, room.round, 'final');
+          p.payoutCash += share; p.lastSeenAt = now;
+          await savePlayer(p);
+          paidFromWipeout += share; paidCount++;
+        } catch (e) {
+          logger.error('ls_wipeout_payout_failed', { roomId: room.id, userId: p.userId, message: (e as Error).message });
+        }
+      }
+      if (paidCount > 0) {
+        wipeout = { splitAmong: lastRound.length, paidCount, percent: pct, paid: paidFromWipeout };
+        logger.info('ls_wipeout_split_paid', {
+          roomId: room.id, round: room.round, percent: pct,
+          splitAmong: lastRound.length, paidCount, paid: paidFromWipeout, remaining
+        });
       }
     }
   }

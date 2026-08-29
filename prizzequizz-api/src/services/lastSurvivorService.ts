@@ -618,8 +618,17 @@ export async function snapshot(roomId: string, forUserId?: string): Promise<any>
         const lastRound = players.filter((p) => p.status === 'eliminated' && p.eliminatedRound === room.round);
         if (lastRound.length === 0) return null;
         const paid = lastRound.filter((p) => (p.payoutCash || 0) > 0);
-        if (paid.length !== 1) return null;      // nothing was paid out this way
-        return { lastUserId: paid[0]!.userId, share: paid[0]!.payoutCash, splitAmong: lastRound.length };
+        /* ANY of them being paid means this ending happened. It used to insist
+         * on EXACTLY ONE, because exactly one used to be paid — so the moment
+         * the pot started being split among all of them, the screen stopped
+         * being able to explain itself and fell back to «nobody survived». */
+        if (paid.length === 0) return null;
+        return {
+          splitAmong: lastRound.length,
+          paidCount: paid.length,
+          percent: Math.max(0, Math.min(100, Number(room.config?.economy?.wipeoutPlayerPercent ?? 50))),
+          paid: paid.reduce((n, p) => n + (p.payoutCash || 0), 0)
+        };
       })()
     },
     stats: { ...stats, remainingPot: netRemaining },

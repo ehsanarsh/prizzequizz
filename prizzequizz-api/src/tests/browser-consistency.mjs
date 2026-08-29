@@ -1,4 +1,6 @@
-/* THE LEDGER REPORT, IN THE PANEL THAT SHOWS IT.
+/* TWO THINGS THE ADMIN PANEL HAS TO GET RIGHT.
+ *
+ * THE LEDGER REPORT, IN THE PANEL THAT SHOWS IT.
  *
  * «۲۸ حساب ۰ مغایرت — ولی وقتی مغایرت داشته باشه معلوم نیست کدوم حساب‌هاست و
  *  مغایرت برای چی هست.»
@@ -103,6 +105,66 @@ ok('and which side is the authority', /دفترکل مرجع است/.test(bad.tx
 console.log('and where it can be taken next:');
 ok('each row opens that account’s ledger', bad.onclicks.some((o) => /viewLedger\('aaaaaaaa/.test(o || '')), bad.onclicks[0] || '');
 ok('and that account’s management screen', bad.onclicks.some((o) => /userDetail\('bbbbbbbb/.test(o || '')));
+
+/* ── THE LAST SURVIVOR SPLIT ──────────────────────────────────────────────
+ * «می‌خوام درصدی از پات رو واقعاً تقسیم کنیم بین کاربرا و درصدی هم خودمون
+ *  برداریم و این درصدها باید در پنل مدیریت قابل تغییر باشه.»
+ * A field that is drawn but never sent is a setting the operator believes they
+ * changed. So this fills it in and reads what the panel actually PUTs. */
+console.log('the Last Survivor wipe-out split:');
+await page.evaluate(() => {
+  window.__saved = [];
+  /* The config the server really answers with: the object itself, not wrapped. */
+  const CFG = { room: { capacity: 20, minUsers: 2, waitSeconds: 30, manualStartEnabled: true, startPct: 70 },
+    timings: { readySeconds: 5, questionSeconds: 10, eliminationSeconds: 7, dashboardSeconds: 6, cashoutSeconds: 8 },
+    match: { totalRounds: 12, minSurvivors: 1 },
+    features: { animations: true, chat: true },
+    economy: { rakePercent: 5, wipeoutPlayerPercent: 40,
+      tickets: { green: { value: 12500, units: 1 }, blue: { value: 25000, units: 2 }, red: { value: 50000, units: 4 } } } };
+  window.api = async (method, path2, body) => {
+    const p = String(path2);
+    if (p.indexOf('/admin/last-survivor/config') >= 0) {
+      if (method === 'PUT') { window.__saved.push(body); return {}; }
+      return CFG;
+    }
+    if (p.indexOf('/admin/last-survivor/rooms') >= 0) return { rows: [] };
+    if (p.indexOf('/admin/last-survivor/topics') >= 0) return { topics: [], categories: [], randomCategories: [] };
+    if (p.indexOf('/admin/waiting-music') >= 0) return { rows: [] };
+    return {};
+  };
+});
+await page.evaluate(async () => { await (0, eval)('renderLastSurvivor')(); });
+const field = await page.evaluate(() => {
+  const el = document.getElementById('ls_wipePct');
+  const card = el && el.closest('.card');
+  return { there: !!el, value: el ? el.value : '',
+           note: card ? (card.textContent || '').replace(/\s+/g, ' ') : '' };
+});
+ok('the field is on the screen', field.there);
+ok('showing what the server has', String(field.value) === '40', String(field.value));
+ok('and the panel spells out both halves of the split', /۴۰٪ بین بازیکنان/.test(field.note) && /۶۰٪ سهم خانه/.test(field.note), field.note.slice(0, 90));
+
+const sent = await page.evaluate(async () => {
+  const el = document.getElementById('ls_wipePct');
+  el.value = '75';
+  await (0, eval)('lsSaveConfig')();
+  return window.__saved[0] || null;
+});
+ok('saving sends the percentage', sent && sent.economy && sent.economy.wipeoutPlayerPercent === 75,
+  sent ? JSON.stringify(sent.economy && sent.economy.wipeoutPlayerPercent) : 'nothing was sent');
+ok('and still sends the house rake beside it', sent && sent.economy && typeof sent.economy.rakePercent === 'number');
+
+/* A save redraws the screen, so the field has to be found again — exactly as
+   an operator would find it after the first save. */
+const clamped = await page.evaluate(async () => {
+  window.__saved = [];
+  await (0, eval)('renderLastSurvivor')();
+  document.getElementById('ls_wipePct').value = '400';
+  await (0, eval)('lsSaveConfig')();
+  return (window.__saved[0] || {}).economy;
+});
+ok('a nonsense percentage is clamped, not sent as typed', clamped && clamped.wipeoutPlayerPercent === 100,
+  String(clamped && clamped.wipeoutPlayerPercent));
 
 console.log(`\n[consistency] ${pass} passed, ${fail} failed`);
 await browser.close(); server.close();

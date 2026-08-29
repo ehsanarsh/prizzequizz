@@ -34,6 +34,14 @@ export interface LastSurvivorConfig {
   features: { animations: boolean; chat: boolean };
   economy: {
     rakePercent: number;       // house cut on the gross pool (admin-set; 0 = full pool to players)
+    /* WHEN NOBODY SURVIVES. Everyone left answered the last question wrongly,
+     * so there is no winner — but the money is real and somebody has to have
+     * it. This is the percentage of what is still on the table that is split
+     * among the players who went out together, by the same units every other
+     * split uses; the house keeps the rest. 0 means the old behaviour of the
+     * whole pot staying with the house, 100 means the players take all of it.
+     * Operator-set, because it is a business decision and not arithmetic. */
+    wipeoutPlayerPercent: number;
     tickets: Record<string, TicketTier>; // green/blue/red → {value, units}
   };
   // Per-topic gating. A topic is playable only when enabled=true. Anything not
@@ -78,6 +86,10 @@ export const LS_DEFAULT_CONFIG: LastSurvivorConfig = {
   features: { animations: true, chat: true },
   economy: {
     rakePercent: 0,
+    /* Half back to the players, half to the house. Chosen as a starting point,
+     * not a rule — the whole reason it is in the config is that the operator
+     * decides. */
+    wipeoutPlayerPercent: 50,
     tickets: {
       green: { value: 12500, units: 1, shields: 0 },
       blue: { value: 25000, units: 2, shields: 1 },

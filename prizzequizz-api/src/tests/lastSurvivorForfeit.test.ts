@@ -18,11 +18,24 @@ import { repositories } from '../repositories/index.js';
 import { grantTickets } from '../services/ticketService.js';
 import { getAccount } from '../services/walletLedgerService.js';
 import { LS_DEFAULT_CONFIG, updateConfig } from '../services/lastSurvivorConfig.js';
-import { joinTopic, getRoom, saveRoom, listPlayers } from '../services/lastSurvivorService.js';
+import { joinTopic, getRoom, saveRoom, listPlayers, snapshot } from '../services/lastSurvivorService.js';
 import { advanceRoom, submitAnswer, eliminationOrder } from '../services/lastSurvivorWorker.js';
 import { houseRevenueSummary, _resetHouseRevenue } from '../services/houseRevenueService.js';
 import { buildPool } from '../services/lastSurvivorPrize.js';
 import { gameConfig } from '../core/config.js';
+import { realtimeRooms } from '../realtime/roomRegistry.js';
+
+/* WHAT THE ROOM SHOUTS AT THE MOMENT IT ENDS.
+ * The snapshot is one way the screen learns about a wipe-out; the `ls:ended`
+ * event is the other, and it is the one that arrives first — a client that has
+ * already stopped polling has nothing else. They are built separately, so a
+ * test that only reads the snapshot leaves the live path unwatched. */
+const ended = new Map<string, any>();
+const realBroadcast = realtimeRooms.broadcastTopic.bind(realtimeRooms);
+realtimeRooms.broadcastTopic = ((topic: string, msg: any) => {
+  if (msg && msg.type === 'ls:ended') ended.set(String(topic).replace(/^ls:/, ''), msg.payload);
+  return realBroadcast(topic, msg);
+}) as typeof realtimeRooms.broadcastTopic;
 
 let passed = 0, failed = 0;
 async function check(name: string, fn: () => Promise<void>): Promise<void> {
@@ -119,7 +132,7 @@ async function run(): Promise<void> {
    * The old expectation is not "broken", it is superseded; what has to stay
    * true is that ONE player is paid, that it is the right one, and that nothing
    * goes missing. */
-  await check('all three miss on round one → the last one out is paid, the rest is booked to the house', async () => {
+  await check('all three miss on round one → ALL of them are paid, the rest is booked to the house', async () => {
     const { roomId, ids } = await openRoom(3);
     const room = (await getRoom(roomId))!;
     const pool = buildPool(room.config, ids.map(() => 'green'));
@@ -134,28 +147,28 @@ async function run(): Promise<void> {
     const players = await listPlayers(roomId);
     assert.equal(players.filter((p) => p.status === 'alive').length, 0, 'nobody survived');
 
-    const order = eliminationOrder(roomId, after.round, ids);
-    const lastOut = order[order.length - 1]!;
+    /* THE RULE CHANGED AGAIN, ON PURPOSE — see the case below about two
+       players. Paying only the last one out meant that of several people who
+       made exactly the same mistake, one was rewarded and the rest were not.
+       Now the operator's percentage is split among all of them. */
+    const pct = LS_DEFAULT_CONFIG.economy.wipeoutPlayerPercent;
+    const toPlayers = Math.floor((pool.net * pct) / 100);
     for (const u of ids) {
       const row = players.find((p) => p.userId === u)!;
       const acct = await getAccount(u);
-      if (u === lastOut) {
-        assert.ok(row.payoutCash > 0, 'the last player out must be paid their share');
-        assert.equal(acct.available, row.payoutCash, 'and their wallet must hold it');
-        /* One share of three, since all three hold the same ticket. */
-        assert.ok(Math.abs(row.payoutCash - Math.floor(pool.net / 3)) <= 3,
-          'the share is ' + row.payoutCash + ', not a third of ' + pool.net);
-      } else {
-        assert.equal(acct.available, 0, u + ' must not be paid');
-        assert.equal(row.payoutCash, 0);
-      }
+      assert.ok(row.payoutCash > 0, u + ' answered as badly as the others and was paid nothing');
+      assert.equal(acct.available, row.payoutCash, u + '’s wallet must hold what they were paid');
+      /* One share of three, since all three hold the same ticket. */
+      assert.ok(Math.abs(row.payoutCash - Math.floor(toPlayers / 3)) <= 3,
+        'the share is ' + row.payoutCash + ', not a third of ' + toPlayers);
     }
 
     const paid = players.reduce((sum, p) => sum + p.payoutCash, 0);
+    assert.ok(Math.abs(paid - toPlayers) <= 3, 'players took ' + paid + ', not the configured ' + toPlayers);
     const house = await houseRevenueSummary();
     const booked = house.recent.find((h) => h.refId === roomId && h.source === 'ls_forfeited_pot');
     assert.ok(booked, 'the forfeited pot must be recorded, not merely lost track of');
-    assert.equal(booked!.amount, pool.net - paid, 'the house keeps everything except that one share');
+    assert.equal(booked!.amount, pool.net - paid, 'the house keeps exactly what the players did not take');
     /* Conservation, which is the point of the whole file. */
     assert.equal(paid + booked!.amount, pool.net, 'the pot did not add up');
     assert.equal((booked!.metadata as any).players, 3);
@@ -211,6 +224,116 @@ async function run(): Promise<void> {
     assert.equal(booked!.amount, net, 'the whole pot, since nothing was paid');
 
     await updateConfig({ economy: { ...LS_DEFAULT_CONFIG.economy, rakePercent: 0, tickets: { ...base } } } as any);
+  });
+
+  /* TWO PLAYERS, BOTH WRONG, BOTH PAID.
+   *
+   * «اگه دو نفر کنار هم بازی کنن و دوتاشونم اشتباه جواب بدن، به یکی می‌ده جایزه
+   *  به یکی نمی‌ده و این بده. می‌خوام درصدی از پات رو واقعاً تقسیم کنیم بین
+   *  کاربرا و درصدی هم خودمون برداریم و این درصدها در پنل قابل تغییر باشه.»
+   *
+   * This is the case that was reported from four real matches, and it is the
+   * one the old rule got wrong: it paid the single last player out and left the
+   * other with nothing for the same mistake. */
+  await check('two players both wrong: BOTH are paid, by the operator’s percentage', async () => {
+    await updateConfig({ economy: { ...LS_DEFAULT_CONFIG.economy, rakePercent: 0,
+      wipeoutPlayerPercent: 60 } } as any);
+    await updateConfig({ room: { capacity: 2, minUsers: 2, waitSeconds: 0, manualStartEnabled: true, startPct: 70 } });
+
+    const { roomId, ids } = await openRoom(2);
+    const r0 = (await getRoom(roomId))!;
+    const net = buildPool(r0.config, ids.map(() => 'green')).net;
+    assert.ok(net > 0);
+    await playRound(roomId, Object.fromEntries(ids.map((u) => [u, 1])));
+
+    const after = (await getRoom(roomId))!;
+    assert.equal(after.status, 'finished');
+    const players = await listPlayers(roomId);
+    assert.equal(players.filter((p) => p.status === 'alive').length, 0, 'nobody survived');
+
+    /* Nobody is left out. That is the whole point of the change. */
+    for (const u of ids) {
+      const row = players.find((p) => p.userId === u)!;
+      const acct = await getAccount(u);
+      assert.ok(row.payoutCash > 0, u + ' was paid nothing while the other was paid');
+      assert.equal(acct.available, row.payoutCash, u + '’s wallet does not hold what they were paid');
+    }
+    /* Same ticket, same units → the same figure for both. */
+    const [pa, pb] = ids.map((u) => players.find((p) => p.userId === u)!.payoutCash);
+    assert.ok(Math.abs(pa! - pb!) <= 1, 'equal stakes should get equal shares: ' + pa + ' vs ' + pb);
+
+    const paid = players.reduce((sum, p) => sum + p.payoutCash, 0);
+    const want = Math.floor((net * 60) / 100);
+    assert.ok(Math.abs(paid - want) <= 2, 'players got ' + paid + ', not the configured ' + want + ' of ' + net);
+
+    const house = await houseRevenueSummary();
+    const booked = house.recent.find((h) => h.refId === roomId && h.source === 'ls_forfeited_pot');
+    assert.ok(booked, 'the rest must be booked to the house');
+    assert.equal(booked!.amount, net - paid, 'the house should keep exactly the remainder');
+    assert.equal(paid + booked!.amount, net, 'the pot did not add up');
+
+    /* AND THE SCREEN IS TOLD. Paying correctly is half of it: the first match
+       that was reported said «باختی» to both players, because nothing reaching
+       the client said this ending had happened at all. The snapshot has to
+       carry it, and carry enough of it to write the sentence with. */
+    const snap = await snapshot(roomId, ids[0]!);
+    const w = (snap as any).room.wipeout;
+    assert.ok(w, 'the snapshot does not report the wipe-out, so the screen cannot explain it');
+    assert.equal(w.paidCount, 2, 'it should say both were paid');
+    assert.equal(w.splitAmong, 2);
+    assert.equal(w.percent, 60, 'the percentage the sentence quotes must be the one that was used');
+    assert.equal(w.paid, paid, 'the total it reports is not what was actually paid');
+
+    /* And the same thing on the live wire, for the client that is still watching
+       when the room ends rather than polling afterwards. */
+    const ev = ended.get(roomId);
+    assert.ok(ev, 'the room ended without announcing it');
+    assert.ok(ev.wipeout, 'the ending event does not carry the wipe-out, so a watching client is told nothing');
+    assert.equal(ev.wipeout.paidCount, 2);
+    assert.equal(ev.wipeout.percent, 60);
+    assert.equal(ev.wipeout.paid, paid);
+  });
+
+  await check('the percentage is the operator’s, not a constant', async () => {
+    /* The same room twice, at two settings: if the figure does not move with
+       the number in the panel, the number in the panel is decoration. */
+    const takes: number[] = [];
+    for (const pct of [20, 90]) {
+      await updateConfig({ economy: { ...LS_DEFAULT_CONFIG.economy, rakePercent: 0, wipeoutPlayerPercent: pct } } as any);
+      const { roomId, ids } = await openRoom(2);
+      const net = buildPool((await getRoom(roomId))!.config, ids.map(() => 'green')).net;
+      await playRound(roomId, Object.fromEntries(ids.map((u) => [u, 1])));
+      const players = await listPlayers(roomId);
+      const paid = players.reduce((s, p) => s + p.payoutCash, 0);
+      assert.ok(Math.abs(paid - Math.floor((net * pct) / 100)) <= 2,
+        'at ' + pct + '% the players got ' + paid + ' of ' + net);
+      takes.push(paid);
+    }
+    assert.ok(takes[1]! > takes[0]!, 'a bigger percentage must pay more: ' + takes.join(' vs '));
+  });
+
+  await check('zero percent keeps the whole pot, and says so', async () => {
+    await updateConfig({ economy: { ...LS_DEFAULT_CONFIG.economy, rakePercent: 0, wipeoutPlayerPercent: 0 } } as any);
+    const warnings: string[] = [];
+    const realWarn = console.warn;
+    console.warn = (...a: unknown[]) => { warnings.push(a.map(String).join(' ')); };
+    let roomId = '', net = 0;
+    try {
+      const room = await openRoom(2); roomId = room.roomId;
+      net = buildPool((await getRoom(roomId))!.config, room.ids.map(() => 'green')).net;
+      await playRound(roomId, Object.fromEntries(room.ids.map((u) => [u, 1])));
+    } finally { console.warn = realWarn; }
+    const players = await listPlayers(roomId);
+    assert.equal(players.reduce((s, p) => s + p.payoutCash, 0), 0, 'nobody should be paid at 0%');
+    const house = await houseRevenueSummary();
+    const booked = house.recent.find((h) => h.refId === roomId && h.source === 'ls_forfeited_pot');
+    assert.equal(booked!.amount, net, 'the house keeps all of it');
+    const line = warnings.find((w) => w.includes('ls_wipeout_not_paid'));
+    assert.ok(line, 'paying nobody must not be silent');
+    assert.match(line!, /"percent":0/, line!);
+    /* Put the shipped setting back for the cases after this one. */
+    await updateConfig({ economy: { ...LS_DEFAULT_CONFIG.economy, rakePercent: 0 } } as any);
+    await updateConfig({ room: { capacity: 3, minUsers: 2, waitSeconds: 0, manualStartEnabled: true, startPct: 70 } });
   });
 
   await check('a room with a survivor books nothing as forfeited', async () => {

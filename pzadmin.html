@@ -3702,6 +3702,9 @@ async function renderLastSurvivor(){
   ]); }catch(e){ $('#main').innerHTML=head('آخرین بازمانده')+'<div class="card empty">'+(e.message||'خطا')+'</div>'; return; }
   _LS_CFG=cfg;
   const t=cfg.economy.tickets||{};
+  /* The split when everybody goes out at once. Read once so the field, the
+     sentence under it and the warning can never disagree about the number. */
+  const wipePct=Math.max(0,Math.min(100,Number(cfg.economy.wipeoutPlayerPercent!=null?cfg.economy.wipeoutPlayerPercent:50)));
   const num=(id,v)=>'<input id="'+id+'" type="number" value="'+(v!=null?v:'')+'" style="width:100%">';
   const chk=(id,v)=>'<select id="'+id+'"><option value="1"'+(v?' selected':'')+'>روشن</option><option value="0"'+(!v?' selected':'')+'>خاموش</option></select>';
   const st=stat;
@@ -3751,7 +3754,15 @@ async function renderLastSurvivor(){
       '<div class="field"><label>چت روم انتظار</label>'+chk('ls_chat',cfg.features.chat)+'</div>'+
     '</div></div>'+
     '<div class="card"><h3>💰 جایزه و بلیط</h3>'+
-      '<div class="field" style="max-width:220px"><label>سهم خانه (rake ٪)</label>'+num('ls_rake',cfg.economy.rakePercent)+'</div>'+
+      '<div class="grid g2">'+
+        '<div class="field"><label>سهم خانه (rake ٪)</label>'+num('ls_rake',cfg.economy.rakePercent)+'</div>'+
+        '<div class="field"><label>وقتی همه حذف شدند: سهم بازیکنان (٪)</label>'+
+          num('ls_wipePct',wipePct)+'</div>'+
+      '</div>'+
+      '<div class="note">وقتی در یک سؤال <b>همهٔ بازماندگان</b> اشتباه جواب می‌دهند، برنده‌ای در کار نیست ولی پول واقعی روی میز است. '+
+        'این عدد می‌گوید چند درصد از باقی‌ماندهٔ جایزه بین همان کسانی که با هم حذف شدند تقسیم شود — با همان «ضریب سهم» بلیط‌ها — و بقیه‌اش سهم خانه است. '+
+        'با تنظیم فعلی: <b>'+fa(wipePct)+'٪ بین بازیکنان، '+fa(100-wipePct)+'٪ سهم خانه</b>. '+
+        (wipePct===0?'<b style="color:var(--bad)">صفر یعنی هیچ‌کس چیزی نمی‌گیرد و کل پات سهم خانه می‌شود.</b>':'')+'</div>'+
       '<div class="tbl-wrap"><table><thead><tr><th>رنگ بلیط</th><th>ارزش (تومان)</th><th>ضریب سهم (Units)</th></tr></thead><tbody>'+
       ['green','blue','red'].map(c=>{const label={green:'🟢 سبز',blue:'🔵 آبی',red:'🔴 قرمز'}[c];const tt=t[c]||{value:0,units:0};return '<tr><td><b>'+label+'</b></td><td>'+num('ls_tv_'+c,tt.value)+'</td><td>'+num('ls_tu_'+c,tt.units)+'</td></tr>';}).join('')+
       '</tbody></table></div><div class="note">استخر = مجموع ارزش بلیط‌ها؛ تقسیم جایزه بر اساس مجموع «ضریب سهم»‌ها (نه تعداد نفرات).</div></div>'+
@@ -3986,7 +3997,7 @@ async function lsSaveConfig(){
     timings:{readySeconds:n('ls_tR'),questionSeconds:n('ls_tQ'),eliminationSeconds:n('ls_tE'),dashboardSeconds:n('ls_tD'),cashoutSeconds:n('ls_tC')},
     match:{totalRounds:n('ls_rounds'),minSurvivors:n('ls_minSurv')},
     features:{animations:b('ls_anim'),chat:b('ls_chat')},
-    economy:{rakePercent:n('ls_rake'),tickets:{
+    economy:{rakePercent:n('ls_rake'),wipeoutPlayerPercent:Math.max(0,Math.min(100,n('ls_wipePct'))),tickets:{
       green:{value:n('ls_tv_green'),units:n('ls_tu_green')},
       blue:{value:n('ls_tv_blue'),units:n('ls_tu_blue')},
       red:{value:n('ls_tv_red'),units:n('ls_tu_red')}

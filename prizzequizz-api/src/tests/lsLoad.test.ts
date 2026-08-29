@@ -19,9 +19,9 @@
  *     paid them.
  *   • HEADCOUNT. Alive + eliminated + cashed-out is always the room's roll.
  *   • THE NEW RULES: an emptied waiting room is closed and never handed to the
- *     next player; and when a round wipes a room out, exactly ONE player — the
- *     last one out, in the server's own order — is paid, and the rest of the
- *     pot is booked to the house.
+ *     next player; and when a round wipes a room out, the operator's percentage
+ *     of what is left is split among EVERY player who went out together, and
+ *     the house keeps the rest.
  *
  * Run: npx tsx src/tests/lsLoad.test.ts
  */
@@ -318,7 +318,7 @@ async function run(): Promise<void> {
   });
 
   /* A forced wipe-out, so the rule is exercised whatever the big run rolled. */
-  await check('a forced wipe-out pays the last player out and nobody else', async () => {
+  await check('a forced wipe-out pays EVERY player who went out, by the operator’s percentage', async () => {
     const { roomId, ids } = await fillRoom(PER_ROOM);
     let room = (await getRoom(roomId))!;
     assert.equal(room.status, 'running');
@@ -335,25 +335,31 @@ async function run(): Promise<void> {
     const players = await listPlayers(roomId);
     assert.equal(players.filter((p) => p.status === 'alive').length, 0, 'somebody survived a total wipe-out');
 
+    /* THE RULE CHANGED, ON PURPOSE. Paying only the last one out meant that of
+       a hundred players who made exactly the same mistake, ninety-nine got
+       nothing — invisible in a big room, glaring in a room of two, which is
+       where it was reported. The operator's percentage is now split among all
+       of them. */
+    const pct = room.config.economy.wipeoutPlayerPercent;
     const paid = players.filter((p) => p.payoutCash > 0);
-    assert.equal(paid.length, 1, paid.length + ' players were paid; exactly one should be');
-    const order = eliminationOrder(roomId, after.round, players.filter((p) => p.eliminatedRound === after.round).map((p) => p.userId));
-    assert.equal(paid[0]!.userId, order[order.length - 1], 'the wrong player was paid');
+    assert.equal(paid.length, players.length, paid.length + ' of ' + players.length + ' players were paid');
 
-    /* Their share is what a normal split among that field would have given
-       them — not a made-up figure — and their wallet actually holds it. */
-    const share = paid[0]!.payoutCash;
-    assert.ok(share > 0 && share <= pool.net, 'share ' + share + ' is outside the pot ' + pool.net);
-    const acct = await getAccount(paid[0]!.userId);
-    assert.equal(acct.available, share, 'the wallet does not hold the share');
-    /* And with equal tickets all round, one share of N is the pot divided N ways. */
-    const expected = Math.floor(pool.net / players.length);
-    assert.ok(Math.abs(share - expected) <= players.length,
-      'share ' + share + ' is not one ' + players.length + '-way split of ' + pool.net + ' (' + expected + ')');
+    /* Equal tickets all round, so equal shares — and each wallet holds it. */
+    const toPlayers = Math.floor((pool.net * pct) / 100);
+    const expected = Math.floor(toPlayers / players.length);
+    for (const p of paid.slice(0, 5)) {
+      const acct = await getAccount(p.userId);
+      assert.equal(acct.available, p.payoutCash, p.userId + '’s wallet does not hold their share');
+      assert.ok(Math.abs(p.payoutCash - expected) <= players.length,
+        'share ' + p.payoutCash + ' is not one ' + players.length + '-way split of ' + toPlayers);
+    }
 
-    /* CONSERVATION ON THE WIPE-OUT PATH. The house keeps everything except that
-       one share — if the forfeited figure still counted the share as unclaimed,
-       the same money would be booked twice and the books would not close. */
+    /* CONSERVATION ON THE WIPE-OUT PATH. The house keeps everything the players
+       did not take — if the forfeited figure still counted a paid share as
+       unclaimed, the same money would be booked twice and the books would not
+       close. */
+    const share = players.reduce((n, p) => n + p.payoutCash, 0);
+    assert.ok(Math.abs(share - toPlayers) <= players.length, 'players took ' + share + ', configured ' + toPlayers);
     const house = await houseRevenueSummary();
     const forfeit = house.recent.find((h) => h.refId === roomId && h.source === 'ls_forfeited_pot');
     assert.ok(forfeit, 'the rest of the pot must be booked to the house');

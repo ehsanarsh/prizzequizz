@@ -71,9 +71,23 @@ async function paint(s) {
   await page.waitForTimeout(300);
 }
 
-console.log('before anybody is out:');
+console.log('before the first question has been graded:');
+/* THE RULE MOVED, BY REQUEST. It used to be «hidden until somebody goes out»;
+   it is now «hidden until the first question has been played», because a round
+   where everybody answers correctly still ends with the player being asked
+   whether to take the money — and «؟؟؟» beside that question is a screen that
+   has not caught up. What is left held back is the only moment there is
+   genuinely nothing to say: before the first question is graded. */
 await page.evaluate(() => { try { (0, eval)('lsPotReset()'); } catch (e) {} });
-await paint(snap(0, 'dashboard'));
+/* The one screen that is both BEFORE grading and carries the share: round one,
+   question open, this player has answered and is waiting for the others. */
+{
+  const s0 = snap(0, 'question');
+  s0.room.round = 1; s0.room.phase = 'question';
+  s0.me.answeredThisRound = true;
+  s0.question = { id: 'q1', round: 1, text: 'سؤال', options: ['الف', 'ب'], difficulty: 'easy' };
+  await paint(s0);
+}
 const dark = await page.evaluate((x) => {
   const body = document.getElementById('lsBody');
   const mine = document.getElementById('lsMyShare');
@@ -273,6 +287,48 @@ ok('and its place is the left corner', corner.slotHalf, 'slot at x=' + corner.sl
 ok('the big number is gone once it has landed', corner.gone);
 ok('and the figure stays there', corner.landed === faNum(52000), corner.landed);
 
+console.log('a round where nobody went out:');
+/* «موشن عدد سهم تو باید بعد از هر سوال بیاد حتی اگه کسی حذف نشده باشه.» The
+   figure did not change — nobody went out — but the player is about to be asked
+   whether to take it, and «؟؟؟» beside that question is a screen that has not
+   caught up. */
+await page.waitForFunction(() => !document.getElementById('lsPotHero'), null, { timeout: 12000 });
+const quiet = await page.evaluate(() => {
+  (0, eval)('lsPotReset()');
+  const s = window.__s;
+  /* Round one, everybody answered correctly: nobody eliminated, and the round
+     has just been graded. */
+  s.room.round = 1; s.room.phase = 'question'; s.stats.eliminated = 0; s.stats.alive = 20;
+  s.me.currentShare = 45000;
+  (0, eval)('lsLive')(s);
+  const before = (document.getElementById('lsMyShare') || {}).textContent;
+  s.room.phase = 'elimination';
+  (0, eval)('lsLive')(s);
+  const h = document.getElementById('lsPotHero');
+  const num = h && h.querySelector('.lph-num');
+  return { before, hero: !!h, label: h ? (h.querySelector('.lph-lbl') || {}).textContent : '',
+           shown: num ? num.textContent : '' };
+});
+ok('before the question is graded there is nothing to tell', quiet.before === '؟؟؟', String(quiet.before));
+ok('once it is graded the figure is announced anyway', quiet.hero === true);
+ok('and it is the player’s own share', quiet.label === 'سهم تو', quiet.label);
+ok('showing the real number, not «؟؟؟»', quiet.shown === faNum(45000), quiet.shown);
+
+const settled = await page.evaluate(async () => {
+  await new Promise((r) => setTimeout(r, 5200));
+  return { hero: !!document.getElementById('lsPotHero'),
+           small: (document.getElementById('lsMyShare') || {}).textContent };
+});
+ok('it lands in its place like any other announcement', settled.hero === false && settled.small === faNum(45000), settled.small);
+
+const twice = await page.evaluate(() => {
+  const s = window.__s;
+  const before = !!document.getElementById('lsPotHero');
+  (0, eval)('lsLive')(s); (0, eval)('lsLive')(s); (0, eval)('lsLive')(s);
+  return { before, after: !!document.getElementById('lsPotHero') };
+});
+ok('and it is said once a round, not once a poll', twice.after === false, String(twice.after));
+
 console.log('the continue/withdraw sheet comes after the announcement, not over it:');
 /* The loop above left an announcement mid-flight; it has to finish before this
    can ask what happens when nothing is being announced. */
@@ -282,10 +338,16 @@ const order = await page.evaluate(() => {
   const drop = () => { const c = document.getElementById('lsCashPop'); if (c) c.remove(); };
 
   /* With nothing being announced, the sheet goes up the moment the phase asks
-     for it — the delay must be about the announcement, not about the sheet. */
+     for it — the delay must be about the announcement, not about the sheet.
+     Every round has an announcement now, so «nothing is being announced» is a
+     state that has to be reached rather than assumed. */
   (0, eval)('lsPotReset()'); drop();
   s.room.phase = 'cashout'; s.stats.eliminated = 0; s.me.decisionThisRound = null;
-  (0, eval)('lsLive')(s); (0, eval)('lsOverlays')(s);
+  (0, eval)('lsLive')(s);
+  const hero = document.getElementById('lsPotHero');
+  if (hero) hero.remove();
+  (0, eval)('_lsHero=null');
+  (0, eval)('lsOverlays')(s);
   const before = !!document.getElementById('lsCashPop');
 
   /* THE REAL ORDER: somebody goes out, the number is announced, and only then
