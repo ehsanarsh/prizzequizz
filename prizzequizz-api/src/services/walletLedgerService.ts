@@ -791,11 +791,42 @@ export async function reportSuspicious(): Promise<unknown[]> {
   return rows.map((r) => ({ userId: r.user_id, reason: r.reason, count: Number(r.n) }));
 }
 
-export async function verifyConsistency(userId?: string): Promise<{ checked: number; mismatches: unknown[] }> {
+/* WHAT A MISMATCH IS, IN ONE PLACE.
+ *
+ * The stored balance on wallet_accounts disagrees with the sum of that user's
+ * own ledger rows. The ledger is the authority — it is append-only — so the
+ * ledger figure is what the balance SHOULD be, and `diff` is what has to move
+ * to make it so: positive means the account is holding more than it earned.
+ *
+ * The panel used to be told only how MANY of these there were, which is the one
+ * fact an operator cannot act on: «معلوم نیست کدوم حساب‌هاست و مغایرت برای چی
+ * هست». So the answer carries who, both figures, and the size of the gap. */
+export interface LedgerMismatch {
+  userId: string;
+  /** Whatever the account is called, so the operator is not handed a bare id. */
+  username?: string;
+  displayName?: string;
+  phone?: string;
+  account: { available: number; locked: number };
+  ledger: { available: number; locked: number };
+  /** account − ledger. Positive = the balance is ahead of what was posted. */
+  diff: { available: number; locked: number };
+}
+/** Names for a handful of ids, best effort — a missing user is not an error. */
+async function nameMismatches(rows: LedgerMismatch[]): Promise<LedgerMismatch[]> {
+  for (const m of rows) {
+    try {
+      const u = await repositories.users.findById(m.userId);
+      if (u) { m.username = (u as any).username; m.displayName = (u as any).displayName; m.phone = (u as any).phone; }
+    } catch { /* a name is a convenience; the figures are the point */ }
+  }
+  return rows;
+}
+export async function verifyConsistency(userId?: string): Promise<{ checked: number; mismatches: LedgerMismatch[] }> {
   const pool = pgAvailable();
   if (!pool) {
     const ids = userId ? [userId] : [...memAccounts.keys()];
-    const mismatches: unknown[] = [];
+    const mismatches: LedgerMismatch[] = [];
     for (const uid of ids) {
       const a = memAccount(uid);
       let av = 0, lk = 0;
@@ -803,15 +834,19 @@ export async function verifyConsistency(userId?: string): Promise<{ checked: num
         if (e.userId !== uid) continue;
         const next = applyKind(e.kind, e.amount, av, lk); av = next.available; lk = next.locked;
       }
-      if (av !== a.available || lk !== a.locked) mismatches.push({ userId: uid, ledger: { available: av, locked: lk }, account: { available: a.available, locked: a.locked } });
+      if (av !== a.available || lk !== a.locked) mismatches.push({
+        userId: uid, ledger: { available: av, locked: lk }, account: { available: a.available, locked: a.locked },
+        diff: { available: a.available - av, locked: a.locked - lk }
+      });
     }
-    return { checked: ids.length, mismatches };
+    return { checked: ids.length, mismatches: await nameMismatches(mismatches) };
   }
   await ensureSchema(pool);
   const args: unknown[] = []; let where = '';
   if (userId) { args.push(userId); where = 'WHERE a.user_id=$1'; }
   const { rows } = await pool.query(`
     SELECT a.user_id, a.available, a.locked,
+      u.username, u.display_name, u.phone,
       coalesce(l.av,0) AS ledger_available, coalesce(l.lk,0) AS ledger_locked
     FROM wallet_accounts a
     LEFT JOIN (
@@ -819,9 +854,19 @@ export async function verifyConsistency(userId?: string): Promise<{ checked: num
         sum(CASE kind WHEN 'credit' THEN amount WHEN 'release' THEN amount WHEN 'debit' THEN -amount WHEN 'lock' THEN -amount ELSE 0 END) AS av,
         sum(CASE kind WHEN 'lock' THEN amount WHEN 'release' THEN -amount WHEN 'settle' THEN -amount ELSE 0 END) AS lk
       FROM wallet_ledger GROUP BY user_id
-    ) l ON l.user_id = a.user_id ${where}`, args);
-  const mismatches = rows.filter((r) => Number(r.available) !== Number(r.ledger_available) || Number(r.locked) !== Number(r.ledger_locked))
-    .map((r) => ({ userId: r.user_id, account: { available: Number(r.available), locked: Number(r.locked) }, ledger: { available: Number(r.ledger_available), locked: Number(r.ledger_locked) } }));
+    ) l ON l.user_id = a.user_id
+    LEFT JOIN users u ON u.id = a.user_id ${where}`, args);
+  const mismatches: LedgerMismatch[] = rows
+    .filter((r) => Number(r.available) !== Number(r.ledger_available) || Number(r.locked) !== Number(r.ledger_locked))
+    .map((r) => ({
+      userId: r.user_id,
+      username: r.username ?? undefined,
+      displayName: r.display_name ?? undefined,
+      phone: r.phone ?? undefined,
+      account: { available: Number(r.available), locked: Number(r.locked) },
+      ledger: { available: Number(r.ledger_available), locked: Number(r.ledger_locked) },
+      diff: { available: Number(r.available) - Number(r.ledger_available), locked: Number(r.locked) - Number(r.ledger_locked) }
+    }));
   return { checked: rows.length, mismatches };
 }
 

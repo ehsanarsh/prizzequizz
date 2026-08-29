@@ -2235,7 +2235,44 @@ function acPaintRows(){
     :'<tr><td colspan="4" class="empty">'+(q?'حسابی با این مشخصات پیدا نشد':'حسابی نیست')+'</td></tr>');
 }
 async function viewLedger(uid){const d=await api('GET','/admin/wallet/users/'+uid+'/ledger?pageSize=60');modal('دفترکل',tbl(['نوع','مبلغ','مانده بعد','زمان','توضیح'],(d.rows||[]).map(e=>[esc(e.entryType),(e.kind==='credit'||e.kind==='release'?'+':'−')+fa(e.amount),fa(e.availableAfter),fmtDate(e.createdAt),esc(e.description||'')])));}
-async function checkConsistency(){try{const r=await api('GET','/admin/wallet/consistency');toast('بررسی شد: '+fa(r.checked)+' حساب، '+fa((r.mismatches||[]).length)+' مغایرت',(r.mismatches||[]).length?'bad':'ok');}catch(e){toast(e.message,'bad');}}
+/* THE ANSWER, NOT THE HEADCOUNT.
+   «وقتی مغایرت داشته باشه معلوم نیست کدوم حساب‌هاست و مغایرت برای چی هست.»
+   The server has always sent the whole picture — who, what the balance says,
+   what the ledger says — and this threw all of it away to print a number in a
+   toast. A count of problems you cannot name is not a report.
+   Zero mismatches stays a toast: there is nothing to open. */
+async function checkConsistency(){
+  try{
+    const r=await api('GET','/admin/wallet/consistency');
+    const bad=(r.mismatches||[]);
+    if(!bad.length){ toast('بررسی شد: '+fa(r.checked)+' حساب، هیچ مغایرتی نیست ✅','ok'); return; }
+    const who=(m)=>esc(m.displayName||m.username||'بی‌نام')+
+      ' <span class="mono" style="color:var(--muted)">'+esc(String(m.userId).slice(0,8))+'</span>'+
+      (m.phone?' <span class="mono" style="color:var(--muted)">'+esc(m.phone)+'</span>':'');
+    /* The sign is the whole meaning: «+» is money the balance is holding that
+       no ledger row put there, «−» is money the ledger posted that the balance
+       never received. */
+    const gap=(n)=>{ const v=Number(n)||0; if(!v) return '<span style="color:var(--muted)">۰</span>';
+      return '<b style="color:'+(v>0?'var(--bad)':'var(--warn,#f0a92b)')+'">'+(v>0?'+':'−')+fa(Math.abs(v))+'</b>'; };
+    modal('مغایرت‌های دفترکل — '+fa(bad.length)+' حساب از '+fa(r.checked),
+      '<p class="note" style="margin:0 0 10px;line-height:2">'+
+        'مغایرت یعنی موجودیِ ثبت‌شدهٔ حساب با جمعِ ردیف‌های دفترکل همان کاربر یکی نیست. '+
+        'دفترکل مرجع است — فقط اضافه می‌شود و هیچ‌وقت پاک نمی‌شود — پس ستون «دفترکل» همان چیزی است که '+
+        'موجودی <b>باید</b> باشد، و ستون «اختلاف» می‌گوید چقدر باید جابه‌جا شود. '+
+        'عدد مثبت یعنی حساب بیشتر از چیزی که ثبت شده نگه داشته؛ منفی یعنی چیزی ثبت شده که به حساب نرسیده.'+
+      '</p>'+
+      tbl(['کاربر','موجودی حساب','طبق دفترکل','اختلاف قابل‌دریافت','اختلاف بلوکه','عملیات'],
+        bad.map(m=>[
+          who(m),
+          fa(m.account.available)+' / <span style="color:var(--muted)">'+fa(m.account.locked)+' بلوکه</span>',
+          fa(m.ledger.available)+' / <span style="color:var(--muted)">'+fa(m.ledger.locked)+' بلوکه</span>',
+          gap(m.diff&&m.diff.available),
+          gap(m.diff&&m.diff.locked),
+          '<button class="btn sm" onclick="viewLedger(\''+esc(m.userId)+'\')">دفترکل</button> '+
+          '<button class="btn sm info" onclick="userDetail(\''+esc(m.userId)+'\')">مدیریت</button>'
+        ])));
+  }catch(e){ toast(e.message,'bad'); }
+}
 
 /* ================= WITHDRAWALS ================= */
 let WD_ST='pending', _WD_ROWS={};

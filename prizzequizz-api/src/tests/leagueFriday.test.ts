@@ -58,7 +58,15 @@ async function run(): Promise<void> {
    * happens to run in. The bug was «the worker asks for the current season», and
    * a fixture whose season is the current week cannot tell a fixed lookup from a
    * correct one — it passed either way. This label can never be today. */
-  const closingSeason = previousSeasonId();
+  /* THE SEASON WHOSE MATCH IS THE ONE THIS TEST WALKS INTO.
+     It used to be «the week before TODAY», which is only the right answer when
+     the suite happens to run on a Friday: the entry below is made at the next
+     kickoff, and on any other day that kickoff belongs to a later week than
+     today does. The season played on a given Friday is the one that ended the
+     Sunday before it — so it is derived from the kickoff, not from now. */
+  const kickoffAt = kickoffFor(await getLeagueConfig());
+  const kickoffWeek = isoWeekId(new Date(kickoffAt));
+  const closingSeason = previousSeasonId(new Date(kickoffAt));
 
   /* Asserted on the boundary itself. Deriving everything from weekResetAt and
    * then checking the derived value hides an error in weekResetAt: a boundary a
@@ -77,8 +85,11 @@ async function run(): Promise<void> {
 
   await check('the week that closes is the week that is ending', async () => {
     assert.equal(isoWeekId(new Date(closeMoment)), '2026-W35', fmt(closeMoment));
-    assert.notEqual(closingSeason, currentSeasonId(),
-      'the fixture season must not be the current week, or this proves nothing');
+    /* The trap this file exists for: the rooms are NOT filed under the week the
+       match is played in. Comparing against today's week instead was the same
+       statement only on a Friday. */
+    assert.notEqual(closingSeason, kickoffWeek,
+      'the fixture season must not be the kickoff’s own week, or this proves nothing');
   });
 
   await check('and it is played on the Friday of the NEXT week — the awkward part', async () => {
@@ -125,9 +136,9 @@ async function run(): Promise<void> {
   /* THE FIRST BUG, WRITTEN DOWN. This is not a requirement — it is the trap:
      on match day the current season is NOT the season holding the rooms. */
   await check('on match day the current season id is not the rooms’ season', async () => {
-    assert.notEqual(currentSeasonId(), closingSeason,
+    assert.notEqual(kickoffWeek, closingSeason,
       'if these were ever equal the old lookup would have worked and this test would be pointless');
-    assert.equal((await listRooms(currentSeasonId())).length, 0,
+    assert.equal((await listRooms(kickoffWeek)).length, 0,
       'the rooms are filed under the closing season, so the current season has none — which is'
       + ' exactly what the worker used to ask for, and why no match ever started');
   });
@@ -135,7 +146,12 @@ async function run(): Promise<void> {
   await check('the season being played is resolved, not assumed to be this week', async () => {
     assert.equal(await activeSeasonId(), closingSeason,
       'the code would look in the current week, where there are no qualifiers at all');
-    assert.notEqual(await activeSeasonId(), currentSeasonId());
+    /* Asked AS OF THE KICKOFF, which is the moment that matters and the one
+       where the two answers always differ. Asking «now» only differs on a
+       Friday, so as an assertion it was a coin-toss on the day of the week. */
+    assert.equal(await activeSeasonId(new Date(kickoffAt)), closingSeason);
+    assert.notEqual(await activeSeasonId(new Date(kickoffAt)), kickoffWeek,
+      'resolved to the kickoff’s own week, which never holds the qualifiers');
   });
 
   /* WHERE THE HEADER'S CHIP GETS ITS FACTS. The big ticket beside the wallet,
@@ -147,7 +163,10 @@ async function run(): Promise<void> {
     const who = result.qualifiers[0]!.userId;
     const mine = await myLeague(who);
     assert.equal(mine.seasonId, closingSeason, 'myLeague is looking at ' + mine.seasonId);
-    assert.notEqual(mine.seasonId, currentSeasonId(), 'it fell back to the empty current week');
+    /* The point is not which label it picked but that the label has players in
+       it: falling back to an empty week is the failure, whatever it is called. */
+    assert.ok((await listQualifiers(mine.seasonId)).length > 0,
+      'it landed on a season with nobody in it: ' + mine.seasonId);
     assert.equal(mine.qualifiedTier, result.qualifiers[0]!.tier,
       'a qualifier holding a ticket is shown as holding no seat, so no chip is drawn');
   });

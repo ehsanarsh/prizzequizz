@@ -15502,9 +15502,35 @@ function pzPromoFitLater(hostId){
     window.addEventListener('resize',()=>{ ['promoLs','promoDuel'].forEach(pzPromoFit); });
   }
 }
+/* A BANNER PLAYS ONCE THROUGH, WHATEVER ELSE THE SCREEN IS DOING.
+ *
+ * «وقتی بلیط رو انتخاب می‌کنی اون بنر تبلیغات دوباره از اول پخش می‌شه … باید
+ *  بدون دخالت هیچ چیزی پخش بشه و تموم شه و دوباره پخش بشه.»
+ *
+ * Choosing a ticket rebuilds the card around it, and this used to rebuild the
+ * banner with it — writing the SAME markup back into the host. Identical
+ * markup is still a new element: the <video autoplay loop> is torn out and a
+ * fresh one put in its place, which starts at zero. So a player comparing two
+ * tickets never saw the end of the advert.
+ *
+ * The cure is simply not to touch the DOM when nothing has changed. What is
+ * currently painted is remembered per host, so a repaint with the same content
+ * is a no-op and the element — and its playhead — is left alone. The fit still
+ * runs: the screen around it may well have changed size. */
+const _pzPromoShown={};
+function pzPromoPaintInto(hostId,html){
+  const host=document.getElementById(hostId); if(!host) return false;
+  /* `firstChild` guards the case where the screen's markup was rebuilt from
+     scratch underneath us: the memo says «already painted» but the host is
+     empty, and believing the memo would leave a blank space. */
+  if(_pzPromoShown[hostId]===html&&(host.firstChild||!html)) return false;
+  _pzPromoShown[hostId]=html;
+  host.innerHTML=html;
+  return true;
+}
 /** Paint a slot into its own host element, above (and separate from) the tickets. */
 function pzPromoRender(slot,hostId){
-  const paint=()=>{ const host=document.getElementById(hostId); if(host){ host.innerHTML=pzPromoHTML(slot); pzPromoFitLater(hostId); } };
+  const paint=()=>{ pzPromoPaintInto(hostId,pzPromoHTML(slot)); pzPromoFitLater(hostId); };
   paint();
   if(!PZ_BANNERS) pzLoadBanners().then(paint);
   if(!PZ_PROMOS) pzLoadPromos().then(paint);
@@ -15521,8 +15547,13 @@ function pzBannerMount(slot,screenId){
     if(after&&after.nextSibling) sec.insertBefore(host,after.nextSibling);
     else sec.insertBefore(host,sec.firstChild);
   }
+  /* Same rule as the ticket screens: showScreen mounts this every time a screen
+     opens, and repainting identical markup would restart a video that is
+     already playing. The fit still runs — the screen it is on has just been
+     shown, so its size is only now real. */
+  if(!host.id) host.id='pzBannerHost_'+slot;
   const paint=()=>{
-    host.innerHTML=pzPromoHTML(slot);
+    pzPromoPaintInto(host.id,pzPromoHTML(slot));
     if((screenId||slot)==='home') pzHomeBannerFit(host);
   };
   paint();
