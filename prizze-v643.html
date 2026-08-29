@@ -7323,6 +7323,24 @@ img.pz-lgtk-big{width:74px;height:74px;object-fit:contain;filter:drop-shadow(0 8
 #topic-pick .tp-clock i{font-style:normal;font-weight:800;color:#ffd97a}
 @keyframes tpBeat{0%,100%{transform:scale(1)}50%{transform:scale(1.09)}}
 @media (prefers-reduced-motion:reduce){#topic-pick .tp-clock b{animation:none}}
+
+/* ══ WAITING FOR A QUESTION THAT HAS NOT LANDED ═══════════════════════════
+ * It is SHORTER than a real question — a question card carries four options and
+ * this carries one sentence — and that is fine: the point is not to reserve the
+ * exact space, it is to stop a hollow box with a live clock under it from
+ * looking like a screen that failed. The dots and the line give it enough
+ * height on their own; a min-height was written here and removed, because the
+ * content already exceeded it and it never applied. */
+#lsGame .ls-qcard.ls-qwait{display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:12px}
+#lsGame .lsqw-txt{font-size:15px;font-weight:800;color:#d9d2c2;text-align:center}
+#lsGame .lsqw-dots{display:flex;gap:9px}
+#lsGame .lsqw-dots i{width:11px;height:11px;border-radius:50%;background:#FFE24A;
+  animation:lsqwBounce 1.05s ease-in-out infinite}
+#lsGame .lsqw-dots i:nth-child(2){animation-delay:.16s}
+#lsGame .lsqw-dots i:nth-child(3){animation-delay:.32s}
+@keyframes lsqwBounce{0%,100%{transform:translateY(0);opacity:.45}50%{transform:translateY(-8px);opacity:1}}
+@media (prefers-reduced-motion:reduce){#lsGame .lsqw-dots i{animation:none;opacity:1}}
 </style>
 
   <!-- Report-question bottom sheet -->
@@ -8967,7 +8985,7 @@ function lsLive(snap){
      somebody goes out, so they are not set — they are counted up. */
   try{ lsChatBadgePaint(); }catch(e){}          /* the tabs are redrawn often */
   const revealed=lsPotRevealed(snap);
-  lsPotPaint('lsRemain',s.remainingPot,revealed);
+  lsPotPaint('lsRemain',s.remainingPot,true);
   { const mine=lsMyShare(snap); if(mine!=null) lsPotPaint('lsMyShare',mine,revealed); }
   const vf=document.getElementById('lsVoteFill'), vt=document.getElementById('lsVoteTxt');
   if(vf&&r.status==='waiting'){ const pct=snap.players.length?Math.round(snap.votes*100/snap.players.length):0; vf.style.width=pct+'%'; if(vt)vt.textContent='شروع با همین تعداد — '+lsFa(pct)+'٪ ('+lsFa(snap.votes)+'/'+lsFa(snap.players.length)+')'; }
@@ -9001,6 +9019,15 @@ let _lsPotRoom=null;
    figure is not decoration: a player deciding whether to take the money has to
    be told how much money. Drama does not get to make that decision blind. */
 const LS_POT_MASK='؟؟؟';
+/* ONLY THE PLAYER'S OWN TAKE IS HELD BACK. «جایزه کل رو هم ؟؟؟ نشون می‌ده،
+   باید کل جایزه رو نشون بده — فقط سهم تو رو تا قبل اون موشن نشون نده.»
+   The room's pot is public: it is what everyone joined for, it is on the topic
+   card before you ever walk in, and hiding it says nothing except that
+   something is broken. The figure with a reveal to earn is the one the
+   announcement is about — what THIS player would walk away with. */
+/* ONE figure waits, so this is one function rather than a table of slots: a
+   table read as if any slot could be added to it, and adding one changed
+   nothing, because every other slot prints its number directly. */
 const _lsPotMasked={};
 /* Followed while it is hidden, shown to nobody. The reveal has to open on what
    the player was ALREADY owed — «اولین حقی که می‌بره» — and that figure was on
@@ -9011,8 +9038,8 @@ const _lsPotHidden={};
 function lsPotRevealed(snap){
   try{ return Number((snap&&snap.stats&&snap.stats.eliminated)||0)>0; }catch(e){ return true; }
 }
-/* What a freshly-built screen should print in a prize slot. */
-function lsPotText(snap,val){ return lsPotRevealed(snap)?lsFa(val):LS_POT_MASK; }
+/* What a freshly-built screen should print in the «سهم تو» slot. */
+function lsShareText(snap,val){ return lsPotRevealed(snap)?lsFa(val):LS_POT_MASK; }
 /* WHICH FIGURE THE BIG NUMBER IS.
    «اولین حقی باشه که می‌بره — اگه با بلیط قرمزه، عدد بعد از کسر کارمزد می‌شه
     ۴۵۰۰۰ تومن، و با هر حذف اون عدد بیشتر می‌شه.»
@@ -9386,7 +9413,7 @@ function lsDashStrip(snap){ const s=snap.stats; const r=snap.room;
      answering. Rebuilt with the strip, which is redrawn on every phase change —
      so it steps forward exactly once per question. */
   const bar=`<div class="pzsb-host ls">${pzStepBarHTML({steps:r.totalRounds||12,current:r.round||0})}</div>`;
-  return bar+`<div style="display:flex;justify-content:space-between;padding:10px 16px;background:rgba(0,0,0,.25)"><span style="color:#6be08a;font-size:12px;font-weight:800">زنده <b id="lsAlive">${lsFa(s.alive)}</b></span><span style="color:#ff8a8a;font-size:12px;font-weight:800">حذف <b id="lsElim">${lsFa(s.eliminated)}</b></span><span style="color:#FFE24A;font-size:12px;font-weight:800">جایزه <b id="lsRemain">${lsPotText(snap,s.remainingPot)}</b></span></div>`; }
+  return bar+`<div style="display:flex;justify-content:space-between;padding:10px 16px;background:rgba(0,0,0,.25)"><span style="color:#6be08a;font-size:12px;font-weight:800">زنده <b id="lsAlive">${lsFa(s.alive)}</b></span><span style="color:#ff8a8a;font-size:12px;font-weight:800">حذف <b id="lsElim">${lsFa(s.eliminated)}</b></span><span style="color:#FFE24A;font-size:12px;font-weight:800">جایزه <b id="lsRemain">${lsFa(s.remainingPot)}</b></span></div>`; }
 /* THE PLAYER'S OWN SHARE.
    The board showed the whole pot and nothing else, so a player in a room of
    forty had to do the division in their head to know what the round was worth
@@ -9401,8 +9428,8 @@ function lsMyShare(snap){
   return v>0?v:0;
 }
 function lsDashCells(snap){ const s=snap.stats; const mine=lsMyShare(snap);
-  return `<div class="ls-stat big"><b id="lsRemain">${lsPotText(snap,s.remainingPot)}</b><span>مبلغ باقی‌ماندهٔ جایزه (ت)</span></div>`+
-  (mine==null?'':`<div class="ls-stat mine"><b id="lsMyShare">${lsPotText(snap,mine)}</b><span>سهم تو (ت)</span></div>`)+`
+  return `<div class="ls-stat big"><b id="lsRemain">${lsFa(s.remainingPot)}</b><span>مبلغ باقی‌ماندهٔ جایزه (ت)</span></div>`+
+  (mine==null?'':`<div class="ls-stat mine"><b id="lsMyShare">${lsShareText(snap,mine)}</b><span>سهم تو (ت)</span></div>`)+`
   <div class="ls-stat"><b id="lsAlive">${lsFa(s.alive)}</b><span>باقی‌مانده</span></div>
   <div class="ls-stat"><b id="lsElim">${lsFa(s.eliminated)}</b><span>حذف‌شده</span></div>
   <div class="ls-stat"><b id="lsCash">${lsFa(s.cashedOut)}</b><span>برداشت‌کرده</span></div>
@@ -9417,9 +9444,9 @@ function lsDashHtml(snap,compact){
     const mine=lsMyShare(snap);
     return `<div class="ls-dash-mini"><div class="c"><b id="lsAlive">${lsFa(s.alive)}</b><span>باقی‌مانده</span></div>`+
       `<div class="c"><b id="lsElim">${lsFa(s.eliminated)}</b><span>حذف‌شده</span></div>`+
-      `<div class="c gold"><b id="lsRemain">${lsPotText(snap,s.remainingPot)}</b><span>کل جایزه (ت)</span></div>`+
+      `<div class="c gold"><b id="lsRemain">${lsFa(s.remainingPot)}</b><span>کل جایزه (ت)</span></div>`+
       (mine==null?`<div class="c"><b id="lsCash">${lsFa(s.cashedOut)}</b><span>برداشت</span></div>`
-                : `<div class="c mine"><b id="lsMyShare">${lsPotText(snap,mine)}</b><span>سهم تو (ت)</span></div>`)+
+                : `<div class="c mine"><b id="lsMyShare">${lsShareText(snap,mine)}</b><span>سهم تو (ت)</span></div>`)+
       `</div>`;
   }
   return `<div class="ls-top" style="padding-bottom:0"><div class="ls-ttl" style="text-align:center;width:100%"><h1>داشبورد مسابقه</h1><p>مرحله ${lsFa(r.round)} از ${lsFa(r.totalRounds)} · <span id="lsTimer">${lsTimer(snap)}</span></p></div></div><div class="ls-dash" id="lsDashGrid">${lsDashCells(snap)}</div>`;
@@ -9454,6 +9481,24 @@ function lsQuestionHtml(snap,locked){
      it may be READ. The countdown modal covers it for a player; this covers it
      for everyone the modal does not reach, which is how a spectator was seeing
      the question before the people answering it. */
+  /* THE QUESTION IS NOT HERE YET.
+     «مودال آماده‌ای میاد، صفحهٔ پخش سوال میاد ولی بدون نوشته و خالی، و بعد
+      سوال اول ظاهر می‌شه.» The ready gate is timed by the server and the
+     question arrives on its own push, so on the first round of a match the
+     gate can lift a moment before the question lands. What was underneath was
+     this same card built from nothing: a «…» where the text goes and no
+     options at all — which reads as a broken screen, not as waiting.
+     So when there is nothing to ask yet, say so. The card is rebuilt the
+     moment the question arrives, because lsRender keys on the question id. */
+  const haveQ=!!(q.id&&String(q.text||'').trim()&&Array.isArray(q.options)&&q.options.length);
+  if(!haveQ){
+    return `<div class="ls-qwrap" data-q="" data-round="${snap.room.round}" data-locked="1" data-gate="1">
+    <div class="ls-qcard ls-qwait">
+      <div class="lsqw-dots"><i></i><i></i><i></i></div>
+      <div class="lsqw-txt">سؤال ${lsFa(snap.room.round)} در راه است…</div>
+      ${pzTimerHTML('lsTimer')}
+    </div></div>`;
+  }
   return `<div class="ls-qwrap" data-q="${q.id||''}" data-round="${snap.room.round}" data-locked="${locked?1:0}" data-gate="${snap.room.phase==='ready'?1:0}">
   ${badge?`<div style="text-align:center;margin-bottom:8px">${badge}</div>`:''}
   <div class="ls-qcard"><div class="ls-qtext">${q.text||'…'}</div>${q.authorName?`<div class="pz-byline">طراحی‌شده توسط ${frEsc(q.authorName)}</div>`:''}

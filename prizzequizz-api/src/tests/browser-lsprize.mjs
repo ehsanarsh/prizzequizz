@@ -74,29 +74,36 @@ async function paint(s) {
 console.log('before anybody is out:');
 await page.evaluate(() => { try { (0, eval)('lsPotReset()'); } catch (e) {} });
 await paint(snap(0, 'dashboard'));
-const dark = await page.evaluate((pot) => {
-  const el = document.getElementById('lsRemain');
+const dark = await page.evaluate((x) => {
   const body = document.getElementById('lsBody');
-  const fa = (0, eval)('lsFa')(pot);
-  return { txt: el ? el.textContent : '(none)', leaks: (body.textContent || '').includes(fa), fa };
-}, POT);
-ok('the prize is not a number yet', dark.txt === '؟؟؟', dark.txt);
-ok('and it is nowhere else on the screen either', dark.leaks === false, 'looking for ' + dark.fa);
+  const mine = document.getElementById('lsMyShare');
+  const pot = document.getElementById('lsRemain');
+  return { share: mine ? mine.textContent : '(none)', pot: pot ? pot.textContent : '(none)',
+           entryLeak: (body.textContent || '').includes((0, eval)('lsFa')(x.entry)) };
+}, { entry: ENTRY_SHARE });
+/* «فقط سهم تو رو تا قبل اون موشن نشون نده» — the player's own take waits. */
+ok('the player’s own share is not a number yet', dark.share === '؟؟؟', dark.share);
+ok('and it is nowhere else on the screen either', dark.entryLeak === false, 'looking for ' + ENTRY_SHARE);
+/* «باید کل جایزه رو نشون بده» — the room's pot never was a secret. */
+ok('but the room’s pot is shown from the start', dark.pot === faNum(POT), dark.pot);
 
-/* The BUILDER must not print it either — masking it a frame later is a leak. */
-const built = await page.evaluate((pot) => {
+/* The BUILDER must agree with the painter — masking a frame later is a leak,
+   and masking what should be visible is the bug this replaced. */
+const built = await page.evaluate((x) => {
   const s = window.__s;
-  const fa = (0, eval)('lsFa')(pot);
+  const entry = (0, eval)('lsFa')(x.entry), pot = (0, eval)('lsFa')(x.pot);
   const strip = (0, eval)('lsDashStrip')(s);
   const cells = (0, eval)('lsDashCells')(s);
   const mini = (0, eval)('lsDashHtml')(s, true);
-  return { strip: strip.includes(fa), cells: cells.includes(fa), mini: mini.includes(fa),
-           masked: strip.includes('؟؟؟') && cells.includes('؟؟؟') && mini.includes('؟؟؟') };
-}, POT);
-ok('the strip does not print it', built.strip === false);
-ok('the dashboard cells do not print it', built.cells === false);
-ok('the elimination mini-board does not print it', built.mini === false);
-ok('all three show the mask instead', built.masked);
+  return { cellsShare: cells.includes(entry), miniShare: mini.includes(entry),
+           masked: cells.includes('؟؟؟') && mini.includes('؟؟؟'),
+           stripPot: strip.includes(pot), cellsPot: cells.includes(pot), miniPot: mini.includes(pot),
+           stripMask: strip.includes('؟؟؟') };
+}, { entry: ENTRY_SHARE, pot: POT });
+ok('no builder prints the share early', built.cellsShare === false && built.miniShare === false);
+ok('both boards show the mask in its place', built.masked);
+ok('and every board prints the pot', built.stripPot && built.cellsPot && built.miniPot);
+ok('the strip has nothing to hide at all', built.stripMask === false);
 
 console.log('the first elimination turns the lights on:');
 /* Read in the SAME turn that fires it: the climb is 2.2s long, so anything
@@ -161,6 +168,21 @@ const landed = await page.evaluate((want) => ({
 }), AFTER_ONE);
 ok('then it goes home', landed.hero === false);
 ok('and the small «سهم تو» has the number now', landed.small === landed.want, landed.small + ' vs ' + landed.want);
+
+/* AND IT STAYS SHOWN. Every phase change rebuilds these boards from scratch, so
+   the builders have to know the lights are on too — otherwise the figure is
+   announced once and then goes back to «؟؟؟» for the rest of the match, on the
+   next screen that redraws. */
+const rebuilt = await page.evaluate((want) => {
+  const s = window.__s;
+  const fa = (0, eval)('lsFa')(want);
+  const cells = (0, eval)('lsDashCells')(s);
+  const mini = (0, eval)('lsDashHtml')(s, true);
+  return { cells: cells.includes(fa), mini: mini.includes(fa),
+           masked: cells.includes('؟؟؟') || mini.includes('؟؟؟') };
+}, AFTER_ONE);
+ok('a board rebuilt after the reveal prints the share', rebuilt.cells && rebuilt.mini);
+ok('and never falls back to «؟؟؟» again', rebuilt.masked === false);
 
 console.log('what grows is the figure, not the type:');
 /* Round after round: every elimination hands the survivors more, so every

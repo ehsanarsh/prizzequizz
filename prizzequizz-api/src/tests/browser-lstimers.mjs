@@ -127,6 +127,43 @@ ok('and so did the number in it', px(q.fs) >= 26, q.fs);
 ok('and the row it sits in grew with it', q.spare >= 4, q.wrapH + 'px row, ' + q.w + 'px circle');
 ok('the options are still on the screen under it', q.fits, 'options top ' + q.optsTop + 'px');
 
+console.log('the first question, before it has arrived:');
+/* «مودال آماده‌ای میاد، صفحهٔ پخش سوال میاد ولی بدون نوشته و خالی، و بعد سوال
+   اول ظاهر می‌شه.» The ready gate is timed by the server; the question comes on
+   its own push. On round one they do not always land together, and what was
+   underneath the gate was the question card built from nothing. */
+await paint(base({ room: Object.assign(base({}).room, { status: 'running', phase: 'ready', round: 1, phaseEndsAt: Date.now() + 4000 }) }));
+const waiting = await page.evaluate(() => {
+  const wrap = document.querySelector('#lsBody .ls-qwrap');
+  const card = document.querySelector('#lsBody .ls-qcard');
+  const opts = document.querySelectorAll('#lsOpts .ans');
+  return { has: !!wrap, txt: (card ? card.textContent : '').replace(/\s+/g, ' ').trim(),
+           h: card ? Math.round(card.getBoundingClientRect().height) : 0,
+           waitClass: !!document.querySelector('#lsBody .ls-qcard.ls-qwait'),
+           dots: document.querySelectorAll('#lsBody .lsqw-dots i').length,
+           opts: opts.length, clock: !!document.getElementById('lsTimer') };
+});
+ok('a card is on screen', waiting.has);
+ok('and it says the question is coming, not nothing at all', /در راه است/.test(waiting.txt), waiting.txt.slice(0, 40));
+ok('it does not show an empty question box', waiting.waitClass && waiting.opts === 0);
+ok('it is animated, so it reads as waiting rather than stuck', waiting.dots === 3);
+/* Not the height of a real question — that carries four options — but enough
+   that it reads as a card rather than a sliver. */
+ok('it is a card, not a sliver', waiting.h >= 120, waiting.h + 'px');
+ok('and the clock still has somewhere to be drawn', waiting.clock);
+
+/* The moment the question lands, the card is the question. */
+await paint(base({ room: Object.assign(base({}).room, { status: 'running', phase: 'ready', round: 1, phaseEndsAt: Date.now() + 4000 }),
+  question: { id: 'q1', round: 1, text: 'پایتخت ایران کجاست؟', options: ['تهران', 'شیراز', 'اصفهان', 'تبریز'], difficulty: 'easy' } }));
+const arrived = await page.evaluate(() => ({
+  txt: (document.querySelector('#lsBody .ls-qtext') || {}).textContent || '',
+  opts: document.querySelectorAll('#lsOpts .ans').length,
+  waiting: !!document.querySelector('#lsBody .ls-qcard.ls-qwait')
+}));
+ok('the question replaces it', /پایتخت/.test(arrived.txt), arrived.txt);
+ok('with all of its options', arrived.opts === 4, String(arrived.opts));
+ok('and no trace of the waiting card', arrived.waiting === false);
+
 console.log('and on a narrow phone:');
 await ctx.close();
 const small = await open(360);
