@@ -7341,6 +7341,18 @@ img.pz-lgtk-big{width:74px;height:74px;object-fit:contain;filter:drop-shadow(0 8
 #lsGame .lsqw-dots i:nth-child(3){animation-delay:.32s}
 @keyframes lsqwBounce{0%,100%{transform:translateY(0);opacity:.45}50%{transform:translateY(-8px);opacity:1}}
 @media (prefers-reduced-motion:reduce){#lsGame .lsqw-dots i{animation:none;opacity:1}}
+
+/* ══ A SHELF WITH NOTHING ON IT YET ═══════════════════════════════════════
+ * Spans both columns of the shop grid, so «loading» is a line across the
+ * shelf rather than a card pretending to be a product. */
+#shop .shop-note{grid-column:1/-1;text-align:center;padding:34px 18px;color:var(--muted)}
+#shop .shop-note p{margin-top:10px;font-size:13px;font-weight:800}
+#shop .shop-note-dots{display:flex;gap:9px;justify-content:center}
+#shop .shop-note-dots i{width:10px;height:10px;border-radius:50%;background:#FFE24A;
+  animation:lsqwBounce 1.05s ease-in-out infinite}
+#shop .shop-note-dots i:nth-child(2){animation-delay:.16s}
+#shop .shop-note-dots i:nth-child(3){animation-delay:.32s}
+@media (prefers-reduced-motion:reduce){#shop .shop-note-dots i{animation:none;opacity:1}}
 </style>
 
   <!-- Report-question bottom sheet -->
@@ -14948,12 +14960,35 @@ async function buyCharacter(ch,el){
 
 /* Load the admin-managed catalog from the server; rebuild tabs + items. Falls
    back to the built-in SHOP if the server is unreachable. */
+/* «LOADING» OR «NOTHING HERE» — the shelf has to tell those apart, and one
+   boolean could not. A first attempt that FAILS is an answer in the sense that
+   it is over, but not in the sense that the shelf is empty: opening the shop
+   fires another fetch, and during that one the honest thing to say is still
+   «loading». So what is tracked is whether a request is in flight, plus
+   whether any request has ever come back — «nothing here» needs both. */
+let _shopFetching=0, _shopAnswered=false;
+function shopWaiting(){ return _shopFetching>0||!_shopAnswered; }
+function shopRepaint(){
+  try{
+    const sc=document.getElementById('shop');
+    if(sc&&sc.classList.contains('active')) renderShop(_shopCurTab);
+  }catch(e){}
+}
 async function pzLoadShop(){
+  _shopFetching++;
   try{
     const r=await pzApi('GET','/shop/items',null,false);
     const d=(r&&r.data)||r;
     const items=d&&d.items;
-    if(!Array.isArray(items)||!items.length)return;
+    /* AN ARRAY IS AN ANSWER; ANYTHING ELSE IS NOT.
+       pzApi does not always throw on a failed request — it can hand back
+       nothing at all — so «we got here» is not proof the server replied.
+       Marking the catalogue answered on that basis told the player the shop was
+       empty when their phone was simply offline. An array, even an empty one,
+       is the server saying what it has. */
+    if(!Array.isArray(items)) return;
+    _shopAnswered=true;
+    if(!items.length) return;
     const byCat={};
     items.forEach(it=>{ (byCat[it.category]??=[]).push({id:it.id,i:it.icon,n:it.name,d:it.description,p:it.price,key:it.effectKey,val:it.effectValue,cur:it.currency,badge:it.badge,img:it.image||'',rewards:Array.isArray(it.rewards)?it.rewards:null}); });
     /* Tickets used to be excluded here and drawn as three big config-driven
@@ -14963,8 +14998,14 @@ async function pzLoadShop(){
        server whose catalogue has no ticket items yet. */
     Object.keys(byCat).forEach(cat=>{ SHOP[cat]=byCat[cat]; });
     pzRebuildShopTabs(Object.keys(byCat));
-    if(document.getElementById('shop')&&document.getElementById('shop').classList.contains('active')) renderShop(_shopCurTab);
-  }catch(e){}
+  }catch(e){
+    /* Offline or a bad answer. This attempt is over, but it says nothing about
+       whether the shelf is empty — so `_shopAnswered` is deliberately NOT set,
+       and the next open says «loading» again rather than «nothing for sale». */
+  } finally {
+    _shopFetching--;
+    shopRepaint();
+  }
 }
 /* Rebuild the shop tab bar so admin-added custom categories appear too. */
 const _SHOP_TAB_LABELS={tickets:'🎫 بلیط مسابقات',coins:'🪙 سکه',characters:'🦸 کاراکترها',
@@ -15300,46 +15341,24 @@ function renderTicketShop(){
      blank before the operator adds them. */
   const cat=SHOP.tickets||[];
   if(cat.length){ cat.forEach(it=>{ g.appendChild(pzShopCard(it)); }); return; }
-  TICKET_DEFS.forEach(t=>{
-    const d=document.createElement('div'); d.className='item'; d.style.cssText='background:'+t.grad+';color:#fff;border:2px solid #000;text-align:center';
-    d.innerHTML='<div class="it-ico tk-shop-art" style="font-size:34px;filter:drop-shadow(0 3px 0 rgba(0,0,0,.35));animation:tkFloat 2.4s ease-in-out infinite">'+pzTicketArt(t.key,'🎫')+'</div>'+
-      '<b style="font-size:15px">'+t.name+'</b>'+
-      '<p style="color:rgba(255,255,255,.9);font-size:12px;line-height:1.6">ورودی مسابقه<br>جایزهٔ برد: <b class="tk-shop-prize" data-tier="'+t.key+'">'+(pzPrizeFor(t.key)==null?'…':fa(pzPrizeFor(t.key))+' تومان')+'</b></p>'+
-      '<div class="price" style="background:rgba(0,0,0,.28);color:#fff">'+fa(t.value)+' ت · تعداد تو: '+fa(mTickets[t.key]||0)+'</div>';
-    d.onclick=()=>buyTicket(t,d);
-    g.appendChild(d);
-  });
-  if(!PZ_PRIZES) pzLoadPrizes().then(()=>{
-    document.querySelectorAll('.tk-shop-prize').forEach(el=>{
-      const v=pzPrizeFor(el.dataset.tier); if(v!=null) el.textContent=fa(v)+' تومان';
-    });
-  });
+  /* THE OLD SHELF IS GONE, NOT HIDDEN.
+     This used to fall back to three big config-driven ticket cards whenever the
+     catalogue had not arrived — which is EVERY time the shop is opened, because
+     /shop/items is still in flight. So the previous version's design was drawn
+     first and replaced a second later: «اول طرح قدیمی فروشگاه میاد کارت‌های
+     بزرگ بلیط، بعد از چند ثانیه طرح جدید». A fallback that runs on every open
+     is not a fallback, it is a second design nobody asked for.
+     What is true while waiting is that we do not know yet, so that is what it
+     says; and once the catalogue IS in and has no tickets, it says that
+     instead of inventing a shelf. */
+  g.innerHTML='<div class="shop-note">'+(shopWaiting()
+    ? '<div class="shop-note-dots"><i></i><i></i><i></i></div><p>در حال گرفتن بلیط‌ها…</p>'
+    : '<div style="font-size:38px">🎫</div><p>هنوز بلیطی برای فروش گذاشته نشده.</p>')+'</div>';
 }
-async function buyTicket(t,el){
-  if(el&&el._busy)return; if(el)el._busy=true;
-  /* Through the order flow, so a player with an empty صندوق is offered the
-     gateway instead of simply being refused. */
-  try{
-    const ok=await pzBuyOrder({kind:'ticket',tier:t.key,qty:1}, t.name);
-    if(ok){ pzApplyServerTickets(null); try{ await pzRefreshHoldings(); }catch(e){} sfx('correct'); vib([30]); if(el)el.classList.add('pop'); }
-  } finally { if(el)el._busy=false; }
-  return;
-  /* eslint-disable no-unreachable */
-  const r=null;
-  if(!r||!r.ok){
-    const msg=(r&&r.error&&r.error.message)||'خرید ناموفق بود';
-    if(r&&r.error&&r.error.code==='INSUFFICIENT_FUNDS'){ showAaaModal({icon:'💰',title:'موجودی کافی نیست',sub:'برای خرید '+t.name+' ('+fa(t.value)+' تومان) صندوق جایزه‌ات را شارژ کن.',primaryText:'شارژ صندوق جایزه',secondaryText:'بعداً',onPrimary:()=>{closeAaaModal(true);go('wallet');setTimeout(openTopup,300);}}); }
-    else toast(msg);
-    return;
-  }
-  /* Server is authoritative: apply its returned balance + ticket counts. */
-  if(typeof r.data.balance==='number'){ wallet=r.data.balance; }
-  pzApplyServerTickets(r.data.tickets);
-  updateWalletUI();
-  sfx('correct');vib([30]); if(el)el.classList.add('pop');
-  toast(t.name+' خریداری شد ✅ (از صندوق جایزه کسر شد)');
-  try{ pzSyncWallet(); }catch(e){}   /* reconcile with the ledger */
-}
+/* buyTicket() lived here. Only the three old ticket cards called it, and half
+   of it was already unreachable behind a `return` — a buy path for a shelf that
+   no longer exists. Catalogue cards buy through pzShopCard → pzBuyOrder, which
+   is the one flow every other shelf uses. */
 /* Entry gate: paid duel needs a ticket; otherwise message + go to shop. */
 function ticketEnterDuel(){
   const t=tDef(selectedTicket);
