@@ -471,8 +471,30 @@ async function finishRoom(room: RoomRow, now: number): Promise<void> {
    * and the same one recomputed here. */
   let wipeout: { lastUserId: string; share: number; splitAmong: number } | null = null;
   let paidFromWipeout = 0;
+  /* WHY A WIPE-OUT DID NOT PAY, WHEN IT DID NOT PAY.
+   *
+   * «این منطق از قبل بود ولی نمی‌دونم چرا الان یه بار کار نکرد.» — and there
+   * was no way to find out. Every road that ends without a payment used to end
+   * in silence: the pot was booked as forfeited, the player was told nobody
+   * survived, and nothing anywhere said which road it was. So each one now
+   * says so, with the numbers that decided it. This changes no outcome; it
+   * only makes the next one answerable from the log instead of guessed at. */
+  const noPay = (reason: string, extra: Record<string, unknown> = {}): void => {
+    logger.warn('ls_wipeout_not_paid', { roomId: room.id, round: room.round, reason, remaining, ...extra });
+  };
+  if (survivors.length === 0 && remaining <= 0) {
+    /* Nothing on the table is the ordinary end of a room everybody cashed out
+       of; it is only worth a line so it can be told apart from the rest. */
+    noPay('nothing left in the pot');
+  }
   if (survivors.length === 0 && remaining > 0) {
     const lastRound = players.filter((p) => p.status === 'eliminated' && p.eliminatedRound === room.round);
+    if (lastRound.length === 0) {
+      noPay('nobody was eliminated in the final round', {
+        eliminatedAnyRound: players.filter((p) => p.status === 'eliminated').length,
+        cashedOut: players.filter((p) => p.status === 'cashed_out').length
+      });
+    }
     if (lastRound.length > 0) {
       const order = eliminationOrder(room.id, room.round, lastRound.map((p) => p.userId));
       const lastId = order[order.length - 1]!;
@@ -483,6 +505,16 @@ async function finishRoom(room: RoomRow, now: number): Promise<void> {
       const split = finalSplit(asAlive, remaining);
       const share = Math.max(0, split[lastId] ?? 0);
       const winner = lastRound.find((p) => p.userId === lastId);
+      /* finalSplit only counts players with units above zero. A last-one-out
+         carrying no units is therefore given nothing — which may well be right,
+         but it must not be invisible: without this the whole pot is forfeited
+         and the room simply reports that nobody survived. */
+      if (winner && share <= 0) {
+        noPay('the last player out computed a zero share', {
+          userId: lastId, units: winner.units, splitAmong: lastRound.length,
+          unitsInRound: lastRound.reduce((n, p) => n + (p.units || 0), 0)
+        });
+      }
       if (winner && share > 0) {
         try {
           await payout(winner.userId, share, room.id, room.round, 'final');

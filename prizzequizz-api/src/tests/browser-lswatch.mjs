@@ -75,6 +75,16 @@ const gate = await page.evaluate((snap) => {
     (0, eval)('lsReadyGate')(alive);
     out.alive = shown();
     close();
+    const waiting = JSON.parse(JSON.stringify(snap)); waiting.me.status = 'waiting';
+    (0, eval)('lsReadyShownRound=""');
+    (0, eval)('lsReadyGate')(waiting);
+    out.waiting = shown();
+    close();
+    const cashed = JSON.parse(JSON.stringify(snap)); cashed.me.status = 'cashed_out';
+    (0, eval)('lsReadyShownRound=""');
+    (0, eval)('lsReadyGate')(cashed);
+    out.cashed = shown();
+    close();
     (0, eval)('lsWatching=true'); (0, eval)('lsReadyShownRound=""');
     (0, eval)('lsReadyGate')(snap);           // a spectator asked to be here
     out.watching = shown();
@@ -88,6 +98,12 @@ const gate = await page.evaluate((snap) => {
 }, snapFor('eliminated'));
 ok('no timer modal for a player who is out', gate.eliminated === false, String(gate.err || gate.eliminated));
 ok('but the players still in it are gated', gate.alive === true);
+/* «waiting» is the status EVERY player holds until the room starts, so the
+   first round of every match is asked for in that state. Reading it as «not
+   alive, therefore out» left round one ungated: a card with its text hidden
+   and a clock running, which is the blank screen that was reported. */
+ok('and so is a player the match has not started for yet', gate.waiting === true, String(gate.waiting));
+ok('a player who cashed out is not gated either', gate.cashed === false, String(gate.cashed));
 ok('and so is a spectator, who asked to be there', gate.watching === true);
 ok('none of it lands on the result screen', gate.afterResult === false);
 

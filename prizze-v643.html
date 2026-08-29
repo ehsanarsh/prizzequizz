@@ -9521,7 +9521,16 @@ function lsReadyGate(snap){
      question you cannot answer, in a room you have left.
      A SPECTATOR still gets it. They asked to be in the room, and the gate is
      what stops a second device reading the question early. */
-  const out=!!(snap.me&&snap.me.status&&snap.me.status!=='alive');
+  /* THE TWO STATES THAT MEAN «YOUR MATCH IS OVER», NAMED.
+     This was written as «anything that is not alive», which also catches
+     `waiting` — the status every player holds until the room actually starts.
+     So on the FIRST round nobody was gated: the question card went up with its
+     text and options hidden (data-gate), which is a blank card with a running
+     clock, and the question appeared when the phase turned. «قبل از سوال اول
+     صفحهٔ سوال ولی خالی میاد و بعد تموم شدن تایمر سوال اول پخش می‌شه» — that
+     was this line, not the question arriving late. */
+  const st=snap.me&&snap.me.status;
+  const out=st==='eliminated'||st==='cashed_out';
   if(!lsWatching&&(lsEndShown||out)) return;
   /* «در تمام مراحل این صفحات باید چت خیلی روان باشه به غیر از پخش سوال.» The
      phrase list is welcome everywhere else in the room; it does not get to sit

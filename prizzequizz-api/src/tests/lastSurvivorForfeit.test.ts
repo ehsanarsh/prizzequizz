@@ -17,7 +17,7 @@ import assert from 'node:assert/strict';
 import { repositories } from '../repositories/index.js';
 import { grantTickets } from '../services/ticketService.js';
 import { getAccount } from '../services/walletLedgerService.js';
-import { updateConfig } from '../services/lastSurvivorConfig.js';
+import { LS_DEFAULT_CONFIG, updateConfig } from '../services/lastSurvivorConfig.js';
 import { joinTopic, getRoom, saveRoom, listPlayers } from '../services/lastSurvivorService.js';
 import { advanceRoom, submitAnswer, eliminationOrder } from '../services/lastSurvivorWorker.js';
 import { houseRevenueSummary, _resetHouseRevenue } from '../services/houseRevenueService.js';
@@ -160,6 +160,57 @@ async function run(): Promise<void> {
     assert.equal(paid + booked!.amount, pool.net, 'the pot did not add up');
     assert.equal((booked!.metadata as any).players, 3);
     assert.equal((booked!.metadata as any).topic, TOPIC);
+  });
+
+  /* THE OTHER ENDING OF THE SAME STORY.
+   *
+   * «این منطق از قبل بود ولی نمی‌دونم چرا الان یه بار کار نکرد» — the case
+   * above proves the payment happens; nothing proved what happens when it
+   * cannot. finalSplit only counts players whose units are above zero, so a
+   * tier configured with no units hands the last player out nothing: the whole
+   * pot is forfeited and the room reports that nobody survived, with no way to
+   * tell that ending from any other. The outcome here is not being changed —
+   * a zero share really is zero — but it must not be silent. */
+  await check('a wipe-out that pays nobody says WHY, instead of forfeiting in silence', async () => {
+    /* Set BEFORE the room is opened: a room snapshots the config it was created
+       with, so changing it afterwards would change nothing. */
+    const base = LS_DEFAULT_CONFIG.economy.tickets;
+    await updateConfig({ economy: { ...LS_DEFAULT_CONFIG.economy, rakePercent: 0,
+      tickets: { ...base, green: { ...base.green, units: 0 } } } } as any);
+
+    const warnings: string[] = [];
+    const realWarn = console.warn;
+    console.warn = (...a: unknown[]) => { warnings.push(a.map(String).join(' ')); };
+    let roomId = '', ids: string[] = [], net = 0;
+    try {
+      const room = await openRoom(3); roomId = room.roomId; ids = room.ids;
+      const r = (await getRoom(roomId))!;
+      assert.equal(r.config.economy.tickets.green?.units, 0, 'the tier should be carrying no units');
+      net = buildPool(r.config, ids.map(() => 'green')).net;
+      await playRound(roomId, Object.fromEntries(ids.map((u) => [u, 1])));
+    } finally { console.warn = realWarn; }
+
+    const after = (await getRoom(roomId))!;
+    assert.equal(after.status, 'finished');
+    const players = await listPlayers(roomId);
+    assert.equal(players.reduce((n, p) => n + p.payoutCash, 0), 0, 'nobody can be paid out of a zero share');
+
+    const line = warnings.find((w) => w.includes('ls_wipeout_not_paid'));
+    assert.ok(line, 'the pot was forfeited and nothing said why: ' + warnings.length + ' warnings seen');
+    assert.match(line!, /zero share/, line!);
+    /* The numbers that decided it are the point of the line — a reason with no
+       figures is another thing to guess at. */
+    assert.match(line!, /"units":0/, line!);
+    assert.match(line!, /"roomId":"/, line!);
+    assert.match(line!, new RegExp('"remaining":' + net), line!);
+
+    /* And the money is still accounted for, exactly as before. */
+    const house = await houseRevenueSummary();
+    const booked = house.recent.find((h) => h.refId === roomId && h.source === 'ls_forfeited_pot');
+    assert.ok(booked, 'the pot must still be booked to the house');
+    assert.equal(booked!.amount, net, 'the whole pot, since nothing was paid');
+
+    await updateConfig({ economy: { ...LS_DEFAULT_CONFIG.economy, rakePercent: 0, tickets: { ...base } } } as any);
   });
 
   await check('a room with a survivor books nothing as forfeited', async () => {
