@@ -1200,12 +1200,30 @@ input,textarea,select,[contenteditable="true"],.pz-selectable,.pz-selectable *{
 .ripple{position:absolute;border-radius:50%;background:rgba(0,0,0,.18);transform:scale(0);animation:rip .6s ease-out forwards;pointer-events:none}
 @keyframes rip{to{transform:scale(3.2);opacity:0}}
 .q-text,.q-topic{user-select:none;-webkit-user-select:none}
-.powerups{display:flex;gap:10px;padding:12px 0 0}
-.pu{flex:1;background:var(--ink-2);border:2px solid #000;border-radius:14px;padding:9px 4px;
-  display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;transition:.12s;box-shadow:var(--hard-sm)}
+/* THE HELPS READ AS HELPS, AND THEY FIT.
+   «رنگ کمکی‌ها در صفحه پخش سوال در همه مودهای بازی باید سبز یا زرد بشه و
+    اندازه‌اش هم یکم کوچیک‌تر بشه چون بعضی مواقع بالاش می‌ره زیر گزینهٔ ۴.»
+   They were the same dark tile as everything else on the card with a grey
+   label — a row that reads as furniture, not as something to spend. Green is
+   the game's «this is yours to use» colour, so an available help wears it and
+   a spent one greys out on its own through .disabled. The tile is also shorter
+   than it was: on a small screen the strip was riding up under the fourth
+   option, and the height came from padding and type sizes rather than from
+   anything the row needs. */
+.powerups{display:flex;gap:8px;padding:8px 0 0}
+.pu{flex:1;background:linear-gradient(180deg,#1C4630,#123020);border:2px solid #000;border-radius:12px;padding:4px;
+  display:flex;flex-direction:column;align-items:center;gap:1px;cursor:pointer;transition:.12s;box-shadow:var(--hard-sm)}
 .pu:active{transform:translateY(3px);box-shadow:0 1px 0 #000}
-.pu .pu-i{font-size:19px}.pu .pu-l{font-size:9.5px;font-weight:800;color:var(--muted);text-align:center}.pu .pu-c{font-size:10px;font-weight:900;color:var(--bolt)}
-.pu.disabled{opacity:.38;pointer-events:none}
+/* Every line is pinned to a height. Left to the font, an emoji reports a line
+   box half again as tall as its own size and the three rows silently added the
+   height back that the smaller type had just saved. */
+.pu .pu-i{font-size:16px;line-height:17px;height:17px}
+.pu .pu-l{font-size:9px;font-weight:800;color:#9FE8BC;text-align:center;line-height:11px}
+.pu .pu-c{font-size:9.5px;font-weight:900;color:var(--bolt);line-height:11px}
+/* Spent or out of stock: the green goes with it, so «can use» and «cannot» are
+   never the same colour at two opacities. */
+.pu.disabled{opacity:.42;pointer-events:none;background:var(--ink-2)}
+.pu.disabled .pu-l{color:var(--muted)}
 
 /* ===== TIMER DANGER ===== */
 @keyframes ringShake{0%,100%{transform:translate(0,0)}25%{transform:translate(-2.5px,1px)}50%{transform:translate(2.5px,-1px)}75%{transform:translate(-1.5px,0)}}
@@ -8520,7 +8538,7 @@ async function lsDoJoin(topic,color){
   if(!r||r.ok===false){ toast((r&&r.error&&r.error.message)||'ورود ناموفق بود'); return; }
   lsInviteRoom=null;
   const snap=r.data; if(!snap||!snap.room){ toast('خطا در ورود'); return; }
-  lsRoomId=snap.room.id; lsLastKey=''; lsDeadDismissed=false; lsChatSeen=0; lsEndShown=false; _lsGoneShown=false; lsForfeited=0; lsReadyShownRound=''; _lsWaitedForPay=false;
+  lsRoomId=snap.room.id; lsLastKey=''; lsDeadDismissed=false; lsChatSeen=0; lsEndShown=false; _lsGoneShown=false; lsReadyShownRound=''; _lsWaitedForPay=false;
   /* A new match: no offer from the last one is still counting down. */
   try{ lsWatchCountdownStop(); lsWatchRoom=null; lsWatchExpired=false; }catch(e){}
   try{ lsChatWatchStop(); lsChatWatchStart(); }catch(e){}
@@ -8652,7 +8670,7 @@ function lsOnWs(type,payload){
     try{ if(lsTab!=='chat'){ lsChatUnread++; lsChatCount++; lsChatBadgePaint(); } else lsLoadChat(); }catch(e){}
     return;
   }
-  if(type==='ls:ended'){ lsForfeited=Number((payload&&payload.forfeited)||0); lsWipeout=(payload&&payload.wipeout)||null; }
+  if(type==='ls:ended'){ lsWipeout=(payload&&payload.wipeout)||null; }
   /* THE ORDER PLAYERS GO OUT IN IS THE SERVER'S, NOT THE GRID'S.
      When a round wipes the room, the last one out is the only one who is paid —
      so the order is money, and the animation has to play the order the server
@@ -8717,9 +8735,6 @@ function lsRender(snap){
   }
   lsSnap=snap; if(snap.me) lsMyId=snap.me.userId;
   lsClockSync(snap.room);
-  /* Also carried on the snapshot, so the REST poll explains a no-winner ending
-     even when the ls:ended push was missed. */
-  if(snap.room&&Number(snap.room.forfeited||0)>0) lsForfeited=Number(snap.room.forfeited);
   const r=snap.room;
   /* The question id is part of the key on purpose. A snapshot that reached the
      phone without the question — a dropped or throttled request, a reconnect
@@ -10571,7 +10586,6 @@ let _lsWaitedForPay=false;
 let lsElimOrder=null, lsWipeout=null;
 /* Set from the ls:ended push when the room finished with no survivor at all.
    Zero on every normal ending. */
-let lsForfeited=0;
 /* OUT OF A ROOM THAT IS NOT THERE ANY MORE.
    «باید کامل برنامه رو ببندی تا بیاد بیرون… و بهش بگه فعلا حریفی برای تو وجود
    نداره» — the polling stops, the room is let go of, the music with it, and the
@@ -10667,20 +10681,29 @@ function lsFinish(snap){
   /* Nobody survived: the last players all missed the same question, so there is
      no winner to pay. Saying only «حذف شدی» left everyone wondering where the
      pot went — the honest line is that it went nowhere, and that no one took it. */
-  const noWinner = !won && lsForfeited>0;
   /* ONE word for a win, however it was won. «جایزه‌ت رو برداشتی» and «برنده
      شدی» were two headlines for the same outcome, and the second one is the
      one players read as winning. */
-  if(title) title.textContent = iAmWiped ? 'همه حذف شدند — سهمت پرداخت شد 🤝'
-                                  : (won ? 'برنده شدی! 🏆'
-                                  : (noWinner?'کسی زنده نموند 💀':'باختی!'));
+  /* A LOSS THAT STILL PAID.
+     «باید باختی رو بنویسه ولی بهشون بگه با اینکه باختی، فلان مبلغ رو برنده
+      شدی. بهشون نمی‌گیم که همه اشتباه جواب دادن — یه چیزی می‌نویسیم که خوششون
+      بیاد و احساس کنن با اینکه باختن بازم جایزه دادیم.»
+     So the headline is the truth they already know — they went out — and the
+     good news rides with it. The mechanic behind the money is not the player's
+     business: «همه اشتباه جواب دادند» explains OUR arithmetic, and reads as
+     «you only got this because everyone else failed too». What is left is the
+     part that is theirs: they lost, and they were paid anyway.
+     A player who was NOT paid is told nothing about any of it — for them this
+     was an ordinary loss, and naming a prize they did not get would be worse
+     than saying nothing. */
+  if(title) title.textContent = iAmWiped ? 'باختی — ولی جایزه گرفتی! 🎁'
+                                  : (won ? 'برنده شدی! 🏆' : 'باختی!');
   if(sub){
     sub.textContent = iAmWiped
-      ? ('چون همه اشتباه جواب دادند، '+lsFa(Number(wipe.percent||0))+'٪ از جایزه بین '+lsFa(wipe.splitAmong)+' نفری که با هم حذف شدند تقسیم شد و سهم تو پرداخت شد.')
+      ? ('با اینکه این دور را باختی، '+lsFa(mine)+' تومان به صندوق جایزه‌ات واریز شد — ما گاهی به بازنده‌ها هم جایزه می‌دهیم. 🎁')
       : (won
         ? (cashedOut?'سهمت پرداخت و به صندوق جایزه‌ات واریز شد':pzWinLine())
-        : (noWinner?'همهٔ بازیکنان باقی‌مانده جواب را غلط دادند، پس این دور برنده‌ای نداشت و جایزه به کسی تعلق نگرفت.'
-                  :pzLoseLine()));
+        : pzLoseLine());
     sub.style.display='';
   }
   /* A WINNER SEES A PRIZE; A LOSER SEES NO FIGURE AT ALL. «۰» in the prize slot

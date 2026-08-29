@@ -198,6 +198,29 @@ export function levelForXp(xp: number): number {
     : Math.max(1, Math.floor(Math.sqrt(x / b)) + 1);
 }
 
+/* THE LEVEL A PLAYER HAS — the one number every screen and every gate must use.
+ *
+ * There were two answers to this question. Everything a player READS — the
+ * header, the profile, the menu, their friends' cards — comes from the stored
+ * `users.level` column. Everything that GATES — the character shelf, the
+ * purchase check — recomputed it from XP. They agree only for as long as the
+ * curve stays put: `levelXpBase` and `levelCurve` are panel settings, and the
+ * moment either is re-tuned the recomputed answer moves while the stored column
+ * stays where the last XP award left it. That is how a player at level ۱۵ was
+ * told a character opens at level ۵.
+ *
+ * A level is a rank that has been reached, so it is a high-water mark: the
+ * stored column and the curve, whichever is higher. That can never take a
+ * character back off a player who already had it, and it can never show one
+ * number and enforce another. */
+export function playerLevel(user: { level?: number | null; xp?: number | null } | null | undefined): number {
+  if (!user) return 1;
+  /* No floor of its own: levelForXp already refuses to answer below 1, and it is
+     always one of the two candidates — so a zeroed or negative column is lifted
+     by the curve rather than by a second guard saying the same thing. */
+  return Math.max(Math.floor(Number(user.level ?? 0) || 0), levelForXp(Number(user.xp ?? 0) || 0));
+}
+
 /* The SAME formula as levelForXp, as a SQL expression over a column.
  *
  * matchEngine adds XP and recomputes the level inside one UPDATE, so the

@@ -22,7 +22,7 @@
  * reason they are locked, because the roster is also a goal list. */
 import { getPgPool } from '../database/postgres.js';
 import { repositories } from '../repositories/index.js';
-import { levelForXp } from './scoringConfig.js';
+import { playerLevel } from './scoringConfig.js';
 import { postEntry } from './walletLedgerService.js';
 import { id } from '../utils/id.js';
 
@@ -379,7 +379,7 @@ export async function purchaseCharacter(userId: string, characterId: string, ide
    * characters — it is purely the gate. */
   const need = Math.max(0, Math.floor(Number(c.unlockLevel) || 0));
   if (need > 0) {
-    const level = levelForXp(Number(user.xp ?? 0) || 0);
+    const level = playerLevel(user as any);
     if (level < need) {
       throw new CharacterPurchaseError('LEVEL_TOO_LOW',
         'این کاراکتر از لول ' + need.toLocaleString('fa-IR') + ' باز می‌شود — تو لول ' +
@@ -473,9 +473,13 @@ export async function buildRoster(userId: string): Promise<RosterView> {
   await ensureSchema();
   const [characters, owned] = await Promise.all([listCharacters(), ownedMap(userId)]);
 
-  let xp = 0;
-  try { const u: any = await repositories.users.findById(userId); xp = Number(u?.xp ?? 0) || 0; } catch { /* level 1 */ }
-  const level = levelForXp(xp);
+  let xp = 0, level = 1;
+  try {
+    const u: any = await repositories.users.findById(userId);
+    xp = Number(u?.xp ?? 0) || 0;
+    /* The same level the player is shown everywhere else — see playerLevel. */
+    level = playerLevel(u);
+  } catch { /* level 1 */ }
 
   const equippedId = await equippedFor(userId);
   const now = Date.now();

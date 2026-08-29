@@ -70,12 +70,21 @@ const finish = async (snap) => {
   }));
 };
 
-console.log('a player who was paid their share:');
+/* «باید باختی رو بنویسه ولی بهشون بگه با اینکه باختی فلان مبلغ رو برنده شدی.
+    بهشون نمی‌گیم که همه اشتباه جواب دادن.»
+   Two halves, and the second is as load-bearing as the first: the arithmetic
+   that produced the money is ours, and printing it turns a gift into an
+   explanation of why they nearly got nothing. */
+console.log('a player who lost but was paid anyway:');
 const paid = await finish(wiped(PAID));
-ok('is not told they lost', !/باختی/.test(paid.title), paid.title);
-ok('is told everybody went out and the prize was shared', /همه حذف شدند/.test(paid.title), paid.title);
-ok('with the operator’s percentage named', /۶۰٪/.test(paid.sub), paid.sub.slice(0, 70));
-ok('and how many it was split between', /۲ نفر/.test(paid.sub), paid.sub.slice(0, 70));
+ok('is told plainly that they lost', /باختی/.test(paid.title), paid.title);
+ok('and in the same breath, that they were paid', /جایزه/.test(paid.title), paid.title);
+ok('the sentence names the figure they won', paid.sub.indexOf(faNum(PAID)) >= 0, paid.sub.slice(0, 80));
+ok('and says it reached their prize fund', /صندوق جایزه/.test(paid.sub), paid.sub.slice(0, 80));
+ok('it reads as a gift, not as an accident', /گاهی/.test(paid.sub), paid.sub.slice(0, 80));
+ok('nothing tells them everyone answered wrongly', !/اشتباه/.test(paid.sub) && !/غلط/.test(paid.sub), paid.sub.slice(0, 80));
+ok('and the split is not explained to them either',
+  !/٪/.test(paid.sub) && !/تقسیم/.test(paid.sub) && !/حذف شدند/.test(paid.sub), paid.sub.slice(0, 80));
 ok('their figure is shown', paid.amt === '+' + faNum(PAID), paid.amt);
 ok('and it is not zero', paid.amtShown && !/\+۰$/.test(paid.amt));
 
@@ -126,8 +135,8 @@ const zeroShare = await page.evaluate(async () => {
            sub: (document.getElementById('resultSub') || {}).textContent || '',
            amt: a ? a.textContent : '', shown: !!(b && getComputedStyle(b).display !== 'none') };
 });
-ok('is not told their share was paid', !/سهمت پرداخت شد/.test(zeroShare.title), zeroShare.title);
-ok('and is not told a figure was shared with them', !/سهم تو پرداخت شد/.test(zeroShare.sub), zeroShare.sub.slice(0, 60));
+ok('is not told they were paid', !/جایزه گرفتی/.test(zeroShare.title), zeroShare.title);
+ok('and no figure is promised in the sentence', !/واریز شد/.test(zeroShare.sub), zeroShare.sub.slice(0, 60));
 ok('no figure is shown', zeroShare.shown === false || zeroShare.amt === '', zeroShare.amt);
 
 console.log('a player who genuinely got nothing:');
@@ -139,15 +148,21 @@ const nothing = await page.evaluate(async () => {
   };
   window.__s = s;
   (0, eval)('lsEndShown=false'); (0, eval)('_lsWaitedForPay=true');
-  (0, eval)('lsWipeout=null'); (0, eval)('lsForfeited=90000');
+  (0, eval)('lsWipeout=null');
   (0, eval)('lsWatching=false'); (0, eval)('lsRoomId="r9"'); (0, eval)('lsSnap=window.__s');
   (0, eval)('lsFinish')(s);
   await new Promise((r) => setTimeout(r, 400));
   const a = document.getElementById('resultAmt'), b = a && a.parentElement;
   return { title: (document.getElementById('resultTitle') || {}).textContent || '',
+           sub: (document.getElementById('resultSub') || {}).textContent || '',
            amt: a ? a.textContent : '', shown: !!(b && getComputedStyle(b).display !== 'none') };
 });
-ok('is told nobody survived', /کسی زنده نموند/.test(nothing.title), nothing.title);
+/* For this player it WAS just a loss, and that is all they are told. The old
+   screen used the forfeited pot to announce «کسی زنده نموند» — an explanation
+   of the room's arithmetic, handed to the one person it did not benefit. */
+ok('is told they lost, and nothing more', /باختی/.test(nothing.title), nothing.title);
+ok('the room’s arithmetic is not read out to them',
+  !/زنده نموند/.test(nothing.title) && !/برنده‌ای نداشت/.test(nothing.sub), nothing.sub.slice(0, 60));
 ok('and is shown no figure at all', nothing.shown === false || nothing.amt === '', nothing.amt);
 
 console.log(`\n[lsresult] ${pass} passed, ${fail} failed`);
