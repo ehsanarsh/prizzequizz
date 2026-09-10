@@ -9,7 +9,7 @@ import { ensureBetaAccess } from '../../services/betaService.js';
 import { observeRequestDevice } from '../../services/deviceRiskService.js';
 import { id } from '../../utils/id.js';
 import { bodyObject, requiredString } from '../../utils/validation.js';
-import { effectiveWeeklyScore } from '../../services/scoringConfig.js';
+import { effectiveWeeklyScore, playerLevel } from '../../services/scoringConfig.js';
 
 export function registerAuthRoutes(router: Router, base: string): void {
   router.add('POST', `${base}/auth/login`, async (ctx) => {
@@ -80,6 +80,10 @@ export function registerAuthRoutes(router: Router, base: string): void {
   });
 }
 
-function toDto(user: any) {
-  return { id: user.id, username: user.username, displayName: user.displayName, plan: user.plan, level: user.level, xp: user.xp, weeklyScore: effectiveWeeklyScore(user), balances: { wallet: user.wallet, coins: user.coins, hearts: user.hearts, tickets: user.tickets } };
+/* Exported so the level it hands the client at login can be held to the same
+   answer every other reader gives — see characterLevelGate. */
+export function toDto(user: any) {
+  /* The level the gates use, not the raw column — this is what the client puts
+     in `_usr` at login, and it must not disagree with /users/me a moment later. */
+  return { id: user.id, username: user.username, displayName: user.displayName, plan: user.plan, level: playerLevel(user), xp: user.xp, weeklyScore: effectiveWeeklyScore(user), balances: { wallet: user.wallet, coins: user.coins, hearts: user.hearts, tickets: user.tickets } };
 }

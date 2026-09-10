@@ -235,6 +235,16 @@ export function xpFloorForLevel(level: number): number {
   return levelCurve() === 'linear' ? (L - 1) * b : (L - 1) * (L - 1) * b;
 }
 
+/* playerLevel, as a SQL expression — for the lists that read many users at once
+ * (the friends list) and cannot call into TypeScript per row. Same rule: the
+ * stored rank or the curve, whichever is higher. */
+export function playerLevelSqlExpr(levelExpr: string, xpExpr: string): string {
+  /* No floor of its own, for the same reason playerLevel has none: levelSqlExpr
+     never returns below 1 and is always one of the two candidates, so a null,
+     zero or negative column is lifted by the curve. */
+  return `GREATEST(COALESCE(${levelExpr}, 1), ${levelSqlExpr(xpExpr)})`;
+}
+
 /* The SAME formula as levelForXp, as a SQL expression over a column.
  *
  * matchEngine adds XP and recomputes the level inside one UPDATE, so the

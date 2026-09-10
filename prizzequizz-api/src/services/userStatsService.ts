@@ -14,7 +14,7 @@ import { repositories } from '../repositories/index.js';
 import { avatarUrlFor } from './avatarService.js';
 import { equippedCharacterFor } from './characterSelectionService.js';
 import type { EquippedCharacter } from './characterSelectionService.js';
-import { effectiveWeeklyScore } from './scoringConfig.js';
+import { effectiveWeeklyScore, playerLevel } from './scoringConfig.js';
 
 /** Weekly-cup thresholds. Must stay in step with the client's `leagueTargets`. */
 export const LEAGUE_TIERS = { bronze: 500, silver: 940, gold: 1680 } as const;
@@ -59,7 +59,10 @@ export async function buildUserStats(uid: string): Promise<PublicUserStats> {
     username: user?.username ?? 'player',
     avatar: await avatarUrlFor(uid),
     character: await equippedCharacterFor(uid),
-    level: Number(user?.level ?? 1),
+    /* The SAME level the player is shown on their own header and gated by in
+       the shop. Reading the raw column here is how a player at level ۱۸ had a
+       public profile telling everyone else ۶. */
+    level: playerLevel(user),
     xp: Number(user?.xp ?? 0),
     weeklyScore,
     league: `${lg.emoji} ${lg.name}`,

@@ -8,6 +8,7 @@ import { lastSeenFor, isOnline } from '../../services/presenceService.js';
 import { notifications } from '../../services/notificationService.js';
 import { repositories } from '../../repositories/index.js';
 import { logger } from '../../services/logger.js';
+import { playerLevelSqlExpr } from '../../services/scoringConfig.js';
 
 /* A MESSAGE HAS TO REACH THE PHONE.
  *
@@ -94,7 +95,7 @@ export function registerFriendRoutes(router: Router, base: string): void {
     const me = ctx.userId; if (!me) return json(ctx.res, 200, []);
     try {
       const { rows } = await pool().query(
-        `SELECT u.id, u.username, u.display_name, u.level,
+        `SELECT u.id, u.username, u.display_name, ${playerLevelSqlExpr('u.level', 'u.xp')} AS level,
                 (SELECT count(*) FROM friend_messages m WHERE m.sender_id = u.id AND m.recipient_id = $1 AND m.read_at IS NULL) AS unread,
                 (SELECT m.body FROM friend_messages m WHERE (m.sender_id = u.id AND m.recipient_id = $1) OR (m.sender_id = $1 AND m.recipient_id = u.id) ORDER BY m.created_at DESC LIMIT 1) AS last_body,
                 (SELECT m.created_at FROM friend_messages m WHERE (m.sender_id = u.id AND m.recipient_id = $1) OR (m.sender_id = $1 AND m.recipient_id = u.id) ORDER BY m.created_at DESC LIMIT 1) AS last_at
@@ -157,11 +158,11 @@ export function registerFriendRoutes(router: Router, base: string): void {
     const me = ctx.userId; if (!me) return json(ctx.res, 200, { incoming: [], outgoing: [] });
     try {
       const inc = await pool().query(
-        `SELECT f.id, u.id AS user_id, u.username, u.display_name, u.level, f.created_at
+        `SELECT f.id, u.id AS user_id, u.username, u.display_name, ${playerLevelSqlExpr('u.level', 'u.xp')} AS level, f.created_at
          FROM friendships f JOIN users u ON u.id = f.requester_id
          WHERE f.addressee_id = $1 AND f.status = 'pending' ORDER BY f.created_at DESC`, [me]);
       const out = await pool().query(
-        `SELECT f.id, u.id AS user_id, u.username, u.display_name, u.level, f.created_at
+        `SELECT f.id, u.id AS user_id, u.username, u.display_name, ${playerLevelSqlExpr('u.level', 'u.xp')} AS level, f.created_at
          FROM friendships f JOIN users u ON u.id = f.addressee_id
          WHERE f.requester_id = $1 AND f.status = 'pending' ORDER BY f.created_at DESC`, [me]);
       const rids = [...inc.rows, ...out.rows].map((r: any) => String(r.user_id));

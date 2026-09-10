@@ -196,6 +196,52 @@ async function mkUser(id: string, level: number, xp: number, coins = 100000): Pr
       'bounds ' + dto.xpFloor + '..' + dto.xpNext + ' do not bracket ' + u.xp);
   });
 
+  /* ── EVERY PLACE THAT REPORTS A LEVEL REPORTS THE SAME ONE ──────────────
+     «تو پروفایلم که به بقیه نشون می‌ده می‌نویسه ۶ ولی برای خودم می‌نویسه ۱۸.»
+     Four separate readers, and only some of them had been fixed. This is the
+     property that was actually broken, so it is the property under test: not
+     «the shelf is right» but «no two of them can disagree». Anything added
+     later that reads users.level raw fails here. */
+  await check('the shelf, the account, the login and the public profile all agree', async () => {
+    const { toDto } = await import('../modules/users/routes.js');
+    const { toDto: authDto } = await import('../modules/auth/routes.js');
+    const { buildUserStats } = await import('../services/userStatsService.js');
+
+    /* BOTH directions of drift. On AHEAD the column happens to equal the
+       answer, so a reader that had gone back to the raw column would slip
+       through unnoticed; BEHIND is the account where they differ. */
+    for (const uid of [AHEAD, BEHIND]) {
+      const u: any = await repositories.users.findById(uid);
+      const want = playerLevel(u);
+      const answers: Record<string, number> = {
+        'playerLevel': want,
+        'the shelf (buildRoster)': (await buildRoster(uid)).level,
+        'the account (/users/me)': (toDto(u) as any).level,
+        'the login payload': (authDto(u) as any).level,
+        'the public profile (/users/:id/profile)': (await buildUserStats(uid)).level
+      };
+      const distinct = [...new Set(Object.values(answers))];
+      assert.equal(distinct.length, 1,
+        uid + ': they disagree — ' + Object.entries(answers).map(([k, v]) => k + '=' + v).join(', '));
+      assert.equal(distinct[0], want);
+    }
+    /* And at least one of those accounts really does differ from its column,
+       or the loop above proves only that everything reads the same stale field. */
+    const bu: any = await repositories.users.findById(BEHIND);
+    assert.notEqual(playerLevel(bu), Number(bu.level), 'fixture: no drift left to catch');
+  });
+
+  /* And the raw column on its own is NOT the answer — otherwise the test above
+     would pass on a system where everything reads the stale column together. */
+  await check('and that shared answer is not simply the stored column', async () => {
+    const u: any = await repositories.users.findById(BEHIND);
+    assert.notEqual(playerLevel(u), Number(u.level),
+      'fixture: this account must be one where the column is stale');
+    const { buildUserStats } = await import('../services/userStatsService.js');
+    assert.equal((await buildUserStats(BEHIND)).level, playerLevel(u),
+      'the public profile is still handing out the stale column');
+  });
+
   console.log(`[characterLevelGate] ${pass} passed, ${fail} failed`);
   if (fail) process.exit(1);
 })();
