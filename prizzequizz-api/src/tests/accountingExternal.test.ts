@@ -82,6 +82,12 @@ async function sale(opts: {
  * real database the totals would otherwise carry over from the test before —
  * which is exactly how a green suite hides a broken filter. */
 async function since<T>(fn: () => Promise<T>): Promise<{ result: T; sales: Awaited<ReturnType<typeof externalSalesSummary>> }> {
+  /* A guard band on BOTH sides of t0. The window is inclusive (`delivered_at >=
+   * from`), and ISO timestamps only go to the millisecond — so a row written by
+   * the previous test in the same millisecond as t0 would be counted here. That
+   * is a flake, and a flake in a test about double-counting money is worse than
+   * no test at all. */
+  await new Promise((r) => setTimeout(r, 5));
   const t0 = new Date().toISOString();
   await new Promise((r) => setTimeout(r, 5));
   const result = await fn();

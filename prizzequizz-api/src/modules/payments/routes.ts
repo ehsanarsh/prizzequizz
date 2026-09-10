@@ -2,34 +2,28 @@ import type { Router } from '../../http/router.js';
 import { error, json } from '../../http/response.js';
 import { requireAdmin } from '../../services/adminGuard.js';
 import { WalletError } from '../../services/walletLedgerService.js';
-import { createPaymentIntent, getPaymentIntent, listPaymentIntents, paymentDiagnostics, paymentSignature, settlePaymentIntent } from '../../services/paymentService.js';
+import { getPaymentIntent, listPaymentIntents, paymentDiagnostics, settlePaymentIntent } from '../../services/paymentService.js';
 import { listGatewaysMasked, saveGateway, removeGateway, getPaymentSettings, updatePaymentSettings, testConnection, gatewayReports } from '../../services/paymentGatewayService.js';
 import type { PaymentIntentStatus, PaymentProvider } from '../../types/domain.js';
-import { bodyObject, optionalString, requiredNumber } from '../../utils/validation.js';
+import { bodyObject } from '../../utils/validation.js';
 
 export function registerPaymentRoutes(router: Router, base: string): void {
-  router.add('POST', `${base}/payments/intents`, async (ctx) => {
-    if (!ctx.userId) return error(ctx.res, 401, 'UNAUTHORIZED', 'Login required.');
-    const body = bodyObject(ctx.body);
-    try {
-      const intent = await createPaymentIntent({ userId: ctx.userId, amount: requiredNumber(body, 'amount'), callbackUrl: optionalString(body, 'callbackUrl'), idempotencyKey: optionalString(body, 'idempotencyKey') });
-      json(ctx.res, 201, intent);
-    } catch (e) {
-      if (e instanceof WalletError) return error(ctx.res, 400, e.code, e.message);
-      throw e;
-    }
-  });
-
+/* TWO ROUTES USED TO SIT AROUND THIS ONE, AND BOTH WERE DEAD.
+ *
+ *   POST /payments/intents         answered 400 to every caller alive. It sent
+ *                                  only an `amount`, and `createPaymentIntent`
+ *                                  refuses an intent with no `order` — there is
+ *                                  no topping up any more, so a payment must be
+ *                                  FOR something. Buying goes through
+ *                                  POST /orders/pay, which carries the order.
+ *   POST /payments/intents/:id/verify   was reduced to a read after the hole
+ *                                  that let a client flip its own intent to
+ *                                  paid was closed. What it then did, the GET
+ *                                  below already did.
+ *
+ * Both are gone rather than left as decoration: a route that cannot succeed is
+ * a trap for the next person who finds it in the router and assumes it works. */
   router.add('GET', `${base}/payments/intents/:id`, async (ctx) => {
-    if (!ctx.userId) return error(ctx.res, 401, 'UNAUTHORIZED', 'Login required.');
-    const intent = await getPaymentIntent(ctx.params.id!, ctx.userId);
-    if (!intent) return error(ctx.res, 404, 'PAYMENT_INTENT_NOT_FOUND', 'Payment intent not found.');
-    json(ctx.res, 200, intent);
-  });
-
-  // READ-ONLY now: a client can only ask for the current status; it can never
-  // flip an intent to paid (that required hole let players self-credit).
-  router.add('POST', `${base}/payments/intents/:id/verify`, async (ctx) => {
     if (!ctx.userId) return error(ctx.res, 401, 'UNAUTHORIZED', 'Login required.');
     const intent = await getPaymentIntent(ctx.params.id!, ctx.userId);
     if (!intent) return error(ctx.res, 404, 'PAYMENT_INTENT_NOT_FOUND', 'Payment intent not found.');
