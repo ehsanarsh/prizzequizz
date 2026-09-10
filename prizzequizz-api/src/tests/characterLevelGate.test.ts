@@ -78,7 +78,7 @@ async function mkUser(id: string, level: number, xp: number, coins = 100000): Pr
   await check('and the sentence that caused the report is not printed at all', async () => {
     const roster = await buildRoster(AHEAD);
     const c = roster.characters.find((x) => x.id === gift.id)!;
-    assert.ok(!/در لول .* آزاد می‌شود/.test(c.lockReason), 'the shelf still says: ' + c.lockReason);
+    assert.ok(!/در (لول|سطح) .* آزاد می‌شود/.test(c.lockReason), 'the shelf still says: ' + c.lockReason);
   });
 
   await check('the purchase gate lets them buy the paid one too', async () => {
@@ -88,6 +88,30 @@ async function mkUser(id: string, level: number, xp: number, coins = 100000): Pr
   });
 
   /* THE GATE STILL GATES. A rule that lets everyone through is not a fix. */
+  /* AND IT SAYS IT IN THE APP'S OWN WORD. The player reads these strings, not
+     the client's: «سطح» in the browser beside «لول» from the server is the same
+     two-words-one-number the report was about, one layer down. */
+  await check('every message the player reads calls it «سطح»', async () => {
+    const low = 'lvl-wording';
+    await mkUser(low, 1, 0);                       // too low for either character
+    const roster = await buildRoster(low);
+    const gated = roster.characters.find((x) => x.id === gift.id)!;
+    assert.match(gated.lockReason, /سطح/, 'the lock reason: ' + gated.lockReason);
+    assert.doesNotMatch(gated.lockReason, /لول/, 'the lock reason still says «لول»: ' + gated.lockReason);
+    /* A PAID character with a level on it takes a different branch of
+       lockReasonFor — «از سطح N — سپس خرید» — so it needs naming too. */
+    const buyable = roster.characters.find((x) => x.id === paid.id)!;
+    assert.match(buyable.lockReason, /سطح/, 'the paid gate: ' + buyable.lockReason);
+    assert.doesNotMatch(buyable.lockReason, /لول/, 'the paid gate still says «لول»: ' + buyable.lockReason);
+    /* The other route to the same fact: the till's refusal. */
+    try { await purchaseCharacter(low, paid.id, 'w1'); assert.fail('it went through'); }
+    catch (e) {
+      const m = (e as Error).message;
+      assert.match(m, /سطح/, 'the refusal: ' + m);
+      assert.doesNotMatch(m, /لول/, 'the refusal still says «لول»: ' + m);
+    }
+  });
+
   await check('a character far above them is still locked', async () => {
     const roster = await buildRoster(AHEAD);
     const c = roster.characters.find((x) => x.id === high.id)!;

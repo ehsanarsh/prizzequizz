@@ -382,7 +382,7 @@ export async function purchaseCharacter(userId: string, characterId: string, ide
     const level = playerLevel(user as any);
     if (level < need) {
       throw new CharacterPurchaseError('LEVEL_TOO_LOW',
-        'این کاراکتر از لول ' + need.toLocaleString('fa-IR') + ' باز می‌شود — تو لول ' +
+        'این کاراکتر از سطح ' + need.toLocaleString('fa-IR') + ' باز می‌شود — تو سطح ' +
         level.toLocaleString('fa-IR') + ' هستی.');
     }
   }
@@ -450,7 +450,7 @@ function lockReasonFor(c: Character, level: number): string {
   const fa = (n: number) => n.toLocaleString('fa-IR');
   if (c.viaLevel && c.unlockLevel > 0) {
     if (level >= c.unlockLevel) return '';
-    return `در لول ${fa(c.unlockLevel)} آزاد می‌شود`;
+    return `در سطح ${fa(c.unlockLevel)} آزاد می‌شود`;
   }
   // Not level-gated → it has to arrive some other way. Name the routes that are
   // actually switched on for this character, never a generic message.
@@ -464,7 +464,7 @@ function lockReasonFor(c: Character, level: number): string {
    * other route to it, so the card has to say so — otherwise the only place a
    * player learns about it is the refusal after they press buy. */
   if (c.unlockLevel > 0 && level < c.unlockLevel) {
-    return `از لول ${fa(c.unlockLevel)} — سپس ${ways.join(' یا ')}`;
+    return `از سطح ${fa(c.unlockLevel)} — سپس ${ways.join(' یا ')}`;
   }
   return `آزادسازی با: ${ways.join(' یا ')}`;
 }

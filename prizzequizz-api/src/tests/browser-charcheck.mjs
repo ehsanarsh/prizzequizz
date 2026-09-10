@@ -199,7 +199,7 @@ const readRing = (page) => page.evaluate(() => {
       ch({ id: 's1', name: 'پهلوان', group: 'قهرمانان', price: 500, unlocked: false }),
       ch({ id: 's2', name: 'شمشیرزن', group: 'قهرمانان', price: 800, unlocked: true }),
       ch({ id: 's3', name: 'روباه', group: 'حیوانات', price: 300, unlocked: false }),
-      ch({ id: 's4', name: 'استاد', group: 'حیوانات', price: 900, unlocked: false, unlockLevel: 40, lockReason: 'از لول ۴۰ — سپس خرید (۹۰۰ سکه)' }),
+      ch({ id: 's4', name: 'استاد', group: 'حیوانات', price: 900, unlocked: false, unlockLevel: 40, lockReason: 'از سطح ۴۰ — سپس خرید (۹۰۰ سکه)' }),
       ch({ id: 's5', name: 'جایزه‌ای', group: '', price: 0, viaPurchase: false, viaRandom: true, unlocked: false, lockReason: 'آزادسازی با: قرعه‌کشی' })
     ], equippedId: '', level: 3, xp: 0, hasDatabase: false
   };
@@ -226,7 +226,7 @@ const readRing = (page) => page.evaluate(() => {
   ok('one already owned says so in those words', /برای شما فعال است/.test(byName('شمشیرزن').price), byName('شمشیرزن').price);
   ok('one for sale shows its coin price', /۵۰۰/.test(byName('پهلوان').price), byName('پهلوان').price);
   /* «من پول داشته باشم سکه داشته باشم ولی لول نداشته باشم نتونم خرید کنم» */
-  ok('one gated by level says the level instead of the price', /لول ۴۰/.test(byName('استاد').price), byName('استاد').price);
+  ok('one gated by level says the level instead of the price', /سطح ۴۰/.test(byName('استاد').price), byName('استاد').price);
   ok('and cannot be bought by tapping it', await page.evaluate(async () => {
     const card = [...document.querySelectorAll('#shopContent .item')].find((e) => /استاد/.test(e.textContent));
     card.click(); await new Promise((r) => setTimeout(r, 400));

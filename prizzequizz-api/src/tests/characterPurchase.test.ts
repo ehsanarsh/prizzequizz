@@ -169,7 +169,7 @@ async function run(): Promise<void> {
       const roster = await buildRoster(p.id);
       const card = roster.characters.find((c) => c.id === gated.id)!;
       assert.equal(card.unlocked, false);
-      assert.match(card.lockReason, /لول ۲۰/, card.lockReason);
+      assert.match(card.lockReason, /سطح ۲۰/, card.lockReason);
     });
 
     /* ── priced in toman ─────────────────────────────────────────────── */

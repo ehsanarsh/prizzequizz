@@ -14,7 +14,7 @@
      copy that was never uploaded look exactly alike. This is that version. It
      is readable from the server with one curl, and it is printed at the bottom
      of «تنظیمات» so it can be read off the phone with no terminal at all. -->
-<meta name="pz-build" content="20260910-1408">
+<meta name="pz-build" content="20260910-1452">
 <!-- App icon on the phone home screen (Add to Home Screen). Place appicon.png
      (a square PNG, ideally 512x512) in the same web folder as this file. -->
 <link rel="apple-touch-icon" sizes="180x180" href="appicon.png">
@@ -7692,7 +7692,7 @@ function csKind(k,el){
 function csApplyFilter(){
   if(!csData||!Array.isArray(csData.characters)){ return; }
   const lvl=document.getElementById('csLvl');
-  if(lvl)lvl.textContent='⭐ لول '+csFa(csData.level||1);
+  if(lvl)lvl.textContent='⭐ سطح '+csFa(csData.level||1);
 
   /* Only what the player actually has. A locked character on the ring is a
      shop window standing in the middle of the wardrobe: it cannot be chosen,
@@ -8017,12 +8017,12 @@ async function csEquip(){
 function csWhy(){
   const c=csCurrent(); if(!c)return;
   const ways=[];
-  if(c.viaLevel&&c.unlockLevel>0)ways.push('رسیدن به لول '+csFa(c.unlockLevel));
+  if(c.viaLevel&&c.unlockLevel>0)ways.push('رسیدن به سطح '+csFa(c.unlockLevel));
   if(c.viaReward)ways.push('جایزهٔ مسابقات');
   if(c.viaEvent)ways.push('جایزهٔ رویدادها');
   if(c.viaRandom)ways.push('قرعه‌کشی');
   if(c.viaPurchase)ways.push(c.price>0?('خرید — '+csFa(c.price)+' سکه'):'خرید از فروشگاه');
-  const need=(c.viaLevel&&c.unlockLevel>0)?('<div style="margin-top:10px;font-size:12px;color:#c9d8cd">لول فعلی تو: <b style="color:var(--bolt)">'+csFa((csData&&csData.level)||1)+'</b> از '+csFa(c.unlockLevel)+'</div>'):'';
+  const need=(c.viaLevel&&c.unlockLevel>0)?('<div style="margin-top:10px;font-size:12px;color:#c9d8cd">سطح فعلی تو: <b style="color:var(--bolt)">'+csFa((csData&&csData.level)||1)+'</b> از '+csFa(c.unlockLevel)+'</div>'):'';
   try{
     showAaaModal({
       iconHTML:'<div style="width:96px;height:96px;margin:0 auto;display:flex;align-items:center;justify-content:center">'+csArtHTML(c)+'</div>',
@@ -13271,7 +13271,7 @@ async function pzLoadNotifPrefs(){
 function testAudioSettings(){sfx('correct');vib([30,40,30]);toast('تست صدا و لرزش انجام شد');}
 function updatePhoneSetting(){const v=(document.getElementById('newPhoneInput')?.value||'').trim();if(!/^09\d{9}$/.test(v)){toast('شماره موبایل معتبر وارد کن');return;}showAaaModal({icon:'📱',title:'کد تأیید ارسال شد',sub:'کد ۴ رقمی برای شماره '+v+' ارسال شد. در نسخه نهایی اینجا OTP بررسی می‌شود.',primaryText:'متوجه شدم',secondaryText:''});}
 function showSessionsModal(){showAaaModal({icon:'📱',title:'نشست‌های فعال',sub:'این دستگاه · Frankfurt · همین حالا<br>Android WebView · ۲ روز پیش<br><br>برای امنیت، می‌تونی نشست‌های دیگر را ببندی.',primaryText:'خروج از دستگاه‌های دیگر',secondaryText:'بستن',onPrimary:()=>{closeAaaModal(false);toast('همه نشست‌های دیگر بسته شدند ✅');},onSecondary:()=>closeAaaModal(false)});}
-function previewPublicProfile(){const nm=(window.myName||(_usr&&_usr.username)||'بازیکن'),lvl=Number(_usr&&_usr.level)||pzLevelForXp((_usr&&_usr.xp)||0)||1,lg=pzLeagueFromCup(weeklyScore);showAaaModal({icon:'🦁',title:'پیش‌نمایش پروفایل',sub:nm+' · لول '+fa(lvl)+' · '+lg.emoji+' '+lg.name+'<br>بردها: '+fa(PLAYER_STATS.wins||0)+' · درصد برد: '+fa(PLAYER_STATS.winRate||0)+'٪<br>وضعیت آنلاین: '+(appSettings.onlineStatus?'نمایش داده می‌شود':'مخفی'),primaryText:'بستن',secondaryText:''});}
+function previewPublicProfile(){const nm=(window.myName||(_usr&&_usr.username)||'بازیکن'),lvl=Number(_usr&&_usr.level)||pzLevelForXp((_usr&&_usr.xp)||0)||1,lg=pzLeagueFromCup(weeklyScore);showAaaModal({icon:'🦁',title:'پیش‌نمایش پروفایل',sub:nm+' · سطح '+fa(lvl)+' · '+lg.emoji+' '+lg.name+'<br>بردها: '+fa(PLAYER_STATS.wins||0)+' · درصد برد: '+fa(PLAYER_STATS.winRate||0)+'٪<br>وضعیت آنلاین: '+(appSettings.onlineStatus?'نمایش داده می‌شود':'مخفی'),primaryText:'بستن',secondaryText:''});}
 function resetLeagueGuide(){try{localStorage.removeItem('pq_league_guide_seen');}catch(e){}appSettings.leagueGuide=true;saveSettings();toast('راهنمای لیگ دوباره فعال شد 🏆');}
 function testCountdownModal(){showCountdownModal({icon:'🎯',title:'تست شمارش معکوس',sub:'این همان مودال شروع بازی است.',seconds:3},()=>toast('Countdown سالم است ✅'));}
 function testAppearanceModal(){showAaaModal({icon:'✨',title:'ظاهر فعلی اعمال شد',sub:'کنتراست، تراکم و انیمیشن‌ها طبق تنظیمات فعلی نمایش داده می‌شوند.',primaryText:'عالیه',secondaryText:''});}
@@ -13315,7 +13315,7 @@ function pzProfileBody(d,note){
   const money=n=>fa(Number(n)||0)+' تومان';
   const head='<div class="opp-user">@'+frEsc(d.username||'player')+'</div>'+
     '<div class="opp-tags"><span class="opp-tag y">'+frEsc(d.league||'🎯 بدون لیگ')+'</span>'+
-    '<span class="opp-tag">لول '+num(d.level)+'</span>'+
+    '<span class="opp-tag">سطح '+num(d.level)+'</span>'+
     '<span class="opp-tag">'+num(d.xp)+' XP</span>'+
     '<span class="opp-tag">🏆 '+num(d.weeklyScore)+'</span></div>';
   if(!d.hasHistory){
@@ -14257,7 +14257,7 @@ const FRIENDS_DATA=[];
 let FRIEND_REQUESTS=[];
 const FRIEND_SUGGESTIONS=[];
 function frQuery(){return (document.getElementById('frSearch')?.value||'').trim().toLowerCase();}
-function friendMatch(f,q){return !q||(f.n+' '+f.u+' '+(f.s||'')+' '+(f.league||'')).toLowerCase().includes(q);}
+function friendMatch(f,q){return !q||(f.n+' '+f.u+' '+(f.s||'')).toLowerCase().includes(q);}
 function renderFriendStats(){
   const box=document.getElementById('frStats');if(!box)return;
   const online=FRIENDS_DATA.filter(f=>f.on).length,unread=FRIENDS_DATA.reduce((s,f)=>s+(f.unread||0),0);
@@ -14297,7 +14297,7 @@ function mapFriend(sf){
   return { id:sf.id, a:sf.avatar||'', ch:sf.character||null, n:sf.displayName||sf.username, u:sf.username, lvl:sf.level||1,
            on:!!sf.online, seen:sf.lastSeenAt||null, unread:sf.unread||0, fav:false,
            s:(sf.online?'آنلاین':frSeenText(sf.lastSeenAt)),
-           league:'سطح '+fa(sf.level||1), last:sf.lastMessage||'', m:prev.m||[] };
+           last:sf.lastMessage||'', m:prev.m||[] };
 }
 /* The badge, one level in: the چت tab carries the unread messages and the
    درخواست‌ها tab carries the pending requests, so the dot on the nav leads
@@ -14462,7 +14462,7 @@ function friendCard(f,mode){
   /* Presence lives in the badge row, not on the username line: that line is
      nowrap+ellipsis, so anything appended to it is the first thing thrown away. */
   const pres=(f.on?'<span class="mini-badge live">● آنلاین</span>':'<span class="mini-badge">'+frEsc(f.s)+'</span>');
-  return '<div class="friend-card '+(f.on?'online':'')+(f.unread?' has-unread':'')+'" '+cardClick+'><div class="fav" '+profileClick+'>'+pzFaceHTML({avatar:f.a,character:f.ch})+star+(f.on?'<span class="on"></span>':'')+'</div><div class="info" '+profileClick+'><b>'+frEsc(f.n)+'</b><span>@'+frEsc(f.u)+'</span><div class="meta">'+pres+'<span class="mini-badge ok">لول '+fa(f.lvl)+'</span><span class="mini-badge y">'+f.league+'</span></div></div><div class="fr-actions">'+actions+'</div></div>';
+  return '<div class="friend-card '+(f.on?'online':'')+(f.unread?' has-unread':'')+'" '+cardClick+'><div class="fav" '+profileClick+'>'+pzFaceHTML({avatar:f.a,character:f.ch})+star+(f.on?'<span class="on"></span>':'')+'</div><div class="info" '+profileClick+'><b>'+frEsc(f.n)+'</b><span>@'+frEsc(f.u)+'</span><div class="meta">'+pres+'<span class="mini-badge ok">سطح '+fa(f.lvl)+'</span></div></div><div class="fr-actions">'+actions+'</div></div>';
 }
 function renderFriendsList(c,q){
   const list=FRIENDS_DATA.filter(f=>friendMatch(f,q)).sort((a,b)=>(b.fav-a.fav)||(b.on-a.on));
@@ -14475,11 +14475,11 @@ function renderChatsList(c,q){
 }
 function renderRequests(c,q){
   const list=FRIEND_REQUESTS.filter(f=>friendMatch(f,q));
-  c.innerHTML=list.length?list.map(r=>'<div class="friend-card request-card"><div class="fav">'+pzFaceHTML({avatar:r.a,character:r.ch})+'</div><div class="info"><b>'+frEsc(r.n)+'</b><span>@'+frEsc(r.u)+' · لول '+fa(r.lvl)+'</span><div class="meta"><span class="mini-badge y">'+r.msg+'</span></div></div><div class="fr-actions"><button class="btn btn-ghost btn-sm" onclick="showOpponentProfileByData(\''+jsStr(r.userId||'')+'\',\''+jsStr(r.n)+'\',\''+jsStr(r.a)+'\',\'درخواست دوستی\')">پروفایل</button><button class="btn btn-green btn-sm" onclick="acceptFriendRequest(\''+r.id+'\')">قبول</button><button class="btn btn-red btn-sm" onclick="declineFriendRequest(\''+r.id+'\')">رد</button></div></div>').join(''):'<div class="fr-empty"><span class="big">📭</span>درخواست جدیدی نداری.</div>';
+  c.innerHTML=list.length?list.map(r=>'<div class="friend-card request-card"><div class="fav">'+pzFaceHTML({avatar:r.a,character:r.ch})+'</div><div class="info"><b>'+frEsc(r.n)+'</b><span>@'+frEsc(r.u)+' · سطح '+fa(r.lvl)+'</span><div class="meta"><span class="mini-badge y">'+r.msg+'</span></div></div><div class="fr-actions"><button class="btn btn-ghost btn-sm" onclick="showOpponentProfileByData(\''+jsStr(r.userId||'')+'\',\''+jsStr(r.n)+'\',\''+jsStr(r.a)+'\',\'درخواست دوستی\')">پروفایل</button><button class="btn btn-green btn-sm" onclick="acceptFriendRequest(\''+r.id+'\')">قبول</button><button class="btn btn-red btn-sm" onclick="declineFriendRequest(\''+r.id+'\')">رد</button></div></div>').join(''):'<div class="fr-empty"><span class="big">📭</span>درخواست جدیدی نداری.</div>';
 }
 function renderAddFriend(c,q){
   const out=(_frOutgoing||[]);
-  const outHtml=out.length?('<div class="section-title" style="margin-top:4px">درخواست‌های ارسالی (در انتظار پاسخ)</div>'+out.map(s=>'<div class="friend-card"><div class="fav">'+pzFaceHTML({avatar:s.a,character:s.ch})+'</div><div class="info"><b>'+frEsc(s.n)+'</b><span>@'+frEsc(s.u)+' · لول '+fa(s.lvl)+'</span><div class="meta"><span class="mini-badge y">در انتظار پاسخ ⏳</span></div></div></div>').join('')):'';
+  const outHtml=out.length?('<div class="section-title" style="margin-top:4px">درخواست‌های ارسالی (در انتظار پاسخ)</div>'+out.map(s=>'<div class="friend-card"><div class="fav">'+pzFaceHTML({avatar:s.a,character:s.ch})+'</div><div class="info"><b>'+frEsc(s.n)+'</b><span>@'+frEsc(s.u)+' · سطح '+fa(s.lvl)+'</span><div class="meta"><span class="mini-badge y">در انتظار پاسخ ⏳</span></div></div></div>').join('')):'';
   c.innerHTML='<div class="add-panel"><h3>افزودن دوست با یوزرنیم</h3><p>یوزرنیم دقیق دوستت رو وارد کن تا درخواست دوستی براش بره.</p><div style="display:flex;gap:8px"><input class="input" id="friendAddInput" placeholder="مثلاً Sara_1452" dir="ltr" onkeydown="if(event.key===\'Enter\')sendFriendRequest()"><button class="btn btn-primary btn-sm" style="height:48px" onclick="sendFriendRequest()">ارسال</button></div><div class="qr-card"><div class="qr-box"></div><div style="flex:1"><b style="font-size:13px">کد معرف تو</b><div style="font-size:12px;color:var(--bolt);font-weight:900;margin-top:4px" dir="ltr" id="frRefCode">…</div></div><button class="btn btn-ghost btn-sm" onclick="copyInviteLink()">کپی</button></div></div>'+outHtml;
   /* It showed the USERNAME and called it the invite link. The link is the
      referral code — that is the only thing a new player can redeem — so the
@@ -15011,7 +15011,7 @@ async function renderCharacterShop(){
      beside it sat inset. */
   c.innerHTML='<div style="margin:14px 18px 2px;padding:10px 12px;background:rgba(255,255,255,.06);'+
     'border:1px solid rgba(255,255,255,.10);border-radius:14px;color:var(--muted);'+
-    'font-size:12px;font-weight:700;line-height:1.9">کاراکترها با <b>سکه</b> یا <b>تومان</b> خریداری می‌شوند و بعضی‌هایشان <b>لول</b> هم می‌خواهند. بعضی هم فقط از گردونه، استریک یا مأموریت‌ها به دست می‌آیند. هرکدام را که داشته باشی، در «انتخاب کاراکتر» قابل انتخاب است.</div>'+
+    'font-size:12px;font-weight:700;line-height:1.9">کاراکترها با <b>سکه</b> یا <b>تومان</b> خریداری می‌شوند و بعضی‌هایشان <b>سطح</b> هم می‌خواهند. بعضی هم فقط از گردونه، استریک یا مأموریت‌ها به دست می‌آیند. هرکدام را که داشته باشی، در «انتخاب کاراکتر» قابل انتخاب است.</div>'+
     groups.map((gr,i)=>
       (gr.name?'<div class="section-title" style="margin:16px 18px 6px;font-size:13px;font-weight:900">'+esc0(gr.name)+'</div>':
         (groups.length>1?'<div class="section-title" style="margin:16px 18px 6px;font-size:13px;font-weight:900">سایر کاراکترها</div>':''))+
@@ -15031,7 +15031,7 @@ async function renderCharacterShop(){
       const buyable=!owned&&ch.viaPurchase&&!lvlShort;
       const cash=ch.currency==='cash';
       const priceTxt=owned?'برای شما فعال است ✅'
-        :lvlShort?('🔒 لول '+fa(need))
+        :lvlShort?('🔒 سطح '+fa(need))
         :ch.viaPurchase?(price>0?(fa(price)+(cash?' ت':' 🪙')):'رایگان')
         :'جایزه‌ای';
       d.innerHTML=(owned
@@ -17457,7 +17457,7 @@ function renderStats(){
 }
 function renderStatsHeader(){
   const el=document.getElementById('statsChipline');if(!el)return;
-  el.innerHTML='<span class="stats-chip ok">رتبه هفته: '+fa(PLAYER_STATS.rank)+'</span><span class="stats-chip">لول '+fa(PLAYER_STATS.level)+'</span><span class="stats-chip">'+PLAYER_STATS.league+'</span><span class="stats-chip">🔥 '+fa(PLAYER_STATS.currentStreak)+' روز</span>';
+  el.innerHTML='<span class="stats-chip ok">رتبه هفته: '+fa(PLAYER_STATS.rank)+'</span><span class="stats-chip">سطح '+fa(PLAYER_STATS.level)+'</span><span class="stats-chip">'+PLAYER_STATS.league+'</span><span class="stats-chip">🔥 '+fa(PLAYER_STATS.currentStreak)+' روز</span>';
 }
 function kpiHTML(ico,val,label,cls){return '<div class="kpi '+(cls||'')+'"><span class="ki">'+ico+'</span><b>'+val+'</b><span>'+label+'</span></div>';}
 function renderStatsOverview(c){
@@ -18303,7 +18303,7 @@ function paintProfileStats(){
       _statCell('g',fa(S.winRate||0)+'٪','درصد برد')+
       _statCell('g',fa(S.accuracy||0)+'٪','دقت پاسخ')+
       _statCell('y',fa((_usr&&_usr.xp)||0),'XP کل')+
-      _statCell('g','لول '+fa(lvl),'سطح · '+lg.emoji+lg.name)+
+      _statCell('g','سطح '+fa(lvl),lg.emoji+lg.name)+
       _statCell('g',fa(weeklyScore||0)+' 🏆','کاپ هفته')+
       _statCell('g',fa(S.totalPrize||0),'جایزه کل (ت)');
   }

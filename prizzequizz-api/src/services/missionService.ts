@@ -465,7 +465,7 @@ function buildSeed(): Partial<MissionDef>[] {
     ach('correctAnswers', n, n + ' پاسخ صحیح', '✅',
       (['common','rare','epic','legendary','mythic'] as Rarity[])[i]!, [R('coins', Math.round(n / 2) + 200)]));
   for (let lv = 10; lv <= 100; lv += 10) {
-    ach('level', lv, 'رسیدن به لول ' + lv, '🎖️',
+    ach('level', lv, 'رسیدن به سطح ' + lv, '🎖️',
       lv >= 80 ? 'mythic' : lv >= 50 ? 'legendary' : lv >= 30 ? 'epic' : 'rare',
       [R('coins', lv * 100), R('ticket', lv >= 50 ? 1 : 0, 'blue')].filter((r) => r.amount > 0));
   }
