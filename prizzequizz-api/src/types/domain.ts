@@ -331,7 +331,10 @@ export interface ErrorReport {
   resolvedBy?: UUID | 'system';
 }
 
-export type PaymentProvider = 'sandbox' | 'zarinpal' | 'stripe' | 'manual';
+/* The authoritative list of gateway kinds is `GATEWAY_TYPES` in
+ * paymentGatewayService — an operator can register any of them from the panel.
+ * This is the narrower label stored on an intent, kept in step by hand. */
+export type PaymentProvider = 'sandbox' | 'zarinpal' | 'stripe' | 'manual' | 'card_to_card';
 export type PaymentIntentStatus = 'created' | 'pending' | 'paid' | 'failed' | 'expired';
 
 export interface PaymentIntent {

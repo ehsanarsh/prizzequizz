@@ -4930,7 +4930,10 @@ async function smsBlDel(n){ try{await api('DELETE','/admin/sms/blacklist/'+encod
 
 /* ================= MULTI-GATEWAY PAYMENTS ================= */
 let PAY_SUB='gateways';
-const GW_TYPES={zibal:'زیبال',zarinpal:'زرین‌پال',nextpay:'نکست‌پی',idpay:'آیدی‌پی',bitpay:'بیت‌پی',sandbox:'تست (Sandbox)',custom:'سفارشی'};
+const GW_TYPES={zibal:'زیبال',zarinpal:'زرین‌پال',nextpay:'نکست‌پی',idpay:'آیدی‌پی',bitpay:'بیت‌پی',sandbox:'تست (Sandbox)',custom:'سفارشی',card_to_card:'کارت به کارت'};
+/* «به‌زودی» با «غیرفعال» یکی نیست: اولی به بازیکن نشان داده می‌شود ولی قابل
+   انتخاب نیست، دومی اصلاً دیده نمی‌شود. هیچ‌کدام جز «فعال» پرداخت نمی‌گیرد. */
+const GW_AVAIL={live:['فعال','ok'],coming_soon:['به‌زودی','pend'],hidden:['پنهان','bad']};
 const PIST={created:'ایجاد شد',pending:'در انتظار',paid:'موفق',failed:'ناموفق',expired:'منقضی'};
 async function renderPayments(){
   const subtabs='<div class="subtabs">'+[['gateways','🏦 درگاه‌ها'],['settings','⚙️ واریز/دریافت جایزه'],['reports','📊 گزارش درگاه‌ها'],['tx','📄 تراکنش‌ها']].map(s=>'<button class="'+(PAY_SUB===s[0]?'active':'')+'" onclick="PAY_SUB=\''+s[0]+'\';renderPayments()">'+s[1]+'</button>').join('')+'</div>';
@@ -4946,11 +4949,11 @@ async function renderPayments(){
 async function payGateways(b){
   const d=await api('GET','/admin/payments/gateways'); const rows=d.rows||[];
   window._GW={};rows.forEach(g=>window._GW[g.id]=g);
-  b.innerHTML='<div class="note">درگاه‌ها به‌ترتیب «اولویت» (کوچک‌تر = زودتر) امتحان می‌شوند؛ اگر درگاهِ فعالِ اول در دسترس نبود، پرداخت به بعدی می‌رود.</div>'+
+  b.innerHTML='<div class="note">درگاه‌ها به‌ترتیب «اولویت» (کوچک‌تر = زودتر) امتحان می‌شوند؛ اگر درگاهِ فعالِ اول در دسترس نبود، پرداخت به بعدی می‌رود. درگاهِ «به‌زودی» به بازیکن نشان داده می‌شود ولی هرگز پرداختی نمی‌گیرد.</div>'+
     '<button class="btn pri" style="margin-bottom:10px" onclick="gwEdit()">➕ افزودن درگاه</button>'+
     tbl(['اولویت','نام','نوع','وضعیت','حالت','Callback','عملیات'],rows.map(g=>[
       fa(g.priority),'<b>'+esc(g.name)+'</b>',esc(GW_TYPES[g.type]||g.type),
-      '<span class="pill '+(g.enabled?'ok':'bad')+'">'+(g.enabled?'فعال':'غیرفعال')+'</span>',
+      (function(a){const v=GW_AVAIL[a]||GW_AVAIL.live;return '<span class="pill '+v[1]+'">'+v[0]+'</span>';})(g.availability),
       g.sandbox?'<span class="pill">تست</span>':'<span class="pill ok">واقعی</span>',
       '<span class="mono" style="font-size:11px">'+esc(g.callbackUrl||'—')+'</span>',
       '<button class="btn sm" onclick="gwEdit(\''+g.id+'\')">ویرایش</button> <button class="btn sm" onclick="gwTest(\''+g.id+'\')">تست اتصال</button> <button class="btn sm bad" onclick="gwDel(\''+g.id+'\')">حذف</button>'
@@ -4967,13 +4970,13 @@ function gwEdit(id){
     '<div class="grid g2"><div class="field"><label>Secret '+(g.secretSet?'(ثبت‌شده)':'')+'</label><input id="gw_secret" type="password" dir="ltr" placeholder="'+(g.secretSet?'••••':'در صورت نیاز')+'"></div>'+
     '<div class="field"><label>Callback URL</label><input id="gw_cb" dir="ltr" value="'+esc(g.callbackUrl||'/v1/payments/callback')+'"></div></div>'+
     '<div class="grid g3"><div class="field"><label>اولویت</label><input id="gw_prio" type="number" value="'+(g.priority!=null?g.priority:100)+'"></div>'+
-    '<div class="field"><label>وضعیت</label><select id="gw_enabled"><option value="1"'+(g.enabled!==false?' selected':'')+'>فعال</option><option value="0"'+(g.enabled===false?' selected':'')+'>غیرفعال</option></select></div>'+
+    '<div class="field"><label>وضعیت</label><select id="gw_avail">'+Object.keys(GW_AVAIL).map(function(k){return '<option value="'+k+'"'+((g.availability||'live')===k?' selected':'')+'>'+GW_AVAIL[k][0]+'</option>';}).join('')+'</select></div>'+
     '<div class="field"><label>حالت</label><select id="gw_sandbox"><option value="1"'+(g.sandbox!==false?' selected':'')+'>تست</option><option value="0"'+(g.sandbox===false?' selected':'')+'>واقعی</option></select></div></div>'+
     '<button class="btn pri" onclick="gwSave(\''+(id||'')+'\')">💾 ذخیره</button>');
 }
 async function gwSave(id){
   const name=$('#gw_name').value.trim(); if(!name)return toast('نام لازم است','bad');
-  const body={id:id||undefined,name,type:$('#gw_type').value,merchantId:$('#gw_merchant').value.trim(),secret:$('#gw_secret').value.trim(),apiKey:$('#gw_apikey').value.trim(),callbackUrl:$('#gw_cb').value.trim(),priority:Number($('#gw_prio').value||100),enabled:$('#gw_enabled').value==='1',sandbox:$('#gw_sandbox').value==='1'};
+  const body={id:id||undefined,name,type:$('#gw_type').value,merchantId:$('#gw_merchant').value.trim(),secret:$('#gw_secret').value.trim(),apiKey:$('#gw_apikey').value.trim(),callbackUrl:$('#gw_cb').value.trim(),priority:Number($('#gw_prio').value||100),availability:$('#gw_avail').value,sandbox:$('#gw_sandbox').value==='1'};
   try{await api('POST','/admin/payments/gateways',body);toast('ذخیره شد ✅','ok');document.querySelector('.modal-bg').remove();renderPayments();}catch(e){toast(e.message,'bad');}
 }
 async function gwTest(id){ try{const r=await api('POST','/admin/payments/gateways/'+id+'/test');toast(r.message,r.ok?'ok':'bad');}catch(e){toast(e.message,'bad');} }

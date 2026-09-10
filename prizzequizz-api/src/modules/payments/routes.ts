@@ -82,7 +82,7 @@ export function registerPaymentRoutes(router: Router, base: string): void {
     if (!requireAdmin(ctx, { tab: 'payments' })) return;
     const b = bodyObject(ctx.body) as any;
     if (!b.name || !b.type) return error(ctx.res, 422, 'FIELDS_REQUIRED', 'نام و نوع درگاه لازم است.');
-    const input: any = { id: b.id, name: String(b.name), type: String(b.type), merchantId: b.merchantId != null ? String(b.merchantId) : undefined, callbackUrl: b.callbackUrl != null ? String(b.callbackUrl) : undefined, enabled: b.enabled != null ? !!b.enabled : undefined, sandbox: b.sandbox != null ? !!b.sandbox : undefined, priority: b.priority != null ? Number(b.priority) : undefined };
+    const input: any = { id: b.id, name: String(b.name), type: String(b.type), merchantId: b.merchantId != null ? String(b.merchantId) : undefined, callbackUrl: b.callbackUrl != null ? String(b.callbackUrl) : undefined, availability: b.availability != null ? String(b.availability) : undefined, sandbox: b.sandbox != null ? !!b.sandbox : undefined, priority: b.priority != null ? Number(b.priority) : undefined };
     // Only overwrite secrets when a fresh (non-masked) value is provided.
     if (b.apiKey && !String(b.apiKey).startsWith('••••')) input.apiKey = String(b.apiKey);
     if (b.secret && !String(b.secret).startsWith('••••')) input.secret = String(b.secret);

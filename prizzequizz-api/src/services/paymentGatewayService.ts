@@ -20,7 +20,7 @@ export interface PaymentGateway {
   merchantId: string;
   secret: string;
   callbackUrl: string;
-  enabled: boolean;
+  availability: GatewayAvailability;
   sandbox: boolean;
   priority: number;        // lower = tried first
   createdAt: string;
@@ -33,7 +33,29 @@ export interface PaymentSettings {
   defaultGatewayId: string | null;
 }
 
-export const GATEWAY_TYPES = ['zibal', 'zarinpal', 'nextpay', 'idpay', 'bitpay', 'sandbox', 'custom'] as const;
+export const GATEWAY_TYPES = ['zibal', 'zarinpal', 'nextpay', 'idpay', 'bitpay', 'sandbox', 'custom', 'card_to_card'] as const;
+
+/* «SOON» IS NOT «OFF».
+ *
+ * `enabled: boolean` had to mean two different things at once: whether a
+ * gateway may take money, and whether a player is told it exists. Those come
+ * apart the moment a second way to pay is announced before it is ready — the
+ * operator wants the bank gateway VISIBLE and unselectable, which a boolean
+ * cannot say.
+ *
+ *   live         picked by pickActiveGateway, shown, selectable
+ *   coming_soon  NEVER picked, shown greyed out with its own note
+ *   hidden       never picked, never shown
+ *
+ * The state lives on the server rather than as a label in the client, so the
+ * day the bank gateway is ready is one click in the panel — not a deploy that
+ * still leaves every cached client saying «به‌زودی». */
+export const GATEWAY_AVAILABILITY = ['live', 'coming_soon', 'hidden'] as const;
+export type GatewayAvailability = (typeof GATEWAY_AVAILABILITY)[number];
+
+export function isAvailability(v: unknown): v is GatewayAvailability {
+  return (GATEWAY_AVAILABILITY as readonly string[]).includes(String(v));
+}
 
 function pg(): ReturnType<typeof getPgPool> | null { try { return process.env.DATABASE_URL ? getPgPool() : null; } catch { return null; } }
 
@@ -46,6 +68,20 @@ async function ensureSchema(pool: ReturnType<typeof getPgPool>): Promise<void> {
     enabled BOOLEAN NOT NULL DEFAULT true, sandbox BOOLEAN NOT NULL DEFAULT true, priority INT NOT NULL DEFAULT 100,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(), updated_at TIMESTAMPTZ NOT NULL DEFAULT now())`);
   await pool.query(`CREATE TABLE IF NOT EXISTS payment_settings (id TEXT PRIMARY KEY, data JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT now())`);
+  /* Mirrors database/migrations/027_gateway_availability.sql, so a plain
+   * build+restart deploy works exactly as the wallet ledger's does. The old
+   * boolean is carried across and then dropped: leaving both would mean two
+   * fields that can disagree about whether a gateway takes money. */
+  await pool.query(`ALTER TABLE payment_gateways ADD COLUMN IF NOT EXISTS availability TEXT NOT NULL DEFAULT 'live'`);
+  await pool.query(`DO $do$
+    BEGIN
+      IF EXISTS (SELECT 1 FROM information_schema.columns
+                  WHERE table_name='payment_gateways' AND column_name='enabled') THEN
+        UPDATE payment_gateways SET availability = CASE WHEN enabled THEN 'live' ELSE 'hidden' END;
+        ALTER TABLE payment_gateways DROP COLUMN enabled;
+      END IF;
+    END
+  $do$;`);
   _schemaReady = true;
 }
 
@@ -64,14 +100,14 @@ let memSettings: PaymentSettings | null = null;
 let _seeded = false;
 
 function gwRow(r: any): PaymentGateway {
-  return { id: r.id, name: r.name, type: r.type, apiKey: r.api_key ?? '', merchantId: r.merchant_id ?? '', secret: r.secret ?? '', callbackUrl: r.callback_url ?? '', enabled: r.enabled !== false, sandbox: r.sandbox !== false, priority: Number(r.priority ?? 100), createdAt: r.created_at?.toISOString?.() ?? String(r.created_at), updatedAt: r.updated_at?.toISOString?.() ?? String(r.updated_at) };
+  return { id: r.id, name: r.name, type: r.type, apiKey: r.api_key ?? '', merchantId: r.merchant_id ?? '', secret: r.secret ?? '', callbackUrl: r.callback_url ?? '', availability: isAvailability(r.availability) ? r.availability : 'live', sandbox: r.sandbox !== false, priority: Number(r.priority ?? 100), createdAt: r.created_at?.toISOString?.() ?? String(r.created_at), updatedAt: r.updated_at?.toISOString?.() ?? String(r.updated_at) };
 }
 
 async function seedIfEmpty(): Promise<void> {
   if (_seeded) return;
   const all = await listGatewaysRaw();
   if (all.length === 0) {
-    await saveGateway({ name: 'درگاه تست (Sandbox)', type: 'sandbox', enabled: true, sandbox: true, priority: 1, callbackUrl: '/v1/payments/callback' });
+    await saveGateway({ name: 'درگاه تست (Sandbox)', type: 'sandbox', availability: 'live', sandbox: true, priority: 1, callbackUrl: '/v1/payments/callback' });
   }
   _seeded = true;
 }
@@ -98,7 +134,7 @@ export async function saveGateway(input: Partial<PaymentGateway> & { name: strin
     merchantId: input.merchantId != null ? String(input.merchantId) : (existing?.merchantId ?? ''),
     secret: input.secret != null ? String(input.secret) : (existing?.secret ?? ''),
     callbackUrl: input.callbackUrl != null ? String(input.callbackUrl) : (existing?.callbackUrl ?? '/v1/payments/callback'),
-    enabled: input.enabled != null ? !!input.enabled : (existing?.enabled ?? true),
+    availability: isAvailability(input.availability) ? input.availability : (existing?.availability ?? 'live'),
     sandbox: input.sandbox != null ? !!input.sandbox : (existing?.sandbox ?? true),
     priority: input.priority != null ? Number(input.priority) : (existing?.priority ?? 100),
     createdAt: existing?.createdAt || now, updatedAt: now
@@ -106,10 +142,10 @@ export async function saveGateway(input: Partial<PaymentGateway> & { name: strin
   const pool = pg();
   if (pool) {
     await ensureSchema(pool);
-    await pool.query(`INSERT INTO payment_gateways(id,name,type,api_key,merchant_id,secret,callback_url,enabled,sandbox,priority,created_at,updated_at)
+    await pool.query(`INSERT INTO payment_gateways(id,name,type,api_key,merchant_id,secret,callback_url,availability,sandbox,priority,created_at,updated_at)
       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
-      ON CONFLICT (id) DO UPDATE SET name=$2,type=$3,api_key=$4,merchant_id=$5,secret=$6,callback_url=$7,enabled=$8,sandbox=$9,priority=$10,updated_at=$12`,
-      [g.id, g.name, g.type, g.apiKey, g.merchantId, g.secret, g.callbackUrl, g.enabled, g.sandbox, g.priority, g.createdAt, g.updatedAt]);
+      ON CONFLICT (id) DO UPDATE SET name=$2,type=$3,api_key=$4,merchant_id=$5,secret=$6,callback_url=$7,availability=$8,sandbox=$9,priority=$10,updated_at=$12`,
+      [g.id, g.name, g.type, g.apiKey, g.merchantId, g.secret, g.callbackUrl, g.availability, g.sandbox, g.priority, g.createdAt, g.updatedAt]);
   } else memGw.set(g.id, g);
   return g;
 }
@@ -139,7 +175,9 @@ export async function updatePaymentSettings(patch: Partial<PaymentSettings>): Pr
 /** Highest-priority enabled gateway, skipping any excluded ids (auto-switch). */
 export async function pickActiveGateway(excludeIds: string[] = []): Promise<PaymentGateway | null> {
   const settings = await getPaymentSettings();
-  const gws = (await listGateways()).filter((g) => g.enabled && !excludeIds.includes(g.id));
+  /* `coming_soon` is announced, not open. A gateway that cannot take money must
+   * never be picked to take money, whatever its priority says. */
+  const gws = (await listGateways()).filter((g) => g.availability === 'live' && !excludeIds.includes(g.id));
   if (!gws.length) return null;
   if (settings.defaultGatewayId) { const def = gws.find((g) => g.id === settings.defaultGatewayId); if (def) return def; }
   return gws[0]!; // already sorted by priority
