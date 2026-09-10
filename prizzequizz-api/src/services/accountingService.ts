@@ -1,7 +1,15 @@
 /* COMPANY ACCOUNTING — the money view of the business, not of a player.
  *
- * Income is read from the wallet ledger, which is the only place money moves,
- * so nothing here can drift from what players actually paid or were paid:
+ * Income has THREE sources, and it needs all three:
+ *   1. the wallet ledger — every purchase paid from the صندوق
+ *   2. the legacy `shop_purchases` table, kept in the sum should it ever fill
+ *   3. `order_fulfilments` — orders paid OUTSIDE the صندوق, at a gateway or by
+ *      card-to-card. Those write nothing to the ledger on purpose (the money is
+ *      the house's, not the player's), so reading only the ledger reported every
+ *      one of them as zero. The same trap as the `shop_purchases` note below,
+ *      from the other side.
+ *
+ * From the ledger:
  *   • commission  — `fee` rows tied to a match, grouped by the mode that earned
  *                   them, so each game mode shows what it brings in
  *   • tickets     — ticket purchases
@@ -16,6 +24,7 @@
  * figure keeps itself up to date with no monthly data entry. */
 import { getPgPool } from '../database/postgres.js';
 import { houseRevenueSummary, type HouseRevenueSummary } from './houseRevenueService.js';
+import { externalSalesSummary, EXTERNAL_SALE_WHERE, type ExternalSales } from './orderFulfilmentService.js';
 import { id } from '../utils/id.js';
 
 export type Granularity = 'day' | 'week' | 'month';
@@ -106,6 +115,12 @@ export interface FinanceReport {
   series: Array<{ bucket: string; income: number; payouts: number; expenses: number; net: number }>;
   serverCost: { hourlyTotal: number; machines: Array<{ name: string; hourly: number; hours: number; cost: number }> };
   hasDatabase: boolean;
+  /** Sales paid OUTSIDE the صندوق — a gateway, or card-to-card. These amounts
+   *  are already folded into `income.tickets` / `income.shop` and into
+   *  `earnings`; this is the breakdown, NOT a further line to add. It exists
+   *  because the money arrives through a channel the ledger cannot see, and
+   *  without it the panel reports a zero that is not a zero. */
+  externalSales: ExternalSales;
   /** false → the shop has no purchase flow yet, so its income line is not "zero
    *  sales" but "not yet measurable". The panel says so instead of implying 0. */
   shopSalesTracked: boolean;
@@ -292,10 +307,17 @@ export async function financeReport(opts: { from?: string; to?: string; granular
     earnings: { commission: 0, lsRake: 0, forfeitedPot: 0, shopItems: 0, coins: 0, lifelines: 0, ads: 0, penalties: 0, total: 0, net: 0, ticketsExcluded: 0, prizesExcluded: 0 },
     grossProfit: 0, netProfit: 0, series: [],
     serverCost: { hourlyTotal: 0, machines: [] }, hasDatabase: false, shopSalesTracked: false,
+    externalSales: { total: 0, count: 0, tickets: 0, coins: 0, shop: 0, bySource: [] },
     houseRevenue: { total: 0, bySource: [], recent: [] }
   };
   const pool = pg();
-  if (!pool) return { ...empty, houseRevenue: await houseRevenueSummary(from, to) };
+  if (!pool) {
+    return {
+      ...empty,
+      houseRevenue: await houseRevenueSummary(from, to),
+      externalSales: await externalSalesSummary(from, to + ' 23:59:59')
+    };
+  }
   await ensureSchema(pool);
   const range = [from, to + ' 23:59:59'];
 
@@ -364,14 +386,24 @@ export async function financeReport(opts: { from?: string; to?: string; granular
          FROM wallet_ledger WHERE created_at BETWEEN $1 AND $2
         GROUP BY 1 ORDER BY 1`, range);
 
+    /* The chart reads from the ledger, so an externally-paid sale was missing
+     * from it for the same reason it was missing from the totals. Same window,
+     * same buckets, keyed on when the goods were actually handed over. */
+    const extSeriesQ = pool.query(
+      `SELECT ${BUCKET_SQL[granularity].replace(/created_at/g, 'delivered_at')} AS bucket,
+              coalesce(sum(amount_toman),0)::bigint AS income
+         FROM order_fulfilments
+        WHERE ${EXTERNAL_SALE_WHERE} AND delivered_at BETWEEN $1 AND $2
+        GROUP BY 1 ORDER BY 1`, range).catch(() => ({ rows: [] } as any));
+
     const expSeriesQ = pool.query(
       `SELECT to_char(date_trunc($3, spent_at), CASE $3 WHEN 'day' THEN 'YYYY-MM-DD' WHEN 'week' THEN 'YYYY-"W"IW' ELSE 'YYYY-MM' END) AS bucket,
               coalesce(sum(amount),0)::bigint AS amount
          FROM company_expenses WHERE spent_at BETWEEN $1 AND $2 GROUP BY 1`, [from, to, granularity]);
 
-    const [totalsR, byModeR, shopR, shopLedgerR, lifelineSalesR, expR, seriesR, expSeriesR, srv, house] = await Promise.all([
-      totalsQ, byModeQ, shopQ, shopLedgerQ, lifelineSalesQ, expQ, seriesQ, expSeriesQ, serverCost(from, to),
-      houseRevenueSummary(from, to)
+    const [totalsR, byModeR, shopR, shopLedgerR, lifelineSalesR, expR, seriesR, expSeriesR, extSeriesR, srv, house, external] = await Promise.all([
+      totalsQ, byModeQ, shopQ, shopLedgerQ, lifelineSalesQ, expQ, seriesQ, expSeriesQ, extSeriesQ, serverCost(from, to),
+      houseRevenueSummary(from, to), externalSalesSummary(range[0], range[1])
     ]);
 
     const t = totalsR.rows[0] || {};
@@ -388,18 +420,27 @@ export async function financeReport(opts: { from?: string; to?: string; granular
     const shopOther = [...shopByCat.entries()]
       .filter(([c]) => c !== 'tickets' && c !== 'coins')
       .reduce((sum, [, v]) => sum + v.total, 0) + n(shopR.rows?.[0]?.total);
+
+    /* THE THIRD SOURCE. An order paid at a gateway or by card-to-card writes no
+     * ledger row on purpose — the money is the house's, not the player's — so
+     * until now it landed on no line at all. It goes on exactly the same three
+     * lines as a صندوق purchase, split the same way: the tickets shelf is entry
+     * money wherever it was paid, and only the rest is earnings. */
+    const extTickets = external.tickets;
+    const extCoins = external.coins;
+    const extShop = external.shop;
     /* NOT including lifelines. They are their own income line and were being
        added here as well, so every help sold was counted twice in the total —
        the comment above this line even says so, which is how it slipped in. */
-    const shop = shopOther + shopCoinSales;
+    const shop = shopOther + shopCoinSales + extShop + extCoins;
     const shopLedgerCount = [...shopByCat.values()].reduce((sum, v) => sum + v.n, 0);
-    const shopTracked = (n(shopR.rows?.[0]?.n) + shopLedgerCount + n(lifelineSalesR.rows?.[0]?.n)) > 0;
+    const shopTracked = (n(shopR.rows?.[0]?.n) + shopLedgerCount + n(lifelineSalesR.rows?.[0]?.n) + external.count) > 0;
     const income = {
       /* Tickets from BOTH doors: the dedicated purchase and the tickets shelf in
          the shop. The shelf's takings are kept out of `shop` because they are
          not earnings, and until now that left them in no line at all — visible
          nowhere in the cash-flow figure even though the money really arrived. */
-      commission: n(t.commission), tickets: n(t.tickets) + shopTicketSales, shop, lifelines: n(t.lifelines),
+      commission: n(t.commission), tickets: n(t.tickets) + shopTicketSales + extTickets, shop, lifelines: n(t.lifelines),
       penalties: n(t.penalties), deposits: n(t.deposits), total: 0
     };
     // Deposits are the player's own money arriving — not revenue. Stakes are
@@ -441,15 +482,15 @@ export async function financeReport(opts: { from?: string; to?: string; granular
       commission: income.commission,
       lsRake: src('ls_rake'),
       forfeitedPot: src('ls_forfeited_pot'),
-      shopItems: shopOther,
-      coins: shopCoinSales,
+      shopItems: shopOther + extShop,
+      coins: shopCoinSales + extCoins,
       lifelines: n(t.lifelines),
       ads: src('ads'),
       penalties: n(t.penalties),
       total: 0, net: 0,
       /* Every route a ticket can be bought by: the dedicated one, and the
          tickets shelf in the shop. */
-      ticketsExcluded: n(t.tickets) + shopTicketSales,
+      ticketsExcluded: n(t.tickets) + shopTicketSales + extTickets,
       prizesExcluded: payouts.prizes
     };
     earnings.total = earnings.commission + earnings.lsRake + earnings.forfeitedPot
@@ -457,10 +498,12 @@ export async function financeReport(opts: { from?: string; to?: string; granular
     earnings.net = earnings.total - expenses.total;
 
     const expByBucket = new Map<string, number>(expSeriesR.rows.map((r: any) => [String(r.bucket), n(r.amount)]));
-    const buckets = new Set<string>([...seriesR.rows.map((r: any) => String(r.bucket)), ...expByBucket.keys()]);
+    const extByBucket = new Map<string, number>((extSeriesR.rows ?? []).map((r: any) => [String(r.bucket), n(r.income)]));
+    const buckets = new Set<string>([...seriesR.rows.map((r: any) => String(r.bucket)), ...expByBucket.keys(), ...extByBucket.keys()]);
     const series = [...buckets].sort().map((bucket) => {
       const row = seriesR.rows.find((r: any) => String(r.bucket) === bucket);
-      const inc = n(row?.income), pay = n(row?.payouts), exp = expByBucket.get(bucket) ?? 0;
+      const inc = n(row?.income) + (extByBucket.get(bucket) ?? 0);
+      const pay = n(row?.payouts), exp = expByBucket.get(bucket) ?? 0;
       return { bucket, income: inc, payouts: pay, expenses: exp, net: inc - pay - exp };
     });
 
@@ -469,6 +512,7 @@ export async function financeReport(opts: { from?: string; to?: string; granular
       commissionByMode: byModeR.rows.map((r: any) => ({ modeId: String(r.mode), commission: n(r.commission), matches: n(r.matches) })),
       grossProfit, netProfit: grossProfit - expenses.total, series,
       serverCost: srv, hasDatabase: true, shopSalesTracked: shopTracked,
+      externalSales: external,
       houseRevenue: house
     };
   } catch {

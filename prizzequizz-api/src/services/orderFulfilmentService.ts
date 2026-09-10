@@ -332,6 +332,97 @@ export async function find(ref: string): Promise<FulfilmentRecord | null> {
   return found ? { ...found } : null;
 }
 
+/* ---------------------------------------------------------------------------
+ * INCOME FROM MONEY THAT NEVER TOUCHED THE صندوق.
+ *
+ * `accountingService` reads every income line from `wallet_ledger`. An order
+ * paid at a gateway — or, soon, by card-to-card — deliberately posts nothing
+ * there, because the money belongs to the house and crediting the player's
+ * صندوق with it would let a purchase be laundered into a withdrawable prize.
+ * The consequence nobody noticed: every such sale has been reported as zero.
+ *
+ * These rows are the third source the report reads. Two rules keep it honest:
+ *
+ *   - only `gateway` and `card_to_card` count. A `vault` row is a purchase the
+ *     ledger ALREADY counted, and adding it again would double the income.
+ *   - the split matches the ledger's own: money from the tickets shelf is
+ *     entry money, not earnings, wherever it was paid.
+ * ------------------------------------------------------------------------- */
+
+/** The rows that are new income. Constant — never built from user input. */
+export const EXTERNAL_SALE_WHERE = `status = 'done' AND currency = 'cash' AND source IN ('gateway','card_to_card')`;
+
+export type SaleLine = 'tickets' | 'coins' | 'shop';
+
+/** Which income line a delivered order belongs on. */
+export function saleLine(kind: string, category: string): SaleLine {
+  if (kind === 'ticket' || category === 'tickets') return 'tickets';
+  if (category === 'coins') return 'coins';
+  return 'shop';
+}
+
+export interface ExternalSales {
+  total: number;
+  count: number;
+  tickets: number;
+  coins: number;
+  shop: number;
+  bySource: Array<{ source: string; total: number; count: number }>;
+}
+
+export async function externalSalesSummary(from?: string, to?: string): Promise<ExternalSales> {
+  const out: ExternalSales = { total: 0, count: 0, tickets: 0, coins: 0, shop: 0, bySource: [] };
+  const bySource = new Map<string, { total: number; count: number }>();
+  const add = (source: string, line: SaleLine, amount: number) => {
+    out[line] += amount;
+    out.total += amount;
+    out.count += 1;
+    const b = bySource.get(source) ?? { total: 0, count: 0 };
+    b.total += amount; b.count += 1;
+    bySource.set(source, b);
+  };
+
+  const pool = pg();
+  if (pool) {
+    await ensureSchema(pool);
+    const params: any[] = [];
+    let window = '';
+    if (from) { params.push(from); window += ` AND delivered_at >= $${params.length}`; }
+    if (to) { params.push(to); window += ` AND delivered_at <= $${params.length}`; }
+    const { rows } = await pool.query(
+      `SELECT source, kind, coalesce(category,'') AS category,
+              coalesce(sum(amount_toman),0)::bigint AS total, count(*)::int AS n
+         FROM order_fulfilments
+        WHERE ${EXTERNAL_SALE_WHERE}${window}
+        GROUP BY 1,2,3`, params);
+    for (const r of rows) {
+      const line = saleLine(String(r.kind), String(r.category));
+      const amount = Number(r.total) || 0;
+      const count = Number(r.n) || 0;
+      out[line] += amount;
+      out.total += amount;
+      out.count += count;
+      const b = bySource.get(String(r.source)) ?? { total: 0, count: 0 };
+      b.total += amount; b.count += count;
+      bySource.set(String(r.source), b);
+    }
+  } else {
+    const lo = from ? Date.parse(from) : -Infinity;
+    const hi = to ? Date.parse(to) : Infinity;
+    for (const r of mem.values()) {
+      if (r.status !== 'done' || r.currency !== 'cash') continue;
+      if (r.source !== 'gateway' && r.source !== 'card_to_card') continue;
+      const at = Date.parse(r.deliveredAt ?? r.createdAt);
+      if (at < lo || at > hi) continue;
+      add(r.source, saleLine(r.kind, r.category), r.amountToman);
+    }
+  }
+  out.bySource = [...bySource.entries()]
+    .map(([source, v]) => ({ source, ...v }))
+    .sort((a, b) => b.total - a.total);
+  return out;
+}
+
 /** Test seam. */
 export function _resetFulfilments(): void { mem.clear(); }
 
