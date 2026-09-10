@@ -18,7 +18,8 @@
  * Run: npx tsx src/tests/characterLevelGate.test.ts */
 import assert from 'node:assert/strict';
 import { repositories } from '../repositories/index.js';
-import { levelForXp, playerLevel } from '../services/scoringConfig.js';
+import { levelForXp, levelXpBase, playerLevel, xpFloorForLevel } from '../services/scoringConfig.js';
+import { gameConfig } from '../core/config.js';
 import {
   saveCharacter, buildRoster, purchaseCharacter, _resetMemory as resetChars,
   CharacterPurchaseError
@@ -139,6 +140,60 @@ async function mkUser(id: string, level: number, xp: number, coins = 100000): Pr
     assert.equal(playerLevel({ level: -3, xp: -900 }), 1, 'negative XP must not drag it under either');
     assert.equal(playerLevel({ level: null, xp: null }), 1);
     assert.equal(playerLevel({} as any), 1);
+  });
+
+  /* AND THE ACCOUNT PAYLOAD CARRIES THE SAME NUMBER.
+     The shelf agreeing with the column is only half of it: the header reads the
+     account, so if that still carried the raw column the two would part company
+     again the moment the panel's curve moved. */
+  await check('the account payload reports the level the gate uses', async () => {
+    const { toDto } = await import('../modules/users/routes.js');
+    const u: any = await repositories.users.findById(AHEAD);
+    const dto = toDto(u) as any;
+    assert.equal(dto.level, playerLevel(u), 'the header would read a different level from the shelf');
+    assert.equal(dto.level, 15, 'and it should be the level the player has been shown all along');
+    /* The bar's bounds must bracket the XP even here, where the rank is banked
+       above what the curve would grant — otherwise the header draws a bar
+       filled a negative amount and a tail counting backwards. */
+    assert.ok(dto.xpFloor <= u.xp, 'floor ' + dto.xpFloor + ' is above the player’s ' + u.xp);
+    assert.ok(dto.xpNext > u.xp, 'next ' + dto.xpNext + ' is not ahead of ' + u.xp);
+    assert.ok(dto.xpNext > dto.xpFloor, 'the bounds are inverted');
+  });
+
+  /* THE FLOOR ITSELF, not only as it survives the clamp. Read through toDto the
+     clamp hides an off-by-one and hides the base being ignored, because both
+     produce a figure that is still <= the player's XP. */
+  await check('xpFloorForLevel is the curve read backwards', () => {
+    const b = levelXpBase();
+    assert.equal(xpFloorForLevel(1), 0, 'level 1 must begin at zero XP');
+    for (const L of [2, 5, 15, 40]) {
+      const floor = xpFloorForLevel(L);
+      assert.equal(levelForXp(floor), L, 'the XP at level ' + L + '’s floor must read back as level ' + L);
+      assert.equal(levelForXp(floor - 1), L - 1, 'one XP short of it must still be level ' + (L - 1));
+    }
+    /* And it moves with the panel, which is the whole reason it exists. The
+       default base is 100, so a hardcoded 100 is indistinguishable until the
+       panel is actually re-tuned — which is exactly the situation that produced
+       the bug report. */
+    assert.equal(xpFloorForLevel(5), 16 * b, 'the floor must be built from the panel’s base');
+    const before = xpFloorForLevel(5);
+    const original = (gameConfig as any).level;
+    try {
+      (gameConfig as any).level = { ...(original ?? {}), xpPerLevelBase: 250 };
+      assert.equal(levelXpBase(), 250, 'fixture: the panel base did not take');
+      assert.equal(xpFloorForLevel(5), 16 * 250, 'the floor ignored the panel and used a constant');
+      assert.notEqual(xpFloorForLevel(5), before, 'the floor did not move with the panel at all');
+    } finally { (gameConfig as any).level = original; }
+    assert.equal(xpFloorForLevel(5), before, 'the fixture leaked into the rest of the run');
+  });
+
+  await check('an ordinary account gets the curve’s own bounds, untouched', async () => {
+    const { toDto } = await import('../modules/users/routes.js');
+    const u: any = await repositories.users.findById(BEHIND);
+    const dto = toDto(u) as any;
+    assert.equal(dto.level, levelForXp(XP_WELL_PAST_5));
+    assert.ok(dto.xpFloor <= u.xp && dto.xpNext > u.xp,
+      'bounds ' + dto.xpFloor + '..' + dto.xpNext + ' do not bracket ' + u.xp);
   });
 
   console.log(`[characterLevelGate] ${pass} passed, ${fail} failed`);

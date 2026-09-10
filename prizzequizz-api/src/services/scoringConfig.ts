@@ -221,6 +221,20 @@ export function playerLevel(user: { level?: number | null; xp?: number | null } 
   return Math.max(Math.floor(Number(user.level ?? 0) || 0), levelForXp(Number(user.xp ?? 0) || 0));
 }
 
+/* THE XP AT WHICH A LEVEL BEGINS — levelForXp read backwards.
+ *
+ * The browser needs this to draw the progress bar, and it used to work it out
+ * itself from a hardcoded `(L-1)²·100`. That is a THIRD copy of the curve, and
+ * unlike the other two it cannot see the panel at all: re-tune xpPerLevelBase
+ * and the header goes on reporting a level nothing else in the system agrees
+ * with. Sent from here instead, so the number a player reads is the number they
+ * are gated by. */
+export function xpFloorForLevel(level: number): number {
+  const L = Math.max(1, Math.floor(Number(level) || 1));
+  const b = levelXpBase();
+  return levelCurve() === 'linear' ? (L - 1) * b : (L - 1) * (L - 1) * b;
+}
+
 /* The SAME formula as levelForXp, as a SQL expression over a column.
  *
  * matchEngine adds XP and recomputes the level inside one UPDATE, so the

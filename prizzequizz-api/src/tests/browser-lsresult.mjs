@@ -56,7 +56,7 @@ const wiped = (payoutCash) => ({
 const finish = async (snap) => {
   await page.evaluate((s) => {
     window.__s = s;
-    (0, eval)('lsEndShown=false'); (0, eval)('_lsWaitedForPay=false'); (0, eval)('lsWipeout=null');
+    (0, eval)('lsEndShown=false'); (0, eval)('_lsPayTries=0'); (0, eval)('lsWipeout=null');
     (0, eval)('lsWatching=false'); (0, eval)('lsRoomId="r9"'); (0, eval)('lsSnap=window.__s');
     (0, eval)('lsFinish')(window.__s);
   }, snap);
@@ -97,12 +97,12 @@ const racing = await page.evaluate((p) => {
     players: []
   };
   window.__s = s;
-  (0, eval)('lsEndShown=false'); (0, eval)('_lsWaitedForPay=false');
+  (0, eval)('lsEndShown=false'); (0, eval)('_lsPayTries=0');
   (0, eval)('lsWatching=false'); (0, eval)('lsRoomId="r9"'); (0, eval)('lsSnap=window.__s');
   window.__w = { splitAmong: 2, paidCount: 2, percent: 60, paid: p * 2 };
   (0, eval)('lsWipeout=window.__w');
   (0, eval)('lsFinish')(s);
-  return { finalised: (0, eval)('lsEndShown'), waited: (0, eval)('_lsWaitedForPay') };
+  return { finalised: (0, eval)('lsEndShown'), waited: (0, eval)('_lsPayTries') > 0 };
 }, PAID);
 ok('the screen is not finalised on it', racing.finalised === false, String(racing.finalised));
 ok('it waits for the figure instead', racing.waited === true);
@@ -110,6 +110,77 @@ ok('it waits for the figure instead', racing.waited === true);
 const settled = await finish(wiped(PAID));
 ok('once it lands, the amount is real', settled.amt === '+' + faNum(PAID), settled.amt);
 ok('and never «+۰»', !/\+۰$/.test(settled.amt));
+
+/* THE STATE THAT ACTUALLY HAPPENS.
+   The server builds the wipe-out report FROM the payouts, so an early snapshot
+   carries NEITHER — no figure and no report. The old guard asked for the report
+   before it would wait for the figure, which meant it could only fire when the
+   ls:ended push won the race. Here it does not: nothing has arrived. */
+console.log('an early snapshot carrying neither the figure nor the news:');
+const blind = await page.evaluate(() => {
+  const s = {
+    room: { id: 'r9', status: 'finished', phase: 'finished', round: 3, totalRounds: 12, wipeout: null },
+    me: { userId: 'u1', status: 'eliminated', units: 1, payoutCash: 0, eliminatedRound: 3 },
+    stats: { alive: 0, eliminated: 2, cashedOut: 0, remainingPot: 0 }, players: []
+  };
+  window.__s = s;
+  /* Wiped first, so what is read back is what THIS call painted — the element
+     still holds the previous case's headline otherwise, and the assertion would
+     be reading history. */
+  const t = document.getElementById('resultTitle'); if (t) t.textContent = '';
+  (0, eval)('lsEndShown=false'); (0, eval)('_lsPayTries=0'); (0, eval)('lsWipeout=null');
+  (0, eval)('lsWatching=false'); (0, eval)('lsRoomId="r9"'); (0, eval)('lsSnap=window.__s');
+  (0, eval)('lsFinish')(s);
+  return { finalised: (0, eval)('lsEndShown'), tries: (0, eval)('_lsPayTries'),
+           title: (document.getElementById('resultTitle') || {}).textContent || '' };
+});
+ok('it does not finalise on the zero', blind.finalised === false, String(blind.finalised));
+ok('it asks again instead', blind.tries === 1, 'tries ' + blind.tries);
+ok('and paints no verdict at all while it waits', blind.title === '', blind.title || '(empty)');
+
+/* AND IT ONLY WAITS FOR THE PLAYER IT COULD BE ABOUT.
+   Someone knocked out in round 1 of a twelve-round match has no money coming
+   when the room ends eleven rounds later; making them sit through the retries
+   is a spinner for nothing. */
+console.log('a player eliminated long before the last round:');
+const early = await page.evaluate(() => {
+  const s = {
+    room: { id: 'r9', status: 'finished', phase: 'finished', round: 9, totalRounds: 12, wipeout: null },
+    me: { userId: 'u1', status: 'eliminated', units: 1, payoutCash: 0, eliminatedRound: 1 },
+    stats: { alive: 0, eliminated: 5, cashedOut: 0, remainingPot: 0 }, players: []
+  };
+  window.__s = s;
+  const t = document.getElementById('resultTitle'); if (t) t.textContent = '';
+  (0, eval)('lsEndShown=false'); (0, eval)('_lsPayTries=0'); (0, eval)('lsWipeout=null');
+  (0, eval)('lsWatching=false'); (0, eval)('lsRoomId="r9"'); (0, eval)('lsSnap=window.__s');
+  (0, eval)('lsFinish')(s);
+  return { finalised: (0, eval)('lsEndShown'), tries: (0, eval)('_lsPayTries'),
+           title: (document.getElementById('resultTitle') || {}).textContent || '' };
+});
+ok('the screen finishes at once', early.finalised === true, String(early.finalised));
+ok('with no retries spent on them', early.tries === 0, 'tries ' + early.tries);
+ok('and it says they lost', /باختی/.test(early.title), early.title);
+
+/* AND IT GIVES UP. A player who genuinely got nothing must not sit on a
+   spinner, so the retries are counted and the screen finishes without them. */
+console.log('a player who really was paid nothing, after the retries run out:');
+const gaveUp = await page.evaluate(async () => {
+  const s = {
+    room: { id: 'r9', status: 'finished', phase: 'finished', round: 3, totalRounds: 12, wipeout: null },
+    me: { userId: 'u1', status: 'eliminated', units: 1, payoutCash: 0, eliminatedRound: 3 },
+    stats: { alive: 0, eliminated: 2, cashedOut: 0, remainingPot: 0 }, players: []
+  };
+  window.__s = s;
+  (0, eval)('lsEndShown=false'); (0, eval)('lsWipeout=null');
+  (0, eval)('_lsPayTries=' + (0, eval)('LS_PAY_TRIES'));
+  (0, eval)('lsWatching=false'); (0, eval)('lsRoomId="r9"'); (0, eval)('lsSnap=window.__s');
+  (0, eval)('lsFinish')(s);
+  await new Promise((r) => setTimeout(r, 400));
+  return { finalised: (0, eval)('lsEndShown'),
+           title: (document.getElementById('resultTitle') || {}).textContent || '' };
+});
+ok('the screen does finish', gaveUp.finalised === true);
+ok('and says they lost, without a prize that never came', /باختی/.test(gaveUp.title) && !/جایزه گرفتی/.test(gaveUp.title), gaveUp.title);
 
 console.log('a player in a shared wipe-out whose own share came to nothing:');
 /* The room DID share the pot — the message about sharing is true of the room —
@@ -126,7 +197,7 @@ const zeroShare = await page.evaluate(async () => {
   window.__s = s;
   (0, eval)('lsEndShown=false');
   /* The wait has already happened: this player really was paid nothing. */
-  (0, eval)('_lsWaitedForPay=true'); (0, eval)('lsWipeout=null');
+  (0, eval)('_lsPayTries=99'); (0, eval)('lsWipeout=null');
   (0, eval)('lsWatching=false'); (0, eval)('lsRoomId="r9"'); (0, eval)('lsSnap=window.__s');
   (0, eval)('lsFinish')(s);
   await new Promise((r) => setTimeout(r, 400));
@@ -147,7 +218,7 @@ const nothing = await page.evaluate(async () => {
     stats: { alive: 0, eliminated: 2, cashedOut: 0, remainingPot: 0 }, players: []
   };
   window.__s = s;
-  (0, eval)('lsEndShown=false'); (0, eval)('_lsWaitedForPay=true');
+  (0, eval)('lsEndShown=false'); (0, eval)('_lsPayTries=99');
   (0, eval)('lsWipeout=null');
   (0, eval)('lsWatching=false'); (0, eval)('lsRoomId="r9"'); (0, eval)('lsSnap=window.__s');
   (0, eval)('lsFinish')(s);

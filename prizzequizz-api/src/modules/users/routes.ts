@@ -5,7 +5,7 @@ import { inventoryFor } from '../../services/lifelineService.js';
 import { AvatarError, AVATAR_MAX_BYTES, avatarUrlFor, getAvatar, removeAvatar, saveAvatar } from '../../services/avatarService.js';
 import { buildUserStats } from '../../services/userStatsService.js';
 import { equippedCharacterFor } from '../../services/characterSelectionService.js';
-import { effectiveWeeklyScore } from '../../services/scoringConfig.js';
+import { effectiveWeeklyScore, playerLevel, xpFloorForLevel } from '../../services/scoringConfig.js';
 import { listOnlinePlayers, OnlinePlayersError } from '../../services/onlinePlayersService.js';
 import { codeFor, inviteCount, redeem as redeemReferral, ReferralError, REFERRAL_REWARD_TIER, REFERRAL_REWARD_COUNT } from '../../services/referralService.js';
 
@@ -183,6 +183,26 @@ export function registerUserRoutes(router: Router, base: string): void {
   });
 }
 
-function toDto(user: any) {
-  return { id: user.id, username: user.username, displayName: user.displayName, gender: user.gender ?? null, plan: user.plan, level: user.level, xp: user.xp, weeklyScore: effectiveWeeklyScore(user), lifelines: user.lifelines ?? {}, balances: { wallet: user.wallet, coins: user.coins, hearts: user.hearts, tickets: user.tickets } };
+/* Exported so the account payload can be held to sending the level the gates
+   use — the header reads this, and the two parting company is the whole bug. */
+export function toDto(user: any) {
+  /* ONE LEVEL, AND THE GEOMETRY TO DRAW IT.
+   * `level` is the answer every gate uses (see playerLevel), not the raw column
+   * — the shelf and the header must not be able to disagree. `xpFloor`/`xpNext`
+   * are the bounds of that level under the CURRENT panel curve, so the browser
+   * can fill the bar without keeping a copy of the formula that goes stale the
+   * moment the curve is re-tuned. */
+  const level = playerLevel(user);
+  const xp = Math.max(0, Number(user.xp) || 0);
+  /* The bounds always BRACKET the XP. A level that is a high-water mark can sit
+   * above what the curve would grant today — the curve was re-tuned and the
+   * rank was kept — and then the level's own floor is above the player's XP.
+   * Sent raw, that draws a bar filled a negative amount and a tail counting
+   * backwards. Clamped, it reads honestly: the rank is banked, and the tail is
+   * the XP still needed before the curve agrees. */
+  const xpFloor = Math.min(xpFloorForLevel(level), xp);
+  /* No clamp needed on this side: `level` is never below the curve's own answer
+     for this XP, so the next level's floor is always ahead of it. */
+  const xpNext = xpFloorForLevel(level + 1);
+  return { id: user.id, username: user.username, displayName: user.displayName, gender: user.gender ?? null, plan: user.plan, level, xp: user.xp, xpFloor, xpNext, weeklyScore: effectiveWeeklyScore(user), lifelines: user.lifelines ?? {}, balances: { wallet: user.wallet, coins: user.coins, hearts: user.hearts, tickets: user.tickets } };
 }

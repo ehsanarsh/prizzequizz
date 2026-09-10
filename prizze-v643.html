@@ -14,7 +14,7 @@
      copy that was never uploaded look exactly alike. This is that version. It
      is readable from the server with one curl, and it is printed at the bottom
      of «تنظیمات» so it can be read off the phone with no terminal at all. -->
-<meta name="pz-build" content="20260910-1246">
+<meta name="pz-build" content="20260910-1322">
 <!-- App icon on the phone home screen (Add to Home Screen). Place appicon.png
      (a square PNG, ideally 512x512) in the same web folder as this file. -->
 <link rel="apple-touch-icon" sizes="180x180" href="appicon.png">
@@ -8547,7 +8547,7 @@ async function lsDoJoin(topic,color){
   if(!r||r.ok===false){ toast((r&&r.error&&r.error.message)||'ورود ناموفق بود'); return; }
   lsInviteRoom=null;
   const snap=r.data; if(!snap||!snap.room){ toast('خطا در ورود'); return; }
-  lsRoomId=snap.room.id; lsLastKey=''; lsDeadDismissed=false; lsChatSeen=0; lsEndShown=false; _lsGoneShown=false; lsReadyShownRound=''; _lsWaitedForPay=false;
+  lsRoomId=snap.room.id; lsLastKey=''; lsDeadDismissed=false; lsChatSeen=0; lsEndShown=false; _lsGoneShown=false; lsReadyShownRound=''; _lsPayTries=0;
   /* A new match: no offer from the last one is still counting down. */
   try{ lsWatchCountdownStop(); lsWatchRoom=null; lsWatchExpired=false; }catch(e){}
   try{ lsChatWatchStop(); lsChatWatchStart(); }catch(e){}
@@ -10589,7 +10589,11 @@ function lsRefreshWatchBtn(){
 let lsWatchRoomDone=false;
 let lsEndShown=false;
 /* One re-fetch, once per match — see lsFinish. */
-let _lsWaitedForPay=false;
+/* Bounded retries, not one shot: the first re-read is often still early. Four
+   at 700ms is under three seconds — long enough for the payouts to land, short
+   enough that a player who genuinely got nothing is not left waiting. */
+const LS_PAY_TRIES=4;
+let _lsPayTries=0;
 /* The order the server eliminated this round's players in, and the wipeout
    settlement if the room ended with nobody left. */
 let lsElimOrder=null, lsWipeout=null;
@@ -10646,10 +10650,26 @@ function lsFinish(snap){
      money was split and this player's figure is still zero, wait for the
      snapshot that has it. Capped, because a player who genuinely got nothing
      must not be left on a spinner. */
-  if(!_lsWaitedForPay){
-    const w=(snap.room&&snap.room.wipeout)||lsWipeout||null;
-    if(w&&Number(w.paidCount||0)>0&&Number(snap.me.payoutCash||0)===0){
-      _lsWaitedForPay=true;
+  /* IT MUST NOT WAIT ON THE NEWS TO WAIT FOR THE MONEY.
+     This used to require the wipe-out report before it would retry — and the
+     server builds that report FROM the payouts (`paid.length===0 → null`). So a
+     snapshot taken before the payments landed carries neither: no figure AND no
+     report, and the one condition that would have caught it needed the report.
+     It could only ever fire when the ls:ended push happened to win the race,
+     which is the same as saying it fired by luck. The screen then finalised on
+     a zero and said «باختی» to a player who had just been paid.
+     The real question needs nothing from the ending: this room is over, nobody
+     survived, I went out in the final round — so money may still be in flight.
+     Ask again, a few times, then give up so nobody sits on a spinner. */
+  if(_lsPayTries<LS_PAY_TRIES){
+    const r=snap.room||{}, me2=snap.me||{};
+    const paidNothing=Number(me2.payoutCash||0)===0;
+    const wentOutLast=me2.status==='eliminated'&&Number(me2.eliminatedRound||0)===Number(r.round||0);
+    const w=(r.wipeout)||lsWipeout||null;
+    const moneyMayBeComing=(w&&Number(w.paidCount||0)>0)
+      ||(r.status==='finished'&&Number((snap.stats&&snap.stats.alive)||0)===0&&wentOutLast);
+    if(paidNothing&&moneyMayBeComing){
+      _lsPayTries++;
       setTimeout(()=>{ try{ lsPollNow(); }catch(e){} },700);
       return;
     }
@@ -17749,12 +17769,27 @@ function renderWeeklyProgress(){
   requestAnimationFrame(()=>{fill.style.width=Math.max(0,pct-3)+'%';marker.style.left=pct+'%';});
 }
 /* ===== REAL data hydration (header XP bar + hero rank/league + boards) ===== */
+/* THE CURVE IS THE SERVER'S, NOT OURS.
+   «لول من ۱۵ هست» while the shelf said a level-۵ character was still locked:
+   both numbers were honestly computed and there were THREE of them. The server
+   has the panel's curve; this file had a copy of it with the base baked in as
+   100, and that copy is what the header printed. Re-tune «پایهٔ XP هر لول» in
+   the panel and only this one goes on believing the old answer.
+   So the level and the bar's bounds now come from the server — it sends them
+   with the account — and these remain only as the fallback for the seconds
+   before the first reply arrives, or an old build of the API that sends
+   neither. Nothing about how XP is EARNED is touched here. */
 function pzLevelForXp(x){ return Math.max(1, Math.floor(Math.sqrt(Math.max(0,Number(x)||0)/100))+1); }
 function pzXpFloor(L){ return (L-1)*(L-1)*100; }
+/* What the server said, when it said anything. */
+function pzSrvNum(k){ try{ const v=_usr&&_usr[k]; return (v==null||v==='')?null:Number(v); }catch(e){ return null; } }
 let _pzLastLevel=null;
 function pzUpdateXpBar(x){
   x=Math.max(0,Number(x)||0);
-  const L=pzLevelForXp(x), cur=pzXpFloor(L), next=pzXpFloor(L+1);
+  const srvL=pzSrvNum('level'), srvFloor=pzSrvNum('xpFloor'), srvNext=pzSrvNum('xpNext');
+  const L=(srvL!=null&&srvL>=1)?Math.floor(srvL):pzLevelForXp(x);
+  const cur=(srvFloor!=null)?srvFloor:pzXpFloor(L);
+  const next=(srvNext!=null&&srvNext>cur)?srvNext:pzXpFloor(L+1);
   const pct=Math.max(3,Math.min(100,((x-cur)/Math.max(1,next-cur))*100));
   const lv=document.getElementById('hdrLvl'); if(lv)lv.textContent=fa(L);
   const bar=document.getElementById('hdrXp'); if(bar)bar.style.width=pct+'%';
