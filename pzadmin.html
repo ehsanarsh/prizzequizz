@@ -266,7 +266,7 @@ function groupMembers(g){ return (TAB_GROUPS[g]?TAB_GROUPS[g].tabs:[]).filter(t=
 const NAV=[
   ['اصلی',[['dashboard','📊','داشبورد'],['g_money','💰','مالی و حسابداری'],['users','👤','کاربران'],['matches','🎮','مسابقات'],['duel','⚔️','دوئل'],['lastsurvivor','🏆','آخرین بازمانده'],['support','🎧','پشتیبانی']]],
   ['محتوا',[['g_qhub','❓','سوالات'],['categories','🏷️','موضوعات'],['g_chars','🎭','کاراکترها'],['lifelines','🧩','کمک‌ها'],['rewards','🎡','گردونه و جایزه روزانه'],['recordmode','🏅','ثبت رکورد'],['onboarding','👋','خوش‌آمدگویی']]],
-  ['اقتصاد',[['wallet','🏆','صندوق جایزه'],['g_payout','💸','دریافت جایزه'],['tickets','🎫','بلیط‌ها'],['shop','🛒','فروشگاه'],['chatpacks','💬','پک‌های چت'],['giftcodes','🎁','کدهای هدیه'],['payments','🏦','درگاه پرداخت']]],
+  ['اقتصاد',[['wallet','🏆','صندوق جایزه'],['g_payout','💸','دریافت جایزه'],['tickets','🎫','بلیط‌ها'],['shop','🛒','فروشگاه'],['chatpacks','💬','پک‌های چت'],['giftcodes','🎁','کدهای هدیه'],['payments','🏦','درگاه پرداخت'],['c2ccards','💳','کارت‌های مقصد']]],
   ['بالانس بازی (Data-Driven)',[['g_balance','⚖️','بالانس بازی'],['leagues','🛡️','لیگ‌ها'],['missions2','🎯','مأموریت‌ها']]],
   ['رشد و تعامل',[['leaderboard','📈','لیدربرد'],['campaign','🎁','کمپین کاربر جدید'],['events','📅','رویدادها'],['banners','🖼️','بنرها'],['notifications','🔔','اعلان‌ها'],['g_sms','📱','پنل پیامکی']]],
   ['سیستم',[['monitoring','🖥️','مانیتورینگ سرور'],['g_security','🛡️','امنیت و ضدتقلب'],['g_audit','📑','گزارش و لاگ'],['reset','♻️','ابزار ریست'],['accounts','🔐','حساب‌ها و دسترسی'],['backup','💾','پشتیبان‌گیری'],['general','⚙️','تنظیمات عمومی'],['rawcfg','🧩','ویرایش خام Config']]]
@@ -488,7 +488,7 @@ async function render(){
   try{
     if(CUR==='accounts')return renderAccounts();
     if(CONFIG_PAGES[CUR]){ await renderConfigSection(CONFIG_PAGES[CUR][0],CONFIG_PAGES[CUR][1]); groupBar(); if(tracked)void badgeLoad(); return; }
-    const fn={dashboard:renderDashboard,finance:renderFinance,accounting:renderAccounting,expenses:renderExpenses,backup:renderBackup,users:renderUsers,matches:renderMatches,support:renderSupport,questions:renderQuestions,leagues:renderLeagues,qreports:renderQReports,aistudio:renderAiStudio,pipeline:renderPipeline,categories:renderCategories,wallet:renderWallet,withdrawals:renderWithdrawals,payoutpartners:renderPayoutPartners,withdrawotp:renderWithdrawOtp,smsgroups:renderSmsGroups,rewardholds:renderRewardHolds,tickets:renderTickets,giftcodes:renderGiftCodes,shop:renderShopAdmin,chatpacks:renderChatPacks,characters:renderCharacters,charboxes:renderCharBoxes,lifelines:renderLifelines,rewards:renderRewards,missions2:renderMissions2,recordmode:renderRecordMode,onboarding:renderOnboarding,lastsurvivor:renderLastSurvivor,duel:renderDuel,sms:renderSms,payments:renderPayments,leaderboard:renderLeaderboard,banners:renderBanners,notifications:renderNotifications,anticheat:renderAntiCheat,suspicious:renderSuspicious,reports:renderReports,logs:renderLogs,reset:renderReset,roles:renderRoles,rawcfg:renderRawCfg,monitoring:renderMonitoring}[CUR];
+    const fn={dashboard:renderDashboard,finance:renderFinance,accounting:renderAccounting,expenses:renderExpenses,backup:renderBackup,users:renderUsers,matches:renderMatches,support:renderSupport,questions:renderQuestions,leagues:renderLeagues,qreports:renderQReports,aistudio:renderAiStudio,pipeline:renderPipeline,categories:renderCategories,wallet:renderWallet,withdrawals:renderWithdrawals,payoutpartners:renderPayoutPartners,withdrawotp:renderWithdrawOtp,smsgroups:renderSmsGroups,rewardholds:renderRewardHolds,tickets:renderTickets,giftcodes:renderGiftCodes,shop:renderShopAdmin,chatpacks:renderChatPacks,characters:renderCharacters,charboxes:renderCharBoxes,lifelines:renderLifelines,rewards:renderRewards,missions2:renderMissions2,recordmode:renderRecordMode,onboarding:renderOnboarding,lastsurvivor:renderLastSurvivor,duel:renderDuel,sms:renderSms,payments:renderPayments,c2ccards:renderC2cCards,leaderboard:renderLeaderboard,banners:renderBanners,notifications:renderNotifications,anticheat:renderAntiCheat,suspicious:renderSuspicious,reports:renderReports,logs:renderLogs,reset:renderReset,roles:renderRoles,rawcfg:renderRawCfg,monitoring:renderMonitoring}[CUR];
     if(fn){ await fn(); groupBar(); if(tracked)void badgeLoad(); return; }
     /* No renderer for this tab. Six nav entries were in this state, and
        clicking one silently left the PREVIOUS screen's content on display —
@@ -4978,6 +4978,60 @@ async function gwSave(id){
   const name=$('#gw_name').value.trim(); if(!name)return toast('نام لازم است','bad');
   const body={id:id||undefined,name,type:$('#gw_type').value,merchantId:$('#gw_merchant').value.trim(),secret:$('#gw_secret').value.trim(),apiKey:$('#gw_apikey').value.trim(),callbackUrl:$('#gw_cb').value.trim(),priority:Number($('#gw_prio').value||100),availability:$('#gw_avail').value,sandbox:$('#gw_sandbox').value==='1'};
   try{await api('POST','/admin/payments/gateways',body);toast('ذخیره شد ✅','ok');document.querySelector('.modal-bg').remove();renderPayments();}catch(e){toast(e.message,'bad');}
+}
+/* ===== کارت‌های مقصد کارت‌به‌کارت =====
+   کارت‌ها به‌ترتیب اولویت انتخاب می‌شوند. «کف مبلغ» خاصیت خود بانک است، نه
+   سلیقهٔ ما: زیر آن مبلغ بانک اصلاً پیامک نمی‌فرستد، پس پرداخت قابل شناسایی
+   نیست و اصلاً پیشنهاد نمی‌شود. */
+const C2C_ST={ACTIVE:['فعال','ok'],INACTIVE:['غیرفعال','bad'],MAINTENANCE:['تعمیر','pend']};
+async function renderC2cCards(){
+  $('#main').innerHTML=head('کارت‌های مقصد')+'<div id="c2cBody"><div class="card empty">…</div></div>';
+  const b=$('#c2cBody');
+  let d; try{ d=await api('GET','/admin/c2c/cards'); }catch(e){ b.innerHTML='<div class="card empty">'+esc(e.message||'خطا')+'</div>'; return; }
+  const rows=d.rows||[];
+  window._C2C={}; rows.forEach(c=>window._C2C[c.id]=c);
+  b.innerHTML='<div class="note">کارت‌ها به‌ترتیب «اولویت» انتخاب می‌شوند (کوچک‌تر = زودتر). «کف مبلغ» را بانک تعیین می‌کند: برای واریز کمتر از آن پیامکی نمی‌آید، پس آن پرداخت قابل شناسایی نیست و کارت‌به‌کارت برایش پیشنهاد نمی‌شود.</div>'+
+    (rows.length?'':'<div class="note">⚠️ هیچ کارتی تعریف نشده است؛ تا وقتی یک کارت فعال نباشد، پرداخت کارت‌به‌کارت کار نمی‌کند.</div>')+
+    '<button class="btn pri" style="margin-bottom:10px" onclick="c2cEdit()">➕ افزودن کارت</button>'+
+    tbl(['اولویت','کارت','بانک / صاحب','وضعیت','کف مبلغ','سقف روزانه','امروز','سشن باز','عملیات'],rows.map(c=>[
+      fa(c.priority),
+      '<span class="mono">'+esc(c.panMasked)+'</span>',
+      esc(c.bankName||c.bankKey||'—')+'<br><span class="sub">'+esc(c.holderName||'—')+'</span>',
+      (function(v){const t=C2C_ST[v]||C2C_ST.INACTIVE;return '<span class="pill '+t[1]+'">'+t[0]+'</span>';})(c.status),
+      fa(c.minAmountToman)+' تومان',
+      c.dailyCapRial?fa(c.dailyCapRial)+' ریال':'—',
+      fa(c.takenTodayRial)+' ریال',
+      fa(c.openSessions),
+      '<button class="btn sm" onclick="c2cEdit(\''+c.id+'\')">ویرایش</button> <button class="btn sm bad" onclick="c2cDel(\''+c.id+'\')">حذف</button>'
+    ]));
+}
+function c2cEdit(id){
+  const c=(window._C2C||{})[id]||{};
+  const stOpts=Object.keys(C2C_ST).map(k=>'<option value="'+k+'"'+((c.status||'ACTIVE')===k?' selected':'')+'>'+C2C_ST[k][0]+'</option>').join('');
+  modal(id?'ویرایش کارت مقصد':'افزودن کارت مقصد',
+    '<div class="grid g2"><div class="field"><label>شمارهٔ کارت (۱۶ رقم)</label><input id="c2c_pan" dir="ltr" inputmode="numeric" value="'+esc(c.pan||'')+'"></div>'+
+    '<div class="field"><label>شمارهٔ حساب <span class="sub">— پیامک بانک این را می‌نویسد</span></label><input id="c2c_acc" dir="ltr" inputmode="numeric" value="'+esc(c.accountNo||'')+'"></div></div>'+
+    '<div class="grid g2"><div class="field"><label>نام بانک</label><input id="c2c_bank" value="'+esc(c.bankName||'')+'"></div>'+
+    '<div class="field"><label>به نام</label><input id="c2c_holder" value="'+esc(c.holderName||'')+'"></div></div>'+
+    '<div class="grid g2"><div class="field"><label>کلید بانک <span class="sub">— sepah / refah / tejarat</span></label><input id="c2c_key" dir="ltr" value="'+esc(c.bankKey||'')+'"></div>'+
+    '<div class="field"><label>وضعیت</label><select id="c2c_status">'+stOpts+'</select></div></div>'+
+    '<div class="grid g3"><div class="field"><label>اولویت</label><input id="c2c_prio" type="number" value="'+(c.priority!=null?c.priority:100)+'"></div>'+
+    '<div class="field"><label>کف مبلغ (تومان)</label><input id="c2c_min" type="number" value="'+(c.minAmountToman!=null?c.minAmountToman:50000)+'"></div>'+
+    '<div class="field"><label>سقف روزانه (ریال، ۰ = بی‌سقف)</label><input id="c2c_cap" type="number" value="'+(c.dailyCapRial!=null?c.dailyCapRial:0)+'"></div></div>'+
+    '<button class="btn pri" onclick="c2cSave(\''+(id||'')+'\')">💾 ذخیره</button>');
+}
+async function c2cSave(id){
+  const body={id:id||undefined,pan:$('#c2c_pan').value.trim(),accountNo:$('#c2c_acc').value.trim(),
+    bankName:$('#c2c_bank').value.trim(),holderName:$('#c2c_holder').value.trim(),bankKey:$('#c2c_key').value.trim(),
+    status:$('#c2c_status').value,priority:Number($('#c2c_prio').value||100),
+    minAmountToman:Number($('#c2c_min').value||0),dailyCapRial:Number($('#c2c_cap').value||0)};
+  try{await api('POST','/admin/c2c/cards',body);toast('ذخیره شد ✅','ok');document.querySelector('.modal-bg').remove();renderC2cCards();}
+  catch(e){toast(e.message||'ذخیره نشد','bad');}
+}
+async function c2cDel(id){
+  if(!confirm('این کارت حذف شود؟'))return;
+  try{await api('DELETE','/admin/c2c/cards/'+id);toast('حذف شد','ok');renderC2cCards();}
+  catch(e){toast(e.message||'حذف نشد','bad');}
 }
 async function gwTest(id){ try{const r=await api('POST','/admin/payments/gateways/'+id+'/test');toast(r.message,r.ok?'ok':'bad');}catch(e){toast(e.message,'bad');} }
 async function gwDel(id){ if(!confirm('این درگاه حذف شود؟'))return; try{await api('DELETE','/admin/payments/gateways/'+id);toast('حذف شد','ok');renderPayments();}catch(e){toast(e.message,'bad');} }

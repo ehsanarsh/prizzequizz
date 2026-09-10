@@ -968,6 +968,42 @@ function run(): void {
     assert.ok(script.includes('کاربران مورد اعتماد'), 'the trusted list is never rendered');
   });
 
+  /* ── card-to-card: the destination cards ─────────────────────────────
+   * A nav entry with no renderer used to leave the PREVIOUS screen on display,
+   * which reads as a section that vanished. So the three halves — nav entry,
+   * dispatch entry, and the function itself — are checked together. */
+  check('«کارت‌های مقصد» is reachable and really has a screen behind it', () => {
+    assert.ok(script.includes("['c2ccards','💳','کارت‌های مقصد']"), 'no nav entry');
+    assert.ok(/c2ccards:\s*renderC2cCards/.test(script), 'the nav entry has no renderer wired');
+    assert.ok(/function renderC2cCards\s*\(/.test(script), 'the renderer does not exist');
+  });
+
+  check('the card form asks for the account number, not only the card', () => {
+    /* Every bank sample we have — Sepah, Refah, Tejarat — prints the ACCOUNT.
+     * A card saved without one can never be matched to its own SMS. */
+    assert.ok(script.includes('c2c_acc'), 'no account field');
+    assert.ok(script.includes('پیامک بانک این را می‌نویسد'), 'and nothing says why it is needed');
+  });
+
+  check('the card list masks the number and the form does not', () => {
+    assert.ok(script.includes('panMasked'), 'the table shows a full card number');
+    assert.ok(/id="c2c_pan" dir="ltr"[^>]*value=.\+esc\(c\.pan/.test(script.replace(/\n/g, ' '))
+      || script.includes("esc(c.pan||'')"), 'the edit form cannot show the real number');
+  });
+
+  check('the SMS floor is presented as the bank\'s rule, not as our preference', () => {
+    assert.ok(script.includes('کف مبلغ'), 'the floor is not labelled');
+    assert.ok(script.includes('پیامکی نمی‌آید'),
+      'nothing tells the operator WHY a low amount cannot be paid this way');
+  });
+
+  check('a gateway is three-state now, and the old boolean is gone', () => {
+    assert.ok(script.includes("GW_AVAIL={live:"), 'no availability map');
+    assert.ok(script.includes('به‌زودی'), '«coming soon» cannot be chosen');
+    assert.ok(!script.includes("gw_enabled"), 'the old enabled select is still there');
+    assert.ok(!/enabled:\$\('#gw_/.test(script), 'the save still sends the old boolean');
+  });
+
 console.log(`[adminPanelHtml] ${passed} passed, ${failed} failed`);
   if (failed) process.exit(1);
 }

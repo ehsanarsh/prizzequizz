@@ -207,6 +207,19 @@ export async function pickActiveGateway(excludeIds: string[] = []): Promise<Paym
 export async function testConnection(gid: string): Promise<{ ok: boolean; message: string }> {
   const g = await getGateway(gid);
   if (!g) return { ok: false, message: 'درگاه یافت نشد.' };
+  /* Card-to-card has no key to check and no endpoint to reach: what makes it
+   * ready is a destination card. Answered BEFORE the sandbox branch, or a
+   * gateway left on the default «test» flag would report itself fine while
+   * there is nowhere for a player to send money. */
+  if (g.type === 'card_to_card') {
+    const { listCards } = await import('./c2c/cardService.js');
+    const active = (await listCards()).filter((c) => c.status === 'ACTIVE');
+    if (!active.length) {
+      return { ok: false, message: 'هیچ کارت مقصد فعالی تعریف نشده است؛ از تب «کارت‌های مقصد» یکی اضافه کن.' };
+    }
+    const floor = Math.min(...active.map((c) => c.minAmountToman));
+    return { ok: true, message: `${active.length.toLocaleString('fa-IR')} کارت مقصد فعال است؛ خرید باید بیشتر از ${floor.toLocaleString('fa-IR')} تومان باشد.` };
+  }
   if (g.sandbox || g.type === 'sandbox') return { ok: true, message: 'درگاه تست آماده است (بدون تراکنش واقعی).' };
   if (!g.apiKey && !g.merchantId) return { ok: false, message: 'کلید/مرچنت درگاه تنظیم نشده است.' };
   return { ok: true, message: 'اطلاعات اتصال کامل است؛ تراکنش واقعی هنگام پرداخت انجام می‌شود.' };

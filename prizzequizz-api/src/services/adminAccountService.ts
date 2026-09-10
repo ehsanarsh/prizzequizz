@@ -185,7 +185,7 @@ export async function deleteAccount(accountId: string): Promise<boolean> {
 // The tab keys that exist in the panel (kept in sync with the admin nav).
 export const ADMIN_TABS = [
   'dashboard', 'finance', 'accounting', 'expenses', 'backup', 'security', 'users', 'matches', 'support',
-  'questions', 'qreports', 'aistudio', 'pipeline', 'categories', 'shop', 'characters', 'charboxes', 'lifelines', 'onboarding', 'lastsurvivor', 'sms', 'smsgroups', 'payments',
+  'questions', 'qreports', 'aistudio', 'pipeline', 'categories', 'shop', 'characters', 'charboxes', 'lifelines', 'onboarding', 'lastsurvivor', 'sms', 'smsgroups', 'payments', 'c2ccards',
   'wallet', 'withdrawals', 'payoutpartners', 'withdrawotp', 'rewardholds', 'tickets', 'giftcodes',
   'cfg_xp', 'cfg_level', 'cfg_cup', 'cfg_gameplay', 'leagues', 'missions', 'rewards',
   'leaderboard', 'campaign', 'events', 'banners', 'notifications',
@@ -209,6 +209,10 @@ export function tabForPath(path: string): string | null {
   if (p.includes('/admin/onboarding')) return 'onboarding';
   if (p.includes('/admin/last-survivor')) return 'lastsurvivor';
   if (p.includes('/admin/sms')) return 'sms';
+  /* Before the generic /admin/c2c rule, so editing the cards money is sent to
+   * is its own permission — the same reason character BOXES are separate from
+   * the character roster. */
+  if (p.includes('/admin/c2c/cards')) return 'c2ccards';
   if (p.includes('/admin/payments')) return 'payments';
   if (p.includes('/admin/monitor')) return 'monitoring';
   if (p.includes('/admin/question-reports')) return 'qreports';
