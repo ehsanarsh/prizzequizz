@@ -7,6 +7,14 @@
      own content clear of them with env(safe-area-inset-*). -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
 <title>Prizze Quizz!</title>
+<!-- WHICH FILE IS THIS.
+     Twice now a fix has been reported as «not done» when the question was
+     really «did the new index.html reach the phone». There was no way to tell:
+     the file has no version on it, so a stale copy in a browser cache and a
+     copy that was never uploaded look exactly alike. This is that version. It
+     is readable from the server with one curl, and it is printed at the bottom
+     of «تنظیمات» so it can be read off the phone with no terminal at all. -->
+<meta name="pz-build" content="20260910-1246">
 <!-- App icon on the phone home screen (Add to Home Screen). Place appicon.png
      (a square PNG, ideally 512x512) in the same web folder as this file. -->
 <link rel="apple-touch-icon" sizes="180x180" href="appicon.png">
@@ -1211,14 +1219,14 @@ input,textarea,select,[contenteditable="true"],.pz-selectable,.pz-selectable *{
    option, and the height came from padding and type sizes rather than from
    anything the row needs. */
 .powerups{display:flex;gap:8px;padding:8px 0 0}
-.pu{flex:1;background:linear-gradient(180deg,#1C4630,#123020);border:2px solid #000;border-radius:12px;padding:4px;
+.pu{flex:1;background:linear-gradient(180deg,#2FA862,#1E7A45);border:2px solid #000;border-radius:12px;padding:4px;
   display:flex;flex-direction:column;align-items:center;gap:1px;cursor:pointer;transition:.12s;box-shadow:var(--hard-sm)}
 .pu:active{transform:translateY(3px);box-shadow:0 1px 0 #000}
 /* Every line is pinned to a height. Left to the font, an emoji reports a line
    box half again as tall as its own size and the three rows silently added the
    height back that the smaller type had just saved. */
 .pu .pu-i{font-size:16px;line-height:17px;height:17px}
-.pu .pu-l{font-size:9px;font-weight:800;color:#9FE8BC;text-align:center;line-height:11px}
+.pu .pu-l{font-size:9px;font-weight:800;color:#EAFFF3;text-align:center;line-height:11px}
 .pu .pu-c{font-size:9.5px;font-weight:900;color:var(--bolt);line-height:11px}
 /* Spent or out of stock: the green goes with it, so «can use» and «cannot» are
    never the same colour at two opacities. */
@@ -6648,6 +6656,7 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
       <div class="row" onclick="go('support')"><div class="r-ico">💬</div><div class="r-txt"><b>پشتیبانی</b><span>گفتگوی زنده و ارسال تیکت</span></div><span class="r-arrow">‹</span></div>
       <div class="row" onclick="go('rules')"><div class="r-ico">📜</div><div class="r-txt"><b>قوانین و مقررات</b><span>شرایط بازی و برداشت جایزه</span></div><span class="r-arrow">‹</span></div>
       <div class="row danger-zone" onclick="confirmLogout()"><div class="r-ico" style="background:var(--bad-soft)">🚪</div><div class="r-txt"><b style="color:var(--bad)">خروج از حساب</b><span>خروج امن از این دستگاه</span></div><span class="r-arrow">‹</span></div>
+      <div id="pzBuildLine" style="text-align:center;color:var(--muted);font-size:10px;font-weight:800;padding:14px 0 4px;opacity:.75">نسخهٔ برنامه: —</div>
     </section>
 
     <!-- ============ MY REFERRAL CODE ============
@@ -23723,8 +23732,17 @@ function pzBuildParticles(){
   }
   field.innerHTML=html;
 }
+/* One source: the <meta> at the top of this very file. Reading it rather than
+   repeating the string means the line on screen cannot drift from the file it
+   is describing. */
+function pzBuildId(){
+  try{ const m=document.querySelector('meta[name="pz-build"]'); return (m&&m.getAttribute('content'))||''; }catch(e){ return ''; }
+}
+function pzPaintBuildLine(){
+  try{ const el=document.getElementById('pzBuildLine'); if(el) el.textContent='نسخهٔ برنامه: '+(pzBuildId()||'—'); }catch(e){}
+}
 try{ pzBuildParticles(); }catch(e){}
-document.addEventListener('DOMContentLoaded', function(){ try{ pzBuildParticles(); var a=document.querySelector('.screen.active'); pzApplyWall(a?a.id:'splash'); }catch(e){} });
+document.addEventListener('DOMContentLoaded', function(){ try{ pzBuildParticles(); pzPaintBuildLine(); var a=document.querySelector('.screen.active'); pzApplyWall(a?a.id:'splash'); }catch(e){} });
 
 
 /* Loading screen (image 02) with the horns progress bar. Runs once on first

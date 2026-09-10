@@ -50,6 +50,13 @@ const rgb = (s) => (String(s).match(/\d+/g) || []).slice(0, 3).map(Number);
    to be — #B9B4A6 has more green in it than blue — which is exactly how a
    colour requirement gets quietly ignored. */
 const looksGreen = ([r, g, b]) => g > r + 20 && g > b + 20;
+const lum = ([r, g, b]) => Math.round(0.2126 * r + 0.7152 * g + 0.0722 * b);
+/* THE LABEL IS NOT THE TILE. On a saturated green ground the readable label is
+   a near-white, so demanding a leading green channel of it would be demanding a
+   worse design. What it must be is LIGHT — bright enough to sit on the green —
+   and COOL: the grey it used to be (#B9B4A6) is warm, red leading, and that is
+   precisely the dinginess being complained about. */
+const readsAsOnGreen = ([r, g, b]) => lum([r, g, b]) >= 215 && g >= r && b >= r - 6;
 
 /* ── LAST SURVIVOR ─────────────────────────────────────────────────────── */
 const LS_SNAP = {
@@ -110,9 +117,13 @@ ok('the row is on the card', ls.count === 3, String(ls.count) + ' tiles');
    grey label on a green tile is the same unreadable strip in a new coat. */
 const liveBg = rgb((ls.live || {}).bg || ''); const liveLbl = rgb((ls.live || {}).label || '');
 ok('an available help is green, not the card’s own dark tile', looksGreen(liveBg), ((ls.live || {}).bg || '').slice(0, 60));
-ok('and its label is green too, not muted grey', looksGreen(liveLbl), (ls.live || {}).label);
+/* «سبزش خیلی تیره و خفه است» — the tile has to look switched ON, so its
+   brightness is part of the requirement and not only its hue. */
+ok('and its label is a light one that belongs on green, not muted grey', readsAsOnGreen(liveLbl), (ls.live || {}).label);
 /* AND THE TWO STATES DIFFER IN COLOUR. Opacity alone was the old answer and it
    is why a spent help and an available one read the same at a glance. */
+ok('and it is a live green, not a dark one that reads as more card',
+  lum(liveBg) >= 95, 'luminance ' + lum(liveBg));
 ok('a spent help is not green', !looksGreen(rgb((ls.spent || {}).bg || '')), ((ls.spent || {}).bg || '').slice(0, 60));
 ok('so «can use» and «cannot» are different colours, not one colour twice',
   String((ls.live || {}).bg) !== String((ls.spent || {}).bg));
@@ -158,7 +169,7 @@ const duel = await page.evaluate(async () => {
 console.log('the duel — the same row, built by other code:');
 ok('the row is painted', duel.count === 3, String(duel.count) + ' tiles');
 ok('an available help is green here too', looksGreen(rgb((duel.live || {}).bg || '')), ((duel.live || {}).bg || '').slice(0, 60));
-ok('with a green label', looksGreen(rgb((duel.live || {}).label || '')), (duel.live || {}).label);
+ok('with the same light label', readsAsOnGreen(rgb((duel.live || {}).label || '')), (duel.live || {}).label);
 ok('a spent help is not green', !looksGreen(rgb((duel.spent || {}).bg || '')), ((duel.spent || {}).bg || '').slice(0, 60));
 ok('and the tile is the same short one', duel.live.h <= 54, duel.live.h + 'px');
 /* One rule means one answer: if the two rows ever disagree, a player crossing
