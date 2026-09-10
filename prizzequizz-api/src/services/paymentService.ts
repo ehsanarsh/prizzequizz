@@ -135,7 +135,9 @@ export async function settlePaymentIntent(intentId: string, sig: string, status:
   const order = parseOrder((intent.metadata as any)?.order);
   if (order) {
     try {
-      await fulfil(intent.userId, order, `intent:${intent.id}`);
+      await fulfil(intent.userId, order, `intent:${intent.id}`, {
+        source: 'gateway', amountToman: intent.amount, paymentRef: intent.id
+      });
     } catch (e) {
       /* Paid but undelivered is the one outcome that must never be silent. */
       logger.error('payment_fulfilment_failed', { intentId: intent.id, userId: intent.userId, message: e instanceof Error ? e.message : 'unknown' });

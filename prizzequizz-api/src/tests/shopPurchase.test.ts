@@ -6,7 +6,8 @@
  * arrives, a repeat charges once, and a purchase nobody can afford is refused
  * before anything is granted. */
 import assert from 'node:assert/strict';
-import { ShopError, purchase, _resetPurchaseMemory } from '../services/shopPurchaseService.js';
+import { ShopError, purchase } from '../services/shopPurchaseService.js';
+import { _resetFulfilments } from '../services/orderFulfilmentService.js';
 import { listItems, saveItem } from '../services/shopService.js';
 import { getHearts, _resetHeartMemory } from '../services/heartService.js';
 import { postEntry } from '../services/walletLedgerService.js';
@@ -36,7 +37,7 @@ async function makeUser(opts: { wallet?: number; coins?: number; hearts?: number
 const uniq = () => 'k-' + id();
 
 async function run() {
-  _resetPurchaseMemory(); _resetHeartMemory();
+  _resetFulfilments(); _resetHeartMemory();
   const items = await listItems({ enabledOnly: true });
 
   const heartItem = items.find((i) => i.effectKey === 'heart' && i.effectValue === 1);

@@ -9,7 +9,8 @@
  */
 import assert from 'node:assert/strict';
 import { saveItem, getItem, rewardsOf, rewardLabel } from '../services/shopService.js';
-import { purchase, _resetPurchaseMemory } from '../services/shopPurchaseService.js';
+import { purchase } from '../services/shopPurchaseService.js';
+import { _resetFulfilments } from '../services/orderFulfilmentService.js';
 import { getTickets } from '../services/ticketService.js';
 import { inventoryFor } from '../services/lifelineService.js';
 import { repositories } from '../repositories/index.js';
@@ -34,7 +35,7 @@ async function buyer(coins = 100000): Promise<string> {
 const uniq = () => 'k_' + Math.random().toString(36).slice(2);
 
 async function run(): Promise<void> {
-  _resetPurchaseMemory();
+  _resetFulfilments();
 
   const bundle = await saveItem({
     category: 'tickets', name: 'بستهٔ شروع', description: 'برای شروع', icon: '🎁',

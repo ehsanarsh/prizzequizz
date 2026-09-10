@@ -27,7 +27,7 @@ const requiredTables = [
   'sessions', 'security_events', 'push_subscriptions', 'notification_preferences', 'notifications',
   'integrity_signals', 'devices', 'user_device_bindings', 'user_risk_profiles', 'reward_holds',
   'support_tickets', 'support_messages', 'character_items', 'user_character_inventory', 'character_unlock_events',
-  'payment_intents', 'beta_invites', 'beta_access'
+  'payment_intents', 'beta_invites', 'beta_access', 'order_fulfilments'
 ];
 
 const requiredIndexes = [
@@ -40,6 +40,7 @@ const requiredIndexes = [
   'idx_support_tickets_status_time',
   'idx_character_items_slot_status',
   'idx_payment_intents_status_time',
+  'idx_order_fulfilments_status',
   'idx_beta_invites_status',
   'idx_beta_access_invite'
 ];

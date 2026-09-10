@@ -13,7 +13,8 @@
  */
 import assert from 'node:assert/strict';
 import { postEntry, getAccount, listEntries, isPlayerVisible, WalletError } from '../services/walletLedgerService.js';
-import { quote, payFromVault, parseOrder, isGatewayPayable, OrderError, _resetFulfilled, fulfil } from '../services/purchaseOrderService.js';
+import { quote, payFromVault, parseOrder, isGatewayPayable, OrderError, fulfil } from '../services/purchaseOrderService.js';
+import { _resetFulfilments } from '../services/orderFulfilmentService.js';
 import { createPaymentIntent, settlePaymentIntent, paymentSignature } from '../services/paymentService.js';
 import { getTickets } from '../services/ticketService.js';
 import { getTicketPrices } from '../services/economyConfig.js';
@@ -75,7 +76,7 @@ async function run(): Promise<void> {
   /* ── paying from the صندوق ────────────────────────────────────────── */
 
   await check('a ticket can be paid for out of the صندوق', async () => {
-    _resetFulfilled();
+    _resetFulfilments();
     const uid = await player();
     await win(uid, PRICE * 3);
     const r = await payFromVault(uid, { kind: 'ticket', tier: TIER, qty: 1 }, 'o:' + id());
@@ -94,7 +95,7 @@ async function run(): Promise<void> {
   });
 
   await check('paying twice with the same key charges once', async () => {
-    _resetFulfilled();
+    _resetFulfilments();
     const uid = await player();
     await win(uid, PRICE * 4);
     const key = 'o:' + id();
@@ -108,7 +109,7 @@ async function run(): Promise<void> {
   /* ── paying at the gateway ────────────────────────────────────────── */
 
   await check('a gateway payment delivers the ticket', async () => {
-    _resetFulfilled();
+    _resetFulfilments();
     const uid = await player();
     const intent = await createPaymentIntent({ userId: uid, order: { kind: 'ticket', tier: TIER, qty: 2 } });
     assert.equal(intent.amount, PRICE * 2, 'priced from the catalogue, not the client');
@@ -120,7 +121,7 @@ async function run(): Promise<void> {
   await check('and the money never lands in the صندوق', async () => {
     /* The heart of it. If a gateway payment credited the صندوق, a player could
        pay in and withdraw it back out as if it were a prize. */
-    _resetFulfilled();
+    _resetFulfilments();
     const uid = await player();
     const intent = await createPaymentIntent({ userId: uid, order: { kind: 'ticket', tier: TIER, qty: 1 } });
     await settlePaymentIntent(intent.id, paymentSignature(intent.id, intent.amount, 'paid'), 'paid');
@@ -128,7 +129,7 @@ async function run(): Promise<void> {
   });
 
   await check('a replayed callback does not hand over a second ticket', async () => {
-    _resetFulfilled();
+    _resetFulfilments();
     const uid = await player();
     const intent = await createPaymentIntent({ userId: uid, order: { kind: 'ticket', tier: TIER, qty: 1 } });
     const sig = paymentSignature(intent.id, intent.amount, 'paid');
@@ -139,7 +140,7 @@ async function run(): Promise<void> {
   });
 
   await check('an unsigned callback settles nothing', async () => {
-    _resetFulfilled();
+    _resetFulfilments();
     const uid = await player();
     const intent = await createPaymentIntent({ userId: uid, order: { kind: 'ticket', tier: TIER, qty: 1 } });
     await assert.rejects(() => settlePaymentIntent(intent.id, 'deadbeef', 'paid'));
@@ -191,7 +192,7 @@ async function run(): Promise<void> {
 
   await check('but a purchase paid from the صندوق IS shown', async () => {
     /* Otherwise the balance drops and nothing on the statement explains it. */
-    _resetFulfilled();
+    _resetFulfilments();
     const uid = await player();
     await win(uid, PRICE * 2);
     await payFromVault(uid, { kind: 'ticket', tier: TIER, qty: 1 }, 'o:' + id());
@@ -207,11 +208,11 @@ async function run(): Promise<void> {
   /* ── fulfilment on its own ────────────────────────────────────────── */
 
   await check('fulfilment hands over goods without charging', async () => {
-    _resetFulfilled();
+    _resetFulfilments();
     const uid = await player();
     await win(uid, 400000);
     const before = (await getAccount(uid)).available;
-    await fulfil(uid, { kind: 'ticket', tier: TIER, qty: 3 }, 'ref:' + id());
+    await fulfil(uid, { kind: 'ticket', tier: TIER, qty: 3 }, 'ref:' + id(), { source: 'gateway', amountToman: PRICE * 3 });
     assert.equal((await getTickets(uid))[TIER], 3);
     assert.equal((await getAccount(uid)).available, before, 'the صندوق was untouched');
   });

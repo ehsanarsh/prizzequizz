@@ -27,6 +27,8 @@ import { getItem, rewardsOf, rewardLabel } from './shopService.js';
 import { purchase as shopPurchase } from './shopPurchaseService.js';
 import { postEntry, getAccount, WalletError } from './walletLedgerService.js';
 import { recordPurchase } from './missionService.js';
+import * as fulfilments from './orderFulfilmentService.js';
+import type { FulfilSource } from './orderFulfilmentService.js';
 import { logger } from './logger.js';
 
 export type PayMethod = 'vault' | 'gateway';
@@ -106,46 +108,67 @@ export interface Fulfilment {
   duplicate: boolean;
 }
 
-export async function fulfil(userId: string, order: PurchaseOrder, ref: string): Promise<Fulfilment> {
-  if (order.kind === 'ticket') {
-    /* grantTickets is not idempotent on its own, so the reference is what
-     * stops a replayed callback issuing a second ticket. */
-    if (await alreadyFulfilled(ref)) return { granted: [], duplicate: true };
-    await markFulfilled(ref);
-    try {
-      await grantTickets(userId, order.tier!, order.qty);
-      await recordPurchase(userId, { tickets: order.qty });
-    } catch (e) {
-      /* Un-mark so a retry can still deliver what the player paid for. */
-      unmarkFulfilled(ref);
-      throw e;
-    }
-    return {
-      granted: [{ key: 'ticket-' + order.tier, value: order.qty, label: ticketName(order.tier!) }],
-      duplicate: false
-    };
-  }
-  /* The shop already knows how to grant a bundle and is idempotent on its key;
-   * `paidExternally` is what tells it the money has come from somewhere other
-   * than the صندوق. */
-  const r = await shopPurchase({ userId, itemId: order.itemId!, qty: order.qty, idempotencyKey: ref, paidExternally: true });
-  return { granted: r.granted ?? [], duplicate: !!r.duplicate };
+/* WHO PAID, AND HOW MUCH.
+ *
+ * Fulfilment never charges, but it does have to RECORD what was sold: money
+ * paid outside the صندوق leaves no trace in `wallet_ledger` by design, so
+ * without this the sale is invisible to the finance report. */
+export interface FulfilMeta {
+  source: FulfilSource;
+  /** Toman. What the player paid for this order, for the income report. */
+  amountToman: number;
+  /** The payment intent (or later, the card-to-card session) behind it. */
+  paymentRef?: string;
 }
 
-/* Fulfilment marks. Postgres-free on purpose: the shop path carries its own
- * idempotency and the ticket path only needs to survive a duplicate callback
- * within the life of the process plus a ledger row that records the payment.
- * A restart between two callbacks for the same intent is the one gap, and the
- * gateway's own retry window is far shorter than that. */
-const _fulfilled = new Set<string>();
-async function alreadyFulfilled(ref: string): Promise<boolean> { return _fulfilled.has(ref); }
-async function markFulfilled(ref: string): Promise<void> {
-  _fulfilled.add(ref);
-  if (_fulfilled.size > 20_000) { const first = _fulfilled.values().next().value; if (first) _fulfilled.delete(first); }
+function grantedOf(record: { payload: unknown }): Fulfilment['granted'] {
+  return Array.isArray(record.payload) ? (record.payload as Fulfilment['granted']) : [];
 }
-function unmarkFulfilled(ref: string): void { _fulfilled.delete(ref); }
-/** Test seam. */
-export function _resetFulfilled(): void { _fulfilled.clear(); }
+
+export async function fulfil(userId: string, order: PurchaseOrder, ref: string, meta: FulfilMeta): Promise<Fulfilment> {
+  if (order.kind === 'shop') {
+    /* The shop already knows how to grant a bundle and claims the same
+     * reference itself; `paidExternally` is what tells it the money has come
+     * from somewhere other than the صندوق. */
+    const r = await shopPurchase({
+      userId, itemId: order.itemId!, qty: order.qty, idempotencyKey: ref,
+      paidExternally: meta.source !== 'vault', source: meta.source, paymentRef: meta.paymentRef
+    });
+    return { granted: r.granted ?? [], duplicate: !!r.duplicate };
+  }
+
+  /* grantTickets is not idempotent on its own, so the claim is what stops a
+   * replayed callback issuing a second ticket — and it survives a restart, a
+   * second server, and an SMS that arrives hours later. */
+  const claim = await fulfilments.claim({
+    ref, userId, source: meta.source, kind: 'ticket',
+    order: { kind: order.kind, tier: order.tier, qty: order.qty }, paymentRef: meta.paymentRef
+  });
+  if (!claim.claimed) return { granted: grantedOf(claim.record), duplicate: true };
+
+  const granted = [{ key: 'ticket-' + order.tier, value: order.qty, label: ticketName(order.tier!) }];
+  try {
+    await grantTickets(userId, order.tier!, order.qty);
+  } catch (e) {
+    /* The payment stands and the ticket is still owed: the row stays claimed
+     * so the debt is recorded, and whoever arranged the payment decides
+     * whether to reverse it (`payFromVault` refunds and voids the reference). */
+    await fulfilments.fail(ref, e instanceof Error ? e.message : 'grant failed');
+    throw e;
+  }
+  await fulfilments.complete(ref, {
+    payload: granted, amountToman: meta.amountToman, currency: 'cash', category: 'tickets'
+  });
+
+  /* Mission progress is a side effect of the purchase, never a condition of it.
+   * It used to sit inside the same try as the grant, so a counter that threw
+   * un-marked a ticket that had ALREADY been issued — and the retry issued a
+   * second one. */
+  await recordPurchase(userId, { tickets: order.qty })
+    .catch((e) => logger.warn('mission_record_failed', { ref, message: e instanceof Error ? e.message : 'unknown' }));
+
+  return { granted, duplicate: false };
+}
 
 /* ---------------------------------------------------------------------------
  * Paying from the صندوق جایزه.
@@ -170,8 +193,9 @@ export async function payFromVault(userId: string, order: PurchaseOrder, idempot
       idempotencyKey, refType: 'ticket', refId: order.tier!, description: `خرید ${q.label}`
     });
     if (posted.duplicate) return { quote: q, granted: [], duplicate: true, balance: posted.account.available };
+    const ref = 'vault:' + idempotencyKey;
     try {
-      const f = await fulfil(userId, order, 'vault:' + idempotencyKey);
+      const f = await fulfil(userId, order, ref, { source: 'vault', amountToman: q.amount });
       return { quote: q, granted: f.granted, duplicate: f.duplicate, balance: posted.account.available };
     } catch (e) {
       await postEntry({
@@ -179,6 +203,9 @@ export async function payFromVault(userId: string, order: PurchaseOrder, idempot
         idempotencyKey: `order_refund:${posted.entry.id}`, refType: 'ticket', refId: order.tier!,
         description: 'برگشت وجه: صدور بلیت ناموفق بود'
       });
+      /* The money is back where it came from, so nothing is owed on this
+       * reference any more — and it must never look deliverable again. */
+      await fulfilments.voidRef(ref, 'refunded: ticket grant failed');
       throw e;
     }
   }
