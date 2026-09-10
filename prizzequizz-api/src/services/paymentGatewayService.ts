@@ -31,6 +31,24 @@ export interface PaymentSettings {
   withdraw: { enabled: boolean; min: number; max: number; dailyCap: number; fee: number; feePayer: 'user' | 'system'; autoApprove: boolean; hoursFrom: number; hoursTo: number };
   feePercent: number;      // platform deposit fee (0 = none)
   defaultGatewayId: string | null;
+  /* Card-to-card policy. On the existing settings blob rather than in a table
+   * of its own: five numbers an operator tunes, not an entity. */
+  c2c: {
+    /** 'rial' hides the uniqueness suffix inside the Rial figure (≤ 9.9 Toman
+     *  of difference); 'toman' keeps the payable amount a whole Toman, for
+     *  banking apps that will not accept anything else. */
+    suffixMode: 'rial' | 'toman';
+    /** How long the player has to pay. */
+    ttlMinutes: number;
+    /** How long AFTER that the amount stays reserved, so a late transfer is
+     *  still recognisable instead of landing on the next person given it. */
+    reserveHours: number;
+    /** A cancelled session keeps its amount this long. */
+    cancelCooldownMinutes: number;
+    /** Sessions one player may hold open — the amount space is finite, and
+     *  without this one account can reserve all of it and pay for none. */
+    maxActivePerUser: number;
+  };
 }
 
 export const GATEWAY_TYPES = ['zibal', 'zarinpal', 'nextpay', 'idpay', 'bitpay', 'sandbox', 'custom', 'card_to_card'] as const;
@@ -90,7 +108,8 @@ function defaultSettings(): PaymentSettings {
   return {
     deposit: { enabled: true, min: w.minDeposit, max: w.maxDeposit, dailyCap: w.maxDeposit, txPerDay: 20 },
     withdraw: { enabled: true, min: w.minWithdraw, max: w.maxWithdraw, dailyCap: w.dailyWithdrawCap, fee: w.withdrawFee, feePayer: 'user', autoApprove: false, hoursFrom: 0, hoursTo: 24 },
-    feePercent: 0, defaultGatewayId: null
+    feePercent: 0, defaultGatewayId: null,
+    c2c: { suffixMode: 'rial', ttlMinutes: 20, reserveHours: 24, cancelCooldownMinutes: 15, maxActivePerUser: 2 }
   };
 }
 
@@ -164,7 +183,7 @@ export async function getPaymentSettings(): Promise<PaymentSettings> {
 }
 export async function updatePaymentSettings(patch: Partial<PaymentSettings>): Promise<PaymentSettings> {
   const cur = await getPaymentSettings();
-  const next: PaymentSettings = { ...cur, ...patch, deposit: { ...cur.deposit, ...(patch.deposit || {}) }, withdraw: { ...cur.withdraw, ...(patch.withdraw || {}) } };
+  const next: PaymentSettings = { ...cur, ...patch, deposit: { ...cur.deposit, ...(patch.deposit || {}) }, withdraw: { ...cur.withdraw, ...(patch.withdraw || {}) }, c2c: { ...cur.c2c, ...(patch.c2c || {}) } };
   const pool = pg();
   if (pool) { await ensureSchema(pool); await pool.query(`INSERT INTO payment_settings(id,data,updated_at) VALUES('default',$1,now()) ON CONFLICT (id) DO UPDATE SET data=$1, updated_at=now()`, [JSON.stringify(next)]); }
   else memSettings = next;
