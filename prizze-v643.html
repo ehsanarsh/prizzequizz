@@ -14,7 +14,7 @@
      copy that was never uploaded look exactly alike. This is that version. It
      is readable from the server with one curl, and it is printed at the bottom
      of «تنظیمات» so it can be read off the phone with no terminal at all. -->
-<meta name="pz-build" content="20260910-1452">
+<meta name="pz-build" content="20260910-2002">
 <!-- App icon on the phone home screen (Add to Home Screen). Place appicon.png
      (a square PNG, ideally 512x512) in the same web folder as this file. -->
 <link rel="apple-touch-icon" sizes="180x180" href="appicon.png">
@@ -14126,6 +14126,35 @@ async function submitQuestion(){
     onSecondary:()=>{closeAaaModal(false);qsLoadMine(true);}});
   qsLoadMine();
 }
+/* SCROLL INSIDE THE SCREEN, NEVER THE SHELL.
+   Every `.screen` is its own scroll container (position:absolute; inset:0;
+   overflow-y:auto) and the phone shell around them is fixed — it must never
+   move. `scrollIntoView()` does not know that: it walks up EVERY scrollable
+   ancestor. On an element that is in a screen which is not on display it can do
+   nothing with the inner container, so it drags the OUTER one instead — the
+   whole app went 581px off the top of the window and STAYED there, on every
+   screen after it, until the page was reloaded. That is «کل صفحه قاطی می‌کنه و
+   کار نمی‌کنه».
+   So: only ever the element's own screen, only when that screen is the one on
+   display, and by setting its scrollTop rather than asking the browser to find
+   something to move. */
+function pzScrollIntoScreen(el,opts){
+  try{
+    if(!el) return;
+    const scr=el.closest('.screen');
+    if(!scr) return;
+    /* No check that the screen is the one on display: a hidden screen reports
+       every rect as zero, so the arithmetic below already lands on 0 and the
+       form still opens at its top. A guard for it would be a line that can
+       never run. */
+    const o=opts||{}, pad=(o.pad==null?12:o.pad);
+    const r=el.getBoundingClientRect(), s=scr.getBoundingClientRect();
+    const top=o.bottom
+      ? (r.bottom-s.top+scr.scrollTop-scr.clientHeight+pad)
+      : (r.top-s.top+scr.scrollTop-pad);
+    scr.scrollTo({top:Math.max(0,top),behavior:'smooth'});
+  }catch(e){}
+}
 /* What a player got for the questions they wrote — the only place the promise
    ("if it is approved you get a prize") is ever settled. */
 const QS_ST={pending:['در انتظار بررسی','pend'],approved:['تأیید شد','ok'],rejected:['رد شد','bad']};
@@ -14141,7 +14170,7 @@ async function qsLoadMine(scroll){
       return '<div class="qs-mine-row"><div class="qs-mine-t">'+pzEsc(String(x.text||'').slice(0,70))+'</div>'+
              '<div><span class="qs-badge '+st[1]+'">'+st[0]+'</span>'+rw+'</div></div>';
     }).join('')+'</div>';
-  if(scroll) box.scrollIntoView({behavior:'smooth',block:'start'});
+  if(scroll) pzScrollIntoScreen(box);
 }
 function showFriendRequestSnackbar(name){let s=document.getElementById('friendSnackbar');if(!s){s=document.createElement('div');s.id='friendSnackbar';s.className='friend-snackbar';document.querySelector('.phone').appendChild(s);}s.innerHTML='<div class="fs-ico">🤝</div><div style="flex:1"><b>درخواست دوستی ارسال شد</b><br><span>'+(name||'کاربر')+' درخواستت رو دریافت می‌کنه.</span></div><button class="btn btn-ghost" onclick="this.closest(\'.friend-snackbar\').classList.remove(\'show\')">باشه</button>';s.classList.add('show');clearTimeout(s._t);s._t=setTimeout(()=>s.classList.remove('show'),3200);}
 setTimeout(()=>{buildRatingStars();},300);
@@ -19779,7 +19808,7 @@ function pzRegisterCharStep(){
      otherwise returns to — this is the last step of signing up, so finishing it
      means being in the game. */
   btn.onclick=function(){ charBack='home'; go('character'); };
-  try{ btn.scrollIntoView({block:'end',behavior:'smooth'}); }catch(e){}
+  pzScrollIntoScreen(btn,{bottom:true});
 }
 
 /* Profile-edit screen: fill from the SINGLE shared source (_usr) — no hardcoded name. */

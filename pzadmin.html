@@ -1497,15 +1497,37 @@ let Q_ST='';
 let Q_CAT='', Q_SEARCH='';
 /* Real lifetime answer statistics per question — fed by EVERY game mode
    (duel, arena, all-or-nothing, last survivor). */
-let _QSTATS={}, _QSTATS_AT=0;
+let _QSTATS={}, _QSTATS_AT=0, _QSTATS_BUSY=false;
+/* THIS USED TO RE-ENTER THE WHOLE SCREEN, AND COULD NOT STOP.
+ *
+ * renderQuestions() calls this, and this called renderQuestions() again once the
+ * figures arrived — a loop whose only brake was «have we got any stats yet».
+ * When the endpoint answers with NO rows — an empty bank, a question nobody has
+ * answered yet, or a failure that yields nothing — that brake never engages, so
+ * it recurses for ever at two API calls a turn and takes the tab down with it.
+ * That is «کل صفحه قاطی می‌کنه و کار نمی‌کنه».
+ *
+ * Three things fix it, and the first is the real one:
+ *   • the stats feed two COLUMNS, so repaint the rows, never the screen —
+ *     qPaintRows() cannot call back into here, so no loop is possible at all;
+ *   • freshness is «when did we last ASK», not «did we get anything», so an
+ *     empty answer counts as an answer;
+ *   • one request at a time. */
 async function qLoadStats(force){
-  if(!force && Date.now()-_QSTATS_AT<30000 && Object.keys(_QSTATS).length) return;
+  if(_QSTATS_BUSY) return;
+  if(!force && _QSTATS_AT && Date.now()-_QSTATS_AT<30000) return;
+  _QSTATS_BUSY=true;
   try{
     const d=await api('GET','/admin/questions/stats?limit=500');
-    const m={}; (d.rows||[]).forEach(r=>m[r.id]=r);
-    _QSTATS=m; _QSTATS_AT=Date.now();
-    if(CUR==='questions') renderQuestions();
+    const m={}; ((d&&d.rows)||[]).forEach(r=>m[r.id]=r);
+    _QSTATS=m;
+    if(CUR==='questions'&&Q_VIEW==='bank') qPaintRows();
   }catch(e){ /* stats are additive — never block the table */ }
+  finally{
+    /* Stamped whatever happened, so a bank with no figures yet is asked about
+       once every thirty seconds rather than continuously. */
+    _QSTATS_AT=Date.now(); _QSTATS_BUSY=false;
+  }
 }
 async function qStats(id){
   let s; try{ s=await api('GET','/admin/questions/'+id+'/stats'); }catch(e){ return toast(e.message,'bad'); }
