@@ -16,6 +16,16 @@
  *
  * Run: npx tsx src/tests/deadRoutes.test.ts
  */
+/* The API's background workers (matchmaking, Last Survivor, leagues, the
+ * monitor collector) are started by createApiServer and keep their timers
+ * running after server.close() — so a test that boots the server can finish
+ * its assertions and then simply never exit. Turned off here, before the
+ * server is created, because this file is about routes and not about them. */
+process.env.MATCHMAKING_WORKER = 'false';
+process.env.LAST_SURVIVOR_WORKER = 'false';
+process.env.LEAGUE_WORKER = 'false';
+process.env.SERVER_MONITOR = 'false';
+
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import type { AddressInfo } from 'node:net';
