@@ -79,7 +79,7 @@ await page.evaluate((st) => {
   };
   /* CFG is null until loadCfg() runs, so it is assigned whole here rather than
      reached into — which is also why the renderers now guard it. */
-  (0, eval)('CFG = { questionPipeline: { aiEnabled: true, generatorModel: "claude-sonnet-5" } }');
+  (0, eval)('CFG = { questionPipeline: { aiEnabled: true, minQuality: 70, generatorModel: "claude-sonnet-5" } }');
   /* Saving ends with render(), which repaints whatever tab is open — so the
      tab has to be this one, exactly as it is for an operator. */
   (0, eval)('CUR = "aistudio"');
@@ -120,12 +120,26 @@ ok2('each holds what the server has', shown.gen === 'متن فعلیِ تولی�
    would freeze today's wording into the config the first time anything is
    saved, and quietly stop tracking the shipped default. */
 ok2('one left at the default shows empty, not the default text pasted in', shown.rev === '', JSON.stringify(shown.rev));
-ok2('and the model each stage uses is named', /claude-opus-5/.test(shown.txt) && /claude-sonnet-5/.test(shown.txt));
+
+/* THE MODEL IDS, BESIDE THE PROMPT THEY BELONG TO.
+   A token-based key refuses every model whose id lacks a «t-» prefix, so this
+   is not an advanced setting — it is the difference between the feature working
+   and a 402 on the first press. It used to be reachable only by hand-editing
+   the raw config JSON. */
+const models = await page.evaluate(() => {
+  const v = (id) => { const e = document.getElementById(id); return e ? e.value : null; };
+  return { gen: v('ai_m_generator'), rev: v('ai_m_reviewer'), fact: v('ai_m_factChecker') };
+});
+console.log('the model each stage uses:');
+ok2('has a field of its own', models.gen !== null && models.rev !== null && models.fact !== null, JSON.stringify(models));
+ok2('filled from the server', models.gen === 'claude-sonnet-5' && models.fact === 'claude-opus-5', JSON.stringify(models));
 
 console.log('saving:');
 const saved = await page.evaluate(async () => {
   document.getElementById('ai_p_generator').value = '  سؤال فقط دربارهٔ تاریخ ایران  ';
   document.getElementById('ai_p_reviewer').value = 'سخت بگیر';
+  /* The «t-» prefix a token-based key needs — typed here, not in raw JSON. */
+  document.getElementById('ai_m_generator').value = '  t-claude-sonnet-5  ';
   await (0, eval)('aiSavePrompts')();
   return window.__saved[0] || null;
 });
@@ -134,11 +148,13 @@ ok2('it sends the prompts under questionPipeline', !!(saved && saved.questionPip
 ok2('trimmed', saved.questionPipeline.prompts.generator === 'سؤال فقط دربارهٔ تاریخ ایران',
   JSON.stringify(saved.questionPipeline.prompts.generator));
 ok2('all three stages travel together', Object.keys(saved.questionPipeline.prompts).sort().join(',') === 'factChecker,generator,reviewer');
-/* The rest of questionPipeline — models, thresholds — must survive a save that
-   was not about them. */
-ok2('and the settings it was not about are kept',
-  saved.questionPipeline.generatorModel === 'claude-sonnet-5' && saved.questionPipeline.aiEnabled === true,
+ok2('and the models are saved with them', saved.questionPipeline.generatorModel === 't-claude-sonnet-5',
   JSON.stringify(saved.questionPipeline.generatorModel));
+/* The rest of questionPipeline — the thresholds, the on/off switch — must
+   survive a save that was not about them. */
+ok2('and the settings this form does not own are kept',
+  saved.questionPipeline.minQuality === 70 && saved.questionPipeline.aiEnabled === true,
+  JSON.stringify({ q: saved.questionPipeline.minQuality, on: saved.questionPipeline.aiEnabled }));
 
 console.log('resetting one to the default:');
 const reset = await page.evaluate(async () => {
@@ -153,6 +169,22 @@ const reset = await page.evaluate(async () => {
 ok2('the box is emptied', reset.after === '', JSON.stringify(reset.after));
 ok2('and an empty string is what is saved, so the shipped default is used again',
   reset.sent === '', JSON.stringify(reset.sent));
+
+/* WHAT THE PROVIDER'S ERRORS MEAN, IN WORDS AN OPERATOR CAN ACT ON. */
+console.log('when the provider refuses:');
+const help = await page.evaluate(() => {
+  const h = (0, eval)('aiErrorHelp');
+  return {
+    billing: h('AI HTTP 402: {"type":"error","error":{"type":"permission_error","message":"This API key is for token-based models only","code":"billing_type_mismatch"}}'),
+    auth: h('AI HTTP 401: {"error":{"message":"invalid x-api-key"}}'),
+    notFound: h('AI HTTP 404: not found'),
+    fine: h('')
+  };
+});
+ok2('a token-key mismatch says to put «t-» in front', /t-claude-sonnet-5/.test(help.billing) && /توکنی/.test(help.billing));
+ok2('a rejected key points at the server’s .env', /ANTHROPIC_API_KEY/.test(help.auth));
+ok2('a 404 points at the «/v1» in the address', /ANTHROPIC_BASE_URL/.test(help.notFound) && /v1/.test(help.notFound));
+ok2('and nothing is said when there is no error', help.fine === '');
 
 /* THE BOOT WHERE THE CONFIG NEVER ARRIVED. */
 console.log('when the config has not loaded at all:');

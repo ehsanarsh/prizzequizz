@@ -2012,12 +2012,17 @@ async function renderAiStudio(){
   _AISTATUS=st;
   const aiOn=!!st.configured;
   const pr=st.prompts||{}, df=st.promptDefaults||{}, md=st.models||{};
-  const box=(id,label,val,def,hint)=>
-    '<div class="field" style="margin-bottom:12px"><label>'+label+
+  const box=(id,label,val,def,hint)=>{
+    const stage=id.replace('ai_p_','');
+    return '<div class="field" style="margin-bottom:14px"><label>'+label+
       ' <span class="note" style="display:inline;margin:0;padding:0;opacity:.75">'+hint+'</span></label>'+
       '<textarea id="'+id+'" rows="4" style="width:100%;font-family:inherit;line-height:1.9;resize:vertical">'+esc(val||'')+'</textarea>'+
-      '<div style="margin-top:5px"><button class="btn sm" onclick="aiResetPrompt(\''+id+'\')">بازگرداندن به پیش‌فرض</button>'+
-      '<span class="note" style="display:inline;margin-inline-start:8px">مدل: <span class="mono">'+esc(md[id.replace('ai_p_','')]||'—')+'</span></span></div></div>';
+      '<div style="display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap">'+
+        '<span class="note" style="display:inline;margin:0">مدل:</span>'+
+        '<input id="ai_m_'+stage+'" value="'+esc(md[stage]||'')+'" placeholder="claude-sonnet-5" style="width:200px" class="mono">'+
+        '<button class="btn sm" onclick="aiResetPrompt(\''+id+'\')">بازگرداندن پرامپت به پیش‌فرض</button>'+
+      '</div></div>';
+  };
   $('#main').innerHTML=head('استودیوی سوال (AI)','تولید ← بازبینی ← راستی‌آزمایی ← تشخیص تکرار ← امتیاز کیفیت',
     '<button class="btn" onclick="go(\'pipeline\')">صف کیفیت</button>')+
     '<div class="note">معماری: <b>Generator → Reviewer → Fact-Checker → Duplicate → Quality → Database</b>. تشخیصِ تکرار و امتیازِ کیفیت همیشه کار می‌کنند، حتی وقتی AI خاموش است.</div>'+
@@ -2046,6 +2051,22 @@ async function renderAiStudio(){
 /* Blank means «use the shipped default», so a reset is an empty box — not a
    copy of the default text pasted in, which would freeze today's wording into
    the config and silently stop tracking improvements to it. */
+/* The provider's own errors are English, terse and in JSON. The two an operator
+   will actually hit are worth translating into what to DO about them, next to
+   the field that fixes it — «billing_type_mismatch» tells nobody that their key
+   is token-based and every model id therefore needs a «t-» in front. */
+function aiErrorHelp(err){
+  const e=String(err||'');
+  if(/billing_type_mismatch|token-based/i.test(e))
+    return '<div class="note" style="border-color:var(--gold)"><b>کلیدت توکنی است.</b> شناسهٔ مدل باید با <span class="mono">t-</span> شروع شود — مثلاً '+
+      '<span class="mono">t-claude-sonnet-5</span> به‌جای <span class="mono">claude-sonnet-5</span>. '+
+      'کادرهای «مدل» پایین همین صفحه را عوض کن و ذخیره بزن.</div>';
+  if(/\b401\b|authentication|invalid.*api.*key/i.test(e))
+    return '<div class="note" style="border-color:var(--bad)"><b>کلید پذیرفته نشد.</b> مقدار <span class="mono">ANTHROPIC_API_KEY</span> در فایل <span class="mono">.env</span> روی سرور را بررسی کن، بعد کانتینر api را بازبساز.</div>';
+  if(/\b404\b/.test(e))
+    return '<div class="note" style="border-color:var(--bad)"><b>آدرس پیدا نشد.</b> معمولاً یعنی <span class="mono">ANTHROPIC_BASE_URL</span> با <span class="mono">/v1</span> نوشته شده. بدون آن بنویسش.</div>';
+  return '';
+}
 function aiResetPrompt(id){
   const el=$('#'+id); if(!el) return;
   el.value='';
@@ -2053,11 +2074,13 @@ function aiResetPrompt(id){
 }
 async function aiSavePrompts(){
   const g=($('#ai_p_generator')||{}).value||'', r=($('#ai_p_reviewer')||{}).value||'', f=($('#ai_p_factChecker')||{}).value||'';
+  const m=id=>String((($('#ai_m_'+id)||{}).value)||'').trim();
   const cur=((CFG&&CFG.questionPipeline)||{});
   try{
-    await api('PATCH','/admin/config',{questionPipeline:Object.assign({},cur,{prompts:{
-      generator:g.trim(), reviewer:r.trim(), factChecker:f.trim()
-    }})});
+    await api('PATCH','/admin/config',{questionPipeline:Object.assign({},cur,{
+      generatorModel:m('generator'), reviewerModel:m('reviewer'), factCheckerModel:m('factChecker'),
+      prompts:{ generator:g.trim(), reviewer:r.trim(), factChecker:f.trim() }
+    })});
     toast('پرامپت‌ها ذخیره شد ✅','ok');
     await loadCfg(); render();
   }catch(e){ toast(e.message,'bad'); }
@@ -2068,7 +2091,7 @@ async function aiGen(){
     const r=await api('POST','/admin/questions/ai/generate',{topic:$('#ai_topic').value.trim(),difficulty:$('#ai_diff').value,count:Number($('#ai_count').value||1)});
     if(!r.configured){ out.innerHTML='<div class="note">🔌 AI پیکربندی نشده (ANTHROPIC_API_KEY تنظیم نیست). فعلاً «ساخت دستی» را بزن یا کلید را روی سرور ست کن.</div>'; return; }
     AI_DRAFTS=r.drafts||[];
-    if(!AI_DRAFTS.length){ out.innerHTML='<div class="empty">مدل چیزی تولید نکرد'+(r.error?': '+esc(r.error):'')+'</div>'; return; }
+    if(!AI_DRAFTS.length){ out.innerHTML='<div class="empty">مدل چیزی تولید نکرد'+(r.error?': '+esc(r.error):'')+'</div>'+aiErrorHelp(r.error); return; }
     out.innerHTML=AI_DRAFTS.map((d,i)=>draftCard(d,i)).join('');
   }catch(e){ out.innerHTML='<div class="empty">'+esc(e.message)+'</div>'; }
 }
