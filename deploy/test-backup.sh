@@ -71,6 +71,27 @@ ok "$([ $RC -ne 0 ] && echo 1 || echo 0)" "three tables is not a database, howev
 ok "$(grep -q 'not a whole database' /tmp/o && echo 1 || echo 0)" "and it says so" "$(tail -1 /tmp/o)"
 ok "$([ "$(count)" -eq 0 ] && echo 1 || echo 0)" "nothing kept" "$(count)"
 
+echo "when it refuses, it says what it DID find:"
+fresh
+PZ_DB_NAME=pzthin bash "$SCRIPT" >/tmp/o 2>&1
+ok "$(grep -q 'tables found:' /tmp/o && echo 1 || echo 0)" "the names it saw are printed" "$(tail -1 /tmp/o | head -c 90)"
+ok "$(grep -qE 'tables found:.*t1' /tmp/o && echo 1 || echo 0)" "and they are the real ones from the archive"
+
+echo "when the archive cannot be listed at all:"
+fresh
+# A prefix whose pg_restore produces nothing — a broken archive, or a pg_restore
+# that is not there. The old code read this as «0 tables» and blamed the schema.
+cat > /tmp/deadpg.sh <<'SHIM'
+#!/usr/bin/env bash
+if [ "$1" = "pg_restore" ]; then exit 1; fi
+exec "/usr/lib/postgresql/16/bin/$1" "${@:2}"
+SHIM
+chmod +x /tmp/deadpg.sh
+PZ_PG_EXEC=/tmp/deadpg.sh bash "$SCRIPT" >/tmp/o 2>&1; RC=$?
+ok "$([ $RC -ne 0 ] && echo 1 || echo 0)" "it fails" "rc=$RC"
+ok "$(grep -q 'could not be listed at all' /tmp/o && echo 1 || echo 0)" "and blames the archive, not the schema" "$(tail -1 /tmp/o | head -c 80)"
+ok "$([ "$(count)" -eq 0 ] && echo 1 || echo 0)" "nothing kept"
+
 echo "rotation:"
 fresh
 bash "$SCRIPT" >/dev/null 2>&1

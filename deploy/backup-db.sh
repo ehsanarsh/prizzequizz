@@ -71,14 +71,28 @@ SIZE="$(stat -c %s "$TMP")"
 # THE VERIFICATION THAT MAKES IT A BACKUP. An archive that cannot be listed
 # cannot be restored, and the only time anyone finds out is the day they need
 # it. pg_restore --list reads the whole table of contents.
-TABLES="$($PG_EXEC pg_restore --list < "$TMP" 2>/dev/null | grep -c 'TABLE DATA' || true)"
+#
+# Read ONCE, into a variable. Running it per check re-read the whole archive
+# each time, and piping a long-running producer into `grep -q` — which exits at
+# the first match — can hand the producer a SIGPIPE that `pipefail` then reports
+# as failure. A verification step that can fail for a reason having nothing to
+# do with the backup is worse than no verification: it cries wolf on a file that
+# was fine.
+LIST="$($PG_EXEC pg_restore --list < "$TMP" 2>/dev/null || true)"
+[ -n "$LIST" ] || die "the archive could not be listed at all — pg_restore read nothing from it"
+
+TABLES="$(printf '%s\n' "$LIST" | grep -c 'TABLE DATA' || true)"
 [ "${TABLES:-0}" -ge 10 ] || die "archive lists only ${TABLES:-0} tables — not a whole database"
 
 # The tables that hold money. If these are missing the dump is worthless even
 # though it is large and readable.
 for t in wallet_ledger wallet_accounts users; do
-  $PG_EXEC pg_restore --list < "$TMP" 2>/dev/null \
-    | grep -q " $t " || die "no data for '$t' in the archive"
+  if ! printf '%s\n' "$LIST" | grep -q "TABLE DATA public $t\b"; then
+    # Say what WAS in there. «not found» on its own sends an operator hunting
+    # blind; the list of names usually contains the answer.
+    FOUND="$(printf '%s\n' "$LIST" | sed -n 's/.*TABLE DATA [^ ]* \([^ ]*\).*/\1/p' | sort | tr '\n' ' ')"
+    die "no data for '$t' in the archive. tables found: ${FOUND:-<none>}"
+  fi
 done
 
 mv "$TMP" "$FINAL"
