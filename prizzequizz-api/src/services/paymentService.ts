@@ -19,7 +19,7 @@ import { logger } from './logger.js';
 import { notifications } from './notificationService.js';
 import { WALLET_LIMITS, WalletError, postEntry } from './walletLedgerService.js';
 import { recordMoney } from './missionService.js';
-import { getPaymentSettings, pickActiveGateway } from './paymentGatewayService.js';
+import { getGateway, getPaymentSettings, pickActiveGateway } from './paymentGatewayService.js';
 import { fulfil, isGatewayPayable, parseOrder, quote, type PurchaseOrder } from './purchaseOrderService.js';
 
 export interface PaymentDiagnostics {
@@ -50,6 +50,16 @@ function signatureValid(intent: PaymentIntent, sig: string, status: 'paid' | 'fa
   } catch { return false; }
 }
 
+/** The gateway the player picked — if it is still open. */
+async function requireLiveGateway(gatewayId: string) {
+  const g = await getGateway(gatewayId);
+  if (!g) throw new WalletError('GATEWAY_NOT_FOUND', 'این روش پرداخت وجود ندارد.');
+  if (g.availability !== 'live') {
+    throw new WalletError('GATEWAY_NOT_AVAILABLE', 'این روش پرداخت فعلاً در دسترس نیست.');
+  }
+  return g;
+}
+
 /* THERE IS NO TOPPING UP ANY MORE.
  *
  * A payment must be FOR something. `order` says what, its price is taken from
@@ -60,15 +70,38 @@ function signatureValid(intent: PaymentIntent, sig: string, status: 'paid' | 'fa
  *
  * The old deposit limits still guard the amount, because they are also a sane
  * bound on what a single purchase may cost. */
-export async function createPaymentIntent(input: { userId: string; amount?: number; callbackUrl?: string; idempotencyKey?: string; order?: PurchaseOrder }): Promise<PaymentIntent> {
+export async function createPaymentIntent(input: { userId: string; amount?: number; callbackUrl?: string; idempotencyKey?: string; order?: PurchaseOrder; gatewayId?: string }): Promise<PaymentIntent> {
   if (!input.order) throw new WalletError('DEPOSIT_REMOVED', 'شارژ کیف پول حذف شده است؛ پرداخت باید برای یک خرید مشخص باشد.');
   const q = await quote(input.order);
   if (!isGatewayPayable(q)) throw new WalletError('ORDER_NOT_PAYABLE', 'این مورد از درگاه قابل پرداخت نیست.');
   const amount = q.amount;
   if (!Number.isFinite(amount) || amount < 1 || amount > WALLET_LIMITS.maxDeposit) throw new WalletError('PAYMENT_AMOUNT_INVALID', 'مبلغ پرداخت نامعتبر است.');
   const settings = await getPaymentSettings();
-  // Pick the highest-priority enabled gateway (auto-switch handled at retry).
-  const gateway = await pickActiveGateway();
+  /* The player may name the gateway they chose in the sheet — but it is their
+   * CHOICE, never their permission: it is re-checked here, because a client
+   * that sends the id of a «coming soon» gateway must not be able to open a
+   * door the panel has closed. With nothing named, the highest-priority live
+   * gateway is used (auto-switch handled at retry). */
+  const gateway = input.gatewayId
+    ? await requireLiveGateway(input.gatewayId)
+    : await pickActiveGateway();
+  /* NO GATEWAY MEANS NO PAYMENT — it does not mean the ambient provider.
+   *
+   * This used to fall through to `provider()`, which defaults to 'sandbox':
+   * an operator who set every gateway to «به‌زودی» would not be closing the
+   * door, they would be handing every player a self-settling sandbox link. */
+  if (!gateway) throw new WalletError('GATEWAY_NOT_AVAILABLE', 'در حال حاضر هیچ روش پرداخت آنلاینی فعال نیست.');
+  /* CARD-TO-CARD HAS TO BE CHOSEN, NEVER FALLEN INTO.
+   *
+   * It settles on a page the client has to render — a card, an exact figure, a
+   * deadline. A client that did not name it (an old cached build, which sends
+   * no `gatewayId`) cannot show any of that: it would follow a `paymentUrl`
+   * that is not there, and an amount slot would be held for a payment its
+   * owner never saw. Better a sentence telling them to refresh. */
+  if (!input.gatewayId && gateway.type === 'card_to_card') {
+    throw new WalletError('GATEWAY_SELECTION_REQUIRED',
+      'برای پرداخت کارت‌به‌کارت باید روش پرداخت را انتخاب کنی. صفحه را تازه کن و دوباره تلاش کن.');
+  }
   const key = input.idempotencyKey ? `payment:${input.userId}:${input.idempotencyKey}` : `payment:${input.userId}:${amount}:${Date.now()}:${id().slice(0, 8)}`;
   const existing = await repositories.payments.findByIdempotencyKey(key);
   if (existing) return existing;
@@ -77,30 +110,62 @@ export async function createPaymentIntent(input: { userId: string; amount?: numb
   const now = new Date().toISOString();
   /* 'purchase', not 'topup': nothing is being added to a balance. */
   await repositories.transactions.save({ id: transactionId, userId: input.userId, type: 'purchase' as any, currency: 'cash', amount, direction: 'out', status: 'pending', reference: intentId, createdAt: now });
+  /* THE SANDBOX PAY LINK IS A SELF-SETTLING URL, AND ONLY THE SANDBOX MAY HAVE ONE.
+   *
+   * It carries the HMAC that settles the intent, which is the whole point of a
+   * simulated gateway: the client fetches it and the purchase completes. Handed
+   * to any other kind of gateway it is a hole — a card-to-card payer could
+   * settle their own order, take the goods, and never transfer a rial.
+   *
+   * The test is the TYPE, not the `sandbox` flag: a card-to-card gateway is
+   * created with `sandbox: true` by default, and that flag must not be what
+   * decides whether a payment can settle itself. */
+  const isSandboxGateway = gateway.type === 'sandbox';
   const sig = paymentSignature(intentId, amount, 'paid');
   const intent: PaymentIntent = {
     id: intentId,
     userId: input.userId,
-    provider: provider(),
+    provider: (gateway.type === 'card_to_card' ? 'card_to_card' : provider()) as PaymentProvider,
     amount,
     currency: 'cash',
     status: 'pending',
     transactionId,
-    // The sandbox pay URL carries the same signed proof a real gateway callback
-    // would; without it, settlement is impossible.
-    paymentUrl: `/v1/payments/sandbox/${intentId}/pay?sig=${sig}`,
+    paymentUrl: isSandboxGateway ? `/v1/payments/sandbox/${intentId}/pay?sig=${sig}` : '',
     callbackUrl: input.callbackUrl,
-    providerReference: `sandbox_${intentId}`,
+    providerReference: isSandboxGateway ? `sandbox_${intentId}` : '',
     idempotencyKey: key,
     /* The order travels WITH the intent, because the callback that settles it
      * may arrive minutes later on a different process with no memory of the
      * request that started it. */
-    metadata: { sandbox: gateway ? gateway.sandbox : provider() === 'sandbox', gatewayId: gateway?.id, gatewayName: gateway?.name, gatewayType: gateway?.type, order: input.order, orderLabel: q.label },
+    metadata: { sandbox: gateway.sandbox, gatewayId: gateway.id, gatewayName: gateway.name, gatewayType: gateway.type, order: input.order, orderLabel: q.label },
     createdAt: now,
     updatedAt: now
   };
   await repositories.payments.save(intent);
   return intent;
+}
+
+/* AN INTENT WHOSE PAYMENT PAGE NEVER OPENED.
+ *
+ * The intent row is written before the card-to-card session is allocated,
+ * because the session has to point at something. If no amount can be reserved
+ * there is nothing for the player to pay, and a `pending` intent left behind
+ * would sit in the payments screen forever and count as pending money in the
+ * gateway report.
+ *
+ * Deliberately NOT a settlement path: it only ever moves an unsettled intent
+ * to `failed`, never touches the ledger, and refuses to act on one that is
+ * already paid — so it can never be used to bury a real payment.
+ */
+export async function abandonPaymentIntent(intentId: string, reason: string): Promise<void> {
+  const intent = await repositories.payments.findById(intentId);
+  if (!intent || intent.status === 'paid' || intent.status === 'failed') return;
+  await repositories.transactions.updateStatus(intent.transactionId, 'failed', intent.id);
+  await repositories.payments.updateStatus(intent.id, 'failed', {
+    failedAt: new Date().toISOString(),
+    metadata: { ...intent.metadata, abandonedReason: reason }
+  });
+  logger.warn('payment_intent_abandoned', { intentId, userId: intent.userId, reason });
 }
 
 export async function getPaymentIntent(id: string, userId?: string): Promise<PaymentIntent | null> {

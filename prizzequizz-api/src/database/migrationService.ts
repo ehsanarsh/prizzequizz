@@ -27,7 +27,8 @@ const requiredTables = [
   'sessions', 'security_events', 'push_subscriptions', 'notification_preferences', 'notifications',
   'integrity_signals', 'devices', 'user_device_bindings', 'user_risk_profiles', 'reward_holds',
   'support_tickets', 'support_messages', 'character_items', 'user_character_inventory', 'character_unlock_events',
-  'payment_intents', 'beta_invites', 'beta_access', 'order_fulfilments'
+  'payment_intents', 'beta_invites', 'beta_access', 'order_fulfilments',
+  'c2c_cards', 'c2c_sessions'
 ];
 
 const requiredIndexes = [
@@ -42,7 +43,14 @@ const requiredIndexes = [
   'idx_payment_intents_status_time',
   'idx_order_fulfilments_status',
   'idx_beta_invites_status',
-  'idx_beta_access_invite'
+  'idx_beta_access_invite',
+  /* THE ONE THAT MUST NEVER BE MISSING.
+   * c2c_amount_unique is not a performance index — it IS how two live payments
+   * are stopped from being told to send the same figure to the same card. A
+   * deploy that lands without it looks perfectly healthy right up to the first
+   * bank SMS that matches two people's orders at once. */
+  'c2c_amount_unique',
+  'idx_c2c_sessions_intent'
 ];
 
 export function listMigrationFiles(): string[] {

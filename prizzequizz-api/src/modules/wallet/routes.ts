@@ -3,7 +3,10 @@ import { error, json } from '../../http/response.js';
 import { repositories } from '../../repositories/index.js';
 import { requireAdmin } from '../../services/adminGuard.js';
 import { notifications } from '../../services/notificationService.js';
-import { createPaymentIntent, listPaymentIntents } from '../../services/paymentService.js';
+import { abandonPaymentIntent, createPaymentIntent, listPaymentIntents } from '../../services/paymentService.js';
+import { paymentMethodsFor } from '../../services/paymentMethodService.js';
+import { openForIntent } from '../../services/c2c/sessionService.js';
+import { AllocationError } from '../../services/c2c/amountAllocator.js';
 import {
   WALLET_LIMITS, WalletError, adminAdjust, auditLog, getAccount, getDashboard, internalTransfer,
   listAudit, listEntries, listWithdraws, postEntry, reportSummary, reportSuspicious, reportTopUsers,
@@ -113,14 +116,25 @@ export function registerWalletRoutes(router: Router, base: string): void {
     if (!order) return error(ctx.res, 400, 'ORDER_INVALID', 'سفارش نامعتبر است.');
     try {
       const q = await quote(order);
-      const acct = await getAccount(uid).catch(() => ({ available: 0 } as any));
+      const [acct, user] = await Promise.all([
+        getAccount(uid).catch(() => ({ available: 0 } as any)),
+        repositories.users.findById(uid)
+      ]);
       const vault = Number(acct.available) || 0;
+      const coins = Number(user?.coins) || 0;
+      /* The sheet itself, built server-side: with two gateways that can
+       * disagree about the same order, «can I pay by gateway» is no longer a
+       * yes or no. See paymentMethodService. */
+      const methods = await paymentMethodsFor(q, { vaultToman: vault, coins });
       json(ctx.res, 200, {
         order: q.order, amount: q.amount, currency: q.currency, label: q.label,
-        vaultBalance: vault,
-        /* What the sheet should offer. A coin-priced item has neither. */
-        canPayFromVault: q.currency === 'coins' ? true : vault >= q.amount,
-        canPayByGateway: isGatewayPayable(q)
+        vaultBalance: vault, coinBalance: coins,
+        /* Kept for clients built before the sheet existed. `canPayFromVault`
+         * now answers for coins from the real balance instead of always true:
+         * the old value made the button work and the purchase fail. */
+        canPayFromVault: methods.some((m) => m.kind === 'vault' && m.selectable),
+        canPayByGateway: isGatewayPayable(q),
+        paymentMethods: methods
       });
     } catch (e) {
       const oe = asOrderError(e);
@@ -140,15 +154,54 @@ export function registerWalletRoutes(router: Router, base: string): void {
     const meta = reqMeta(ctx);
     try {
       if (method === 'gateway') {
-        const intent = await createPaymentIntent({ userId: uid, order, callbackUrl: optionalString(body, 'callbackUrl'), idempotencyKey: optionalString(body, 'idempotencyKey') });
+        /* `gatewayId` is the player's CHOICE, not their permission —
+         * createPaymentIntent re-checks that the gateway is still live. */
+        const intent = await createPaymentIntent({
+          userId: uid, order,
+          callbackUrl: optionalString(body, 'callbackUrl'),
+          idempotencyKey: optionalString(body, 'idempotencyKey'),
+          gatewayId: optionalString(body, 'gatewayId')
+        });
+        /* An idempotency key that already settled or already died must not be
+         * dressed up as a fresh payment page. */
+        if (intent.status === 'paid') {
+          return json(ctx.res, 200, { method, flow: 'settled', intentId: intent.id, amount: intent.amount, status: intent.status });
+        }
+        if (intent.status === 'failed') {
+          return error(ctx.res, 409, 'PAYMENT_INTENT_FAILED', 'این پرداخت قبلاً ناموفق شده است؛ دوباره از اول شروع کن.');
+        }
+        if ((intent.metadata as any)?.gatewayType === 'card_to_card') {
+          let checkout;
+          try {
+            checkout = await openForIntent(intent);
+          } catch (e) {
+            /* No amount, no page — and no pending intent left behind either,
+             * or it would sit in the payments screen and in the gateway report
+             * as money on its way that was never asked for. */
+            await abandonPaymentIntent(intent.id, e instanceof AllocationError ? e.code : 'checkout_failed');
+            if (e instanceof AllocationError) {
+              await auditLog({ userId: uid, action: 'order_c2c_unavailable', api: 'POST /orders/pay', ...meta, request: { order }, error: e.code });
+              return error(ctx.res, e.code === 'C2C_CAPACITY_FULL' ? 503 : 409, e.code, e.message);
+            }
+            throw e;
+          }
+          await auditLog({ userId: uid, action: 'order_c2c_started', api: 'POST /orders/pay', ...meta, request: { order }, response: { intentId: intent.id, sessionId: checkout.sessionId, amountRial: checkout.amounts.payableRial } });
+          return json(ctx.res, 201, { method, flow: 'card_to_card', ...checkout });
+        }
         await auditLog({ userId: uid, action: 'order_gateway_started', api: 'POST /orders/pay', ...meta, request: { order }, response: { intentId: intent.id, amount: intent.amount } });
-        return json(ctx.res, 201, { method, intentId: intent.id, amount: intent.amount, status: intent.status, paymentUrl: intent.paymentUrl });
+        return json(ctx.res, 201, { method, flow: 'redirect', intentId: intent.id, amount: intent.amount, status: intent.status, paymentUrl: intent.paymentUrl });
       }
       const r = await payFromVault(uid, order, idem);
       await auditLog({ userId: uid, action: 'order_paid_from_vault', api: 'POST /orders/pay', ...meta, request: { order }, response: { amount: r.quote.amount, duplicate: r.duplicate } });
       json(ctx.res, 200, { method, amount: r.quote.amount, label: r.quote.label, granted: r.granted, duplicate: r.duplicate, balance: r.balance });
     } catch (e) {
       await auditLog({ userId: uid, action: 'order_failed', api: 'POST /orders/pay', ...meta, request: { order, method }, error: e instanceof Error ? e.message : 'unknown' });
+      /* Naming a gateway the panel has closed is not a bad order — it is a
+       * stale sheet. 409 tells the client to re-quote and show the current
+       * methods, which a flat 400 «سفارش نامعتبر است» never would. */
+      if (e instanceof WalletError && (e.code === 'GATEWAY_NOT_AVAILABLE' || e.code === 'GATEWAY_NOT_FOUND' || e.code === 'GATEWAY_SELECTION_REQUIRED')) {
+        return error(ctx.res, 409, e.code, e.message);
+      }
       const oe = asOrderError(e);
       if (oe) return error(ctx.res, 400, oe.code, oe.message);
       walletError(ctx, e);

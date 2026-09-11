@@ -4229,6 +4229,30 @@ button,input,textarea,select{font-family:'Vazirmatn',system-ui,sans-serif}
   padding-top:14px!important;
 }
 #menuSheet::-webkit-scrollbar{width:0}
+/* ---- Paying by card-to-card ----
+   The player reads two things off this page into a banking app: a card number
+   and an amount. Both are `mono`, both are LTR, and both have their own copy
+   button, because a mistyped digit in either one is a payment that nothing
+   will recognise. The amount is the largest thing on the screen for the same
+   reason — it is the only part that must be exact to the rial. */
+.c2c-amt{background:linear-gradient(180deg,rgba(255,210,31,.16),rgba(255,210,31,.06));border:2px solid rgba(255,210,31,.45);border-radius:18px;padding:14px 12px;text-align:center}
+.c2c-amt .big{font-size:27px;font-weight:900;letter-spacing:.5px;direction:ltr;display:block;line-height:1.25}
+.c2c-amt .sub{font-size:12px;color:var(--muted);display:block;margin-top:3px}
+.c2c-row{display:flex;align-items:center;gap:9px;background:rgba(255,255,255,.05);border:1.5px solid rgba(255,255,255,.12);border-radius:14px;padding:10px 12px;margin-top:9px}
+.c2c-row .lbl{font-size:11.5px;color:var(--muted);display:block}
+.c2c-row .val{font-size:14.5px;font-weight:900;display:block;word-break:break-all}
+.c2c-copy{flex-shrink:0;border:none;background:rgba(255,210,31,.16);color:var(--bolt,#FFD21F);border-radius:11px;width:38px;height:38px;font-size:15px;cursor:pointer;font-family:inherit}
+.c2c-note{font-size:12.5px;line-height:1.9;border-radius:14px;padding:10px 12px;margin-top:10px}
+.c2c-warn{background:rgba(255,90,90,.12);border:1.5px solid rgba(255,90,90,.32)}
+.c2c-ok{background:rgba(60,200,130,.12);border:1.5px solid rgba(60,200,130,.3);color:var(--muted)}
+.c2c-clock{font-size:15px;font-weight:900;direction:ltr;display:inline-block;min-width:62px;text-align:center}
+/* A method the server marked unselectable is shown, not hidden: the player
+   needs to see that card-to-card exists and WHY it cannot take this order. */
+.pm-row{display:flex;align-items:center;gap:10px;width:100%;text-align:right;border:2px solid rgba(255,255,255,.14);background:rgba(255,255,255,.05);border-radius:15px;padding:12px 13px;margin-top:9px;font-family:inherit;color:inherit;cursor:pointer}
+.pm-row[disabled]{opacity:.5;cursor:not-allowed}
+.pm-row .pm-name{font-size:14px;font-weight:900;display:block}
+.pm-row .pm-note{font-size:11.5px;color:var(--muted);display:block;margin-top:2px}
+.pm-row .pm-ic{width:36px;height:36px;border-radius:11px;background:rgba(255,210,31,.14);display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0}
 .menu-sheet-head{
   position:sticky;
   top:0;
@@ -7521,6 +7545,52 @@ img.pz-lgtk-big{width:74px;height:74px;object-fit:contain;filter:drop-shadow(0 8
     <div class="field"><label>نام بانک (اختیاری)</label><input class="input" id="bankNameInput" placeholder="خودکار از روی شماره کارت"></div>
     <div class="field"><label>شماره شبا (اختیاری)</label><input class="input mono" id="bankIbanInput" placeholder="IR..." dir="ltr"></div>
     <button class="btn btn-primary" onclick="submitBankCard()">ثبت کارت</button>
+  </div>
+
+  <!-- Payment method sheet: built from the server's paymentMethods[] -->
+  <div class="sheet-bg" id="payMethodBg" onclick="pzClosePayMethods()"></div>
+  <div class="sheet" id="payMethodSheet">
+    <div class="grab"></div>
+    <button class="sheet-x" onclick="pzClosePayMethods()" aria-label="بستن">✕</button>
+    <h1 style="font-size:19px;font-weight:900" id="pmTitle">پرداخت</h1>
+    <p style="color:var(--muted);font-size:13px;margin:4px 0 12px" id="pmSub">روش پرداخت را انتخاب کن</p>
+    <div id="pmList"></div>
+  </div>
+
+  <!-- Card-to-card payment page -->
+  <div class="sheet-bg" id="c2cBg" onclick="pzCloseC2c()"></div>
+  <div class="sheet" id="c2cSheet">
+    <div class="grab"></div>
+    <button class="sheet-x" onclick="pzCloseC2c()" aria-label="بستن">✕</button>
+    <h1 style="font-size:19px;font-weight:900">پرداخت کارت به کارت 💳</h1>
+    <p style="color:var(--muted);font-size:13px;margin:4px 0 12px" id="c2cOrder">—</p>
+    <div id="c2cLive">
+      <div class="c2c-amt">
+        <span class="sub">مبلغ دقیق واریز</span>
+        <span class="big mono" id="c2cAmount">—</span>
+        <span class="sub" id="c2cAmountToman">—</span>
+        <button class="btn btn-ghost btn-sm" style="margin-top:9px" onclick="pzCopyC2c('amount')">کپی مبلغ</button>
+      </div>
+      <div class="c2c-note c2c-warn" id="c2cNotice">—</div>
+      <div class="c2c-row">
+        <span style="flex:1;min-width:0"><span class="lbl">شمارهٔ کارت مقصد</span><span class="val mono" dir="ltr" id="c2cPan">—</span></span>
+        <button class="c2c-copy" onclick="pzCopyC2c('pan')" aria-label="کپی شمارهٔ کارت">⧉</button>
+      </div>
+      <div class="c2c-row">
+        <span style="flex:1;min-width:0"><span class="lbl">به نام</span><span class="val" id="c2cHolder">—</span></span>
+        <span style="font-size:12px;color:var(--muted)" id="c2cBank">—</span>
+      </div>
+      <div class="c2c-row">
+        <span style="flex:1;min-width:0"><span class="lbl">مهلت واریز</span><span class="val"><span class="c2c-clock mono" id="c2cClock">—</span></span></span>
+        <span style="text-align:left"><span class="lbl">کد پیگیری</span><span class="val mono" dir="ltr" id="c2cTrack">—</span></span>
+      </div>
+      <div class="c2c-note c2c-ok" id="c2cAuto">—</div>
+      <button class="btn btn-ghost" style="margin-top:12px" onclick="pzCancelC2c()">انصراف از این پرداخت</button>
+    </div>
+    <div id="c2cDone" style="display:none">
+      <div class="kyc-status" style="background:rgba(255,210,31,.10)"><div class="ks" id="c2cDoneIcon">⏳</div><div><b id="c2cDoneMsg">—</b><span id="c2cDoneSub">کد پیگیری: <span class="mono" dir="ltr" id="c2cDoneTrack">—</span></span></div></div>
+      <button class="btn btn-primary" style="margin-top:12px" onclick="pzCloseC2c()">بستن</button>
+    </div>
   </div>
 
   <!-- Menu sheet -->
@@ -18642,7 +18712,7 @@ function startMatchmaking(){
   const scanMsgs=['هماهنگ‌سازی سطح مهارت...','پیدا کردن اتصال پایدار...','بررسی سرعت پاسخ...','آماده‌سازی دوئل تمرینی...'];let msgIdx=0;
   mmMsgT=setInterval(()=>{if(!document.getElementById('matchmaking').classList.contains('active')){clearInterval(mmMsgT);return;}msgIdx=(msgIdx+1)%scanMsgs.length;document.getElementById('mmScanSub').textContent=scanMsgs[msgIdx];},1150);
   mmTimer=setInterval(()=>{
-    mmElapsed++;document.getElementById('mmTime').textContent='۰:'+fa(String(mmElapsed).padStart(2,'0'));
+    mmElapsed++;document.getElementById('mmTime').textContent='۰:'+faPad2(mmElapsed);
   },1000);
   pzStartQueueCount();
   setTimeout(()=>{
@@ -18716,7 +18786,7 @@ function startConsensusChat(){
   clearInterval(ccTimer);
   ccTimer=setInterval(()=>{
     ccLeft--;const el=document.getElementById('ccCount');
-    el.textContent='۰:'+fa(String(Math.max(0,ccLeft)).padStart(2,'0'));
+    el.textContent='۰:'+faPad2(ccLeft);
     el.classList.toggle('warn',ccLeft<=10);
     if(Math.random()<0.22)addChat('consChatBox',names[Math.floor(Math.random()*names.length)],['ادامه!','برداشت بهتره','😅','پایه‌ام 👍','نه بسه'][Math.floor(Math.random()*5)],false);
     if(ccLeft<=0){clearInterval(ccTimer);startVote();}
@@ -19353,6 +19423,17 @@ function fa(n){
   const s=Number(n).toLocaleString('en-US').replace(/,/g,'٬');
   const f=['۰','۱','۲','۳','۴','۵','۶','۷','۸','۹'];
   return s.replace(/[0-9]/g,d=>f[d]);
+}
+
+/* A CLOCK IS NOT A NUMBER.
+   `fa()` runs its argument through Number() to group thousands, which eats a
+   leading zero: fa('05') is «۵», not «۰۵». Every countdown in the page was
+   built as fa(String(x).padStart(2,'0')), so for the first ten seconds of
+   every minute they all read «۰:۵». Padding has to happen AFTER the digits are
+   converted, which is all this does. */
+function faPad2(n){
+  const f=['۰','۱','۲','۳','۴','۵','۶','۷','۸','۹'];
+  return String(Math.max(0,Math.floor(Number(n)||0))).padStart(2,'0').replace(/[0-9]/g,d=>f[d]);
 }
 
 /* OTP countdown.
@@ -20077,7 +20158,7 @@ startMatchmaking = async function(){
   },650);
   mmTimer=setInterval(()=>{
     mmElapsed++;
-    document.getElementById('mmTime').textContent='۰:'+fa(String(mmElapsed).padStart(2,'0'));
+    document.getElementById('mmTime').textContent='۰:'+faPad2(mmElapsed);
   },1000);
 
   /* API enqueue */
@@ -22138,38 +22219,72 @@ renderWalletSecurity=function(c){
    is shown BEFORE anything is charged; both buttons post the same order and
    differ only in `method`. */
 window.pzBuyOrder=async function(order,label){
-  /* Price it first. The server decides the amount and which doors are open —
-     the client never sends a price and never guesses whether the صندوق can
-     cover it. */
+  /* Price it first. The server decides the amount, which doors are open, AND
+     what to say about each one — the client never sends a price, never guesses
+     whether the صندوق can cover it, and never writes its own sentence about
+     why a method is unavailable. */
   const q=await pzApi('POST','/orders/quote',{order});
   if(!q||!q.ok||!q.data){ toast((q&&q.error&&q.error.message)||'خطا در قیمت‌گذاری'); return false; }
   const d=q.data;
   const name=label||d.label||'خرید';
+  const methods=Array.isArray(d.paymentMethods)?d.paymentMethods:[];
 
-  /* Coin-priced items have no funding choice to make. */
-  if(d.currency==='coins') return pzPayOrder(order,'vault',name);
+  /* A LIST OF ONE IS NOT A CHOICE — but a list of three with two greyed out is
+     information, and skipping it because only one is selectable would hide
+     exactly what the player needs: why the صندوق cannot cover this, and that
+     card-to-card is what will be used. It would also start allocating a unique
+     amount with no confirmation. So the sheet is skipped only when the server
+     listed a single method at all (a coin-priced item), never when it listed
+     several and one happens to be usable. */
+  if(methods.length===1&&methods[0].selectable) return pzPayOrder(order,methods[0],name);
+  if(!methods.length) return pzPayOrder(order,{id:'vault',kind:'vault'},name);
 
   return new Promise((resolve)=>{
-    const vaultLine=d.canPayFromVault
-      ? 'موجودی صندوق: <b>'+fa(d.vaultBalance)+' تومان</b>'
-      : '<span style="color:var(--bad)">موجودی صندوق کافی نیست ('+fa(d.vaultBalance)+' تومان)</span>';
-    showAaaModal({
-      icon:'💳', title:name,
-      sub:'<div style="text-align:center;line-height:2.1">مبلغ: <b>'+fa(d.amount)+' تومان</b><br>'+vaultLine+'<br><span style="color:var(--muted);font-size:12px">روش پرداخت را انتخاب کن</span></div>',
-      primaryText: d.canPayFromVault?'پرداخت از صندوق جایزه':'درگاه پرداخت',
-      secondaryText: d.canPayFromVault?'درگاه پرداخت':'انصراف',
-      onPrimary:async()=>{ closeAaaModal(false); resolve(await pzPayOrder(order, d.canPayFromVault?'vault':'gateway', name)); },
-      onSecondary:async()=>{ closeAaaModal(false); if(!d.canPayFromVault) return resolve(false); resolve(await pzPayOrder(order,'gateway',name)); }
-    });
+    _pzPmResolve=resolve; _pzPmOrder=order; _pzPmName=name;
+    document.getElementById('pmTitle').textContent=name;
+    document.getElementById('pmSub').innerHTML='مبلغ: <b>'+fa(d.amount)+(d.currency==='coins'?' سکه':' تومان')+'</b> — روش پرداخت را انتخاب کن';
+    const ic={vault:'🏆',card_to_card:'💳',gateway_redirect:'🏦'};
+    document.getElementById('pmList').innerHTML=methods.map((m,i)=>
+      '<button type="button" class="pm-row" '+(m.selectable?'':'disabled')+' onclick="pzPickPayMethod('+i+')">'+
+        '<span class="pm-ic">'+(ic[m.kind]||'💳')+'</span>'+
+        '<span style="flex:1;min-width:0"><span class="pm-name">'+esc0(m.label||'')+'</span>'+
+        '<span class="pm-note">'+esc0(m.note||'')+'</span></span>'+
+        (m.selectable?'<span style="color:var(--muted);font-size:16px">‹</span>':'')+
+      '</button>').join('');
+    _pzPmMethods=methods;
+    document.getElementById('payMethodBg').classList.add('show');
+    document.getElementById('payMethodSheet').classList.add('show');
   });
 };
 
+let _pzPmResolve=null,_pzPmMethods=[],_pzPmOrder=null,_pzPmName='';
+function pzClosePayMethods(){
+  document.getElementById('payMethodBg').classList.remove('show');
+  document.getElementById('payMethodSheet').classList.remove('show');
+  const r=_pzPmResolve; _pzPmResolve=null;
+  if(r) r(false);
+}
+window.pzPickPayMethod=async function(i){
+  const m=_pzPmMethods[i]; if(!m||!m.selectable) return;
+  const r=_pzPmResolve; _pzPmResolve=null;
+  document.getElementById('payMethodBg').classList.remove('show');
+  document.getElementById('payMethodSheet').classList.remove('show');
+  const ok=await pzPayOrder(_pzPmOrder,m,_pzPmName);
+  if(r) r(ok);
+};
+
+/* `method` is what the endpoint understands ('vault' or 'gateway'); `gatewayId`
+   is WHICH gateway the player picked. The server re-checks it — a sheet cached
+   from before the operator closed a gateway must not be able to open it. */
 async function pzPayOrder(order,method,name){
+  const kind=(method&&method.kind)||'vault';
   const key='ord_'+Date.now()+'_'+Math.random().toString(36).slice(2,8);
-  const r=await pzApi('POST','/orders/pay',{order,method,idempotencyKey:key});
+  const body={order,method:kind==='vault'?'vault':'gateway',idempotencyKey:key};
+  if(kind!=='vault') body.gatewayId=method.id;
+  const r=await pzApi('POST','/orders/pay',body);
   if(!r||!r.ok||!r.data){ toast((r&&r.error&&r.error.message)||'پرداخت انجام نشد'); return false; }
 
-  if(method==='vault'){
+  if(kind==='vault'){
     await pzSyncWallet();
     try{ pzReceipt(r.data.granted,name); }catch(e){ toast(name+' خریداری شد ✅'); }
     try{ pzHydrateAll(); }catch(e){}
@@ -22178,6 +22293,11 @@ async function pzPayOrder(order,method,name){
     try{ pzShopReturnAfterBuy(); }catch(e){}
     return true;
   }
+
+  /* Card to card: no redirect and no link to fetch. The player is shown a card
+     and an exact amount, and the purchase activates when the bank's SMS is
+     matched — which may be after this page is closed. */
+  if(r.data.flow==='card_to_card') return pzOpenC2c(r.data,name);
 
   /* Gateway: a real PSP redirects; the sandbox link carries the same signed
      proof. Settlement only ever happens server-side. */
@@ -22196,6 +22316,152 @@ async function pzPayOrder(order,method,name){
   toast(name+' خریداری شد ✅');
   try{ pzShopReturnAfterBuy(); }catch(e){}
   return true;
+}
+
+/* ---- The card-to-card payment page ----
+   Two rules shape everything below.
+
+   THE DEADLINE IS THE SERVER'S. A phone whose clock is wrong would otherwise
+   show a countdown that has nothing to do with the one being enforced, so the
+   offset against `serverTime` is measured once and the rest of the count runs
+   off the device's own monotonic clock.
+
+   CLOSING THE PAGE IS NOT CANCELLING. The payment stays live and activates by
+   itself; only «انصراف» cancels. That is why the close button stops the timers
+   and nothing else. */
+let _c2cSession=null,_c2cTimer=null,_c2cPollTimer=null,_c2cDeadline=0,_c2cResolve=null,_c2cName='',_c2cPolls=0;
+
+function pzOpenC2c(d,name){
+  _c2cSession=d; _c2cName=name||'خرید'; _c2cPolls=0;
+  document.getElementById('c2cOrder').textContent=(d.order&&d.order.label?d.order.label:_c2cName)+' — '+d.amounts.finalTomanText;
+  document.getElementById('c2cAmount').textContent=d.amounts.payableRialText;
+  document.getElementById('c2cAmountToman').textContent='معادل '+d.amounts.finalTomanText;
+  document.getElementById('c2cPan').textContent=d.card.panFormatted;
+  document.getElementById('c2cHolder').textContent=d.card.holderName||'—';
+  document.getElementById('c2cBank').textContent=d.card.bankName||'';
+  document.getElementById('c2cTrack').textContent=d.trackingCode;
+  document.getElementById('c2cNotice').textContent=d.notice;
+  document.getElementById('c2cAuto').textContent=d.autoActivate;
+  document.getElementById('c2cLive').style.display='';
+  document.getElementById('c2cDone').style.display='none';
+  /* performance.now() so a clock correction mid-payment — an NTP sync, a
+     timezone change — cannot make the countdown jump. */
+  _c2cDeadline=(typeof performance!=='undefined'&&performance.now?performance.now():Date.now())+(Number(d.secondsLeft)||0)*1000;
+  pzC2cTick();
+  clearInterval(_c2cTimer); _c2cTimer=setInterval(pzC2cTick,1000);
+  pzC2cSchedulePoll();
+  document.getElementById('c2cBg').classList.add('show');
+  document.getElementById('c2cSheet').classList.add('show');
+  return new Promise((res)=>{ _c2cResolve=res; });
+}
+
+function pzC2cTick(){
+  const now=(typeof performance!=='undefined'&&performance.now?performance.now():Date.now());
+  const left=Math.max(0,Math.round((_c2cDeadline-now)/1000));
+  const el=document.getElementById('c2cClock'); if(!el) return;
+  el.textContent=faPad2(Math.floor(left/60))+':'+faPad2(left%60);
+  el.style.color=left<=120?'var(--bad)':'';
+  if(left<=0){ clearInterval(_c2cTimer); _c2cTimer=null; pzC2cPoll(); }
+}
+
+/* Backoff, because most of this wait is a person walking to another app: 2s
+   while they might still be on screen, 5s, then 15s. */
+function pzC2cSchedulePoll(){
+  clearTimeout(_c2cPollTimer);
+  const wait=_c2cPolls<15?2000:(_c2cPolls<39?5000:15000);
+  _c2cPollTimer=setTimeout(pzC2cPoll,wait);
+}
+async function pzC2cPoll(){
+  if(!_c2cSession) return;
+  _c2cPolls++;
+  let st=null;
+  try{ st=await pzApi('GET','/c2c/sessions/'+_c2cSession.sessionId); }catch(e){}
+  if(!_c2cSession) return;               /* closed while the request was in flight */
+  if(st&&st.ok&&st.data){
+    const s=st.data;
+    if(s.status==='PAID') return pzC2cSettled(s);
+    if(s.status!=='AWAITING') return pzC2cEnded(s);
+  }
+  pzC2cSchedulePoll();
+}
+
+function pzC2cStop(){
+  clearInterval(_c2cTimer); _c2cTimer=null;
+  clearTimeout(_c2cPollTimer); _c2cPollTimer=null;
+}
+
+function pzC2cSettled(s){
+  pzC2cStop();
+  sfx('correct');
+  document.getElementById('c2cLive').style.display='none';
+  document.getElementById('c2cDoneIcon').textContent='✅';
+  document.getElementById('c2cDoneMsg').textContent=s.message;
+  document.getElementById('c2cDoneTrack').textContent=s.trackingCode;
+  document.getElementById('c2cDone').style.display='';
+  try{ pzReceipt(s.granted,_c2cName); }catch(e){}
+  try{ pzHydrateAll(); }catch(e){}
+  try{ pzSyncWallet(); }catch(e){}
+  const r=_c2cResolve; _c2cResolve=null; _c2cSession=null;
+  if(r) r(true);
+}
+
+/* Expired, cancelled or under review. The server's own sentence is shown —
+   «مهلت تمام شد» must not read as «پولت گم شد», and only the server knows
+   how long a late transfer stays recognisable. */
+function pzC2cEnded(s){
+  pzC2cStop();
+  document.getElementById('c2cLive').style.display='none';
+  document.getElementById('c2cDoneIcon').textContent=s.status==='REVIEW'?'⏳':'⌛';
+  document.getElementById('c2cDoneMsg').textContent=s.message;
+  document.getElementById('c2cDoneTrack').textContent=s.trackingCode;
+  document.getElementById('c2cDone').style.display='';
+  const r=_c2cResolve; _c2cResolve=null; _c2cSession=null;
+  if(r) r(false);
+}
+
+function pzCloseC2c(){
+  pzC2cStop();
+  document.getElementById('c2cBg').classList.remove('show');
+  document.getElementById('c2cSheet').classList.remove('show');
+  const r=_c2cResolve; _c2cResolve=null; _c2cSession=null;
+  if(r) r(false);
+}
+
+async function pzCancelC2c(){
+  if(!_c2cSession) return;
+  const sid=_c2cSession.sessionId;
+  showAaaModal({
+    icon:'⚠️', title:'انصراف از پرداخت؟',
+    sub:'اگر مبلغ را واریز کرده‌ای انصراف نده — واریزت شناسایی می‌شود.',
+    primaryText:'بله، انصراف', secondaryText:'برمی‌گردم',
+    onPrimary:async()=>{
+      closeAaaModal(false);
+      const r=await pzApi('POST','/c2c/sessions/'+sid+'/cancel');
+      if(r&&r.ok&&r.data) pzC2cEnded(r.data); else { toast((r&&r.error&&r.error.message)||'انصراف انجام نشد'); }
+    },
+    onSecondary:()=>closeAaaModal(false)
+  });
+}
+
+function pzCopyC2c(what){
+  if(!_c2cSession) return;
+  /* The RAW figure, not the grouped one: a banking app's amount box does not
+     take separators, and «۱٬۰۰۰٬۰۴۷» pasted into it is a rejected payment. */
+  const txt=what==='amount'?_c2cSession.amounts.payableRialRaw:_c2cSession.card.pan;
+  pzCopyText(txt, what==='amount'?'مبلغ کپی شد — بدون تغییر واریز کن ✅':'شمارهٔ کارت کپی شد ✅');
+}
+
+/* One copy path for the whole app. The modern clipboard needs a secure context
+   and a gesture; the old selection trick needs neither, so both are tried. */
+function pzCopyText(text,msg){
+  const done=()=>{ toast(msg||'کپی شد ✅'); try{ vib(20); }catch(e){} };
+  try{
+    if(navigator.clipboard&&navigator.clipboard.writeText){
+      navigator.clipboard.writeText(String(text)).then(done).catch(()=>refCopyFallback(String(text),done));
+      return;
+    }
+  }catch(e){}
+  refCopyFallback(String(text),done);
 }
 
 /* What was actually handed over, as the server reported it — not a re-reading

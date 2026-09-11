@@ -1,4 +1,4 @@
-/* CARD-TO-CARD — admin REST.
+/* CARD-TO-CARD — the payment page, and the destination cards behind it.
  *
  * Only the destination cards for now; the transaction queue, the forwarder
  * devices and the bank patterns arrive with the stages that produce them,
@@ -10,7 +10,7 @@
  * money is taken. A second settings screen for five numbers would be a second
  * place to look.
  */
-import type { Router } from '../../http/router.js';
+import type { RequestContext, Router } from '../../http/router.js';
 import { error, json } from '../../http/response.js';
 import { requireAdmin } from '../../services/adminGuard.js';
 import { recordAdmin } from '../../services/adminAuditService.js';
@@ -19,6 +19,7 @@ import {
   CARD_STATUSES, CardError, formatPan, listCards, removeCard, saveCard, takenTodayRial, type C2cCard
 } from '../../services/c2c/cardService.js';
 import { listSessions } from '../../services/c2c/sessionStore.js';
+import { SessionError, cancelSession, viewSession } from '../../services/c2c/sessionService.js';
 
 /* The operator's own card number, so it is not a secret from them — but a list
  * on a shared screen is not where it belongs either. The full number rides
@@ -38,7 +39,43 @@ async function describe(card: C2cCard): Promise<Record<string, unknown>> {
   };
 }
 
+function requireUser(ctx: RequestContext): string | null {
+  if (!ctx.userId) { error(ctx.res, 401, 'UNAUTHORIZED', 'برای این کار باید وارد شوی.'); return null; }
+  return ctx.userId;
+}
+
+function sessionError(ctx: RequestContext, e: unknown): void {
+  if (e instanceof SessionError) {
+    /* NOT_FOUND is also the answer for somebody else's session: a 403 would
+     * confirm that the id exists, which is the one thing an id-guesser wants. */
+    error(ctx.res, e.code === 'C2C_SESSION_NOT_FOUND' ? 404 : 409, e.code, e.message);
+    return;
+  }
+  throw e;
+}
+
 export function registerC2cRoutes(router: Router, base: string): void {
+
+  /* ---------- The player's own payment page ----------
+   * Polled while the page is open, with the backoff the client applies
+   * (2s → 5s → 15s). No limiter of its own: the global one already counts per
+   * CALLER and per PATH, and this path carries the session id, so a polling
+   * page gets its own 120/minute bucket — well clear of that backoff, and
+   * still a wall for a client stuck in a tight loop. */
+  router.add('GET', `${base}/c2c/sessions/:id`, async (ctx) => {
+    const uid = requireUser(ctx); if (!uid) return;
+    try {
+      json(ctx.res, 200, await viewSession(ctx.params.id!, uid));
+    } catch (e) { sessionError(ctx, e); }
+  });
+
+  router.add('POST', `${base}/c2c/sessions/:id/cancel`, async (ctx) => {
+    const uid = requireUser(ctx); if (!uid) return;
+    try {
+      json(ctx.res, 200, await cancelSession(ctx.params.id!, uid));
+    } catch (e) { sessionError(ctx, e); }
+  });
+
   router.add('GET', `${base}/admin/c2c/cards`, async (ctx) => {
     if (!requireAdmin(ctx, { tab: 'c2ccards' })) return;
     const cards = await listCards();

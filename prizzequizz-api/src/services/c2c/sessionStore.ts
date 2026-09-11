@@ -96,6 +96,9 @@ export async function ensureSessionSchema(pool: ReturnType<typeof getPgPool>): P
     CREATE INDEX IF NOT EXISTS idx_c2c_sessions_sweep ON c2c_sessions(status, expires_at);
     CREATE INDEX IF NOT EXISTS idx_c2c_sessions_user ON c2c_sessions(user_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_c2c_sessions_match ON c2c_sessions(amount_rial, status);
+    /* The retry lookup — see database/migrations/029. Partial, because only
+     * live sessions are ever asked for by intent. */
+    CREATE INDEX IF NOT EXISTS idx_c2c_sessions_intent ON c2c_sessions(intent_id) WHERE status = 'AWAITING';
   `);
   _schemaReady = true;
 }
@@ -193,6 +196,31 @@ export async function getSession(sessionId: string): Promise<C2cSession | null> 
   return s ? { ...s } : null;
 }
 
+/* The live session for a payment intent, if one was already made.
+ *
+ * Two taps on «پرداخت» are one payment, not two: without this the second tap
+ * burns another slot in the card's amount space and shows a different figure
+ * for the same order — and whichever one the player then transfers, the other
+ * stays reserved for hours holding an amount nobody will ever send.
+ *
+ * Only AWAITING counts. An expired session's deadline has passed, so a fresh
+ * attempt needs a fresh deadline; the old amount stays reserved and still
+ * settles the same intent, which `orderFulfilmentService` keeps to once. */
+export async function liveSessionForIntent(intentId: string): Promise<C2cSession | null> {
+  const pool = pg();
+  if (pool) {
+    await ensureSessionSchema(pool);
+    const { rows } = await pool.query(
+      `SELECT * FROM c2c_sessions WHERE intent_id=$1 AND status='AWAITING' ORDER BY created_at DESC LIMIT 1`,
+      [intentId]);
+    return rows[0] ? rowToSession(rows[0]) : null;
+  }
+  const found = [...mem.values()]
+    .filter((s) => s.intentId === intentId && s.status === 'AWAITING')
+    .sort((a, b) => (a.createdAt > b.createdAt ? -1 : 1))[0];
+  return found ? { ...found } : null;
+}
+
 /** Sessions still holding an amount for this user — the per-user cap counts these. */
 export async function reservingSessionsForUser(userId: string): Promise<C2cSession[]> {
   const pool = pg();
@@ -253,3 +281,17 @@ export function _memPaidTodayRial(cardId: string): number {
 
 /** Test seam. */
 export function _resetSessions(): void { mem.clear(); _schemaReady = false; }
+
+/* Test seam: move a session's deadline, on whichever driver is running.
+ * The alternative is a test that sleeps for the shortest configurable TTL —
+ * one minute — which is not a test anybody runs. */
+export async function _setExpiresAt(sessionId: string, iso: string): Promise<void> {
+  const pool = pg();
+  if (pool) {
+    await ensureSessionSchema(pool);
+    await pool.query(`UPDATE c2c_sessions SET expires_at=$2 WHERE id=$1`, [sessionId, iso]);
+    return;
+  }
+  const s = mem.get(sessionId);
+  if (s) s.expiresAt = iso;
+}
