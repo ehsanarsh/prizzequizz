@@ -38,7 +38,7 @@ import { getMessage, insertMessage, listMessages, purgeOldBodies, PURGED_NOTE, _
 import { listPatterns, setPatternStatus, _resetPatterns } from '../services/c2c/patternStore.js';
 import { createPairingCode, pairDevice, touchDevice, _resetDevices } from '../services/c2c/deviceStore.js';
 import { ingestSms } from '../services/c2c/matchService.js';
-import { c2cAlerts, dailyReport } from '../services/c2c/reportService.js';
+import { c2cAlerts, catalogueAlerts, dailyReport } from '../services/c2c/reportService.js';
 import { purgeRawText } from '../services/c2c/c2cWorker.js';
 import { listGateways, removeGateway, saveGateway, updatePaymentSettings } from '../services/paymentGatewayService.js';
 import { id } from '../utils/id.js';
@@ -242,6 +242,77 @@ async function run(): Promise<void> {
       const ready = (await c2cAlerts()).find((a) => a.id === 'c2c_pattern_ready');
       assert.equal(ready?.detail?.includes('رفاه') ?? false, false,
         'a pattern unproven against a withdrawal was offered for promotion');
+    });
+
+    await check('a catalogue priced entirely under the floor is a critical alert', async () => {
+      /* The floor is the BANK's rule: below it no SMS arrives, so the payment
+       * could never be recognised. If nothing in the shop clears it, the whole
+       * feature is built, deployed — and offered to nobody. Nothing throws;
+       * players simply never see the option, and «nobody chose it» looks
+       * exactly the same from the outside.
+       *
+       * Priced here rather than read from the live catalogue: this is a rule
+       * about prices, and a test that edits the real shop to check it can only
+       * fail in ways that have nothing to do with the rule. */
+      const alerts = catalogueAlerts([
+        { price: 40_000, currency: 'cash', category: 'tickets' },
+        { price: 50_000, currency: 'cash', category: 'tickets' },
+        { price: 12_000, currency: 'cash', category: 'hearts' }
+      ], 50_000);
+      const none = alerts.find((a) => a.id === 'c2c_nothing_payable');
+      assert.ok(none, alertIds(alerts).join(', ') || 'no alert at all');
+      assert.equal(none!.level, 'critical', 'a feature offered to nobody is not a warning');
+      assert.match(none!.detail, /به هیچ بازیکنی پیشنهاد نمی‌شود/);
+      assert.equal(alerts.length, 1, 'the ticket line only repeats what the critical line already said');
+    });
+
+    await check('an item priced EXACTLY at the floor does not count as payable', async () => {
+      /* eligibleCards rejects at amountToman <= minAmountToman. A `>=` here
+       * would call this shop healthy while every player saw no option. */
+      const alerts = catalogueAlerts([{ price: 50_000, currency: 'cash', category: 'tickets' }], 50_000);
+      assert.ok(alerts.some((a) => a.id === 'c2c_nothing_payable'),
+        'a shop priced exactly at the floor was reported as payable');
+    });
+
+    await check('and a shop where only TICKETS are under the floor says so separately', async () => {
+      /* A shop where a heart can be paid by transfer but a MATCH ENTRY cannot
+       * is a strange shop — and that is today's real catalogue. */
+      const alerts = catalogueAlerts([
+        { price: 200_000, currency: 'cash', category: 'hearts' },
+        { price: 50_000, currency: 'cash', category: 'tickets' },
+        { price: 40_000, currency: 'cash', category: 'tickets' }
+      ], 50_000);
+      assert.ok(!alerts.some((a) => a.id === 'c2c_nothing_payable'), 'the shop does sell something payable');
+      const noTicket = alerts.find((a) => a.id === 'c2c_no_payable_ticket');
+      assert.ok(noTicket, alertIds(alerts).join(', ') || 'no alert at all');
+      assert.equal(noTicket!.level, 'warn');
+      assert.match(noTicket!.detail, /بستهٔ چندتایی/, 'nothing tells the operator what to do about it');
+    });
+
+    await check('a shop that sells a payable ticket is not warned about', async () => {
+      const alerts = catalogueAlerts([
+        { price: 200_000, currency: 'cash', category: 'hearts' },
+        { price: 60_000, currency: 'cash', category: 'tickets' },
+        { price: 40_000, currency: 'cash', category: 'tickets' }
+      ], 50_000);
+      assert.deepEqual(alerts.map((a) => a.id), [], 'a healthy catalogue was reported as broken');
+    });
+
+    await check('a shop that sells no tickets is not warned about its tickets', async () => {
+      /* Without the length check the message reads «همهٔ ۰ محصول دستهٔ بلیط…» —
+       * an alert about a category the shop does not have, which teaches the
+       * operator to stop reading alerts. */
+      assert.deepEqual(
+        catalogueAlerts([{ price: 200_000, currency: 'cash', category: 'hearts' }], 50_000).map((a) => a.id),
+        [], 'a shop with no ticket category was told its tickets are unpayable');
+    });
+
+    await check('coin-priced items are not mistaken for money', async () => {
+      /* Only `cash` items can be paid by transfer at all. A shop selling
+       * nothing for money has no card-to-card problem to report. */
+      assert.deepEqual(
+        catalogueAlerts([{ price: 900, currency: 'coins', category: 'tickets' }], 50_000).map((a) => a.id),
+        [], 'a coin price was measured against a Toman floor');
     });
 
     await check('unparsed messages are surfaced with their deadline', async () => {

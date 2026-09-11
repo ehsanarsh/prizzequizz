@@ -28,7 +28,18 @@ const requiredTables = [
   'integrity_signals', 'devices', 'user_device_bindings', 'user_risk_profiles', 'reward_holds',
   'support_tickets', 'support_messages', 'character_items', 'user_character_inventory', 'character_unlock_events',
   'payment_intents', 'beta_invites', 'beta_access', 'order_fulfilments',
-  'c2c_cards', 'c2c_sessions', 'bank_transactions', 'bank_sms_patterns', 'bank_sms_messages', 'bank_sms_devices'
+  /* THE MONEY PATH IS VERIFIED WHOLE, NOT MOSTLY.
+   *
+   * Every table the card-to-card feature owns is named c2c_* or bank_*, and
+   * every one of them is listed here. bank_sms_pairings was the one that was
+   * not, for no reason other than that it was written last — a deploy could
+   * have landed without it and `db:verify` would have said the database was
+   * fine, right up to the moment the operator tried to pair a phone.
+   *
+   * schemaContract.test.ts holds the whole rule to this list, so the next
+   * table in this feature cannot be forgotten the same way. */
+  'c2c_cards', 'c2c_sessions', 'bank_transactions', 'bank_sms_patterns', 'bank_sms_messages',
+  'bank_sms_devices', 'bank_sms_pairings'
 ];
 
 const requiredIndexes = [
@@ -50,6 +61,11 @@ const requiredIndexes = [
    * deploy that lands without it looks perfectly healthy right up to the first
    * bank SMS that matches two people's orders at once. */
   'c2c_amount_unique',
+  /* The code the player is given to quote back. tryInsertSession does not
+   * merely benefit from this index — it is written against it, retrying on the
+   * 23505 the index raises. Without it the collision never raises at all, and
+   * two players walk away holding the same tracking code. */
+  'c2c_tracking_unique',
   'idx_c2c_sessions_intent',
   /* The other index that is a rule, not a speed-up: one deposit may settle at
    * most one order. Without it, a bug in the settlement path can deliver twice

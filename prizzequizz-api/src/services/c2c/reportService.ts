@@ -18,13 +18,14 @@
  * being restated in a query that drifts.
  */
 import { getPaymentSettings } from '../paymentGatewayService.js';
-import { listCards } from './cardService.js';
+import { listCards, lowestFloorToman } from './cardService.js';
+import { listItems } from '../shopService.js';
 import { listSessions } from './sessionStore.js';
 import { listTransactions, type BankTransaction } from './transactionStore.js';
 import { listMessages } from './messageStore.js';
 import { listDevices, isOffline, OFFLINE_AFTER_MS } from './deviceStore.js';
 import { listPatterns, TRIAL_CONFIRMATIONS } from './patternStore.js';
-import { formatRialFa } from '../money.js';
+import { formatRialFa, formatTomanFa } from '../money.js';
 import type { AlertLevel, SecurityAlert } from '../securityAlertService.js';
 
 export interface DailyRow {
@@ -134,6 +135,47 @@ function alert(id: string, level: AlertLevel, title: string, detail: string, cou
   return { id, level, title, detail, count, tab: 'c2c', at: new Date().toISOString() };
 }
 
+/** The only two things the catalogue check needs to know about a shop item. */
+export interface PricedItem {
+  price: number;
+  currency: string;
+  category?: string;
+}
+
+/**
+ * Whether a shop priced like this can be paid for by transfer at all.
+ *
+ * Kept pure and separate from c2cAlerts because it is a rule about PRICES, and
+ * a rule about prices should be checkable by naming prices — not by editing the
+ * live catalogue and hoping the edit is undone. It also means the two ways this
+ * goes wrong can be stated exactly once each.
+ *
+ * `floorToman` is the bank's rule, and the comparison is deliberately strict:
+ * eligibleCards rejects an order at `amountToman <= minAmountToman`, so an item
+ * priced EXACTLY at the floor is not payable either. A `>=` here would report a
+ * shop as healthy while every player saw the option missing.
+ */
+export function catalogueAlerts(items: readonly PricedItem[], floorToman: number): SecurityAlert[] {
+  const out: SecurityAlert[] = [];
+  const cash = items.filter((i) => i.currency === 'cash' && i.price > 0);
+  if (!cash.length) return out;   // an empty shop is a shop problem, not a payment one
+
+  if (!cash.some((i) => i.price > floorToman)) {
+    out.push(alert('c2c_nothing_payable', 'critical', 'هیچ محصولی با کارت‌به‌کارت قابل خرید نیست',
+      `کف پیامک بانک ${formatTomanFa(floorToman)} است و هیچ‌کدام از ${cash.length} محصول نقدی فروشگاه از آن بیشتر نیست. ` +
+      'کارت‌به‌کارت ساخته شده ولی به هیچ بازیکنی پیشنهاد نمی‌شود.', cash.length));
+    return out;   // the ticket line would only repeat it
+  }
+
+  const tickets = cash.filter((i) => i.category === 'tickets');
+  if (tickets.length && !tickets.some((i) => i.price > floorToman)) {
+    out.push(alert('c2c_no_payable_ticket', 'warn', 'هیچ بلیطی با کارت‌به‌کارت قابل خرید نیست',
+      `همهٔ ${tickets.length} محصول دستهٔ «بلیط» ${formatTomanFa(floorToman)} یا کمترند، پس کارت‌به‌کارت برایشان پیشنهاد نمی‌شود. ` +
+      'یک بستهٔ چندتایی بالای این مبلغ در تب فروشگاه اضافه کن.', tickets.length));
+  }
+  return out;
+}
+
 /**
  * Everything wrong with card-to-card, right now.
  *
@@ -211,6 +253,21 @@ export async function c2cAlerts(): Promise<SecurityAlert[]> {
       `${ready.map((p) => p.label || p.bankKey).join('، ')} به اندازهٔ کافی درست تطبیق داده. ` +
       'تا وقتی آزمایشی بماند، هر واریزش دستی تأیید می‌شود.', ready.length));
   }
+
+  /* NOTHING IN THE SHOP CLEARS THE BANK'S FLOOR.
+   *
+   * The floor is the bank's rule, not ours: below it no SMS arrives, so the
+   * payment could never be recognised and card-to-card is not offered. If the
+   * catalogue happens to be priced entirely under it, the whole feature is
+   * built, tested, deployed — and offered to nobody. Nothing throws; players
+   * simply never see the option, and the operator has no way to tell that
+   * from «nobody chose it».
+   *
+   * Tickets get their own line because they are the game's economy: a shop
+   * where hearts can be paid by transfer but a MATCH ENTRY cannot is a
+   * strange shop, and that is exactly today's default catalogue. */
+  const floor = await lowestFloorToman();
+  if (floor != null) out.push(...catalogueAlerts(await listItems({ enabledOnly: true }), floor));
 
   /* UNPARSED MESSAGES THAT WILL AGE OUT. They are the raw material for the
    * pattern that would have read them, and their text does not live forever. */
