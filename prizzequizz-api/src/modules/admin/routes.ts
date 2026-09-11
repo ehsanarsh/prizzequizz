@@ -11,7 +11,8 @@ import { getAdminUserOverview, resetUserStats, searchAdminUsers, setUserTickets,
 import { getMatch, claimTimeout, forfeitMatch } from '../../services/matchEngine.js';
 import { activeMatchState } from '../../services/matchStateStore.js';
 import { createGiftCode, listGiftCodes, redeemGiftCode } from '../../services/giftCodeService.js';
-import { aiGenerate, approve as approvePipeline, createDraft, getMeta as getPipelineMeta, listPipeline, reject as rejectPipeline, runPipeline } from '../../services/questionPipelineService.js';
+import { aiGenerate, aiPrompt, aiPromptDefaults, approve as approvePipeline, createDraft, getMeta as getPipelineMeta, listPipeline, reject as rejectPipeline, runPipeline } from '../../services/questionPipelineService.js';
+import { aiConfigured, aiEndpoint, aiModel } from '../../services/aiClient.js';
 import { listAdminAudit, recordAdmin } from '../../services/adminAuditService.js';
 import { listPartners, savePartner, removePartner, addCodes, listCodes, stock as payoutStock, PayoutError } from '../../services/payoutPartnerService.js';
 import { getOtpSettings, setOtpSettings } from '../../services/withdrawOtpService.js';
@@ -698,6 +699,23 @@ export function registerAdminRoutes(router: Router, base: string): void {
   });
 
   // ================= AI question pipeline =================
+  /* WHAT THE AI SIDE IS ACTUALLY SET TO.
+   * Without this the panel could only say «AI فعال/غیرفعال» and an operator who
+   * had set a key but the wrong host had nothing to look at. The key itself is
+   * never returned — only whether one is present, and how it ends, which is
+   * enough to tell two keys apart without revealing either. */
+  router.add('GET', `${base}/admin/questions/ai/status`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    const key = String(process.env.ANTHROPIC_API_KEY || '').trim();
+    json(ctx.res, 200, {
+      configured: aiConfigured(),
+      endpoint: aiEndpoint(),
+      keyTail: key ? key.slice(-4) : '',
+      models: { generator: aiModel('generator'), reviewer: aiModel('reviewer'), factChecker: aiModel('factChecker') },
+      prompts: { generator: aiPrompt('generator'), reviewer: aiPrompt('reviewer'), factChecker: aiPrompt('factChecker') },
+      promptDefaults: aiPromptDefaults()
+    });
+  });
   router.add('POST', `${base}/admin/questions/ai/generate`, async (ctx) => {
     if (!requireAdmin(ctx)) return;
     const b = (ctx.body ?? {}) as any;

@@ -7,7 +7,27 @@
 import { gameConfig } from '../core/config.js';
 import { logger } from './logger.js';
 
-export function aiConfigured(): boolean { return !!process.env.ANTHROPIC_API_KEY; }
+export function aiConfigured(): boolean { return !!aiKey(); }
+function aiKey(): string { return String(process.env.ANTHROPIC_API_KEY || '').trim(); }
+
+/* WHOSE SERVER ANSWERS. The Anthropic Messages API is also spoken by resellers
+ * and proxies — which is how this reaches Iran at all — so the host is a
+ * setting, not a constant. Anything that speaks the same protocol works, and
+ * nothing else in this file changes.
+ *
+ * The trailing `/v1` is stripped on purpose. Every such provider documents its
+ * base URL WITHOUT it because the official SDKs append `/v1/messages`
+ * themselves, so an operator who pastes the URL from a page that shows it WITH
+ * `/v1` would otherwise get `/v1/v1/messages` and a 404. Sinox's own docs call
+ * that their single most common support ticket. Accepting both spellings costs
+ * one line and removes the trap. */
+const AI_DEFAULT_HOST = 'https://api.anthropic.com';
+export function aiBaseUrl(): string {
+  const raw = String(process.env.ANTHROPIC_BASE_URL || '').trim() || AI_DEFAULT_HOST;
+  return raw.replace(/\/+$/, '').replace(/\/v1$/, '');
+}
+/** Where the request actually goes — shown in the panel so it can be checked. */
+export function aiEndpoint(): string { return aiBaseUrl() + '/v1/messages'; }
 
 function pipelineCfg(): any { return (gameConfig as any)?.questionPipeline ?? {}; }
 export function aiModel(kind: 'generator' | 'reviewer' | 'factChecker'): string {
@@ -22,11 +42,15 @@ export interface AiResult<T> { configured: boolean; ok: boolean; data?: T; error
 export async function aiJson<T = any>(input: { model: string; system: string; user: string; maxTokens?: number }): Promise<AiResult<T>> {
   if (!aiConfigured()) return { configured: false, ok: false, error: 'ANTHROPIC_API_KEY not set' };
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
+    const res = await fetch(aiEndpoint(), {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
-        'x-api-key': process.env.ANTHROPIC_API_KEY as string,
+        /* Both spellings of the same credential. The official API reads
+         * `x-api-key`; some proxies only look at `Authorization`. Sending both
+         * costs nothing and means one setting works either way. */
+        'x-api-key': aiKey(),
+        'authorization': 'Bearer ' + aiKey(),
         'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify({

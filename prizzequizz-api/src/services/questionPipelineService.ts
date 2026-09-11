@@ -89,6 +89,36 @@ function baseMeta(questionId: string, source: 'manual' | 'ai'): PipelineMeta {
 }
 
 // ---------------------------------------------------------------------------
+/* THE THREE PROMPTS, WHERE AN OPERATOR CAN REACH THEM.
+ *
+ * These were literals in this file, so tuning what the model is asked — the one
+ * thing anyone running a question pipeline actually wants to tune — meant a
+ * code change and a deploy. They live in the panel's `questionPipeline` config
+ * now, with the text below as the default, so an empty or missing setting
+ * behaves exactly as before.
+ *
+ * The JSON shape is NOT part of what an operator edits. It is appended by the
+ * caller and by aiClient, because the reply is parsed against it: a prompt that
+ * could change the shape could break every stage downstream of it. */
+const PROMPT_DEFAULTS = {
+  generator: 'You are an expert Persian (Farsi) quiz-question writer for a paid competition app. Write factually correct, unambiguous questions with EXACTLY 4 options and EXACTLY one correct answer. Persian must be fluent and natural. Avoid time-sensitive facts unless clearly dated.',
+  reviewer: 'You are a strict Persian quiz reviewer. Check: is the marked answer correct; is there EXACTLY one correct option; any ambiguity; is Persian fluent; does difficulty match. Score each 0-100.',
+  factChecker: 'You are a meticulous fact-checker. Verify whether the marked answer is actually correct using reliable general knowledge. If the fact is time-sensitive, lower confidence and say so.'
+} as const;
+
+export type PromptStage = keyof typeof PROMPT_DEFAULTS;
+
+/** The operator's prompt for a stage, or the shipped default when unset. */
+export function aiPrompt(stage: PromptStage): string {
+  const cfg = (gameConfig as any)?.questionPipeline ?? {};
+  const own = cfg.prompts?.[stage];
+  const text = typeof own === 'string' ? own.trim() : '';
+  return text || PROMPT_DEFAULTS[stage];
+}
+
+/** The defaults, so the panel can show what «empty» means and offer a reset. */
+export function aiPromptDefaults(): Record<PromptStage, string> { return { ...PROMPT_DEFAULTS }; }
+
 // Stage 1 — AI Generator
 // ---------------------------------------------------------------------------
 export interface DraftQuestion { topic: string; difficulty: string; question: string; options: string[]; correctAnswer: number; explanation?: string; source?: string }
@@ -98,7 +128,7 @@ export async function aiGenerate(input: { topic: string; difficulty?: string; co
   const difficulty = input.difficulty || 'medium';
   const r = await aiJson<{ questions: DraftQuestion[] }>({
     model: aiModel('generator'),
-    system: 'You are an expert Persian (Farsi) quiz-question writer for a paid competition app. Write factually correct, unambiguous questions with EXACTLY 4 options and EXACTLY one correct answer. Persian must be fluent and natural. Avoid time-sensitive facts unless clearly dated.',
+    system: aiPrompt('generator'),
     user: `Create ${count} multiple-choice quiz question(s) in PERSIAN about "${input.topic}" at "${difficulty}" difficulty. Return JSON: {"questions":[{"topic":"${input.topic}","difficulty":"${difficulty}","question":"...","options":["..","..","..",".."],"correctAnswer":0,"explanation":"...","source":".."}]}. correctAnswer is the 0-based index of the correct option.`,
     maxTokens: 1600
   });
@@ -116,7 +146,7 @@ export async function aiGenerate(input: { topic: string; difficulty?: string; co
 export async function aiReview(q: { text: string; options: string[]; correctIndex: number; difficulty: string }): Promise<any> {
   const r = await aiJson({
     model: aiModel('reviewer'),
-    system: 'You are a strict Persian quiz reviewer. Check: is the marked answer correct; is there EXACTLY one correct option; any ambiguity; is Persian fluent; does difficulty match. Score each 0-100.',
+    system: aiPrompt('reviewer'),
     user: `Review this question (0-based correct index = ${q.correctIndex}, difficulty=${q.difficulty}). Question: ${q.text}\nOptions: ${q.options.map((o, i) => `${i}) ${o}`).join(' | ')}\nReturn JSON: {"accuracy":0,"clarity":0,"grammar":0,"difficultyMatch":0,"singleCorrect":true,"ambiguous":false,"approved":true,"notes":".."}`,
     maxTokens: 700
   });
@@ -129,7 +159,7 @@ export async function aiReview(q: { text: string; options: string[]; correctInde
 export async function aiFactCheck(q: { text: string; options: string[]; correctIndex: number }): Promise<any> {
   const r = await aiJson({
     model: aiModel('factChecker'),
-    system: 'You are a meticulous fact-checker. Verify whether the marked answer is actually correct using reliable general knowledge. If the fact is time-sensitive, lower confidence and say so.',
+    system: aiPrompt('factChecker'),
     user: `Fact-check. Correct option is index ${q.correctIndex}. Question: ${q.text}\nOptions: ${q.options.map((o, i) => `${i}) ${o}`).join(' | ')}\nReturn JSON: {"verified":true,"confidence":0,"timeSensitive":false,"correctIndexShouldBe":${q.correctIndex},"note":".."}`,
     maxTokens: 600
   });

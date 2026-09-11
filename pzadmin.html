@@ -2002,18 +2002,65 @@ async function qStatus(id,status){try{await api('PATCH','/admin/questions/'+id+'
 
 /* ================= AI QUESTION STUDIO ================= */
 let AI_DRAFTS=[];
+let _AISTATUS=null;
 async function renderAiStudio(){
-  const qp=(CFG.questionPipeline)||{};
-  const aiOn=qp.aiEnabled;
+  const qp=((CFG&&CFG.questionPipeline)||{});
+  /* What the SERVER is actually set to — the key, the host, the models and the
+     prompts. «AI فعال» on its own could not tell an operator who had set a key
+     but the wrong address why nothing worked. */
+  let st={}; try{ st=await api('GET','/admin/questions/ai/status'); }catch(e){ st={error:e.message}; }
+  _AISTATUS=st;
+  const aiOn=!!st.configured;
+  const pr=st.prompts||{}, df=st.promptDefaults||{}, md=st.models||{};
+  const box=(id,label,val,def,hint)=>
+    '<div class="field" style="margin-bottom:12px"><label>'+label+
+      ' <span class="note" style="display:inline;margin:0;padding:0;opacity:.75">'+hint+'</span></label>'+
+      '<textarea id="'+id+'" rows="4" style="width:100%;font-family:inherit;line-height:1.9;resize:vertical">'+esc(val||'')+'</textarea>'+
+      '<div style="margin-top:5px"><button class="btn sm" onclick="aiResetPrompt(\''+id+'\')">بازگرداندن به پیش‌فرض</button>'+
+      '<span class="note" style="display:inline;margin-inline-start:8px">مدل: <span class="mono">'+esc(md[id.replace('ai_p_','')]||'—')+'</span></span></div></div>';
   $('#main').innerHTML=head('استودیوی سوال (AI)','تولید ← بازبینی ← راستی‌آزمایی ← تشخیص تکرار ← امتیاز کیفیت',
     '<button class="btn" onclick="go(\'pipeline\')">صف کیفیت</button>')+
-    '<div class="note">معماری: <b>Generator → Reviewer → Fact-Checker → Duplicate → Quality → Database</b>. مدل‌ها و آستانه‌ها از «ویرایش خام Config» کلید <span class="mono">questionPipeline</span> تنظیم می‌شوند. AI فقط وقتی متغیرِ محیطیِ <span class="mono">ANTHROPIC_API_KEY</span> روی سرور تنظیم باشد فعال می‌شود؛ در غیر این صورت مراحلِ AI رد می‌شوند و سوال را دستی می‌سازی — ولی تشخیصِ تکرار و امتیازِ کیفیت همیشه کار می‌کنند.</div>'+
+    '<div class="note">معماری: <b>Generator → Reviewer → Fact-Checker → Duplicate → Quality → Database</b>. تشخیصِ تکرار و امتیازِ کیفیت همیشه کار می‌کنند، حتی وقتی AI خاموش است.</div>'+
+    '<div class="card" style="margin-bottom:13px"><h3>🔌 اتصال '+(aiOn?'<span class="pill ok">کلید تنظیم شده</span>':'<span class="pill bad">کلید تنظیم نشده</span>')+'</h3>'+
+      '<div class="cfg-row"><label>آدرسی که درخواست به آن می‌رود</label><b class="mono">'+esc(st.endpoint||'—')+'</b></div>'+
+      '<div class="cfg-row"><label>کلید</label><b class="mono">'+(st.keyTail?('…'+esc(st.keyTail)):'—')+'</b></div>'+
+      '<div class="note">هر دو از <b>متغیر محیطی روی سرور</b> خوانده می‌شوند و از اینجا قابل تغییر نیستند — کلید نباید در پنل یا مرورگر بگردد. '+
+      'برای عوض کردنشان <span class="mono">ANTHROPIC_API_KEY</span> و <span class="mono">ANTHROPIC_BASE_URL</span> را در docker-compose ست کن و کانتینر api را ری‌استارت کن.</div>'+
+      (st.error?'<div class="note" style="color:var(--bad)">خطا در خواندن وضعیت: '+esc(st.error)+'</div>':'')+
+    '</div>'+
+    '<div class="card" style="margin-bottom:13px"><h3>📝 پرامپت‌ها</h3>'+
+      '<div class="note">این متن‌ها به‌عنوان <span class="mono">system</span> به مدل داده می‌شوند. قالبِ JSONِ پاسخ اینجا نیست و عمداً هم نیست: '+
+      'خروجی بر اساس همان قالب پارس می‌شود، پس پرامپتی که بتواند شکلش را عوض کند می‌تواند همهٔ مراحل بعدی را بشکند. '+
+      'کادر خالی یعنی «پیش‌فرض».</div>'+
+      box('ai_p_generator','۱) تولیدکننده','' + (pr.generator||''),df.generator,'— چه سؤالی بسازد')+
+      box('ai_p_reviewer','۲) بازبین','' + (pr.reviewer||''),df.reviewer,'— با چه سخت‌گیری‌ای بررسی کند')+
+      box('ai_p_factChecker','۳) راستی‌آزما','' + (pr.factChecker||''),df.factChecker,'— درستیِ جواب را چطور بسنجد')+
+      '<button class="btn pri" onclick="aiSavePrompts()">💾 ذخیرهٔ پرامپت‌ها</button></div>'+
     '<div class="card" style="margin-bottom:13px"><h3>۱) تولید سوال '+(aiOn?'<span class="pill ok">AI فعال</span>':'<span class="pill pend">AI غیرفعال — دستی</span>')+'</h3>'+
       '<div class="grid g3"><div class="field"><label>موضوع</label><input id="ai_topic" placeholder="مثلاً فوتبال"></div>'+
       '<div class="field"><label>سختی</label><select id="ai_diff"><option value="easy">آسان</option><option value="medium" selected>متوسط</option><option value="hard">سخت</option></select></div>'+
       '<div class="field"><label>تعداد</label><input id="ai_count" type="number" value="3"></div></div>'+
       '<button class="btn pri" onclick="aiGen()">🤖 تولید با AI</button> <button class="btn" onclick="aiManual()">✍️ ساخت دستی</button></div>'+
     '<div id="ai_out"></div>';
+}
+/* Blank means «use the shipped default», so a reset is an empty box — not a
+   copy of the default text pasted in, which would freeze today's wording into
+   the config and silently stop tracking improvements to it. */
+function aiResetPrompt(id){
+  const el=$('#'+id); if(!el) return;
+  el.value='';
+  toast('خالی شد — با ذخیره، پیش‌فرض به کار می‌رود','ok');
+}
+async function aiSavePrompts(){
+  const g=($('#ai_p_generator')||{}).value||'', r=($('#ai_p_reviewer')||{}).value||'', f=($('#ai_p_factChecker')||{}).value||'';
+  const cur=((CFG&&CFG.questionPipeline)||{});
+  try{
+    await api('PATCH','/admin/config',{questionPipeline:Object.assign({},cur,{prompts:{
+      generator:g.trim(), reviewer:r.trim(), factChecker:f.trim()
+    }})});
+    toast('پرامپت‌ها ذخیره شد ✅','ok');
+    await loadCfg(); render();
+  }catch(e){ toast(e.message,'bad'); }
 }
 async function aiGen(){
   const out=$('#ai_out'); out.innerHTML='<div class="skel"></div>';
@@ -5241,7 +5288,7 @@ async function changeMyPassword(){
 /* ================= ANTI-CHEAT ================= */
 async function renderAntiCheat(){
   const [sig,risk]=await Promise.all([api('GET','/admin/integrity/signals?limit=50').catch(()=>[]),api('GET','/admin/risk/users').catch(()=>[])]);
-  const ac=(CFG.antiCheat)||{};
+  const ac=((CFG&&CFG.antiCheat)||{});
   const tog=(k,label)=>'<div class="cfg-row"><label>'+label+'</label><input id="ac_'+k+'" type="checkbox" '+(ac[k]?'checked':'')+'></div>';
   const numr=(k,label)=>'<div class="cfg-row"><label>'+label+'</label><input id="ac_'+k+'" type="number" value="'+(ac[k]!=null?ac[k]:0)+'"></div>';
   $('#main').innerHTML=head('سیستم ضدتقلب','فعال/غیرفعال کردن قوانین + سیگنال‌های تقلب')+
