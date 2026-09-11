@@ -38,6 +38,7 @@ import { startServerMonitorCollector } from './services/serverMonitorCollector.j
 import { registerAdminRoutes } from './modules/admin/routes.js';
 import { attachRealtimeGateway } from './realtime/gateway.js';
 import { startMatchmakingWorker } from './services/matchmakingWorker.js';
+import { startC2cWorker } from './services/c2c/c2cWorker.js';
 import { startLastSurvivorWorker } from './services/lastSurvivorWorker.js';
 import { startWtaWorker } from './services/wtaService.js';
 import { startLeagueWorker } from './services/leagueWorker.js';
@@ -103,5 +104,9 @@ export function createApiServer(options: ApiServerOptions = {}): Server {
   if (process.env.LAST_SURVIVOR_WORKER !== 'false') startLastSurvivorWorker();
   if (process.env.LEAGUE_WORKER !== 'false') { startWtaWorker(); startLeagueWorker(); startDuelRunSweeper(); }
   if (process.env.SERVER_MONITOR !== 'false') startServerMonitorCollector();
+  /* Expires dead payment pages and — the part that matters — gives their
+   * reserved amounts back. Without it each card's 99 slots per price fill with
+   * abandoned payments and every new one is refused. */
+  if (process.env.C2C_WORKER !== 'false') startC2cWorker();
   return server;
 }

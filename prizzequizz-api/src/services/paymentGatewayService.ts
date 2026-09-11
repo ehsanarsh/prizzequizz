@@ -43,6 +43,9 @@ export interface PaymentSettings {
     /** How long AFTER that the amount stays reserved, so a late transfer is
      *  still recognisable instead of landing on the next person given it. */
     reserveHours: number;
+    /** Above this figure a match is NEVER settled automatically, however
+     *  perfect it looks — a person signs for the large ones. 0 = no ceiling. */
+    autoApproveMaxRial: number;
     /** A cancelled session keeps its amount this long. */
     cancelCooldownMinutes: number;
     /** Sessions one player may hold open — the amount space is finite, and
@@ -109,7 +112,7 @@ function defaultSettings(): PaymentSettings {
     deposit: { enabled: true, min: w.minDeposit, max: w.maxDeposit, dailyCap: w.maxDeposit, txPerDay: 20 },
     withdraw: { enabled: true, min: w.minWithdraw, max: w.maxWithdraw, dailyCap: w.dailyWithdrawCap, fee: w.withdrawFee, feePayer: 'user', autoApprove: false, hoursFrom: 0, hoursTo: 24 },
     feePercent: 0, defaultGatewayId: null,
-    c2c: { suffixMode: 'rial', ttlMinutes: 20, reserveHours: 24, cancelCooldownMinutes: 15, maxActivePerUser: 2 }
+    c2c: { suffixMode: 'rial', ttlMinutes: 20, reserveHours: 24, autoApproveMaxRial: 20_000_000, cancelCooldownMinutes: 15, maxActivePerUser: 2 }
   };
 }
 

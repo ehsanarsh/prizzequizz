@@ -47,6 +47,24 @@ const tiers = Object.keys(getTicketPrices());
 const TIER = tiers[0]!;
 const PRICE = getTicketPrices()[TIER]!;
 
+/* THE GATEWAY THIS FILE IS ABOUT.
+ *
+ * These tests are about a REDIRECT gateway: pay elsewhere, come back, the
+ * callback settles it. `createPaymentIntent` with no `gatewayId` picks the
+ * highest-priority live gateway, so on a shared database whatever another
+ * suite left behind decides what is being tested — and a card-to-card gateway
+ * there is refused outright, because that flow needs a client that can render
+ * a payment page. So this names its own gateway instead of trusting the
+ * database's mood. */
+async function redirectGateway(): Promise<string> {
+  const { listGateways, saveGateway } = await import('../services/paymentGatewayService.js');
+  const live = (await listGateways()).filter((g) => g.availability === 'live');
+  const sandbox = live.find((g) => g.type === 'sandbox');
+  if (sandbox) return sandbox.id;
+  const made = await saveGateway({ name: 'درگاه تست (prizeVault)', type: 'sandbox', availability: 'live', sandbox: true, priority: 1 });
+  return made.id;
+}
+
 async function run(): Promise<void> {
   /* ── no topping up, anywhere ──────────────────────────────────────── */
 
@@ -107,11 +125,12 @@ async function run(): Promise<void> {
   });
 
   /* ── paying at the gateway ────────────────────────────────────────── */
+  const GW = await redirectGateway();
 
   await check('a gateway payment delivers the ticket', async () => {
     _resetFulfilments();
     const uid = await player();
-    const intent = await createPaymentIntent({ userId: uid, order: { kind: 'ticket', tier: TIER, qty: 2 } });
+    const intent = await createPaymentIntent({ userId: uid, order: { kind: 'ticket', tier: TIER, qty: 2 }, gatewayId: GW });
     assert.equal(intent.amount, PRICE * 2, 'priced from the catalogue, not the client');
     assert.equal((await getTickets(uid))[TIER] ?? 0, 0, 'nothing before payment');
     await settlePaymentIntent(intent.id, paymentSignature(intent.id, intent.amount, 'paid'), 'paid');
@@ -123,7 +142,7 @@ async function run(): Promise<void> {
        pay in and withdraw it back out as if it were a prize. */
     _resetFulfilments();
     const uid = await player();
-    const intent = await createPaymentIntent({ userId: uid, order: { kind: 'ticket', tier: TIER, qty: 1 } });
+    const intent = await createPaymentIntent({ userId: uid, order: { kind: 'ticket', tier: TIER, qty: 1 }, gatewayId: GW });
     await settlePaymentIntent(intent.id, paymentSignature(intent.id, intent.amount, 'paid'), 'paid');
     assert.equal((await getAccount(uid)).available, 0, 'the صندوق is still empty');
   });
@@ -131,7 +150,7 @@ async function run(): Promise<void> {
   await check('a replayed callback does not hand over a second ticket', async () => {
     _resetFulfilments();
     const uid = await player();
-    const intent = await createPaymentIntent({ userId: uid, order: { kind: 'ticket', tier: TIER, qty: 1 } });
+    const intent = await createPaymentIntent({ userId: uid, order: { kind: 'ticket', tier: TIER, qty: 1 }, gatewayId: GW });
     const sig = paymentSignature(intent.id, intent.amount, 'paid');
     await settlePaymentIntent(intent.id, sig, 'paid');
     await settlePaymentIntent(intent.id, sig, 'paid');
@@ -142,7 +161,7 @@ async function run(): Promise<void> {
   await check('an unsigned callback settles nothing', async () => {
     _resetFulfilments();
     const uid = await player();
-    const intent = await createPaymentIntent({ userId: uid, order: { kind: 'ticket', tier: TIER, qty: 1 } });
+    const intent = await createPaymentIntent({ userId: uid, order: { kind: 'ticket', tier: TIER, qty: 1 }, gatewayId: GW });
     await assert.rejects(() => settlePaymentIntent(intent.id, 'deadbeef', 'paid'));
     assert.equal((await getTickets(uid))[TIER] ?? 0, 0, 'nothing was delivered');
   });

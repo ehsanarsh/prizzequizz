@@ -266,7 +266,7 @@ function groupMembers(g){ return (TAB_GROUPS[g]?TAB_GROUPS[g].tabs:[]).filter(t=
 const NAV=[
   ['اصلی',[['dashboard','📊','داشبورد'],['g_money','💰','مالی و حسابداری'],['users','👤','کاربران'],['matches','🎮','مسابقات'],['duel','⚔️','دوئل'],['lastsurvivor','🏆','آخرین بازمانده'],['support','🎧','پشتیبانی']]],
   ['محتوا',[['g_qhub','❓','سوالات'],['categories','🏷️','موضوعات'],['g_chars','🎭','کاراکترها'],['lifelines','🧩','کمک‌ها'],['rewards','🎡','گردونه و جایزه روزانه'],['recordmode','🏅','ثبت رکورد'],['onboarding','👋','خوش‌آمدگویی']]],
-  ['اقتصاد',[['wallet','🏆','صندوق جایزه'],['g_payout','💸','دریافت جایزه'],['tickets','🎫','بلیط‌ها'],['shop','🛒','فروشگاه'],['chatpacks','💬','پک‌های چت'],['giftcodes','🎁','کدهای هدیه'],['payments','🏦','درگاه پرداخت'],['c2c','🧾','واریزهای کارت‌به‌کارت'],['c2ccards','💳','کارت‌های مقصد']]],
+  ['اقتصاد',[['wallet','🏆','صندوق جایزه'],['g_payout','💸','دریافت جایزه'],['tickets','🎫','بلیط‌ها'],['shop','🛒','فروشگاه'],['chatpacks','💬','پک‌های چت'],['giftcodes','🎁','کدهای هدیه'],['payments','🏦','درگاه پرداخت'],['c2c','🧾','واریزهای کارت‌به‌کارت'],['c2ccards','💳','کارت‌های مقصد'],['c2cpatterns','📩','الگوهای پیامک بانک']]],
   ['بالانس بازی (Data-Driven)',[['g_balance','⚖️','بالانس بازی'],['leagues','🛡️','لیگ‌ها'],['missions2','🎯','مأموریت‌ها']]],
   ['رشد و تعامل',[['leaderboard','📈','لیدربرد'],['campaign','🎁','کمپین کاربر جدید'],['events','📅','رویدادها'],['banners','🖼️','بنرها'],['notifications','🔔','اعلان‌ها'],['g_sms','📱','پنل پیامکی']]],
   ['سیستم',[['monitoring','🖥️','مانیتورینگ سرور'],['g_security','🛡️','امنیت و ضدتقلب'],['g_audit','📑','گزارش و لاگ'],['reset','♻️','ابزار ریست'],['accounts','🔐','حساب‌ها و دسترسی'],['backup','💾','پشتیبان‌گیری'],['general','⚙️','تنظیمات عمومی'],['rawcfg','🧩','ویرایش خام Config']]]
@@ -488,7 +488,7 @@ async function render(){
   try{
     if(CUR==='accounts')return renderAccounts();
     if(CONFIG_PAGES[CUR]){ await renderConfigSection(CONFIG_PAGES[CUR][0],CONFIG_PAGES[CUR][1]); groupBar(); if(tracked)void badgeLoad(); return; }
-    const fn={dashboard:renderDashboard,finance:renderFinance,accounting:renderAccounting,expenses:renderExpenses,backup:renderBackup,users:renderUsers,matches:renderMatches,support:renderSupport,questions:renderQuestions,leagues:renderLeagues,qreports:renderQReports,aistudio:renderAiStudio,pipeline:renderPipeline,categories:renderCategories,wallet:renderWallet,withdrawals:renderWithdrawals,payoutpartners:renderPayoutPartners,withdrawotp:renderWithdrawOtp,smsgroups:renderSmsGroups,rewardholds:renderRewardHolds,tickets:renderTickets,giftcodes:renderGiftCodes,shop:renderShopAdmin,chatpacks:renderChatPacks,characters:renderCharacters,charboxes:renderCharBoxes,lifelines:renderLifelines,rewards:renderRewards,missions2:renderMissions2,recordmode:renderRecordMode,onboarding:renderOnboarding,lastsurvivor:renderLastSurvivor,duel:renderDuel,sms:renderSms,payments:renderPayments,c2c:renderC2cQueue,c2ccards:renderC2cCards,leaderboard:renderLeaderboard,banners:renderBanners,notifications:renderNotifications,anticheat:renderAntiCheat,suspicious:renderSuspicious,reports:renderReports,logs:renderLogs,reset:renderReset,roles:renderRoles,rawcfg:renderRawCfg,monitoring:renderMonitoring}[CUR];
+    const fn={dashboard:renderDashboard,finance:renderFinance,accounting:renderAccounting,expenses:renderExpenses,backup:renderBackup,users:renderUsers,matches:renderMatches,support:renderSupport,questions:renderQuestions,leagues:renderLeagues,qreports:renderQReports,aistudio:renderAiStudio,pipeline:renderPipeline,categories:renderCategories,wallet:renderWallet,withdrawals:renderWithdrawals,payoutpartners:renderPayoutPartners,withdrawotp:renderWithdrawOtp,smsgroups:renderSmsGroups,rewardholds:renderRewardHolds,tickets:renderTickets,giftcodes:renderGiftCodes,shop:renderShopAdmin,chatpacks:renderChatPacks,characters:renderCharacters,charboxes:renderCharBoxes,lifelines:renderLifelines,rewards:renderRewards,missions2:renderMissions2,recordmode:renderRecordMode,onboarding:renderOnboarding,lastsurvivor:renderLastSurvivor,duel:renderDuel,sms:renderSms,payments:renderPayments,c2c:renderC2cQueue,c2ccards:renderC2cCards,c2cpatterns:renderC2cPatterns,leaderboard:renderLeaderboard,banners:renderBanners,notifications:renderNotifications,anticheat:renderAntiCheat,suspicious:renderSuspicious,reports:renderReports,logs:renderLogs,reset:renderReset,roles:renderRoles,rawcfg:renderRawCfg,monitoring:renderMonitoring}[CUR];
     if(fn){ await fn(); groupBar(); if(tracked)void badgeLoad(); return; }
     /* No renderer for this tab. Six nav entries were in this state, and
        clicking one silently left the PREVIOUS screen's content on display —
@@ -4997,6 +4997,122 @@ async function gwSave(id){
    3. THE SERVER FORMATS THE MONEY. Every figure below is printed from a
       *Text field the API sent. The panel doing its own ×10 is exactly the bug
       this whole design is arranged to prevent. */
+
+/* ---- Bank SMS patterns ----
+   The operator adds their own banks here. What they type is a TEMPLATE, never
+   a regex — a wrong regex reads the amount wrong (and the amount IS the
+   payment), and an operator should not have to know regex to add their bank.
+
+   Two rules this screen exists to enforce:
+   1. A pattern is SAVED only when it reads a real deposit AND refuses a real
+      withdrawal. At Refah the difference between the two is one «+».
+   2. The unit is chosen, never defaulted — Refah's message prints none at all,
+      so a guess is a ten-times error nothing in the text can correct. The test
+      box shows the figure in BOTH units so a backwards unit is visible. */
+const PAT_ST={draft:['پیش‌نویس','pend'],trial:['آزمایشی','pend'],live:['فعال','ok'],disabled:['غیرفعال','bad']};
+
+async function renderC2cPatterns(){
+  $('#main').innerHTML=head('الگوهای پیامک بانک','قالب پیامک هر بانک، با نمونهٔ واریز و برداشت')+'<div id="patBody"><div class="card empty">…</div></div>';
+  const b=$('#patBody');
+  let d,msgs;
+  try{
+    d=await api('GET','/admin/c2c/patterns');
+    msgs=await api('GET','/admin/c2c/messages?status=PARSE_FAILED&limit=20');
+  }catch(e){ b.innerHTML='<div class="card empty">'+esc(e.message||'خطا')+'</div>'; return; }
+  window._PAT={}; (d.rows||[]).forEach(p=>window._PAT[p.id]=p);
+  window._PATMETA=d;
+
+  b.innerHTML=
+    '<div class="note">قالب را مثل خودِ پیامک بنویس و جای مقدارهای متغیر از '+
+      (d.fields||[]).map(f=>'<code>{'+esc(f)+'}</code>').join('، ')+' و <code>{*}</code> استفاده کن. '+
+      'متنی که ممکن است نباشد را داخل <code>[...]</code> بگذار (مثل واحد «ریال» که سپه گاهی می‌نویسد و گاهی نه).</div>'+
+    '<div class="note">⚠️ الگوی تازه همیشه <b>آزمایشی</b> شروع می‌شود: هر تطبیقش به‌جای تحویل خودکار، به صف واریزها می‌رود تا خودت تأیید کنی. بعد از '+fa(d.trialConfirmations||5)+' تطبیق درست می‌توانی فعالش کنی.</div>'+
+    '<button class="btn pri" style="margin-bottom:10px" onclick="patEdit()">➕ افزودن بانک</button>'+
+    tbl(['بانک','وضعیت','واحد مبلغ','نمونهٔ منفی','تطبیق‌ها','عملیات'],(d.rows||[]).map(p=>[
+      '<b>'+esc(p.label||p.bankKey)+'</b><br><span class="sub mono">'+esc(p.bankKey)+'</span>'+(p.builtIn?' <span class="pill ok">پیش‌فرض</span>':''),
+      pill(PAT_ST,p.status)+(p.readyToPromote?'<br><span class="sub ok">آمادهٔ فعال‌سازی</span>':''),
+      p.amountUnit==='rial'?'ریال':'تومان',
+      p.provenNegative?'<span class="pill ok">دارد</span>':'<span class="pill bad">ندارد</span><br><span class="sub">تا نمونهٔ برداشت نباشد، آزمایشی می‌ماند</span>',
+      fa(p.matchedCount),
+      '<button class="btn sm" onclick="patEdit(\''+p.id+'\')">ویرایش</button> '+
+      (p.status==='live'
+        ? '<button class="btn sm" onclick="patStatus(\''+p.id+'\',\'trial\')">آزمایشی کن</button>'
+        : '<button class="btn sm pri" onclick="patPromote(\''+p.id+'\')">فعال کن</button>')+
+      (p.builtIn?'':' <button class="btn sm bad" onclick="patDel(\''+p.id+'\')">حذف</button>')
+    ]))+
+    '<div class="card" style="margin-top:14px"><h3>📥 پیامک‌هایی که هیچ الگویی نشناخت</h3>'+
+    '<div class="sub">هرکدام یک واریز واقعی است که خوانده نشد. از روی همین متن‌ها الگوی بانک تازه را بساز.</div>'+
+    tbl(['زمان','فرستنده','متن'],(msgs.rows||[]).map(m=>[
+      '<span class="sub">'+esc(new Date(m.receivedAt).toLocaleString('fa-IR'))+'</span>',
+      esc(m.sender||'—'),
+      '<pre style="white-space:pre-wrap;margin:0;font-size:12px">'+esc(m.body)+'</pre>'
+    ]))+'</div>';
+}
+
+function patEdit(id){
+  const p=(window._PAT||{})[id]||{};
+  const meta=window._PATMETA||{};
+  const unitOpts='<option value="">— انتخاب کن —</option>'+
+    (meta.amountUnits||['rial','toman']).map(u=>'<option value="'+u+'"'+(p.amountUnit===u?' selected':'')+'>'+(u==='rial'?'ریال':'تومان')+'</option>').join('');
+  modal(id?'ویرایش الگوی بانک':'افزودن بانک',
+    '<div class="grid g3"><div class="field"><label>کلید بانک</label><input id="pat_key" dir="ltr" placeholder="melli" value="'+esc(p.bankKey||'')+'"'+(p.builtIn?' readonly':'')+'></div>'+
+    '<div class="field"><label>نام بانک</label><input id="pat_label" value="'+esc(p.label||'')+'"></div>'+
+    '<div class="field"><label>واحد مبلغ در پیامک</label><select id="pat_unit">'+unitOpts+'</select></div></div>'+
+    '<div class="field"><label>قالب پیامک</label><textarea id="pat_tpl" rows="6" dir="rtl" style="font-family:monospace">'+esc(p.template||'')+'</textarea></div>'+
+    '<div class="field"><label>نمونهٔ واقعی <b>واریز</b> <span class="sub">— قالب باید روی این بگیرد</span></label><textarea id="pat_dep" rows="5" dir="rtl" style="font-family:monospace">'+esc(p.sampleDeposit||'')+'</textarea></div>'+
+    '<div class="field"><label>نمونهٔ واقعی <b>برداشت</b> <span class="sub">— قالب نباید روی این بگیرد؛ اجباری</span></label><textarea id="pat_wd" rows="5" dir="rtl" style="font-family:monospace">'+esc(p.sampleWithdrawal||'')+'</textarea></div>'+
+    '<div class="field"><label>کلیدواژه‌های رد <span class="sub">— با ویرگول، مثل «برداشت»</span></label><input id="pat_rej" value="'+esc((p.rejectKeywords||[]).join('، '))+'"></div>'+
+    '<div id="pat_try"></div>'+
+    '<div style="display:flex;gap:8px"><button class="btn" onclick="patTry()">🔬 آزمایش</button>'+
+    '<button class="btn pri" onclick="patSave(\''+(id||'')+'\')">💾 ذخیره</button></div>');
+}
+
+/* Test before save. Read-only: it never writes a pattern and never settles
+   anything — it exists so the operator sees WHAT the template read out of
+   their own message before it can ever decide a payment. */
+async function patTry(){
+  const body={template:$('#pat_tpl').value,amountUnit:$('#pat_unit').value||'rial',
+    sampleDeposit:$('#pat_dep').value,sampleWithdrawal:$('#pat_wd').value};
+  let r; try{ r=await api('POST','/admin/c2c/patterns/try',body); }
+  catch(e){ $('#pat_try').innerHTML='<div class="note bad">'+esc(e.message||'قالب نادرست است')+'</div>'; return; }
+  const row=(t,x,wantMatch)=>{
+    if(!x.matched) return '<div class="'+(wantMatch?'note bad':'note')+'">'+t+': '+(wantMatch?'❌ نگرفت — قالب این نمونه را نمی‌خواند':'✅ نگرفت (درست است)')+'</div>';
+    if(!wantMatch) return '<div class="note bad">'+t+': ❌ گرفت — این قالب برداشت را واریز می‌خواند و ذخیره نمی‌شود</div>';
+    return '<div class="note ok">'+t+': ✅ گرفت<br>مبلغ: <b>'+esc(x.amountRialText)+'</b> ≡ <b>'+esc(x.amountTomanText)+'</b>'+
+      '<br><span class="sub">تأیید کن که همین مبلغ واریز شده — اگر واحد برعکس باشد، اینجا ده‌برابر دیده می‌شود.</span>'+
+      '<br><span class="sub mono">'+esc(JSON.stringify(x.values))+'</span></div>';
+  };
+  $('#pat_try').innerHTML=row('نمونهٔ واریز',r.deposit,true)+row('نمونهٔ برداشت',r.withdrawal,false);
+}
+
+async function patSave(id){
+  const body={id:id||undefined,bankKey:$('#pat_key').value.trim(),label:$('#pat_label').value.trim(),
+    amountUnit:$('#pat_unit').value,template:$('#pat_tpl').value,
+    sampleDeposit:$('#pat_dep').value,sampleWithdrawal:$('#pat_wd').value,
+    rejectKeywords:$('#pat_rej').value.split(/[،,]/).map(x=>x.trim()).filter(Boolean)};
+  try{
+    const r=await api('POST','/admin/c2c/patterns',body);
+    document.querySelector('.modal-bg').remove();
+    toast('ذخیره شد — وضعیت: '+(PAT_ST[r.pattern.status]||[r.pattern.status])[0],'ok');
+    renderC2cPatterns();
+  }catch(e){ toast(e.message||'ذخیره نشد','bad'); }
+}
+async function patStatus(id,status){
+  try{ await api('POST','/admin/c2c/patterns/'+id+'/status',{status}); toast('وضعیت عوض شد','ok'); renderC2cPatterns(); }
+  catch(e){ toast(e.message||'انجام نشد','bad'); }
+}
+async function patPromote(id){
+  const p=(window._PAT||{})[id]||{};
+  if(!p.provenNegative){ toast('اول نمونهٔ برداشت را وارد کن — بدون آن نمی‌شود مطمئن شد برداشت را واریز نمی‌خواند','bad'); return; }
+  if(!confirm('از این به بعد تطبیق‌های این بانک بدون تأیید تو کالا تحویل می‌دهند. مطمئنی؟')) return;
+  patStatus(id,'live');
+}
+async function patDel(id){
+  if(!confirm('این الگو حذف شود؟'))return;
+  try{ await api('DELETE','/admin/c2c/patterns/'+id); toast('حذف شد','ok'); renderC2cPatterns(); }
+  catch(e){ toast(e.message||'حذف نشد','bad'); }
+}
+
 const BTX_ST={NEW:['در صف','pend'],ASSIGNED:['تخصیص‌یافته','pend'],SETTLED:['تسویه شد','ok'],IGNORED:['رد شد','bad']};
 const SESS_ST={AWAITING:['منتظر واریز','pend'],PAID:['تسویه شد','ok'],EXPIRED:['منقضی','bad'],CANCELLED:['لغو شد','bad'],RELEASED:['آزاد شد','bad'],REVIEW:['بررسی','pend']};
 function pill(map,v){const t=map[v]||[v,'pend'];return '<span class="pill '+t[1]+'">'+t[0]+'</span>';}
@@ -5019,7 +5135,7 @@ async function renderC2cQueue(){
     '<div class="note">واریزی که هنوز از گوشی فوروارد نمی‌شود را اینجا دستی ثبت کن. <b>هیچ واریزی خودکار تسویه نمی‌شود</b> — پرداخت‌های محتمل پیشنهاد می‌شوند و انتخاب با توست.</div>'+
     '<div class="card"><h3>🧮 مغایرت‌گیری</h3><div class="sub">مجموع واریزهای تسویه‌شده در این بازه: <b>'+esc(d.settled&&d.settled.totalRialText||'—')+'</b> در '+fa((d.settled&&d.settled.count)||0)+' تراکنش. این عدد را با صورتحساب بانک مقایسه کن؛ تنها چیزی که یک واریز جعلی را لو می‌دهد همین است.</div></div>'+
     '<div style="margin:10px 0;display:flex;gap:6px;flex-wrap:wrap;align-items:center">'+
-      '<button class="btn pri" onclick="btxManual()">➕ ثبت دستی واریز</button>'+
+      '<button class="btn pri" onclick="btxManual()">➕ ثبت دستی واریز</button>'+'<button class="btn" onclick="btxPasteSms()">📩 ثبت پیامک بانک</button>'+
       '<span style="flex:1"></span>'+filters+
     '</div>'+
     tbl(['زمان','مبلغ','بانک / کارت','کد پیگیری','وضعیت','عملیات'],(d.rows||[]).map(t=>[
@@ -5042,6 +5158,35 @@ async function renderC2cQueue(){
     ]))+'</div>';
 }
 function c2cQFilter(k){ _c2cQFilter=k; renderC2cQueue(); }
+
+
+/* Pasting a bank SMS runs the WHOLE automatic chain — filter, parse, match,
+   maybe settle — through exactly the code the forwarder will use. That is how
+   the automatic path gets exercised and trusted before any Android exists. */
+function btxPasteSms(){
+  modal('ثبت پیامک بانک',
+    '<div class="note">متن پیامک را همان‌طور که رسیده بچسبان. اگر الگوی بانکش فعال باشد و مبلغ دقیقاً با یک پرداخت جور دربیاید، <b>خودکار تسویه می‌شود</b>. در غیر این صورت به صف می‌رود.</div>'+
+    '<div class="note">🔒 پیامک‌هایی که رمز یا کد یکبارمصرف دارند اصلاً ذخیره نمی‌شوند.</div>'+
+    '<div class="grid g2"><div class="field"><label>فرستنده</label><input id="sms_from" dir="ltr" placeholder="sepah bank"></div>'+
+    '<div class="field"><label>زمان دریافت</label><input id="sms_at" type="datetime-local"></div></div>'+
+    '<div class="field"><label>متن پیامک</label><textarea id="sms_body" rows="7" dir="rtl" style="font-family:monospace"></textarea></div>'+
+    '<button class="btn pri" onclick="btxPasteSave()">📩 ثبت و تطبیق</button>');
+}
+async function btxPasteSave(){
+  const body={sender:$('#sms_from').value.trim(),body:$('#sms_body').value,
+    receivedAt:$('#sms_at').value?new Date($('#sms_at').value).toISOString():undefined};
+  if(!body.body.trim()){ toast('متن پیامک را وارد کن','bad'); return; }
+  let r; try{ r=await api('POST','/admin/c2c/messages',body); }
+  catch(e){ toast(e.message||'ثبت نشد','bad'); return; }
+  document.querySelector('.modal-bg').remove();
+  const msg={settled:'تسویه شد و کالا تحویل داده شد ✅',queued:'ثبت شد — تأیید با توست',
+    sensitive:'این پیام رمز داشت و ذخیره نشد 🔒',duplicate:'این پیام قبلاً ثبت شده بود',
+    parse_failed:'هیچ الگویی این پیام را نشناخت',rejected:'این پیام واریز نبود'}[r.outcome]||r.outcome;
+  toast(msg,r.outcome==='settled'?'ok':(r.outcome==='queued'?'ok':'bad'));
+  if(r.reason&&r.outcome!=='settled') toast(r.reason,'bad');
+  await renderC2cQueue();
+  if(r.outcome==='queued'&&r.transaction) btxShowCandidates(r.transaction,r.candidates);
+}
 
 function btxManual(){
   const now=new Date(); now.setMinutes(now.getMinutes()-now.getTimezoneOffset());

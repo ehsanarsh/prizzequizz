@@ -28,7 +28,7 @@ const requiredTables = [
   'integrity_signals', 'devices', 'user_device_bindings', 'user_risk_profiles', 'reward_holds',
   'support_tickets', 'support_messages', 'character_items', 'user_character_inventory', 'character_unlock_events',
   'payment_intents', 'beta_invites', 'beta_access', 'order_fulfilments',
-  'c2c_cards', 'c2c_sessions', 'bank_transactions'
+  'c2c_cards', 'c2c_sessions', 'bank_transactions', 'bank_sms_patterns', 'bank_sms_messages'
 ];
 
 const requiredIndexes = [
@@ -55,7 +55,11 @@ const requiredIndexes = [
    * most one order. Without it, a bug in the settlement path can deliver twice
    * and the second delivery is money a player has simply lost. */
   'bank_tx_session_unique',
-  'bank_tx_reference_unique'
+  'bank_tx_reference_unique',
+  /* The third index that is a rule: without it a forwarder replaying its
+   * offline queue books the same deposit twice, and three of the four banks
+   * print nothing in the text that could tell the copies apart. */
+  'bank_sms_dedupe'
 ];
 
 export function listMigrationFiles(): string[] {

@@ -36,6 +36,7 @@ import { formatRialFa, formatTomanFa } from '../money.js';
 import { getPaymentIntent, settleCardToCardIntent } from '../paymentService.js';
 import { recordAdmin } from '../adminAuditService.js';
 import { repositories } from '../../repositories/index.js';
+import { fulfil, parseOrder } from '../purchaseOrderService.js';
 import { logger } from '../logger.js';
 
 export class SettlementError extends Error {
@@ -226,6 +227,35 @@ export async function ignoreTransaction(txId: string, reason: string, adminId?: 
   await recordAdmin({ adminId, action: 'c2c_transaction_ignored', meta: { txId, amountRial: tx.amountRial, reason } });
   logger.info('c2c_transaction_ignored', { txId, amountRial: tx.amountRial });
   return out;
+}
+
+/**
+ * Finish a delivery that was claimed and abandoned — matrix row ۵.
+ *
+ * Re-runs the SAME idempotent fulfilment the original caller was running, so a
+ * row that actually completed elsewhere in the meantime is left alone. The
+ * order and the buyer come off the stuck row itself, which is the only place
+ * they survived the process that died.
+ */
+export async function retryFulfilment(ref: string): Promise<boolean> {
+  const { find } = await import('../orderFulfilmentService.js');
+  const record = await find(ref);
+  if (!record || record.status !== 'pending') return false;
+
+  const order = parseOrder(record.order);
+  if (!order) {
+    /* Nothing to deliver and nothing to work out — the row cannot say what was
+     * bought. Left claimed so it stays visible rather than silently dropped. */
+    logger.error('c2c_retry_without_order', { ref, userId: record.userId });
+    return false;
+  }
+  await fulfil(record.userId, order, ref, {
+    source: record.source,
+    amountToman: record.amountToman,
+    paymentRef: record.paymentRef
+  });
+  logger.warn('c2c_fulfilment_retried', { ref, userId: record.userId, attempts: record.attempts });
+  return true;
 }
 
 export { RESERVING_STATUSES, TransactionError };

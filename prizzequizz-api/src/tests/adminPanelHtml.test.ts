@@ -1033,6 +1033,78 @@ function run(): void {
       'nothing tells the operator that comparing with the bank is what catches a forged deposit');
   });
 
+  /* ── card-to-card: the bank patterns ────────────────────────────────
+   * The screen where the operator's typing becomes the thing that decides
+   * whether money arrived. Everything checked here is a guard against that
+   * going wrong quietly. */
+  check('«الگوهای پیامک بانک» is reachable and really has a screen behind it', () => {
+    assert.ok(script.includes("['c2cpatterns','📩','الگوهای پیامک بانک']"), 'no nav entry');
+    assert.ok(/c2cpatterns:\s*renderC2cPatterns/.test(script), 'the nav entry has no renderer wired');
+    assert.ok(/function renderC2cPatterns\s*\(/.test(script), 'the renderer does not exist');
+  });
+
+  check('the operator writes a TEMPLATE, never a regex', () => {
+    /* A raw regex field would let a wrong pattern read the amount wrong — and
+     * the amount IS the payment — and would hang the API on one SMS. So the
+     * form has a template field, the save sends `template`, and there is no
+     * input anywhere that takes a pattern directly. */
+    assert.ok(script.includes('pat_tpl'), 'no template field');
+    assert.ok(/template:\s*\$\('#pat_tpl'\)\.value/.test(script), 'the form does not send a template');
+    assert.ok(!/id="pat_(regex|re|pattern)"/.test(script), 'the patterns form offers a raw pattern field');
+    /* Placeholders are the whole interface: if the panel stops naming them,
+     * the operator is back to guessing syntax. */
+    assert.ok(script.includes('{*}') && script.includes('[...]'),
+      'the template syntax is not explained on the screen');
+  });
+
+  check('a pattern cannot be saved on a deposit sample alone', () => {
+    assert.ok(/id="pat_wd"/.test(script), 'no withdrawal-sample field');
+    assert.ok(/sampleWithdrawal:\s*\$\('#pat_wd'\)\.value/.test(script),
+      'the form does not send the withdrawal sample');
+    assert.ok(script.includes('اجباری'), 'the withdrawal sample is not presented as mandatory');
+    assert.ok(script.includes('برداشت را واریز می‌خواند'),
+      'nothing says what a missing negative sample actually costs');
+  });
+
+  check('the test box shows the figure in BOTH units', () => {
+    /* The only check that catches the unit being set the wrong way round:
+     * «۲۵۰٬۰۰۰ ریال ≡ ۲۵٬۰۰۰ تومان» against what was really transferred. Scoped
+     * to patTry, because both field names appear on the deposit queue too and
+     * a file-wide search would pass however that box is written. */
+    const fn = (/async function patTry\([\s\S]*?\n\}/.exec(script) || [''])[0];
+    assert.ok(fn, 'there is no test-before-save box');
+    assert.ok(fn.includes('amountRialText') && fn.includes('amountTomanText'),
+      'the try box shows one unit only — a backwards unit would be invisible');
+    assert.ok(script.includes('ده‌برابر'), 'nothing warns what a backwards unit looks like');
+  });
+
+  check('the amount unit is chosen on patterns too, never defaulted', () => {
+    const screen = script.split('function patEdit')[1] || '';
+    assert.ok(screen.includes('— انتخاب کن —'), 'the pattern form pre-selects a unit');
+  });
+
+  check('promoting a pattern to live is a deliberate, warned act', () => {
+    const fn = (/function patPromote\([\s\S]*?\n\}/.exec(script) || [''])[0];
+    assert.ok(fn, 'a pattern can be made live without a confirmation step');
+    assert.ok(fn.includes('provenNegative'),
+      'promote does not check for a withdrawal sample — an unproven pattern can go live');
+    assert.ok(fn.includes('confirm('), 'promote does not ask');
+    assert.ok(script.includes('بدون تأیید تو کالا تحویل می‌دهند'),
+      'nothing tells the operator what «live» actually changes');
+  });
+
+  check('pasting an SMS says that credentials are never stored', () => {
+    assert.ok(/function btxPasteSms/.test(script), 'there is no way to paste a bank SMS');
+    assert.ok(script.includes('رمز یا کد یکبارمصرف'),
+      'nothing tells the operator that OTP messages are dropped');
+  });
+
+  check('unparsed messages are shown, because they are the samples', () => {
+    assert.ok(script.includes('PARSE_FAILED'), 'unrecognised messages are not surfaced anywhere');
+    assert.ok(script.includes('الگوی بانک تازه را بساز'),
+      'nothing tells the operator what to do with them');
+  });
+
   check('the card form asks for the account number, not only the card', () => {
     /* Every bank sample we have — Sepah, Refah, Tejarat — prints the ACCOUNT.
      * A card saved without one can never be matched to its own SMS. */

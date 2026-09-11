@@ -424,6 +424,34 @@ export async function externalSalesSummary(from?: string, to?: string): Promise<
 }
 
 /** Test seam. */
+/* DELIVERIES THAT WERE CLAIMED AND NEVER FINISHED.
+ *
+ * A claim carries a lease so a caller that dies mid-delivery does not hold the
+ * row forever. These are the rows whose lease has lapsed: the player paid,
+ * something stopped between the claim and the grant, and nobody else is coming
+ * to finish it. The sweeper re-runs them; this only says which.
+ *
+ * `void` rows are excluded deliberately — a reversed payment owes nothing.
+ */
+export async function listStuck(limit = 100): Promise<FulfilmentRecord[]> {
+  const pool = pg();
+  const cap = Math.max(1, Math.min(500, limit));
+  if (pool) {
+    await ensureSchema(pool);
+    const { rows } = await pool.query(
+      `SELECT * FROM order_fulfilments
+        WHERE status = 'pending' AND claimed_at < now() - make_interval(secs => $1)
+        ORDER BY claimed_at LIMIT $2`, [LEASE_MS / 1000, cap]);
+    return rows.map(rowToRecord);
+  }
+  const cutoff = Date.now() - LEASE_MS;
+  return [...mem.values()]
+    .filter((r) => r.status === 'pending' && Date.parse(r.claimedAt) < cutoff)
+    .sort((a, b) => (a.claimedAt < b.claimedAt ? -1 : 1))
+    .slice(0, cap)
+    .map((r) => ({ ...r }));
+}
+
 export function _resetFulfilments(): void { mem.clear(); }
 
 /** Test seam: age a claim past its lease, so a takeover can be exercised

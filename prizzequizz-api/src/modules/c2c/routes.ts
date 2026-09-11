@@ -33,6 +33,14 @@ import {
 } from '../../services/c2c/settlementService.js';
 import { MoneyError, formatRialFa, formatTomanFa, rialToToman, tomanToRial } from '../../services/money.js';
 import { repositories } from '../../repositories/index.js';
+import {
+  AMOUNT_UNITS, PATTERN_STATUSES, PatternError, TRIAL_CONFIRMATIONS, listPatterns, removePattern,
+  savePattern, setPatternStatus, type AmountUnit, type PatternStatus
+} from '../../services/c2c/patternStore.js';
+import { listMessages, type MessageStatus } from '../../services/c2c/messageStore.js';
+import { ingestSms } from '../../services/c2c/matchService.js';
+import { compileTemplate, FIELD_NAMES, TemplateError } from '../../services/c2c/templateCompiler.js';
+import { id as newId } from '../../utils/id.js';
 import { SessionError, cancelSession, viewSession } from '../../services/c2c/sessionService.js';
 
 /* The operator's own card number, so it is not a secret from them — but a list
@@ -114,6 +122,9 @@ function settlementError(ctx: RequestContext, e: unknown): void {
     return;
   }
   if (e instanceof MoneyError) { error(ctx.res, 422, e.code, e.message); return; }
+  /* A template the operator got wrong is a form error, not a conflict: the
+   * message says which part, and they fix it and press save again. */
+  if (e instanceof PatternError || e instanceof TemplateError) { error(ctx.res, 422, e.code, e.message); return; }
   throw e;
 }
 
@@ -272,6 +283,157 @@ export function registerC2cRoutes(router: Router, base: string): void {
       });
     }
     json(ctx.res, 200, { rows: out });
+  });
+
+
+  /* ---------- The bank patterns ----------
+   * The operator adds their own banks here. What they type is a TEMPLATE, not
+   * a regex — see templateCompiler for why that distinction is the whole
+   * safety story. */
+  router.add('GET', `${base}/admin/c2c/patterns`, async (ctx) => {
+    if (!requireAdmin(ctx, { tab: 'c2c' })) return;
+    const rows = await listPatterns();
+    json(ctx.res, 200, {
+      rows: rows.map((p) => ({
+        ...p,
+        /* The panel needs to SEE which patterns are not yet proven both ways:
+         * a missing withdrawal sample is exactly why a bank stays on trial. */
+        provenNegative: !!p.sampleWithdrawal,
+        readyToPromote: p.status === 'trial' && !!p.sampleWithdrawal && p.matchedCount >= TRIAL_CONFIRMATIONS
+      })),
+      statuses: PATTERN_STATUSES,
+      amountUnits: AMOUNT_UNITS,
+      fields: FIELD_NAMES,
+      trialConfirmations: TRIAL_CONFIRMATIONS
+    });
+  });
+
+  /* Compile and run a template WITHOUT saving — the «test before you save»
+   * box. Read-only: it never writes a pattern and never settles anything. */
+  router.add('POST', `${base}/admin/c2c/patterns/try`, async (ctx) => {
+    if (!requireAdmin(ctx, { tab: 'c2c' })) return;
+    const b = bodyObject(ctx.body) as any;
+    try {
+      const compiled = compileTemplate(String(b.template ?? ''));
+      const { matchTemplate, toRial } = await import('../../services/c2c/templateCompiler.js');
+      const unit: AmountUnit = b.amountUnit === 'toman' ? 'toman' : 'rial';
+      const read = (sample: unknown) => {
+        const hit = matchTemplate(compiled, String(sample ?? ''));
+        if (!hit) return { matched: false };
+        let amountRial = 0; let rialText = ''; let tomanText = '';
+        try {
+          amountRial = toRial(hit.amountRaw, unit);
+          rialText = formatRialFa(amountRial);
+          tomanText = formatTomanFa(rialToToman(amountRial));
+        } catch { rialText = '—'; tomanText = '—'; }
+        /* BOTH units, always. The operator confirms «۲۵۰٬۰۰۰ ریال ≡ ۲۵٬۰۰۰
+         * تومان» is what was really transferred — which is the only check that
+         * catches the unit being set the wrong way round. */
+        return { matched: true, values: hit.values, amountRial, amountRialText: rialText, amountTomanText: tomanText };
+      };
+      json(ctx.res, 200, {
+        regexSource: compiled.source,
+        fields: compiled.fields,
+        deposit: read(b.sampleDeposit),
+        withdrawal: read(b.sampleWithdrawal)
+      });
+    } catch (e) { settlementError(ctx, e); }
+  });
+
+  router.add('POST', `${base}/admin/c2c/patterns`, async (ctx) => {
+    if (!requireAdmin(ctx, { tab: 'c2c' })) return;
+    const b = bodyObject(ctx.body) as any;
+    try {
+      const r = await savePattern({
+        id: b.id || undefined,
+        bankKey: String(b.bankKey ?? ''),
+        label: b.label != null ? String(b.label) : undefined,
+        senders: Array.isArray(b.senders) ? b.senders.map(String) : undefined,
+        template: String(b.template ?? ''),
+        amountUnit: b.amountUnit,
+        rejectKeywords: Array.isArray(b.rejectKeywords) ? b.rejectKeywords.map(String) : undefined,
+        sampleDeposit: String(b.sampleDeposit ?? ''),
+        sampleWithdrawal: String(b.sampleWithdrawal ?? ''),
+        priority: b.priority != null ? Number(b.priority) : undefined
+      });
+      await recordAdmin({
+        adminId: (ctx as any).adminAccount?.id, action: b.id ? 'c2c_pattern_updated' : 'c2c_pattern_created',
+        meta: { patternId: r.pattern.id, bankKey: r.pattern.bankKey, status: r.pattern.status, amountUnit: r.pattern.amountUnit }
+      });
+      json(ctx.res, b.id ? 200 : 201, r);
+    } catch (e) { settlementError(ctx, e); }
+  });
+
+  router.add('POST', `${base}/admin/c2c/patterns/:id/status`, async (ctx) => {
+    if (!requireAdmin(ctx, { tab: 'c2c' })) return;
+    const b = bodyObject(ctx.body) as any;
+    const status = String(b.status ?? '');
+    if (!(PATTERN_STATUSES as readonly string[]).includes(status)) {
+      return error(ctx.res, 422, 'PATTERN_STATUS_INVALID', 'وضعیت نامعتبر است.');
+    }
+    const p = await setPatternStatus(ctx.params.id!, status as PatternStatus);
+    if (!p) return error(ctx.res, 404, 'PATTERN_NOT_FOUND', 'الگو پیدا نشد.');
+    /* Promoting to live is the moment matches stop needing a person, so it is
+     * the one worth finding in the audit a year from now. */
+    await recordAdmin({
+      adminId: (ctx as any).adminAccount?.id, action: 'c2c_pattern_status',
+      meta: { patternId: p.id, bankKey: p.bankKey, status, matchedCount: p.matchedCount, provenNegative: !!p.sampleWithdrawal }
+    });
+    json(ctx.res, 200, p);
+  });
+
+  router.add('DELETE', `${base}/admin/c2c/patterns/:id`, async (ctx) => {
+    if (!requireAdmin(ctx, { tab: 'c2c' })) return;
+    try {
+      const removed = await removePattern(ctx.params.id!);
+      if (!removed) return error(ctx.res, 404, 'PATTERN_NOT_FOUND', 'الگو پیدا نشد.');
+      await recordAdmin({ adminId: (ctx as any).adminAccount?.id, action: 'c2c_pattern_removed', meta: { patternId: ctx.params.id } });
+      json(ctx.res, 200, { removed: true });
+    } catch (e) { settlementError(ctx, e); }
+  });
+
+  /* ---------- Messages ----------
+   * Pasting a bank SMS runs the WHOLE chain — filter, parse, match, maybe
+   * settle — through exactly the code the forwarder will use. That is how the
+   * automatic path is exercised and trusted before any Android code exists. */
+  router.add('GET', `${base}/admin/c2c/messages`, async (ctx) => {
+    if (!requireAdmin(ctx, { tab: 'c2c' })) return;
+    const status = ctx.query.get('status') || undefined;
+    const rows = await listMessages({
+      status: status as MessageStatus | undefined,
+      limit: Number(ctx.query.get('limit') ?? 100)
+    });
+    json(ctx.res, 200, { rows });
+  });
+
+  router.add('POST', `${base}/admin/c2c/messages`, async (ctx) => {
+    if (!requireAdmin(ctx, { tab: 'c2c' })) return;
+    const b = bodyObject(ctx.body) as any;
+    const body = String(b.body ?? '').trim();
+    if (!body) return error(ctx.res, 422, 'BODY_REQUIRED', 'متن پیامک را وارد کن.');
+    try {
+      const r = await ingestSms({
+        /* «manual:…» so a pasted message can never collide with a real
+         * device's id space, and so the queue shows where it came from. */
+        deviceId: 'manual',
+        messageId: String(b.messageId ?? '').trim() || 'manual-' + newId(),
+        sender: String(b.sender ?? ''),
+        body,
+        receivedAt: b.receivedAt ? new Date(String(b.receivedAt)).toISOString() : undefined
+      });
+      await recordAdmin({
+        adminId: (ctx as any).adminAccount?.id, action: 'c2c_sms_pasted',
+        meta: { outcome: r.outcome, txId: r.transaction?.id, sessionId: r.sessionId }
+      });
+      json(ctx.res, 200, {
+        outcome: r.outcome,
+        reason: r.reason ?? '',
+        message: r.message ?? null,
+        transaction: r.transaction ? await describeTx(r.transaction) : null,
+        sessionId: r.sessionId ?? null,
+        candidates: r.transaction && r.outcome === 'queued' ? await candidatesFor(r.transaction) : []
+      });
+    } catch (e) { settlementError(ctx, e); }
   });
 
   router.add('GET', `${base}/admin/c2c/cards`, async (ctx) => {

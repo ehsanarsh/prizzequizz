@@ -22,6 +22,7 @@ process.env.MATCHMAKING_WORKER = 'false';
 process.env.LAST_SURVIVOR_WORKER = 'false';
 process.env.LEAGUE_WORKER = 'false';
 process.env.SERVER_MONITOR = 'false';
+process.env.C2C_WORKER = 'false';
 
 import assert from 'node:assert/strict';
 import { once } from 'node:events';

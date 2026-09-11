@@ -252,6 +252,10 @@ export async function setSessionStatus(sessionId: string, status: C2cSessionStat
 export interface SessionFilter {
   cardId?: string;
   status?: C2cSessionStatus;
+  /** Any of these statuses. `RESERVING_STATUSES` is the useful one: those are
+   *  exactly the sessions whose amount is still held, and therefore the only
+   *  ones a fresh deposit could belong to. */
+  statuses?: C2cSessionStatus[];
   userId?: string;
   /** Exactly this payable figure — how a deposit finds the order it paid for. */
   amountRial?: number;
@@ -271,6 +275,7 @@ export async function listSessions(filter: SessionFilter = {}): Promise<C2cSessi
     const where: string[] = []; const params: any[] = [];
     if (filter.cardId) { params.push(filter.cardId); where.push(`card_id=$${params.length}`); }
     if (filter.status) { params.push(filter.status); where.push(`status=$${params.length}`); }
+    if (filter.statuses?.length) { params.push(filter.statuses); where.push(`status = ANY($${params.length})`); }
     if (filter.userId) { params.push(filter.userId); where.push(`user_id=$${params.length}`); }
     if (filter.amountRial) {
       if (tolerance > 0) {
@@ -289,6 +294,7 @@ export async function listSessions(filter: SessionFilter = {}): Promise<C2cSessi
   return [...mem.values()]
     .filter((s) => (!filter.cardId || s.cardId === filter.cardId)
       && (!filter.status || s.status === filter.status)
+      && (!filter.statuses?.length || filter.statuses.includes(s.status))
       && (!filter.userId || s.userId === filter.userId)
       && (!filter.amountRial || Math.abs(s.amountRial - filter.amountRial) <= tolerance))
     .sort((a, b) => (a.createdAt > b.createdAt ? -1 : 1))
