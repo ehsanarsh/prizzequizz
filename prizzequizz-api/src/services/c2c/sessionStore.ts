@@ -249,14 +249,37 @@ export async function setSessionStatus(sessionId: string, status: C2cSessionStat
   return { ...s };
 }
 
-export async function listSessions(filter: { cardId?: string; status?: C2cSessionStatus; limit?: number } = {}): Promise<C2cSession[]> {
+export interface SessionFilter {
+  cardId?: string;
+  status?: C2cSessionStatus;
+  userId?: string;
+  /** Exactly this payable figure — how a deposit finds the order it paid for. */
+  amountRial?: number;
+  /** Payable figures within this many rial of `amountRial`, for a payer who
+   *  typed the amount wrong: the panel offers the near misses and a person
+   *  decides. Ignored without `amountRial`. */
+  amountToleranceRial?: number;
+  limit?: number;
+}
+
+export async function listSessions(filter: SessionFilter = {}): Promise<C2cSession[]> {
   const pool = pg();
   const limit = Math.max(1, Math.min(500, Number(filter.limit ?? 100)));
+  const tolerance = Math.max(0, Number(filter.amountToleranceRial ?? 0));
   if (pool) {
     await ensureSessionSchema(pool);
     const where: string[] = []; const params: any[] = [];
     if (filter.cardId) { params.push(filter.cardId); where.push(`card_id=$${params.length}`); }
     if (filter.status) { params.push(filter.status); where.push(`status=$${params.length}`); }
+    if (filter.userId) { params.push(filter.userId); where.push(`user_id=$${params.length}`); }
+    if (filter.amountRial) {
+      if (tolerance > 0) {
+        params.push(filter.amountRial - tolerance); params.push(filter.amountRial + tolerance);
+        where.push(`amount_rial BETWEEN $${params.length - 1} AND $${params.length}`);
+      } else {
+        params.push(filter.amountRial); where.push(`amount_rial=$${params.length}`);
+      }
+    }
     params.push(limit);
     const { rows } = await pool.query(
       `SELECT * FROM c2c_sessions ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
@@ -264,7 +287,10 @@ export async function listSessions(filter: { cardId?: string; status?: C2cSessio
     return rows.map(rowToSession);
   }
   return [...mem.values()]
-    .filter((s) => (!filter.cardId || s.cardId === filter.cardId) && (!filter.status || s.status === filter.status))
+    .filter((s) => (!filter.cardId || s.cardId === filter.cardId)
+      && (!filter.status || s.status === filter.status)
+      && (!filter.userId || s.userId === filter.userId)
+      && (!filter.amountRial || Math.abs(s.amountRial - filter.amountRial) <= tolerance))
     .sort((a, b) => (a.createdAt > b.createdAt ? -1 : 1))
     .slice(0, limit);
 }

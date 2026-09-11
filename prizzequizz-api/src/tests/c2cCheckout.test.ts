@@ -29,11 +29,12 @@ import type { AddressInfo } from 'node:net';
 import { createApiServer } from '../app.js';
 import { signAccessToken } from '../services/tokenService.js';
 import { repositories } from '../repositories/index.js';
-import { isValidPan, listCards, removeCard, saveCard } from '../services/c2c/cardService.js';
-import { getSession, listSessions, RESERVING_STATUSES, _resetSessions, _setExpiresAt } from '../services/c2c/sessionStore.js';
+import { isValidPan, saveCard } from '../services/c2c/cardService.js';
+import { getSession, listSessions, RESERVING_STATUSES, _setExpiresAt } from '../services/c2c/sessionStore.js';
 import { listGateways, removeGateway, saveGateway } from '../services/paymentGatewayService.js';
 import { getPaymentIntent } from '../services/paymentService.js';
 import { id } from '../utils/id.js';
+import { resetC2c } from './c2cTestReset.js';
 
 let passed = 0, failed = 0;
 async function check(name: string, fn: () => Promise<void>): Promise<void> {
@@ -65,13 +66,7 @@ const ABOVE = { kind: 'ticket', tier: 'red', qty: 2 };   // 100,000 تومان
 const AT_FLOOR = { kind: 'ticket', tier: 'red', qty: 1 };  // 50,000 تومان
 
 async function run(): Promise<void> {
-  if (process.env.DATABASE_URL) {
-    const { getPgPool } = await import('../database/postgres.js');
-    await getPgPool().query('DELETE FROM c2c_sessions');
-    await getPgPool().query('DELETE FROM c2c_cards');
-  }
-  for (const c of await listCards()) await removeCard(c.id);
-  _resetSessions();
+  await resetC2c();
   for (const g of await listGateways()) await removeGateway(g.id);
 
   const c2cGw = await saveGateway({ name: 'کارت به کارت', type: 'card_to_card', availability: 'live', priority: 2 });

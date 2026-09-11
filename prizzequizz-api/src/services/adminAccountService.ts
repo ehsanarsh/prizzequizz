@@ -185,7 +185,7 @@ export async function deleteAccount(accountId: string): Promise<boolean> {
 // The tab keys that exist in the panel (kept in sync with the admin nav).
 export const ADMIN_TABS = [
   'dashboard', 'finance', 'accounting', 'expenses', 'backup', 'security', 'users', 'matches', 'support',
-  'questions', 'qreports', 'aistudio', 'pipeline', 'categories', 'shop', 'characters', 'charboxes', 'lifelines', 'onboarding', 'lastsurvivor', 'sms', 'smsgroups', 'payments', 'c2ccards',
+  'questions', 'qreports', 'aistudio', 'pipeline', 'categories', 'shop', 'characters', 'charboxes', 'lifelines', 'onboarding', 'lastsurvivor', 'sms', 'smsgroups', 'payments', 'c2ccards', 'c2c',
   'wallet', 'withdrawals', 'payoutpartners', 'withdrawotp', 'rewardholds', 'tickets', 'giftcodes',
   'cfg_xp', 'cfg_level', 'cfg_cup', 'cfg_gameplay', 'leagues', 'missions', 'rewards',
   'leaderboard', 'campaign', 'events', 'banners', 'notifications',
@@ -213,6 +213,10 @@ export function tabForPath(path: string): string | null {
    * is its own permission — the same reason character BOXES are separate from
    * the character roster. */
   if (p.includes('/admin/c2c/cards')) return 'c2ccards';
+  /* Everything else under /admin/c2c — the deposit queue and the payments —
+   * is the `c2c` tab. Settling a deposit hands over goods, so it is its own
+   * permission and not something the destination-cards editor also gets. */
+  if (p.includes('/admin/c2c')) return 'c2c';
   if (p.includes('/admin/payments')) return 'payments';
   if (p.includes('/admin/monitor')) return 'monitoring';
   if (p.includes('/admin/question-reports')) return 'qreports';

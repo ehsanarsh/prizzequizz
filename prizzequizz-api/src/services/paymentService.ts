@@ -21,6 +21,7 @@ import { WALLET_LIMITS, WalletError, postEntry } from './walletLedgerService.js'
 import { recordMoney } from './missionService.js';
 import { getGateway, getPaymentSettings, pickActiveGateway } from './paymentGatewayService.js';
 import { fulfil, isGatewayPayable, parseOrder, quote, type PurchaseOrder } from './purchaseOrderService.js';
+import type { FulfilSource } from './orderFulfilmentService.js';
 
 export interface PaymentDiagnostics {
   provider: PaymentProvider;
@@ -188,24 +189,39 @@ export async function settlePaymentIntent(intentId: string, sig: string, status:
     return repositories.payments.updateStatus(intent.id, 'failed', { failedAt: new Date().toISOString(), metadata: { ...intent.metadata, verifiedAt: new Date().toISOString() } });
   }
 
-  // Claim: conditional flip so concurrent callbacks race to exactly one winner.
-  const claimed = await claimIntent(intentId);
-  if (!claimed) return repositories.payments.findById(intentId); // another caller settled it
+  return deliverAndMarkPaid(intent, 'gateway');
+}
 
-  /* DELIVER THE ORDER. The money paid at the gateway belongs to the house, not
-   * to the player's صندوق — crediting it there and debiting it again would let
-   * a purchase be laundered into a withdrawable prize, which is exactly what
+/* THE ONE DELIVERY PATH, WHATEVER PROVED THE MONEY ARRIVED.
+ *
+ * A gateway callback carries an HMAC; a card-to-card payment carries a bank
+ * SMS an operator or a matcher tied to a session. Those are two ways of
+ * BELIEVING the money came — not two ways of handing over the goods. Keeping
+ * one delivery path is what stops the two drifting: an order that gets a
+ * mission counter or a receipt on one route and not the other.
+ *
+ * Everything that decides WHETHER to believe stays in the caller. By the time
+ * this runs, that question is settled.
+ */
+async function deliverAndMarkPaid(intent: PaymentIntent, source: FulfilSource): Promise<PaymentIntent | null> {
+  // Claim: conditional flip so concurrent callers race to exactly one winner.
+  const claimed = await claimIntent(intent.id);
+  if (!claimed) return repositories.payments.findById(intent.id); // another caller settled it
+
+  /* DELIVER THE ORDER. The money paid outside belongs to the house, not to the
+   * player's صندوق — crediting it there and debiting it again would let a
+   * purchase be laundered into a withdrawable prize, which is exactly what
    * removing top-ups is meant to prevent. So nothing is posted to the ledger:
    * the goods are simply handed over. */
   const order = parseOrder((intent.metadata as any)?.order);
   if (order) {
     try {
       await fulfil(intent.userId, order, `intent:${intent.id}`, {
-        source: 'gateway', amountToman: intent.amount, paymentRef: intent.id
+        source, amountToman: intent.amount, paymentRef: intent.id
       });
     } catch (e) {
       /* Paid but undelivered is the one outcome that must never be silent. */
-      logger.error('payment_fulfilment_failed', { intentId: intent.id, userId: intent.userId, message: e instanceof Error ? e.message : 'unknown' });
+      logger.error('payment_fulfilment_failed', { intentId: intent.id, userId: intent.userId, source, message: e instanceof Error ? e.message : 'unknown' });
       await notifications.create({ userId: intent.userId, type: 'wallet_update', title: 'پرداخت انجام شد، تحویل ناموفق', body: 'پرداختت موفق بود ولی تحویل انجام نشد. پشتیبانی پیگیری می‌کند.', data: { paymentIntentId: intent.id, url: '/support' }, push: true }).catch(() => undefined);
     }
   } else {
@@ -216,6 +232,28 @@ export async function settlePaymentIntent(intentId: string, sig: string, status:
   const what = (intent.metadata as any)?.orderLabel || 'خریدت';
   await notifications.create({ userId: intent.userId, type: 'wallet_update', title: 'پرداخت موفق بود', body: `${what} فعال شد.`, data: { paymentIntentId: intent.id, amount: intent.amount, url: '/shop' }, push: true });
   return paid;
+}
+
+/**
+ * Settle a card-to-card intent. NO SIGNATURE, deliberately.
+ *
+ * There is nothing to sign: the bank does not call us back. What stands in for
+ * the HMAC is the transfer itself — a deposit of an amount that was reserved
+ * for exactly this session, tied to it by the caller. So this function is
+ * dangerous in a way `settlePaymentIntent` is not, and the rule that keeps it
+ * safe is that ONLY the card-to-card settlement path may call it: a route that
+ * exposes it to anything a player can reach is a free-goods button.
+ */
+export async function settleCardToCardIntent(intentId: string): Promise<PaymentIntent | null> {
+  const intent = await repositories.payments.findById(intentId);
+  if (!intent) return null;
+  if (intent.status === 'paid') return intent;   // idempotent
+  if ((intent.metadata as any)?.gatewayType !== 'card_to_card') {
+    /* A gateway intent settles by callback and nothing else. Letting this
+     * settle one would be a way around the signature check. */
+    throw new WalletError('INTENT_NOT_CARD_TO_CARD', 'این پرداخت از مسیر کارت‌به‌کارت نیست.');
+  }
+  return deliverAndMarkPaid(intent, 'card_to_card');
 }
 
 /* One-winner claim of a pending intent. */

@@ -28,7 +28,7 @@ const requiredTables = [
   'integrity_signals', 'devices', 'user_device_bindings', 'user_risk_profiles', 'reward_holds',
   'support_tickets', 'support_messages', 'character_items', 'user_character_inventory', 'character_unlock_events',
   'payment_intents', 'beta_invites', 'beta_access', 'order_fulfilments',
-  'c2c_cards', 'c2c_sessions'
+  'c2c_cards', 'c2c_sessions', 'bank_transactions'
 ];
 
 const requiredIndexes = [
@@ -50,7 +50,12 @@ const requiredIndexes = [
    * deploy that lands without it looks perfectly healthy right up to the first
    * bank SMS that matches two people's orders at once. */
   'c2c_amount_unique',
-  'idx_c2c_sessions_intent'
+  'idx_c2c_sessions_intent',
+  /* The other index that is a rule, not a speed-up: one deposit may settle at
+   * most one order. Without it, a bug in the settlement path can deliver twice
+   * and the second delivery is money a player has simply lost. */
+  'bank_tx_session_unique',
+  'bank_tx_reference_unique'
 ];
 
 export function listMigrationFiles(): string[] {

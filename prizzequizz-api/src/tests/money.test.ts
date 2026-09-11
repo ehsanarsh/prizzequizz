@@ -81,12 +81,21 @@ check('nothing else in the codebase converts between the two', () => {
     for (const entry of readdirSync(dir)) {
       const p = join(dir, entry);
       if (statSync(p).isDirectory()) { walk(p); continue; }
-      if (!p.endsWith('.ts') || p.endsWith('money.ts') || p.endsWith('money.test.ts')) continue;
+      if (!p.endsWith('.ts') || p.endsWith('money.ts')) continue;
+      /* Tests are skipped because their assertions QUOTE the patterns being
+       * banned — a guard that scans them is a guard fighting itself. What is
+       * being protected is production money math, and that is not in here. */
+      if (p.includes('/tests/')) continue;
       readFileSync(p, 'utf8').split('\n').forEach((line, i) => {
         /* Only lines that are ABOUT rial: a `* 10` somewhere else is arithmetic,
          * not a currency conversion, and flagging it would make this test noise
          * that people learn to ignore. */
         if (!/rial/i.test(line)) return;
+        /* Prose is not arithmetic. A comment saying «10,000 rial is 1,000
+         * toman» is the explanation, not the offence — and a guard that fires
+         * on its own documentation is one people start ignoring. */
+        const code = line.trim();
+        if (code.startsWith('*') || code.startsWith('//') || code.startsWith('/*')) return;
         if (/[*/]\s*10\b/.test(line) || /\b10\s*\*/.test(line)) {
           offenders.push(`${p.replace(process.cwd() + '/', '')}:${i + 1}  ${line.trim().slice(0, 70)}`);
         }

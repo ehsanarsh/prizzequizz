@@ -266,7 +266,7 @@ function groupMembers(g){ return (TAB_GROUPS[g]?TAB_GROUPS[g].tabs:[]).filter(t=
 const NAV=[
   ['اصلی',[['dashboard','📊','داشبورد'],['g_money','💰','مالی و حسابداری'],['users','👤','کاربران'],['matches','🎮','مسابقات'],['duel','⚔️','دوئل'],['lastsurvivor','🏆','آخرین بازمانده'],['support','🎧','پشتیبانی']]],
   ['محتوا',[['g_qhub','❓','سوالات'],['categories','🏷️','موضوعات'],['g_chars','🎭','کاراکترها'],['lifelines','🧩','کمک‌ها'],['rewards','🎡','گردونه و جایزه روزانه'],['recordmode','🏅','ثبت رکورد'],['onboarding','👋','خوش‌آمدگویی']]],
-  ['اقتصاد',[['wallet','🏆','صندوق جایزه'],['g_payout','💸','دریافت جایزه'],['tickets','🎫','بلیط‌ها'],['shop','🛒','فروشگاه'],['chatpacks','💬','پک‌های چت'],['giftcodes','🎁','کدهای هدیه'],['payments','🏦','درگاه پرداخت'],['c2ccards','💳','کارت‌های مقصد']]],
+  ['اقتصاد',[['wallet','🏆','صندوق جایزه'],['g_payout','💸','دریافت جایزه'],['tickets','🎫','بلیط‌ها'],['shop','🛒','فروشگاه'],['chatpacks','💬','پک‌های چت'],['giftcodes','🎁','کدهای هدیه'],['payments','🏦','درگاه پرداخت'],['c2c','🧾','واریزهای کارت‌به‌کارت'],['c2ccards','💳','کارت‌های مقصد']]],
   ['بالانس بازی (Data-Driven)',[['g_balance','⚖️','بالانس بازی'],['leagues','🛡️','لیگ‌ها'],['missions2','🎯','مأموریت‌ها']]],
   ['رشد و تعامل',[['leaderboard','📈','لیدربرد'],['campaign','🎁','کمپین کاربر جدید'],['events','📅','رویدادها'],['banners','🖼️','بنرها'],['notifications','🔔','اعلان‌ها'],['g_sms','📱','پنل پیامکی']]],
   ['سیستم',[['monitoring','🖥️','مانیتورینگ سرور'],['g_security','🛡️','امنیت و ضدتقلب'],['g_audit','📑','گزارش و لاگ'],['reset','♻️','ابزار ریست'],['accounts','🔐','حساب‌ها و دسترسی'],['backup','💾','پشتیبان‌گیری'],['general','⚙️','تنظیمات عمومی'],['rawcfg','🧩','ویرایش خام Config']]]
@@ -488,7 +488,7 @@ async function render(){
   try{
     if(CUR==='accounts')return renderAccounts();
     if(CONFIG_PAGES[CUR]){ await renderConfigSection(CONFIG_PAGES[CUR][0],CONFIG_PAGES[CUR][1]); groupBar(); if(tracked)void badgeLoad(); return; }
-    const fn={dashboard:renderDashboard,finance:renderFinance,accounting:renderAccounting,expenses:renderExpenses,backup:renderBackup,users:renderUsers,matches:renderMatches,support:renderSupport,questions:renderQuestions,leagues:renderLeagues,qreports:renderQReports,aistudio:renderAiStudio,pipeline:renderPipeline,categories:renderCategories,wallet:renderWallet,withdrawals:renderWithdrawals,payoutpartners:renderPayoutPartners,withdrawotp:renderWithdrawOtp,smsgroups:renderSmsGroups,rewardholds:renderRewardHolds,tickets:renderTickets,giftcodes:renderGiftCodes,shop:renderShopAdmin,chatpacks:renderChatPacks,characters:renderCharacters,charboxes:renderCharBoxes,lifelines:renderLifelines,rewards:renderRewards,missions2:renderMissions2,recordmode:renderRecordMode,onboarding:renderOnboarding,lastsurvivor:renderLastSurvivor,duel:renderDuel,sms:renderSms,payments:renderPayments,c2ccards:renderC2cCards,leaderboard:renderLeaderboard,banners:renderBanners,notifications:renderNotifications,anticheat:renderAntiCheat,suspicious:renderSuspicious,reports:renderReports,logs:renderLogs,reset:renderReset,roles:renderRoles,rawcfg:renderRawCfg,monitoring:renderMonitoring}[CUR];
+    const fn={dashboard:renderDashboard,finance:renderFinance,accounting:renderAccounting,expenses:renderExpenses,backup:renderBackup,users:renderUsers,matches:renderMatches,support:renderSupport,questions:renderQuestions,leagues:renderLeagues,qreports:renderQReports,aistudio:renderAiStudio,pipeline:renderPipeline,categories:renderCategories,wallet:renderWallet,withdrawals:renderWithdrawals,payoutpartners:renderPayoutPartners,withdrawotp:renderWithdrawOtp,smsgroups:renderSmsGroups,rewardholds:renderRewardHolds,tickets:renderTickets,giftcodes:renderGiftCodes,shop:renderShopAdmin,chatpacks:renderChatPacks,characters:renderCharacters,charboxes:renderCharBoxes,lifelines:renderLifelines,rewards:renderRewards,missions2:renderMissions2,recordmode:renderRecordMode,onboarding:renderOnboarding,lastsurvivor:renderLastSurvivor,duel:renderDuel,sms:renderSms,payments:renderPayments,c2c:renderC2cQueue,c2ccards:renderC2cCards,leaderboard:renderLeaderboard,banners:renderBanners,notifications:renderNotifications,anticheat:renderAntiCheat,suspicious:renderSuspicious,reports:renderReports,logs:renderLogs,reset:renderReset,roles:renderRoles,rawcfg:renderRawCfg,monitoring:renderMonitoring}[CUR];
     if(fn){ await fn(); groupBar(); if(tracked)void badgeLoad(); return; }
     /* No renderer for this tab. Six nav entries were in this state, and
        clicking one silently left the PREVIOUS screen's content on display —
@@ -4983,6 +4983,148 @@ async function gwSave(id){
    کارت‌ها به‌ترتیب اولویت انتخاب می‌شوند. «کف مبلغ» خاصیت خود بانک است، نه
    سلیقهٔ ما: زیر آن مبلغ بانک اصلاً پیامک نمی‌فرستد، پس پرداخت قابل شناسایی
    نیست و اصلاً پیشنهاد نمی‌شود. */
+
+/* ---- The deposit queue ----
+   Where a bank transfer becomes goods. Three things about this screen are
+   deliberate and should stay that way:
+
+   1. NOTHING SETTLES ITSELF. Candidate payments are offered; a person picks.
+      Card-to-card carries no order number, so the amount is the entire
+      evidence — and «probably this one» is not something to hand goods out on.
+   2. THE UNIT IS ASKED FOR, EVERY TIME. Refah's SMS reports rial, others
+      toman. A remembered default would be right most of the time and wrong by
+      a factor of ten the rest.
+   3. THE SERVER FORMATS THE MONEY. Every figure below is printed from a
+      *Text field the API sent. The panel doing its own ×10 is exactly the bug
+      this whole design is arranged to prevent. */
+const BTX_ST={NEW:['در صف','pend'],ASSIGNED:['تخصیص‌یافته','pend'],SETTLED:['تسویه شد','ok'],IGNORED:['رد شد','bad']};
+const SESS_ST={AWAITING:['منتظر واریز','pend'],PAID:['تسویه شد','ok'],EXPIRED:['منقضی','bad'],CANCELLED:['لغو شد','bad'],RELEASED:['آزاد شد','bad'],REVIEW:['بررسی','pend']};
+function pill(map,v){const t=map[v]||[v,'pend'];return '<span class="pill '+t[1]+'">'+t[0]+'</span>';}
+
+let _c2cQFilter='';
+async function renderC2cQueue(){
+  $('#main').innerHTML=head('واریزهای کارت‌به‌کارت','صف واریزها، تخصیص دستی و تسویه')+'<div id="c2cqBody"><div class="card empty">…</div></div>';
+  const b=$('#c2cqBody');
+  let d,sess;
+  try{
+    d=await api('GET','/admin/c2c/transactions'+(_c2cQFilter?'?status='+_c2cQFilter:''));
+    sess=await api('GET','/admin/c2c/sessions?status=AWAITING');
+  }catch(e){ b.innerHTML='<div class="card empty">'+esc(e.message||'خطا')+'</div>'; return; }
+  window._BTX={}; (d.rows||[]).forEach(t=>window._BTX[t.id]=t);
+
+  const filters=['','NEW','ASSIGNED','SETTLED','IGNORED'].map(k=>
+    '<button class="btn sm'+(_c2cQFilter===k?' pri':'')+'" onclick="c2cQFilter(\''+k+'\')">'+(k?BTX_ST[k][0]:'همه')+'</button>').join(' ');
+
+  b.innerHTML=
+    '<div class="note">واریزی که هنوز از گوشی فوروارد نمی‌شود را اینجا دستی ثبت کن. <b>هیچ واریزی خودکار تسویه نمی‌شود</b> — پرداخت‌های محتمل پیشنهاد می‌شوند و انتخاب با توست.</div>'+
+    '<div class="card"><h3>🧮 مغایرت‌گیری</h3><div class="sub">مجموع واریزهای تسویه‌شده در این بازه: <b>'+esc(d.settled&&d.settled.totalRialText||'—')+'</b> در '+fa((d.settled&&d.settled.count)||0)+' تراکنش. این عدد را با صورتحساب بانک مقایسه کن؛ تنها چیزی که یک واریز جعلی را لو می‌دهد همین است.</div></div>'+
+    '<div style="margin:10px 0;display:flex;gap:6px;flex-wrap:wrap;align-items:center">'+
+      '<button class="btn pri" onclick="btxManual()">➕ ثبت دستی واریز</button>'+
+      '<span style="flex:1"></span>'+filters+
+    '</div>'+
+    tbl(['زمان','مبلغ','بانک / کارت','کد پیگیری','وضعیت','عملیات'],(d.rows||[]).map(t=>[
+      '<span class="sub">'+esc(new Date(t.occurredAt).toLocaleString('fa-IR'))+'</span>',
+      '<b class="mono">'+esc(t.amountRialText)+'</b>'+(t.amountTomanText?'<br><span class="sub">'+esc(t.amountTomanText)+'</span>':''),
+      esc(t.bankKey||'—')+(t.cardLabel?'<br><span class="sub mono">'+esc(t.cardLabel)+'</span>':'<br><span class="sub bad">کارت ناشناس</span>'),
+      t.reference?'<span class="mono">'+esc(t.reference)+'</span>':'<span class="sub">—</span>',
+      pill(BTX_ST,t.status)+(t.note?'<br><span class="sub">'+esc(t.note)+'</span>':''),
+      t.status==='SETTLED'?'<span class="sub">—</span>'
+        :'<button class="btn sm pri" onclick="btxAssign(\''+t.id+'\')">تخصیص</button>'+
+         (t.status==='IGNORED'?'':' <button class="btn sm bad" onclick="btxIgnore(\''+t.id+'\')">رد</button>')
+    ]))+
+    '<div class="card" style="margin-top:14px"><h3>⏳ پرداخت‌های در انتظار واریز</h3>'+
+    tbl(['کد پیگیری','بازیکن','مبلغ دقیق','کارت','مهلت'],(sess.rows||[]).map(r=>[
+      '<span class="mono">'+esc(r.trackingCode)+'</span>',
+      esc((r.player&&(r.player.displayName||r.player.username))||'—'),
+      '<b class="mono">'+esc(r.amountRialText)+'</b><br><span class="sub">'+esc(r.baseTomanText)+'</span>',
+      '<span class="sub mono">'+esc(r.cardLabel||'—')+'</span>',
+      '<span class="sub">'+esc(new Date(r.expiresAt).toLocaleString('fa-IR'))+'</span>'
+    ]))+'</div>';
+}
+function c2cQFilter(k){ _c2cQFilter=k; renderC2cQueue(); }
+
+function btxManual(){
+  const now=new Date(); now.setMinutes(now.getMinutes()-now.getTimezoneOffset());
+  modal('ثبت دستی واریز',
+    '<div class="note">مبلغ را دقیقاً همان‌طور که در پیامک بانک آمده وارد کن و <b>واحدش را انتخاب کن</b> — بانک‌ها با هم فرق دارند (رفاه ریال می‌نویسد، بعضی تومان).</div>'+
+    '<div class="grid g2"><div class="field"><label>مبلغ</label><input id="btx_amt" type="number" inputmode="numeric" dir="ltr"></div>'+
+    '<div class="field"><label>واحد مبلغ</label><select id="btx_unit"><option value="">— انتخاب کن —</option><option value="rial">ریال</option><option value="toman">تومان</option></select></div></div>'+
+    '<div class="grid g2"><div class="field"><label>حساب/کارت مقصد <span class="sub">— همان که در پیامک آمده</span></label><input id="btx_dest" dir="ltr" inputmode="numeric"></div>'+
+    '<div class="field"><label>بانک</label><input id="btx_bank" dir="ltr" placeholder="sepah / refah / tejarat"></div></div>'+
+    '<div class="grid g2"><div class="field"><label>زمان واریز</label><input id="btx_at" type="datetime-local" value="'+now.toISOString().slice(0,16)+'"></div>'+
+    '<div class="field"><label>کد پیگیری <span class="sub">— اگر بانک داده</span></label><input id="btx_ref" dir="ltr"></div></div>'+
+    '<div class="grid g2"><div class="field"><label>مانده پس از واریز <span class="sub">— برای مغایرت‌گیری</span></label><input id="btx_bal" type="number" dir="ltr"></div>'+
+    '<div class="field"><label>واحد مانده</label><select id="btx_balunit"><option value="rial">ریال</option><option value="toman">تومان</option></select></div></div>'+
+    '<div class="field"><label>متن پیامک <span class="sub">— اختیاری، ولی برای نوشتن پارسر بانک به کار می‌آید</span></label><textarea id="btx_raw" rows="3" dir="rtl"></textarea></div>'+
+    '<button class="btn pri" onclick="btxManualSave()">💾 ثبت و نمایش پرداخت‌های محتمل</button>');
+}
+async function btxManualSave(){
+  const body={amount:Number($('#btx_amt').value||0),amountUnit:$('#btx_unit').value,
+    destRef:$('#btx_dest').value.trim(),bankKey:$('#btx_bank').value.trim(),
+    occurredAt:$('#btx_at').value?new Date($('#btx_at').value).toISOString():undefined,
+    reference:$('#btx_ref').value.trim(),
+    balance:$('#btx_bal').value===''?undefined:Number($('#btx_bal').value),
+    balanceUnit:$('#btx_balunit').value, rawText:$('#btx_raw').value};
+  let r; try{ r=await api('POST','/admin/c2c/transactions/manual',body); }
+  catch(e){ toast(e.message||'ثبت نشد','bad'); return; }
+  document.querySelector('.modal-bg').remove();
+  toast('واریز ثبت شد — حالا پرداختش را انتخاب کن','ok');
+  await renderC2cQueue();
+  btxShowCandidates(r.transaction,r.candidates);
+}
+
+async function btxAssign(id){
+  let r; try{ r=await api('GET','/admin/c2c/transactions/'+id+'/candidates'); }
+  catch(e){ toast(e.message||'خطا','bad'); return; }
+  btxShowCandidates(r.transaction,r.candidates);
+}
+
+/* The list is offered; nothing here submits by itself. Warnings are the
+   server's own sentences — a status this panel has never heard of must still
+   say something true. */
+function btxShowCandidates(tx,cands){
+  window._BTXC=tx;
+  const rows=(cands||[]).map((c,i)=>
+    '<label class="card" style="display:block;cursor:pointer;margin-bottom:8px">'+
+      '<input type="radio" name="btxc" value="'+esc(c.session.id)+'" data-exact="'+(c.exact?'1':'0')+'" onchange="btxPick()">'+
+      ' <b class="mono">'+esc(c.session.trackingCode)+'</b> '+pill(SESS_ST,c.session.status)+
+      (c.exact?' <span class="pill ok">مبلغ دقیقاً جور است</span>':' <span class="pill bad">مبلغ جور نیست</span>')+
+      '<div class="sub">'+esc((c.player&&(c.player.displayName||c.player.username))||'کاربر ناشناس')+
+        ' — '+esc(c.amountRialText)+' ('+esc(c.baseTomanText)+')</div>'+
+      (c.warnings&&c.warnings.length?'<div class="sub bad">⚠️ '+c.warnings.map(esc).join('<br>⚠️ ')+'</div>':'')+
+    '</label>').join('');
+  modal('تخصیص واریز '+(tx.amountRialText||''),
+    (rows||'<div class="empty">هیچ پرداختی با این مبلغ پیدا نشد. یا واریز مربوط به بازی نیست (ردش کن)، یا کاربر مبلغ را اشتباه زده.</div>')+
+    '<div class="field" id="btx_mmwrap" style="display:none"><label>دلیل تسویه با مبلغ متفاوت <span class="sub">— اجباری، در گزارش ادمین ثبت می‌شود</span></label><input id="btx_reason"></div>'+
+    '<button class="btn pri" onclick="btxDoAssign()">✅ تخصیص و تحویل کالا</button>');
+}
+function btxPick(){
+  const sel=document.querySelector('input[name="btxc"]:checked');
+  const w=$('#btx_mmwrap'); if(!w) return;
+  w.style.display=(sel&&sel.dataset.exact==='0')?'':'none';
+}
+async function btxDoAssign(){
+  const sel=document.querySelector('input[name="btxc"]:checked');
+  if(!sel){ toast('اول پرداخت را انتخاب کن','bad'); return; }
+  const mismatch=sel.dataset.exact==='0';
+  const reason=($('#btx_reason')&&$('#btx_reason').value.trim())||'';
+  if(mismatch&&!reason){ toast('برای مبلغ متفاوت باید دلیل بنویسی','bad'); return; }
+  try{
+    const r=await api('POST','/admin/c2c/transactions/'+window._BTXC.id+'/assign',
+      {sessionId:sel.value,acceptAmountMismatch:mismatch,reason:reason||undefined});
+    document.querySelector('.modal-bg').remove();
+    toast(r.delivered?'تسویه شد و کالا تحویل داده شد ✅':'تسویه شد، ولی کالایی تحویل نشد — بررسی کن','ok');
+    if(r.warnings&&r.warnings.length) toast(r.warnings.join(' | '),'bad');
+    renderC2cQueue();
+  }catch(e){ toast(e.message||'تسویه نشد','bad'); }
+}
+async function btxIgnore(id){
+  const reason=prompt('دلیل رد کردن این واریز؟ (اجباری — در گزارش ادمین ثبت می‌شود)');
+  if(!reason||!reason.trim()) return;
+  try{ await api('POST','/admin/c2c/transactions/'+id+'/ignore',{reason:reason.trim()}); toast('رد شد','ok'); renderC2cQueue(); }
+  catch(e){ toast(e.message||'انجام نشد','bad'); }
+}
+
 const C2C_ST={ACTIVE:['فعال','ok'],INACTIVE:['غیرفعال','bad'],MAINTENANCE:['تعمیر','pend']};
 async function renderC2cCards(){
   $('#main').innerHTML=head('کارت‌های مقصد')+'<div id="c2cBody"><div class="card empty">…</div></div>';

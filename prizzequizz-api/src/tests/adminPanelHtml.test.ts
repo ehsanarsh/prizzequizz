@@ -978,6 +978,61 @@ function run(): void {
     assert.ok(/function renderC2cCards\s*\(/.test(script), 'the renderer does not exist');
   });
 
+  /* ── card-to-card: the deposit queue ────────────────────────────────
+   * The screen where a bank transfer becomes goods. What is checked here is
+   * not that it renders — it is that it cannot settle anything by itself, and
+   * that the two ways money goes wrong are both impossible to do quietly. */
+  check('«واریزهای کارت‌به‌کارت» is reachable and really has a screen behind it', () => {
+    assert.ok(script.includes("['c2c','🧾','واریزهای کارت‌به‌کارت']"), 'no nav entry');
+    assert.ok(/c2c:\s*renderC2cQueue/.test(script), 'the nav entry has no renderer wired');
+    assert.ok(/function renderC2cQueue\s*\(/.test(script), 'the renderer does not exist');
+  });
+
+  check('manual entry ASKS for the amount unit instead of assuming one', () => {
+    /* Refah's SMS reports rial and others print toman. A remembered default
+     * would be right most of the time and wrong by a factor of ten the rest. */
+    assert.ok(script.includes('btx_unit'), 'no unit selector');
+    assert.ok(/<option value="">— انتخاب کن —<\/option>/.test(script),
+      'the unit has a pre-selected default, which is the ten-times bug');
+    assert.ok(script.includes('رفاه ریال می‌نویسد'), 'and nothing tells the operator why it is asked');
+  });
+
+  check('nothing on the queue settles itself', () => {
+    assert.ok(script.includes('هیچ واریزی خودکار تسویه نمی‌شود'),
+      'the screen does not state that matching is a person\'s decision');
+    /* The candidate list is radio buttons plus an explicit button — never a
+     * click handler that assigns the first match. */
+    assert.ok(script.includes('name="btxc"') && script.includes('btxDoAssign'),
+      'candidates are not presented as a deliberate choice');
+  });
+
+  check('settling against a different amount demands a written reason', () => {
+    assert.ok(script.includes('btx_reason'), 'no reason field');
+    assert.ok(/mismatch&&!reason/.test(script.replace(/\s/g, '')),
+      'a mismatched amount can be settled with an empty reason');
+  });
+
+  check('rejecting a deposit demands one too, and deletes nothing', () => {
+    assert.ok(/function btxIgnore/.test(script), 'no ignore action');
+    assert.ok(script.includes('اجباری'), 'the reason is not presented as mandatory');
+    assert.ok(!/DELETE.*c2c\/transactions/.test(script), 'the queue can be deleted from');
+  });
+
+  check('the panel never does arithmetic on money', () => {
+    /* Every figure comes from a *Text field the server formatted. A ×10 in the
+     * panel is exactly the bug this whole design is arranged to prevent. */
+    assert.ok(script.includes('amountRialText') && script.includes('totalRialText'),
+      'the queue formats money itself');
+    assert.ok(!/amountRial\s*\/\s*10|amountRial\s*\*\s*10/.test(script),
+      'there is a unit conversion in the panel');
+  });
+
+  check('the reconciliation total is on the screen, not buried in a report', () => {
+    assert.ok(script.includes('مغایرت‌گیری'), 'no reconciliation section');
+    assert.ok(script.includes('صورتحساب بانک'),
+      'nothing tells the operator that comparing with the bank is what catches a forged deposit');
+  });
+
   check('the card form asks for the account number, not only the card', () => {
     /* Every bank sample we have — Sepah, Refah, Tejarat — prints the ACCOUNT.
      * A card saved without one can never be matched to its own SMS. */

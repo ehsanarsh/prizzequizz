@@ -197,6 +197,28 @@ export async function takenTodayRial(cardId: string): Promise<number> {
   return _memPaidTodayRial(cardId);
 }
 
+/* WHICH OF OUR CARDS DID THIS MONEY LAND ON?
+ *
+ * The bank does not say «card 6274…» — Sepah's SMS prints an account number,
+ * and the samples show the number arriving trimmed, padded, or with the
+ * Persian digits and bidi marks an SMS app inserts. So both of a card's
+ * identities are compared, digits only, and a suffix match counts: a bank that
+ * prints the last six digits of an account is still naming that account.
+ */
+export async function findCardByRef(rawRef: string): Promise<C2cCard | null> {
+  const ref = digitsOnly(String(rawRef ?? ''));
+  /* Four digits is a masked tail, not an identifier — «…۴۲۵۶» would match any
+   * card ending the same way, and picking the wrong destination is how a
+   * deposit gets credited against somebody else's order. */
+  if (ref.length < 6) return null;
+  const cards = await listCards();
+  const hit = (a: string) => {
+    const b = digitsOnly(a);
+    return !!b && b.length >= 6 && (b === ref || b.endsWith(ref) || ref.endsWith(b));
+  };
+  return cards.find((c) => hit(c.accountNo)) ?? cards.find((c) => hit(c.pan)) ?? null;
+}
+
 export interface CardRejection { card: C2cCard; why: string }
 
 /**

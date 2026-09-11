@@ -1,8 +1,12 @@
-/* CARD-TO-CARD — the payment page, and the destination cards behind it.
+/* CARD-TO-CARD — the payment page, the transaction queue behind it, and the
+ * destination cards behind that.
  *
- * Only the destination cards for now; the transaction queue, the forwarder
- * devices and the bank patterns arrive with the stages that produce them,
- * rather than as empty screens waiting for data that cannot exist yet.
+ * The forwarder devices and the bank patterns arrive with the stages that
+ * produce them, rather than as empty screens waiting for data that cannot
+ * exist yet. Everything the queue needs to work by hand is here, deliberately
+ * BEFORE any Android code: the whole money path — session, deposit, match,
+ * delivery, accounting — is proven with the operator's own test transfer
+ * rather than with a player's money.
  *
  * The policy numbers (deadline, reservation window, suffix mode, per-player
  * cap) are NOT here: they live on the existing payment settings, under the
@@ -16,9 +20,19 @@ import { requireAdmin } from '../../services/adminGuard.js';
 import { recordAdmin } from '../../services/adminAuditService.js';
 import { bodyObject } from '../../utils/validation.js';
 import {
-  CARD_STATUSES, CardError, formatPan, listCards, removeCard, saveCard, takenTodayRial, type C2cCard
+  CARD_STATUSES, CardError, findCardByRef, formatPan, getCard, listCards, removeCard, saveCard,
+  takenTodayRial, type C2cCard
 } from '../../services/c2c/cardService.js';
-import { listSessions } from '../../services/c2c/sessionStore.js';
+import { listSessions, type C2cSessionStatus } from '../../services/c2c/sessionStore.js';
+import {
+  BANK_TX_STATUSES, DEST_REF_KINDS, TransactionError, getTransaction, insertTransaction,
+  listTransactions, settledTotalRial, type BankTxStatus, type BankTransaction, type DestRefKind
+} from '../../services/c2c/transactionStore.js';
+import {
+  SettlementError, candidatesFor, ignoreTransaction, settle
+} from '../../services/c2c/settlementService.js';
+import { MoneyError, formatRialFa, formatTomanFa, rialToToman, tomanToRial } from '../../services/money.js';
+import { repositories } from '../../repositories/index.js';
 import { SessionError, cancelSession, viewSession } from '../../services/c2c/sessionService.js';
 
 /* The operator's own card number, so it is not a secret from them — but a list
@@ -54,6 +68,55 @@ function sessionError(ctx: RequestContext, e: unknown): void {
   throw e;
 }
 
+
+/* THE UNIT IS ASKED FOR, NEVER GUESSED.
+ *
+ * The operator's own banks disagree: Refah's SMS reports rial, others print
+ * toman. A default here would be right most of the time and wrong by a factor
+ * of ten the rest — and a ten-times error on a deposit is either a player
+ * handed ten times the goods or one told their money never arrived.
+ */
+function amountToRial(raw: unknown, unit: unknown, field: string): number {
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) throw new TransactionError('AMOUNT_INVALID', `${field} نامعتبر است.`);
+  const u = String(unit ?? '');
+  if (u !== 'rial' && u !== 'toman') {
+    throw new TransactionError('AMOUNT_UNIT_REQUIRED', `واحد ${field} را مشخص کن — ریال یا تومان.`);
+  }
+  return u === 'rial' ? Math.floor(n) : tomanToRial(n);
+}
+
+/* Everything the queue row shows, so the panel never does arithmetic or
+ * formatting of its own on money. */
+async function describeTx(tx: BankTransaction): Promise<Record<string, unknown>> {
+  const card = tx.cardId ? await getCard(tx.cardId) : null;
+  /* Through money.ts, so the one place a factor of ten exists stays the one
+   * place. It REFUSES a rial figure that is not a whole number of toman —
+   * which most payable amounts are not, since they carry a uniqueness suffix —
+   * and that refusal is the answer here: there is no round toman figure to
+   * show, so none is shown. */
+  let amountTomanText = '';
+  try { amountTomanText = formatTomanFa(rialToToman(tx.amountRial)); } catch { amountTomanText = ''; }
+  return {
+    ...tx,
+    amountRialText: formatRialFa(tx.amountRial),
+    amountTomanText,
+    balanceRialText: tx.balanceRial == null ? '' : formatRialFa(tx.balanceRial),
+    cardLabel: card ? `${card.bankName || card.bankKey} — ${formatPan(card.pan)}` : ''
+  };
+}
+
+function settlementError(ctx: RequestContext, e: unknown): void {
+  if (e instanceof SettlementError || e instanceof TransactionError) {
+    /* 409 across the board: every one of these means «the world is not in the
+     * state you were looking at», which is a refresh, not a bad request. */
+    error(ctx.res, 409, e.code, e.message);
+    return;
+  }
+  if (e instanceof MoneyError) { error(ctx.res, 422, e.code, e.message); return; }
+  throw e;
+}
+
 export function registerC2cRoutes(router: Router, base: string): void {
 
   /* ---------- The player's own payment page ----------
@@ -74,6 +137,141 @@ export function registerC2cRoutes(router: Router, base: string): void {
     try {
       json(ctx.res, 200, await cancelSession(ctx.params.id!, uid));
     } catch (e) { sessionError(ctx, e); }
+  });
+
+
+  /* ---------- The transaction queue ----------
+   * Deposits the game knows about. Filled by hand here; filled from forwarded
+   * bank SMS once the forwarder exists. Same rows, same settlement path. */
+  router.add('GET', `${base}/admin/c2c/transactions`, async (ctx) => {
+    if (!requireAdmin(ctx, { tab: 'c2c' })) return;
+    const q = ctx.query;
+    const status = q.get('status');
+    const rows = await listTransactions({
+      status: (BANK_TX_STATUSES as readonly string[]).includes(String(status)) ? (status as BankTxStatus) : undefined,
+      from: q.get('from') || undefined,
+      to: q.get('to') || undefined,
+      amountRial: Number(q.get('amountRial')) || undefined,
+      limit: Number(q.get('limit') ?? 100)
+    });
+    const settled = await settledTotalRial(q.get('from') || undefined, q.get('to') || undefined);
+    json(ctx.res, 200, {
+      rows: await Promise.all(rows.map(describeTx)),
+      statuses: BANK_TX_STATUSES,
+      destRefKinds: DEST_REF_KINDS,
+      /* What really arrived in the window, for reconciling against the bank's
+       * own statement — the only check that catches a forged deposit. */
+      settled: { ...settled, totalRialText: formatRialFa(settled.totalRial) }
+    });
+  });
+
+  /* «ثبت دستی پیامک» — the forwarder is offline, or does not exist yet. */
+  router.add('POST', `${base}/admin/c2c/transactions/manual`, async (ctx) => {
+    if (!requireAdmin(ctx, { tab: 'c2c' })) return;
+    const b = bodyObject(ctx.body) as any;
+    try {
+      const amountRial = amountToRial(b.amount, b.amountUnit, 'مبلغ');
+      const balanceRial = b.balance == null || b.balance === ''
+        ? null : amountToRial(b.balance, b.balanceUnit ?? b.amountUnit, 'مانده');
+      const destRef = String(b.destRef ?? '').trim();
+      /* Resolve which of our cards this landed on, so the queue row can say it
+       * and the operator is not asked to repeat what the reference already
+       * says. An unrecognised reference is not refused — real money arrived,
+       * and a row nobody can enter is a row that goes in a notebook instead. */
+      const card = b.cardId ? await getCard(String(b.cardId)) : await findCardByRef(destRef);
+      const tx = await insertTransaction({
+        bankKey: String(b.bankKey ?? card?.bankKey ?? '').trim(),
+        amountRial,
+        destRef,
+        destRefKind: (DEST_REF_KINDS as readonly string[]).includes(String(b.destRefKind))
+          ? (b.destRefKind as DestRefKind) : 'account',
+        cardId: card?.id ?? null,
+        balanceRial,
+        sourceRef: String(b.sourceRef ?? '').trim(),
+        reference: String(b.reference ?? '').trim(),
+        occurredAt: b.occurredAt ? new Date(String(b.occurredAt)).toISOString() : undefined,
+        enteredBy: String((ctx as any).adminAccount?.username ?? 'admin'),
+        note: String(b.note ?? ''),
+        rawText: String(b.rawText ?? '')
+      });
+      await recordAdmin({
+        adminId: (ctx as any).adminAccount?.id, action: 'c2c_transaction_entered',
+        meta: { txId: tx.id, amountRial: tx.amountRial, bankKey: tx.bankKey, cardId: tx.cardId }
+      });
+      json(ctx.res, 201, {
+        transaction: await describeTx(tx),
+        /* The payments this could be, immediately — the operator entered it to
+         * settle it, and making them run a second search is busywork. Offered,
+         * never applied: matrix row ۷ says an amount that does not match is
+         * never confirmed automatically. */
+        candidates: await candidatesFor(tx)
+      });
+    } catch (e) { settlementError(ctx, e); }
+  });
+
+  router.add('GET', `${base}/admin/c2c/transactions/:id/candidates`, async (ctx) => {
+    if (!requireAdmin(ctx, { tab: 'c2c' })) return;
+    const tx = await getTransaction(ctx.params.id!);
+    if (!tx) return error(ctx.res, 404, 'BANK_TX_NOT_FOUND', 'این تراکنش پیدا نشد.');
+    json(ctx.res, 200, { transaction: await describeTx(tx), candidates: await candidatesFor(tx) });
+  });
+
+  /* Assign AND settle: one action, because they are one decision. Splitting
+   * them would leave money bound to an order nobody delivered. */
+  router.add('POST', `${base}/admin/c2c/transactions/:id/assign`, async (ctx) => {
+    if (!requireAdmin(ctx, { tab: 'c2c' })) return;
+    const b = bodyObject(ctx.body) as any;
+    const sessionId = String(b.sessionId ?? '').trim();
+    if (!sessionId) return error(ctx.res, 400, 'SESSION_REQUIRED', 'پرداخت مقصد را انتخاب کن.');
+    try {
+      const r = await settle({
+        txId: ctx.params.id!, sessionId,
+        adminId: (ctx as any).adminAccount?.id,
+        reason: b.reason != null ? String(b.reason) : undefined,
+        acceptAmountMismatch: b.acceptAmountMismatch === true
+      });
+      json(ctx.res, 200, {
+        transaction: await describeTx(r.transaction),
+        session: r.session, delivered: r.delivered, warnings: r.warnings
+      });
+    } catch (e) { settlementError(ctx, e); }
+  });
+
+  router.add('POST', `${base}/admin/c2c/transactions/:id/ignore`, async (ctx) => {
+    if (!requireAdmin(ctx, { tab: 'c2c' })) return;
+    const b = bodyObject(ctx.body) as any;
+    try {
+      const tx = await ignoreTransaction(ctx.params.id!, String(b.reason ?? ''), (ctx as any).adminAccount?.id);
+      json(ctx.res, 200, await describeTx(tx));
+    } catch (e) { settlementError(ctx, e); }
+  });
+
+  /* ---------- The payments themselves ----------
+   * Who is waiting, and what has been settled. Read-only: a payment changes
+   * because a deposit arrived, never because someone edited it here. */
+  router.add('GET', `${base}/admin/c2c/sessions`, async (ctx) => {
+    if (!requireAdmin(ctx, { tab: 'c2c' })) return;
+    const q = ctx.query;
+    const status = q.get('status') || undefined;
+    const rows = await listSessions({
+      status: status as C2cSessionStatus | undefined,
+      userId: q.get('userId') || undefined,
+      amountRial: Number(q.get('amountRial')) || undefined,
+      limit: Number(q.get('limit') ?? 100)
+    });
+    const out = [];
+    for (const s of rows) {
+      const card = await getCard(s.cardId);
+      const user = await repositories.users.findById(s.userId).catch(() => null);
+      out.push({
+        ...s,
+        amountRialText: formatRialFa(s.amountRial),
+        baseTomanText: formatTomanFa(s.baseAmountToman),
+        cardLabel: card ? `${card.bankName || card.bankKey} — ${formatPan(card.pan)}` : '',
+        player: user ? { id: user.id, displayName: (user as any).displayName ?? '', username: (user as any).username ?? '' } : null
+      });
+    }
+    json(ctx.res, 200, { rows: out });
   });
 
   router.add('GET', `${base}/admin/c2c/cards`, async (ctx) => {

@@ -34,6 +34,7 @@ import {
 import { updatePaymentSettings } from '../services/paymentGatewayService.js';
 import { repositories } from '../repositories/index.js';
 import { id } from '../utils/id.js';
+import { resetC2c } from './c2cTestReset.js';
 
 let passed = 0, failed = 0;
 async function check(name: string, fn: () => Promise<void>): Promise<void> {
@@ -60,20 +61,11 @@ async function player(): Promise<string> {
   return uid;
 }
 
-/* Both drivers, in the right order. `_resetCards()`/`_resetSessions()` only
- * clear the in-memory maps; against a real database the sessions hold a
- * foreign key to the cards, so wiping cards first is a constraint violation —
- * and a test that only ever ran on memory would never find out. */
-async function clearCards(): Promise<void> {
-  if (process.env.DATABASE_URL) {
-    const { getPgPool } = await import('../database/postgres.js');
-    const pool = getPgPool();
-    await pool.query('DELETE FROM c2c_sessions');
-    await pool.query('DELETE FROM c2c_cards');
-  }
-  for (const c of await listCards()) await removeCard(c.id);
-  _resetSessions(); _resetCards();
-}
+/* Both drivers, in the right order — see c2cTestReset: against a real database
+ * these tables hold foreign keys to each other, so the order is a constraint
+ * and not a preference, and a test that only ever ran on memory would never
+ * find that out. */
+const clearCards = resetC2c;
 
 const BASE = 60_000;      // Toman — above the 50,000 SMS floor
 const BASE_RIAL = 600_000;

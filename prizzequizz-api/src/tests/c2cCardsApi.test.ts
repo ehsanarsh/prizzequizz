@@ -26,9 +26,10 @@ import { once } from 'node:events';
 import type { AddressInfo } from 'node:net';
 import { createApiServer } from '../app.js';
 import { isValidPan, listCards, removeCard } from '../services/c2c/cardService.js';
-import { tryInsertSession, listSessions, _resetSessions } from '../services/c2c/sessionStore.js';
+import { tryInsertSession, listSessions } from '../services/c2c/sessionStore.js';
 import { repositories } from '../repositories/index.js';
 import { id } from '../utils/id.js';
+import { resetC2c } from './c2cTestReset.js';
 
 let passed = 0, failed = 0;
 async function check(name: string, fn: () => Promise<void>): Promise<void> {
@@ -43,13 +44,7 @@ function makePan(): string {
 }
 
 async function run(): Promise<void> {
-  if (process.env.DATABASE_URL) {
-    const { getPgPool } = await import('../database/postgres.js');
-    await getPgPool().query('DELETE FROM c2c_sessions');
-    await getPgPool().query('DELETE FROM c2c_cards');
-  }
-  for (const c of await listCards()) await removeCard(c.id);
-  _resetSessions();
+  await resetC2c();
 
   const server = createApiServer({ attachRealtime: false });
   server.listen(0);

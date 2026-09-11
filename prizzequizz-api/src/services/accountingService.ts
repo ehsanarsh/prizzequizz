@@ -312,10 +312,36 @@ export async function financeReport(opts: { from?: string; to?: string; granular
   };
   const pool = pg();
   if (!pool) {
+    /* NO LEDGER TO READ — but the external sales are not in the ledger anyway.
+     *
+     * Money paid at a gateway or by card-to-card never touches wallet_ledger
+     * by design, so `order_fulfilments` is its only record and it is readable
+     * on either driver. Reporting it beside a zeroed income block would break
+     * the contract stated on `externalSales`: it is a BREAKDOWN of the income
+     * lines, never a figure standing next to them. So it is folded here the
+     * same way it is below, and the rest stays zero with `hasDatabase: false`
+     * saying why. */
+    const external = await externalSalesSummary(from, to + ' 23:59:59');
+    const income = {
+      ...empty.income,
+      tickets: external.tickets,
+      shop: external.shop + external.coins
+    };
+    income.total = income.commission + income.tickets + income.shop + income.lifelines + income.penalties;
+    const earnings = {
+      ...empty.earnings,
+      shopItems: external.shop,
+      coins: external.coins,
+      ticketsExcluded: external.tickets
+    };
+    earnings.total = earnings.shopItems + earnings.coins;
+    earnings.net = earnings.total;
     return {
       ...empty,
+      income,
+      earnings,
       houseRevenue: await houseRevenueSummary(from, to),
-      externalSales: await externalSalesSummary(from, to + ' 23:59:59')
+      externalSales: external
     };
   }
   await ensureSchema(pool);
