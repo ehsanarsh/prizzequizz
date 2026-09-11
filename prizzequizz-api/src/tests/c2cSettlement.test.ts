@@ -333,11 +333,18 @@ async function run(): Promise<void> {
     await check('the queue reports what really arrived, for reconciling with the bank', async () => {
       const body = (await (await admin('GET', '/admin/c2c/transactions')).json() as any).data;
       assert.ok(body.rows.length >= 5);
-      const settled = body.rows.filter((r: any) => r.status === 'SETTLED');
-      assert.equal(body.settled.count, settled.length);
-      assert.equal(body.settled.totalRial, settled.reduce((s: number, r: any) => s + r.amountRial, 0),
-        'the only check that catches a forged deposit is this total against the bank statement');
       assert.ok(body.rows[0].amountRialText.includes('ریال'), 'the panel never formats money itself');
+
+      /* The total lives on the daily report, which computes it from the same
+       * rows and also splits it by day and by whether a person was involved.
+       * Two thinner copies of one figure would eventually disagree, and the
+       * day they do is the day nobody knows which to believe. */
+      assert.equal(body.settled, undefined, 'a second copy of the reconciliation total came back');
+      const report = (await (await admin('GET', '/admin/c2c/reports/daily')).json() as any).data;
+      const settled = body.rows.filter((r: any) => r.status === 'SETTLED');
+      assert.equal(report.totals.settledCount, settled.length);
+      assert.equal(report.totals.settledRial, settled.reduce((s: number, r: any) => s + r.amountRial, 0),
+        'the only check that catches a forged deposit is this total against the bank statement');
     });
 
     await check('and the sale lands in the finance report as card-to-card income', async () => {

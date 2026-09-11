@@ -16,6 +16,11 @@
  *    row with nothing granted — matrix row ۵. The player paid. Nobody else is
  *    coming to finish it.
  *
+ * 4. RAW SMS TEXT ACCUMULATES. Every bank message prints the operator's
+ *    account number and running balance in full. Once the figure has been
+ *    read into a transaction, keeping the sentence is a liability that grows
+ *    daily and serves nothing.
+ *
  * The reservation window is the reason (2) is not simply «delete the expired
  * ones»: an amount stays reserved for hours AFTER its page dies, so a transfer
  * made late is still recognisable instead of landing on the next player given
@@ -102,6 +107,22 @@ export async function retryStuckFulfilments(): Promise<{ retried: number; ids: s
   return { retried: ids.length, ids };
 }
 
+/**
+ * Clear raw message text past its retention window.
+ *
+ * Separate from the session sweep because it answers to a different clock —
+ * days rather than minutes — and because a failure here must never stop the
+ * sweep that frees amount slots.
+ */
+export async function purgeRawText(): Promise<number> {
+  const { purgeOldBodies } = await import('./messageStore.js');
+  const settings = await getPaymentSettings();
+  const days = Math.max(1, Number(settings.c2c.rawTextRetentionDays) || 30);
+  const purged = await purgeOldBodies(days);
+  if (purged) logger.info('c2c_raw_text_purged', { purged, olderThanDays: days });
+  return purged;
+}
+
 let timer: NodeJS.Timeout | null = null;
 
 /** Every minute: fine for a 20-minute deadline and a 24-hour reservation. */
@@ -113,6 +134,9 @@ export function startC2cWorker(): void {
   timer = setInterval(() => {
     void sweepSessions().catch((e) => logger.error('c2c_sweep_failed', { message: e instanceof Error ? e.message : 'unknown' }));
     void retryStuckFulfilments().catch((e) => logger.error('c2c_retry_failed', { message: e instanceof Error ? e.message : 'unknown' }));
+    /* Days, not minutes — but run from the same timer rather than a second
+     * one: it is a cheap UPDATE that matches nothing on almost every pass. */
+    void purgeRawText().catch((e) => logger.error('c2c_purge_failed', { message: e instanceof Error ? e.message : 'unknown' }));
   }, SWEEP_INTERVAL_MS);
   /* Never the reason a process stays alive. */
   timer.unref?.();

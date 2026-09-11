@@ -271,11 +271,5 @@ export async function setTransactionStatus(txId: string, status: BankTxStatus, n
   return { ...t };
 }
 
-/** How much really arrived, for the day's reconciliation. */
-export async function settledTotalRial(from?: string, to?: string): Promise<{ count: number; totalRial: number }> {
-  const rows = (await listTransactions({ status: 'SETTLED', from, to, limit: 500 }));
-  return { count: rows.length, totalRial: rows.reduce((s, r) => s + r.amountRial, 0) };
-}
-
 /** Test seam. */
 export function _resetTransactions(): void { mem.clear(); _schemaReady = false; }

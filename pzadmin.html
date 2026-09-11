@@ -5175,19 +5175,41 @@ let _c2cQFilter='';
 async function renderC2cQueue(){
   $('#main').innerHTML=head('واریزهای کارت‌به‌کارت','صف واریزها، تخصیص دستی و تسویه')+'<div id="c2cqBody"><div class="card empty">…</div></div>';
   const b=$('#c2cqBody');
-  let d,sess;
+  let d,sess,rep;
   try{
     d=await api('GET','/admin/c2c/transactions'+(_c2cQFilter?'?status='+_c2cQFilter:''));
     sess=await api('GET','/admin/c2c/sessions?status=AWAITING');
+    rep=await api('GET','/admin/c2c/reports/daily');
   }catch(e){ b.innerHTML='<div class="card empty">'+esc(e.message||'خطا')+'</div>'; return; }
   window._BTX={}; (d.rows||[]).forEach(t=>window._BTX[t.id]=t);
 
   const filters=['','NEW','ASSIGNED','SETTLED','IGNORED'].map(k=>
     '<button class="btn sm'+(_c2cQFilter===k?' pri':'')+'" onclick="c2cQFilter(\''+k+'\')">'+(k?BTX_ST[k][0]:'همه')+'</button>').join(' ');
 
+  /* ALERTS FIRST, AND ONLY REAL ONES.
+     Every failure in this system is silent — a forwarder that stopped, a
+     deposit nobody assigned, a card with no capacity. None of them throw and
+     none of them log. A quiet system produces an EMPTY list here, which is
+     the correct answer: warnings that are always on are warnings nobody
+     reads. */
+  const AL={critical:['bad','🚨'],warn:['pend','⚠️'],info:['ok','ℹ️']};
+  const alerts=(rep&&rep.alerts)||[];
+  const t=(rep&&rep.totals)||{};
+
   b.innerHTML=
+    alerts.map(a=>{const k=AL[a.level]||AL.info;return '<div class="note '+k[0]+'">'+k[1]+' <b>'+esc(a.title)+'</b><br>'+esc(a.detail)+'</div>';}).join('')+
     '<div class="note">واریزی که هنوز از گوشی فوروارد نمی‌شود را اینجا دستی ثبت کن. <b>هیچ واریزی خودکار تسویه نمی‌شود</b> — پرداخت‌های محتمل پیشنهاد می‌شوند و انتخاب با توست.</div>'+
-    '<div class="card"><h3>🧮 مغایرت‌گیری</h3><div class="sub">مجموع واریزهای تسویه‌شده در این بازه: <b>'+esc(d.settled&&d.settled.totalRialText||'—')+'</b> در '+fa((d.settled&&d.settled.count)||0)+' تراکنش. این عدد را با صورتحساب بانک مقایسه کن؛ تنها چیزی که یک واریز جعلی را لو می‌دهد همین است.</div></div>'+
+    '<div class="card"><h3>🧮 مغایرت‌گیری و گزارش روزانه</h3>'+
+      '<div class="sub">مجموع واریزهای تسویه‌شده: <b>'+esc(t.settledRialText||'—')+'</b> در '+fa(t.settledCount||0)+' تراکنش. '+
+      '<b>این عدد را با صورتحساب بانک مقایسه کن</b> — تنها چیزی که یک واریز جعلی را لو می‌دهد همین است.</div>'+
+      '<div class="sub" style="margin-top:6px">خودکار: '+fa(t.autoCount||0)+' ('+fa(t.autoRate||0)+'٪) · دستی: '+fa(t.manualCount||0)+
+      (t.medianMinutesToSettle!=null?' · میانهٔ زمان تا تسویه: '+fa(t.medianMinutesToSettle)+' دقیقه':'')+
+      (t.waitingCount?' · <span class="bad">در انتظار: '+fa(t.waitingCount)+'</span>':'')+'</div>'+
+      tbl(['روز','تسویه‌شده','مبلغ','خودکار','دستی','در انتظار'],((rep&&rep.days)||[]).slice(0,14).map(r=>[
+        '<span class="mono">'+esc(r.day)+'</span>', fa(r.settledCount), esc(r.settledRialText),
+        fa(r.autoCount), fa(r.manualCount), r.waitingCount?'<span class="pill bad">'+fa(r.waitingCount)+'</span>':fa(0)
+      ]))+
+    '</div>'+
     '<div style="margin:10px 0;display:flex;gap:6px;flex-wrap:wrap;align-items:center">'+
       '<button class="btn pri" onclick="btxManual()">➕ ثبت دستی واریز</button>'+'<button class="btn" onclick="btxPasteSms()">📩 ثبت پیامک بانک</button>'+
       '<span style="flex:1"></span>'+filters+

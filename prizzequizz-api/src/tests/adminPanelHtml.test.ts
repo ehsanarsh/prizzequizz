@@ -1021,16 +1021,20 @@ function run(): void {
   check('the panel never does arithmetic on money', () => {
     /* Every figure comes from a *Text field the server formatted. A ×10 in the
      * panel is exactly the bug this whole design is arranged to prevent. */
-    assert.ok(script.includes('amountRialText') && script.includes('totalRialText'),
+    assert.ok(script.includes('amountRialText') && script.includes('settledRialText'),
       'the queue formats money itself');
     assert.ok(!/amountRial\s*\/\s*10|amountRial\s*\*\s*10/.test(script),
       'there is a unit conversion in the panel');
   });
 
   check('the reconciliation total is on the screen, not buried in a report', () => {
+    /* It IS a report now — but it is rendered on the queue screen, because a
+     * total in a separate tab is a total nobody compares with anything. */
     assert.ok(script.includes('مغایرت‌گیری'), 'no reconciliation section');
     assert.ok(script.includes('صورتحساب بانک'),
       'nothing tells the operator that comparing with the bank is what catches a forged deposit');
+    assert.ok(/renderC2cQueue[\s\S]*?مغایرت‌گیری/.test(script),
+      'the reconciliation figure is not on the screen the operator lives on');
   });
 
   /* ── card-to-card: the bank patterns ────────────────────────────────
@@ -1148,6 +1152,40 @@ function run(): void {
     const screen = (/async function renderC2cDevices\([\s\S]*?\n\}/.exec(script) || [''])[0];
     assert.ok(screen, 'no devices screen');
     assert.ok(!/secret/i.test(screen), 'the devices list touches a secret');
+  });
+
+  /* ── card-to-card: alerts and the daily figure ──────────────────────
+   * Every failure in this system is silent — a stopped forwarder, an
+   * unassigned deposit, a card out of capacity. The panel is where they
+   * become visible or they do not become visible at all. */
+  check('alerts are rendered from what the server actually found', () => {
+    const screen = (/async function renderC2cQueue\([\s\S]*?\n\}/.exec(script) || [''])[0];
+    assert.ok(screen.includes('rep.alerts') || screen.includes('(rep&&rep.alerts)'),
+      'the queue screen never reads the alerts');
+    /* Rendered from the list, so an empty list shows nothing — rather than a
+     * hard-coded banner that is always on and therefore always ignored. */
+    assert.ok(/alerts\.map\(/.test(screen), 'alerts are not rendered from the server list');
+    assert.ok(!/critical.*همیشه|هشدار همیشگی/.test(screen), 'there is a hard-coded warning');
+  });
+
+  check('an alert keeps its severity instead of flattening to one colour', () => {
+    assert.ok(/critical:\[.*?\],\s*warn:\[.*?\],\s*info:\[/.test(script.replace(/\n/g, '')),
+      'every alert looks the same, so the urgent ones do not stand out');
+  });
+
+  check('the reconciliation figure says what it is FOR', () => {
+    /* A total nobody compares with the bank statement catches nothing. */
+    assert.ok(script.includes('با صورتحساب بانک مقایسه کن'), 'the total is presented without its purpose');
+    assert.ok(script.includes('واریز جعلی'), 'nothing says what the comparison catches');
+  });
+
+  check('the daily report separates automatic from manual', () => {
+    /* The auto rate is the one number that says whether the forwarder is
+     * earning its keep. Hiding it inside a total would flatter it. */
+    assert.ok(script.includes('autoRate') && script.includes('manualCount'),
+      'the report does not distinguish what a person did from what the matcher did');
+    assert.ok(script.includes('medianMinutesToSettle'),
+      'nothing shows how long a player waits');
   });
 
   check('the card form asks for the account number, not only the card', () => {

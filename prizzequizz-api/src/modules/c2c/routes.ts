@@ -26,7 +26,7 @@ import {
 import { listSessions, type C2cSessionStatus } from '../../services/c2c/sessionStore.js';
 import {
   BANK_TX_STATUSES, DEST_REF_KINDS, TransactionError, getTransaction, insertTransaction,
-  listTransactions, settledTotalRial, type BankTxStatus, type BankTransaction, type DestRefKind
+  listTransactions, type BankTxStatus, type BankTransaction, type DestRefKind
 } from '../../services/c2c/transactionStore.js';
 import {
   SettlementError, candidatesFor, ignoreTransaction, settle
@@ -41,6 +41,7 @@ import { listMessages, type MessageStatus } from '../../services/c2c/messageStor
 import { ingestSms } from '../../services/c2c/matchService.js';
 import { compileTemplate, FIELD_NAMES, TemplateError } from '../../services/c2c/templateCompiler.js';
 import { id as newId } from '../../utils/id.js';
+import { c2cAlerts, dailyReport } from '../../services/c2c/reportService.js';
 import {
   DeviceError, OFFLINE_AFTER_MS, PAIRING_MAX_ATTEMPTS, createPairingCode, isOffline,
   listDevices, revokeDevice
@@ -170,14 +171,15 @@ export function registerC2cRoutes(router: Router, base: string): void {
       amountRial: Number(q.get('amountRial')) || undefined,
       limit: Number(q.get('limit') ?? 100)
     });
-    const settled = await settledTotalRial(q.get('from') || undefined, q.get('to') || undefined);
     json(ctx.res, 200, {
       rows: await Promise.all(rows.map(describeTx)),
       statuses: BANK_TX_STATUSES,
-      destRefKinds: DEST_REF_KINDS,
-      /* What really arrived in the window, for reconciling against the bank's
-       * own statement — the only check that catches a forged deposit. */
-      settled: { ...settled, totalRialText: formatRialFa(settled.totalRial) }
+      destRefKinds: DEST_REF_KINDS
+      /* The reconciliation total used to be returned here too. It moved to
+       * `/reports/daily`, which computes the same thing and also splits it by
+       * day and by whether a person was involved — so keeping a second,
+       * thinner copy would be two ways to answer one question, and the day
+       * they disagree is the day nobody knows which to believe. */
     });
   });
 
@@ -489,6 +491,26 @@ export function registerC2cRoutes(router: Router, base: string): void {
      * — which is the whole point of being able to do it from here. */
     await recordAdmin({ adminId: (ctx as any).adminAccount?.id, action: 'c2c_device_revoked', meta: { deviceId: d.id, label: d.label } });
     json(ctx.res, 200, { revoked: true, id: d.id });
+  });
+
+
+  /* ---------- The morning question ----------
+   * «Did the money add up, and is anything broken.» One endpoint, because the
+   * operator asks both in the same breath. */
+  router.add('GET', `${base}/admin/c2c/reports/daily`, async (ctx) => {
+    if (!requireAdmin(ctx, { tab: 'c2c' })) return;
+    const report = await dailyReport(ctx.query.get('from') || undefined, ctx.query.get('to') || undefined);
+    json(ctx.res, 200, {
+      ...report,
+      /* Derived live from real rows. A quiet system returns an empty array —
+       * a panel that invents warnings is a panel whose warnings get ignored. */
+      alerts: await c2cAlerts()
+    });
+  });
+
+  router.add('GET', `${base}/admin/c2c/alerts`, async (ctx) => {
+    if (!requireAdmin(ctx, { tab: 'c2c' })) return;
+    json(ctx.res, 200, { alerts: await c2cAlerts(), at: new Date().toISOString() });
   });
 
   router.add('GET', `${base}/admin/c2c/cards`, async (ctx) => {

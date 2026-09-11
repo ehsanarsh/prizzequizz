@@ -180,5 +180,47 @@ export async function listMessages(filter: { status?: MessageStatus; limit?: num
     .slice(0, limit);
 }
 
+/**
+ * Forget the words, keep the fact.
+ *
+ * A bank SMS is not just «a deposit arrived»: it prints the operator's account
+ * number and their running balance, in full, in every message. Once the figure
+ * has been read into a transaction the sentence has no further job, and a
+ * table of them is a standing liability that grows every day.
+ *
+ * The ROW stays — status, which pattern read it, which transaction it became —
+ * so the audit trail is intact and a deposit can still be traced back to the
+ * message that reported it. Only the text goes.
+ *
+ * An unparsed message is the exception that proves the rule: its text is the
+ * raw material for the pattern that would have read it, so the window is also
+ * the deadline for writing that pattern. The panel says so.
+ */
+export async function purgeOldBodies(olderThanDays: number): Promise<number> {
+  const days = Math.max(1, Math.floor(olderThanDays));
+  const cutoff = new Date(Date.now() - days * 86_400_000).toISOString();
+  const pool = pg();
+  if (pool) {
+    await ensureMessageSchema(pool);
+    const { rowCount } = await pool.query(
+      `UPDATE bank_sms_messages SET body = '', note = CASE WHEN note = '' THEN $2 ELSE note END
+        WHERE body <> '' AND received_at < $1`, [cutoff, PURGED_NOTE]);
+    return rowCount ?? 0;
+  }
+  let n = 0;
+  for (const m of mem.values()) {
+    if (m.body && m.receivedAt < cutoff) {
+      m.body = '';
+      if (!m.note) m.note = PURGED_NOTE;
+      n++;
+    }
+  }
+  return n;
+}
+
+/* Left behind so an empty body reads as «deliberately cleared» rather than
+ * «arrived empty», which are very different things to find in a queue. */
+export const PURGED_NOTE = 'متن خام پس از دورهٔ نگهداری پاک شد';
+
 /** Test seam. */
 export function _resetMessages(): void { mem.clear(); _schemaReady = false; }
