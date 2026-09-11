@@ -1,0 +1,56 @@
+plugins {
+  id 'com.android.application'
+  id 'org.jetbrains.kotlin.android'
+}
+
+android {
+  namespace 'ir.prizequiz.forwarder'
+  compileSdk 34
+
+  defaultConfig {
+    applicationId 'ir.prizequiz.forwarder'
+    /* 24 covers anything still receiving security updates. Say the word and
+     * it goes lower — the only API used below this is the SMS receiver, which
+     * has been stable since forever. */
+    minSdk 24
+    targetSdk 34
+    versionCode 1
+    versionName '1.0.0'
+
+    /* The one thing likely to differ between the operator's machine and a
+     * test build, so it is a build field rather than a constant in code. */
+    buildConfigField 'String', 'API_BASE', '"https://prizequiz.ir/v1"'
+  }
+
+  buildFeatures { buildConfig true; viewBinding true }
+
+  buildTypes {
+    release {
+      minifyEnabled false
+      /* NOT the game's signing key. A per-operator key, made on their own
+       * machine: this app is never published, and sharing the store key with
+       * an app that holds RECEIVE_SMS would be a poor trade. */
+      signingConfig signingConfigs.debug
+    }
+  }
+
+  compileOptions {
+    sourceCompatibility JavaVersion.VERSION_17
+    targetCompatibility JavaVersion.VERSION_17
+  }
+  kotlinOptions { jvmTarget = '17' }
+}
+
+dependencies {
+  implementation 'androidx.core:core-ktx:1.13.1'
+  implementation 'androidx.appcompat:appcompat:1.7.0'
+  implementation 'com.google.android.material:material:1.12.0'
+  /* The retry queue. A daily-use phone goes offline constantly, so «send it
+   * later, survive a reboot» is the normal path and not the exception. */
+  implementation 'androidx.work:work-runtime-ktx:2.9.0'
+  /* The secret is a signing key. It does not sit in plain SharedPreferences. */
+  implementation 'androidx.security:security-crypto:1.1.0-alpha06'
+  implementation 'androidx.room:room-runtime:2.6.1'
+  implementation 'androidx.room:room-ktx:2.6.1'
+  annotationProcessor 'androidx.room:room-compiler:2.6.1'
+}

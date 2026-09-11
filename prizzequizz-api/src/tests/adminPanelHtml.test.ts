@@ -1105,6 +1105,51 @@ function run(): void {
       'nothing tells the operator what to do with them');
   });
 
+  /* ── card-to-card: the forwarder devices ────────────────────────────
+   * The operator's phone is their DAILY phone, which changes what this screen
+   * is for: Android will sleep a background service, and the only way anyone
+   * finds out is that the heartbeat stopped. So the warnings are the feature. */
+  check('«دستگاه‌های فورواردر» is reachable and really has a screen behind it', () => {
+    assert.ok(script.includes("['c2cdevices','📱','دستگاه‌های فورواردر']"), 'no nav entry');
+    assert.ok(/c2cdevices:\s*renderC2cDevices/.test(script), 'the nav entry has no renderer wired');
+    assert.ok(/function renderC2cDevices\s*\(/.test(script), 'the renderer does not exist');
+  });
+
+  check('a phone that went quiet is shouted about, not tucked into a column', () => {
+    assert.ok(script.includes('anyOffline'), 'nothing surfaces an offline device');
+    assert.ok(script.includes('فقط با «ثبت پیامک» دستی'),
+      'nothing tells the operator what an offline forwarder actually costs them');
+  });
+
+  check('battery optimisation is called out, because it is the usual cause', () => {
+    assert.ok(script.includes('anyBatteryOptimized'), 'the panel does not surface battery optimisation');
+    assert.ok(script.includes('اندروید سرویس را می‌خواباند'),
+      'nothing explains why a daily-use phone stops forwarding');
+  });
+
+  check('the screen says plainly that an iPhone cannot be a forwarder', () => {
+    /* Otherwise the operator hunts for an iOS setting that does not exist:
+     * iOS has no SMS-reading API at all, with any permission. */
+    assert.ok(script.includes('آیفون نمی‌تواند فورواردر باشد'), 'the iPhone limitation is not stated');
+    assert.ok(script.includes('Text Message Forwarding'),
+      'nothing explains why the iOS setting that LOOKS right is not');
+  });
+
+  check('the pairing code says its budget is spent by wrong guesses too', () => {
+    const fn = (/async function devPair\([\s\S]*?\n\}/.exec(script) || [''])[0];
+    assert.ok(fn, 'there is no way to generate a pairing code');
+    assert.ok(fn.includes('حتی با کد اشتباه'),
+      'nothing warns that a failed guess burns the operator’s own code');
+    assert.ok(fn.includes('قابل بازیابی نیست'),
+      'nothing says the device secret is shown once and never again');
+  });
+
+  check('the panel never asks for or shows a device secret', () => {
+    const screen = (/async function renderC2cDevices\([\s\S]*?\n\}/.exec(script) || [''])[0];
+    assert.ok(screen, 'no devices screen');
+    assert.ok(!/secret/i.test(screen), 'the devices list touches a secret');
+  });
+
   check('the card form asks for the account number, not only the card', () => {
     /* Every bank sample we have — Sepah, Refah, Tejarat — prints the ACCOUNT.
      * A card saved without one can never be matched to its own SMS. */

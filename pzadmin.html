@@ -266,7 +266,7 @@ function groupMembers(g){ return (TAB_GROUPS[g]?TAB_GROUPS[g].tabs:[]).filter(t=
 const NAV=[
   ['اصلی',[['dashboard','📊','داشبورد'],['g_money','💰','مالی و حسابداری'],['users','👤','کاربران'],['matches','🎮','مسابقات'],['duel','⚔️','دوئل'],['lastsurvivor','🏆','آخرین بازمانده'],['support','🎧','پشتیبانی']]],
   ['محتوا',[['g_qhub','❓','سوالات'],['categories','🏷️','موضوعات'],['g_chars','🎭','کاراکترها'],['lifelines','🧩','کمک‌ها'],['rewards','🎡','گردونه و جایزه روزانه'],['recordmode','🏅','ثبت رکورد'],['onboarding','👋','خوش‌آمدگویی']]],
-  ['اقتصاد',[['wallet','🏆','صندوق جایزه'],['g_payout','💸','دریافت جایزه'],['tickets','🎫','بلیط‌ها'],['shop','🛒','فروشگاه'],['chatpacks','💬','پک‌های چت'],['giftcodes','🎁','کدهای هدیه'],['payments','🏦','درگاه پرداخت'],['c2c','🧾','واریزهای کارت‌به‌کارت'],['c2ccards','💳','کارت‌های مقصد'],['c2cpatterns','📩','الگوهای پیامک بانک']]],
+  ['اقتصاد',[['wallet','🏆','صندوق جایزه'],['g_payout','💸','دریافت جایزه'],['tickets','🎫','بلیط‌ها'],['shop','🛒','فروشگاه'],['chatpacks','💬','پک‌های چت'],['giftcodes','🎁','کدهای هدیه'],['payments','🏦','درگاه پرداخت'],['c2c','🧾','واریزهای کارت‌به‌کارت'],['c2ccards','💳','کارت‌های مقصد'],['c2cpatterns','📩','الگوهای پیامک بانک'],['c2cdevices','📱','دستگاه‌های فورواردر']]],
   ['بالانس بازی (Data-Driven)',[['g_balance','⚖️','بالانس بازی'],['leagues','🛡️','لیگ‌ها'],['missions2','🎯','مأموریت‌ها']]],
   ['رشد و تعامل',[['leaderboard','📈','لیدربرد'],['campaign','🎁','کمپین کاربر جدید'],['events','📅','رویدادها'],['banners','🖼️','بنرها'],['notifications','🔔','اعلان‌ها'],['g_sms','📱','پنل پیامکی']]],
   ['سیستم',[['monitoring','🖥️','مانیتورینگ سرور'],['g_security','🛡️','امنیت و ضدتقلب'],['g_audit','📑','گزارش و لاگ'],['reset','♻️','ابزار ریست'],['accounts','🔐','حساب‌ها و دسترسی'],['backup','💾','پشتیبان‌گیری'],['general','⚙️','تنظیمات عمومی'],['rawcfg','🧩','ویرایش خام Config']]]
@@ -488,7 +488,7 @@ async function render(){
   try{
     if(CUR==='accounts')return renderAccounts();
     if(CONFIG_PAGES[CUR]){ await renderConfigSection(CONFIG_PAGES[CUR][0],CONFIG_PAGES[CUR][1]); groupBar(); if(tracked)void badgeLoad(); return; }
-    const fn={dashboard:renderDashboard,finance:renderFinance,accounting:renderAccounting,expenses:renderExpenses,backup:renderBackup,users:renderUsers,matches:renderMatches,support:renderSupport,questions:renderQuestions,leagues:renderLeagues,qreports:renderQReports,aistudio:renderAiStudio,pipeline:renderPipeline,categories:renderCategories,wallet:renderWallet,withdrawals:renderWithdrawals,payoutpartners:renderPayoutPartners,withdrawotp:renderWithdrawOtp,smsgroups:renderSmsGroups,rewardholds:renderRewardHolds,tickets:renderTickets,giftcodes:renderGiftCodes,shop:renderShopAdmin,chatpacks:renderChatPacks,characters:renderCharacters,charboxes:renderCharBoxes,lifelines:renderLifelines,rewards:renderRewards,missions2:renderMissions2,recordmode:renderRecordMode,onboarding:renderOnboarding,lastsurvivor:renderLastSurvivor,duel:renderDuel,sms:renderSms,payments:renderPayments,c2c:renderC2cQueue,c2ccards:renderC2cCards,c2cpatterns:renderC2cPatterns,leaderboard:renderLeaderboard,banners:renderBanners,notifications:renderNotifications,anticheat:renderAntiCheat,suspicious:renderSuspicious,reports:renderReports,logs:renderLogs,reset:renderReset,roles:renderRoles,rawcfg:renderRawCfg,monitoring:renderMonitoring}[CUR];
+    const fn={dashboard:renderDashboard,finance:renderFinance,accounting:renderAccounting,expenses:renderExpenses,backup:renderBackup,users:renderUsers,matches:renderMatches,support:renderSupport,questions:renderQuestions,leagues:renderLeagues,qreports:renderQReports,aistudio:renderAiStudio,pipeline:renderPipeline,categories:renderCategories,wallet:renderWallet,withdrawals:renderWithdrawals,payoutpartners:renderPayoutPartners,withdrawotp:renderWithdrawOtp,smsgroups:renderSmsGroups,rewardholds:renderRewardHolds,tickets:renderTickets,giftcodes:renderGiftCodes,shop:renderShopAdmin,chatpacks:renderChatPacks,characters:renderCharacters,charboxes:renderCharBoxes,lifelines:renderLifelines,rewards:renderRewards,missions2:renderMissions2,recordmode:renderRecordMode,onboarding:renderOnboarding,lastsurvivor:renderLastSurvivor,duel:renderDuel,sms:renderSms,payments:renderPayments,c2c:renderC2cQueue,c2ccards:renderC2cCards,c2cpatterns:renderC2cPatterns,c2cdevices:renderC2cDevices,leaderboard:renderLeaderboard,banners:renderBanners,notifications:renderNotifications,anticheat:renderAntiCheat,suspicious:renderSuspicious,reports:renderReports,logs:renderLogs,reset:renderReset,roles:renderRoles,rawcfg:renderRawCfg,monitoring:renderMonitoring}[CUR];
     if(fn){ await fn(); groupBar(); if(tracked)void badgeLoad(); return; }
     /* No renderer for this tab. Six nav entries were in this state, and
        clicking one silently left the PREVIOUS screen's content on display —
@@ -5009,6 +5009,60 @@ async function gwSave(id){
    2. The unit is chosen, never defaulted — Refah's message prints none at all,
       so a guess is a ten-times error nothing in the text can correct. The test
       box shows the figure in BOTH units so a backwards unit is visible. */
+
+/* ---- Forwarder devices ----
+   The operator's phone is their DAILY phone, which changes what this screen
+   is for. On a dedicated device this would be housekeeping; here it is the
+   alarm. Android will sleep a background service sooner or later, and the
+   only way anyone finds out is that the heartbeat stopped — so «offline» and
+   «battery optimisation is on» are shouted, not tucked into a column.
+
+   Note on iPhone: there is no iOS forwarder and there cannot be one. iOS has
+   no SMS-reading API at all — not with a permission, not with a setting. An
+   iPhone can only reach this table through something else forwarding on its
+   behalf. The screen says so rather than leaving the operator hunting for a
+   setting that does not exist. */
+const DEV_ST={ACTIVE:['فعال','ok'],REVOKED:['ابطال‌شده','bad']};
+
+async function renderC2cDevices(){
+  $('#main').innerHTML=head('دستگاه‌های فورواردر','گوشی‌هایی که پیامک بانک را می‌فرستند')+'<div id="devBody"><div class="card empty">…</div></div>';
+  const b=$('#devBody');
+  let d; try{ d=await api('GET','/admin/c2c/devices'); }catch(e){ b.innerHTML='<div class="card empty">'+esc(e.message||'خطا')+'</div>'; return; }
+  const rows=d.rows||[];
+
+  b.innerHTML=
+    (d.anyOffline?'<div class="note bad">⚠️ حداقل یک دستگاه بیشتر از '+fa(d.offlineAfterMinutes)+' دقیقه است خبری نداده. تا وقتی برنگردد، واریزها فقط با «ثبت پیامک» دستی وارد می‌شوند.</div>':'')+
+    (d.anyBatteryOptimized?'<div class="note bad">🔋 روی حداقل یک گوشی، بهینه‌سازی باتری <b>روشن</b> است. اندروید سرویس را می‌خواباند و پیامک‌ها با ساعت‌ها تأخیر می‌رسند. در تنظیمات گوشی، برنامه را از بهینه‌سازی باتری مستثنا کن.</div>':'')+
+    '<div class="note">📵 <b>آیفون نمی‌تواند فورواردر باشد.</b> iOS اصلاً API خواندن پیامک ندارد — نه با مجوز، نه با تنظیمات. «Text Message Forwarding» در iOS فقط به دستگاه‌های اپلِ خودت می‌فرستد، نه به سرور. اگر از آیفون لازم شد: یک مک همیشه‌روشن که پیامکِ فورواردشده را بخواند، یا فوروارد اپراتور مخابراتی به یک شمارهٔ اندرویدی، یا همان ثبت دستی در پنل.</div>'+
+    '<button class="btn pri" style="margin-bottom:10px" onclick="devPair()">🔗 کد جفت‌سازی تازه</button>'+
+    tbl(['دستگاه','وضعیت','آخرین خبر','صف','باتری','پیامک دریافتی','عملیات'],rows.map(r=>[
+      '<b>'+esc(r.label||'بدون نام')+'</b><br><span class="sub mono">'+esc(r.id.slice(0,8))+'</span>'+(r.appVersion?'<br><span class="sub">v'+esc(r.appVersion)+'</span>':''),
+      pill(DEV_ST,r.status)+(r.offline?'<br><span class="pill bad">آفلاین</span>':''),
+      r.lastSeenAt?'<span class="sub">'+esc(new Date(r.lastSeenAt).toLocaleString('fa-IR'))+'</span><br><span class="sub">'+fa(r.minutesSinceSeen)+' دقیقه پیش</span>':'<span class="sub">—</span>',
+      r.queueDepth>0?'<span class="pill pend">'+fa(r.queueDepth)+'</span>':fa(0),
+      r.batteryOptimized?'<span class="pill bad">بهینه‌سازی روشن</span>':'<span class="pill ok">مستثنا</span>',
+      fa(r.messagesReceived),
+      r.status==='ACTIVE'?'<button class="btn sm bad" onclick="devRevoke(\''+r.id+'\')">ابطال</button>':'<span class="sub">—</span>'
+    ]));
+}
+
+async function devPair(){
+  let r; try{ r=await api('POST','/admin/c2c/devices/pairing-code'); }
+  catch(e){ toast(e.message||'انجام نشد','bad'); return; }
+  modal('کد جفت‌سازی',
+    '<div style="text-align:center;padding:10px 0"><div class="sub">این کد را در برنامهٔ فورواردر وارد کن</div>'+
+    '<div class="mono" dir="ltr" style="font-size:38px;font-weight:900;letter-spacing:8px;margin:12px 0">'+esc(r.code)+'</div>'+
+    '<div class="sub">'+esc(r.note||'')+' حداکثر '+fa(r.maxAttempts)+' بار تلاش.</div></div>'+
+    '<div class="note">هر تلاش ناموفق — حتی با کد اشتباه — از همین سهمیه کم می‌کند. اگر تمام شد، کد تازه بگیر.</div>'+
+    '<div class="note">رمزِ دستگاه فقط <b>همان یک‌بار</b> موقع جفت‌سازی به گوشی داده می‌شود و دیگر قابل بازیابی نیست. گوشی گم شد؟ ابطالش کن و دوباره جفت کن.</div>');
+}
+
+async function devRevoke(id){
+  if(!confirm('این دستگاه ابطال شود؟ از همان درخواست بعدی دیگر پذیرفته نمی‌شود.'))return;
+  try{ await api('POST','/admin/c2c/devices/'+id+'/revoke'); toast('ابطال شد','ok'); renderC2cDevices(); }
+  catch(e){ toast(e.message||'انجام نشد','bad'); }
+}
+
 const PAT_ST={draft:['پیش‌نویس','pend'],trial:['آزمایشی','pend'],live:['فعال','ok'],disabled:['غیرفعال','bad']};
 
 async function renderC2cPatterns(){
@@ -5181,7 +5235,7 @@ async function btxPasteSave(){
   document.querySelector('.modal-bg').remove();
   const msg={settled:'تسویه شد و کالا تحویل داده شد ✅',queued:'ثبت شد — تأیید با توست',
     sensitive:'این پیام رمز داشت و ذخیره نشد 🔒',duplicate:'این پیام قبلاً ثبت شده بود',
-    parse_failed:'هیچ الگویی این پیام را نشناخت',rejected:'این پیام واریز نبود'}[r.outcome]||r.outcome;
+    parse_failed:'هیچ الگویی این پیام را نشناخت'}[r.outcome]||r.outcome;
   toast(msg,r.outcome==='settled'?'ok':(r.outcome==='queued'?'ok':'bad'));
   if(r.reason&&r.outcome!=='settled') toast(r.reason,'bad');
   await renderC2cQueue();

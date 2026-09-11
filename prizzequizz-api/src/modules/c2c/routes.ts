@@ -41,6 +41,10 @@ import { listMessages, type MessageStatus } from '../../services/c2c/messageStor
 import { ingestSms } from '../../services/c2c/matchService.js';
 import { compileTemplate, FIELD_NAMES, TemplateError } from '../../services/c2c/templateCompiler.js';
 import { id as newId } from '../../utils/id.js';
+import {
+  DeviceError, OFFLINE_AFTER_MS, PAIRING_MAX_ATTEMPTS, createPairingCode, isOffline,
+  listDevices, revokeDevice
+} from '../../services/c2c/deviceStore.js';
 import { SessionError, cancelSession, viewSession } from '../../services/c2c/sessionService.js';
 
 /* The operator's own card number, so it is not a secret from them — but a list
@@ -125,6 +129,7 @@ function settlementError(ctx: RequestContext, e: unknown): void {
   /* A template the operator got wrong is a form error, not a conflict: the
    * message says which part, and they fix it and press save again. */
   if (e instanceof PatternError || e instanceof TemplateError) { error(ctx.res, 422, e.code, e.message); return; }
+  if (e instanceof DeviceError) { error(ctx.res, 422, e.code, e.message); return; }
   throw e;
 }
 
@@ -434,6 +439,56 @@ export function registerC2cRoutes(router: Router, base: string): void {
         candidates: r.transaction && r.outcome === 'queued' ? await candidatesFor(r.transaction) : []
       });
     } catch (e) { settlementError(ctx, e); }
+  });
+
+
+  /* ---------- Forwarder devices ----------
+   * A device is anything that can sign — the Android app first, and any
+   * other client that speaks the same protocol later. iOS cannot be one
+   * directly: it has no SMS-reading API at all, so an iPhone reaches this
+   * table only through something else that forwards on its behalf. */
+  router.add('GET', `${base}/admin/c2c/devices`, async (ctx) => {
+    if (!requireAdmin(ctx, { tab: 'c2c' })) return;
+    const now = Date.now();
+    const devices = await listDevices();
+    json(ctx.res, 200, {
+      rows: devices.map((d) => ({
+        id: d.id, label: d.label, status: d.status, appVersion: d.appVersion,
+        lastSeenAt: d.lastSeenAt, lastSmsAt: d.lastSmsAt, queueDepth: d.queueDepth,
+        batteryOptimized: d.batteryOptimized, messagesReceived: d.messagesReceived,
+        pairedAt: d.pairedAt, revokedAt: d.revokedAt,
+        /* Computed here, so «offline» means the same thing on every screen
+         * and the panel never has to know the threshold. */
+        offline: isOffline(d, now),
+        minutesSinceSeen: d.lastSeenAt ? Math.floor((now - Date.parse(d.lastSeenAt)) / 60_000) : null
+      })),
+      offlineAfterMinutes: Math.round(OFFLINE_AFTER_MS / 60_000),
+      /* The operator's phone is their DAILY phone, so Android will sleep the
+       * forwarder sooner or later. The panel has to say this out loud rather
+       * than let a quiet device look like a quiet day. */
+      anyOffline: devices.some((d) => isOffline(d, now)),
+      anyBatteryOptimized: devices.some((d) => d.status === 'ACTIVE' && d.batteryOptimized)
+    });
+  });
+
+  router.add('POST', `${base}/admin/c2c/devices/pairing-code`, async (ctx) => {
+    if (!requireAdmin(ctx, { tab: 'c2c' })) return;
+    const p = await createPairingCode(String((ctx as any).adminAccount?.username ?? 'admin'));
+    await recordAdmin({ adminId: (ctx as any).adminAccount?.id, action: 'c2c_pairing_code_created', meta: {} });
+    json(ctx.res, 201, {
+      code: p.code, expiresAt: p.expiresAt, maxAttempts: PAIRING_MAX_ATTEMPTS,
+      note: 'این کد یک‌بار مصرف است و ۱۰ دقیقه اعتبار دارد.'
+    });
+  });
+
+  router.add('POST', `${base}/admin/c2c/devices/:id/revoke`, async (ctx) => {
+    if (!requireAdmin(ctx, { tab: 'c2c' })) return;
+    const d = await revokeDevice(ctx.params.id!);
+    if (!d) return error(ctx.res, 404, 'DEVICE_NOT_FOUND', 'دستگاه پیدا نشد.');
+    /* Takes effect on the device's very next request, not on the next deploy
+     * — which is the whole point of being able to do it from here. */
+    await recordAdmin({ adminId: (ctx as any).adminAccount?.id, action: 'c2c_device_revoked', meta: { deviceId: d.id, label: d.label } });
+    json(ctx.res, 200, { revoked: true, id: d.id });
   });
 
   router.add('GET', `${base}/admin/c2c/cards`, async (ctx) => {

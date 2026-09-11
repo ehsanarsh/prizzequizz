@@ -37,7 +37,6 @@ export interface IngestInput {
 export type IngestOutcome =
   | 'sensitive'        // a credential — dropped whole, nothing stored
   | 'duplicate'        // already have this exact message
-  | 'rejected'         // a pattern's own reject keyword (a withdrawal, say)
   | 'parse_failed'     // stored for a person to read; no pattern knew it
   | 'queued'           // parsed into a deposit, waiting for a person
   | 'settled';         // parsed, matched, goods handed over

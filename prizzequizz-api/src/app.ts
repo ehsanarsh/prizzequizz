@@ -27,6 +27,7 @@ import { registerWaitingMusicRoutes } from './modules/waitingMusic/routes.js';
 import { registerLeagueRoutes } from './modules/leagues/routes.js';
 import { registerSmsRoutes } from './modules/sms/routes.js';
 import { registerC2cRoutes } from './modules/c2c/routes.js';
+import { registerBankSmsRoutes } from './modules/banksms/routes.js';
 import { registerLifelineRoutes } from './modules/lifelines/routes.js';
 import { registerOnboardingRoutes } from './modules/onboarding/routes.js';
 import { registerRewardsRoutes } from './modules/rewards/routes.js';
@@ -82,6 +83,7 @@ export function createApiServer(options: ApiServerOptions = {}): Server {
   registerLeagueRoutes(router, base);
   registerSmsRoutes(router, base);
   registerC2cRoutes(router, base);
+  registerBankSmsRoutes(router, base);
   registerLifelineRoutes(router, base);
   registerOnboardingRoutes(router, base);
   registerRewardsRoutes(router, base);

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="app_name">فورواردر پیامک — PrizzeQuizz</string>
+
+  <string name="paired_no">هنوز جفت نشده</string>
+  <string name="paired_yes">جفت شده (%1$s…)</string>
+  <string name="pair_title">جفت‌سازی با سرور</string>
+  <string name="pair_hint">کد شش‌رقمی از پنل</string>
+  <string name="pair_button">جفت کن</string>
+  <string name="pairing">در حال جفت‌سازی…</string>
+  <string name="pair_ok">جفت شد ✅ دیگر کاری با این صفحه نداری.</string>
+  <string name="pair_failed">کد نامعتبر یا منقضی است. از پنل یک کد تازه بگیر.</string>
+  <string name="pair_code_length">کد باید ۶ رقم باشد.</string>
+
+  <string name="sms_ok">اجازهٔ خواندن پیامک: دارد ✅</string>
+  <string name="sms_missing">اجازهٔ خواندن پیامک: ندارد — بدون آن هیچ واریزی فرستاده نمی‌شود</string>
+  <string name="sms_permission_button">اجازه بده</string>
+
+  <string name="battery_ok">بهینه‌سازی باتری: مستثنا ✅</string>
+  <!-- The one warning worth shouting: this is a daily-use phone, and without
+       the exemption Android defers the send until the operator next unlocks
+       it — which can be hours. -->
+  <string name="battery_bad">⚠️ بهینه‌سازی باتری روشن است. اندروید فرستادن را عقب می‌اندازد و واریزها ساعت‌ها دیر می‌رسند.</string>
+  <string name="battery_button">مستثنا کن</string>
+
+  <string name="queue_empty">صف: خالی</string>
+  <string name="queue_pending">صف: %1$d پیام منتظر ارسال</string>
+
+  <string name="privacy_note">این برنامه فقط پیامک بانک‌ها را می‌فرستد. پیامک‌هایی که رمز، رمز پویا، کد تأیید یا CVV2 دارند اصلاً خوانده و ذخیره نمی‌شوند.</string>
+</resources>

@@ -168,7 +168,7 @@ async function run(): Promise<void> {
 
   await check('the price is never taken from the client', async () => {
     const uid = await player();
-    const intent = await createPaymentIntent({ userId: uid, amount: 1, order: { kind: 'ticket', tier: TIER, qty: 1 } } as any);
+    const intent = await createPaymentIntent({ userId: uid, amount: 1, order: { kind: 'ticket', tier: TIER, qty: 1 }, gatewayId: GW } as any);
     assert.equal(intent.amount, PRICE, 'a client-supplied amount is ignored');
   });
 

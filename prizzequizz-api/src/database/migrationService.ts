@@ -28,7 +28,7 @@ const requiredTables = [
   'integrity_signals', 'devices', 'user_device_bindings', 'user_risk_profiles', 'reward_holds',
   'support_tickets', 'support_messages', 'character_items', 'user_character_inventory', 'character_unlock_events',
   'payment_intents', 'beta_invites', 'beta_access', 'order_fulfilments',
-  'c2c_cards', 'c2c_sessions', 'bank_transactions', 'bank_sms_patterns', 'bank_sms_messages'
+  'c2c_cards', 'c2c_sessions', 'bank_transactions', 'bank_sms_patterns', 'bank_sms_messages', 'bank_sms_devices'
 ];
 
 const requiredIndexes = [
