@@ -3,6 +3,7 @@ import type { Router } from '../../http/router.js';
 import { error, json } from '../../http/response.js';
 import { requireAdmin } from '../../services/adminGuard.js';
 import { bodyObject, optionalString } from '../../utils/validation.js';
+import { previewSmsBroadcast, sendSmsBroadcast, SmsBroadcastError, SMS_BROADCAST_MAX } from '../../services/smsBroadcastService.js';
 import {
   listGroups, createGroup, renameGroup, deleteGroup,
   addNumber, addNumbers, removeNumber, listNumbers, sendToGroup, GroupError
@@ -77,6 +78,28 @@ export function registerSmsRoutes(router: Router, base: string): void {
   router.add('POST', `${base}/admin/sms/log/:id/cancel`, async (ctx) => { if (!guard(ctx)) return; await cancelPending(ctx.params.id!); json(ctx.res, 200, { cancelled: true }); });
 
   router.add('GET', `${base}/admin/sms/stats`, async (ctx) => { if (!guard(ctx)) return; json(ctx.res, 200, await smsStats()); });
+
+  /* TEXTING PLAYERS, not typed-in numbers. The audience is described with the
+   * same segment language the notification centre uses, so «everyone above
+   * level 5» means one thing in this product rather than two. */
+  router.add('POST', `${base}/admin/sms/broadcast/preview`, async (ctx) => {
+    if (!guard(ctx)) return;
+    const b = bodyObject(ctx.body) as any;
+    const spec = (b.segment && typeof b.segment === 'object') ? b.segment : { base: 'all' };
+    json(ctx.res, 200, { ...(await previewSmsBroadcast(spec, String(b.text ?? ''))), max: SMS_BROADCAST_MAX });
+  });
+  router.add('POST', `${base}/admin/sms/broadcast`, async (ctx) => {
+    if (!guard(ctx)) return;
+    const b = bodyObject(ctx.body) as any;
+    const spec = (b.segment && typeof b.segment === 'object') ? b.segment : { base: 'all' };
+    try {
+      const r = await sendSmsBroadcast({ spec, text: String(b.text ?? ''), idempotencyKey: String(b.idempotencyKey ?? '') });
+      json(ctx.res, 200, r);
+    } catch (e) {
+      if (e instanceof SmsBroadcastError) return error(ctx.res, 422, e.code, e.message);
+      throw e;
+    }
+  });
 
   /* ===== Number groups: a list of people who are not players =====
    * The panel could message registered players; it could not keep a list of

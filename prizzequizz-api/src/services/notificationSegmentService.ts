@@ -94,6 +94,14 @@ export async function resolveRecipients(raw: string[]): Promise<{ ids: string[];
 export async function resolveSegment(spec: SegmentSpec, cap = 100000): Promise<{ userIds: string[]; count: number; unknown?: string[] }> {
   const s = normalize(spec || {});
   const typed = Array.isArray(s.userIds) ? s.userIds.map(String).filter(Boolean) : [];
+  /* AN EMPTY RECIPIENT LIST MEANS NOBODY, NOT EVERYBODY.
+   * `{userIds: []}` used to fall through every branch below and land on the
+   * unfiltered query — so clearing the recipient box and pressing send aimed at
+   * the ENTIRE user base. For a push that is embarrassing; for the SMS runs
+   * that now share this resolver it is a bill for every player on the system.
+   * An explicitly supplied list that resolves to nobody is an empty audience,
+   * and the callers already refuse to send to one. */
+  if (Array.isArray(s.userIds) && !typed.length) return { userIds: [], count: 0, unknown: [] };
   const resolved = typed.length ? await resolveRecipients(typed) : { ids: [], unknown: [] };
   const manual = resolved.ids;
   // Pure manual list (no other criteria) → those people, and only real ones.

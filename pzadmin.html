@@ -3066,16 +3066,13 @@ async function ntRenderDashboard(){
 }
 /* ---- Compose (rich + segment builder) ---- */
 function ntSegRow(inner){return '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'+inner+'</div>';}
-function ntRenderCompose(){
-  $('#ntBody').innerHTML=
-    '<div class="card" style="max-width:640px"><h3>محتوای پیام</h3>'+
-      '<div class="field"><label>عنوان</label><input id="nt_title" maxlength="120" placeholder="مثلاً: جایزهٔ ویژهٔ امشب 🎁"></div>'+
-      '<div class="field"><label>متن پیام</label><textarea id="nt_body" rows="3" maxlength="700" placeholder="متن نوتیفیکیشن که به دست کاربر می‌رسد..."></textarea></div>'+
-      ntSegRow('<div class="field"><label>نوع</label><select id="nt_type">'+ntTypeOptions('system')+'</select></div>'+
-        '<div class="field"><label>مقصد کلیک (Deep-link)</label><select id="nt_link">'+Object.keys(NT_LINKS).map(k=>'<option value="'+k+'">'+NT_LINKS[k]+'</option>').join('')+'</select></div>')+
-      '<div class="field"><label>تصویر/بنر (URL اختیاری)</label><input id="nt_image" dir="ltr" placeholder="https://... .jpg"></div>'+
-    '</div>'+
-    '<div class="card" style="max-width:640px"><h3>مخاطب هدف</h3>'+
+/* ONE AUDIENCE PICKER, USED BY BOTH THINGS THAT HAVE AN AUDIENCE.
+   The notification composer and the SMS screen resolve their audience with the
+   same segment engine on the server, so they describe it with the same controls
+   here. Two copies would drift, and «همهٔ کاربران بالای سطح ۵» would quietly
+   come to mean two different groups depending on which screen you were on. */
+function segPickerHtml(previewFn){
+  return '<div class="card" style="max-width:640px"><h3>مخاطب هدف</h3>'+
       '<div class="field"><label>گروه پایه</label><select id="seg_base" onchange="ntSegChange()"><option value="all">همهٔ کاربران</option><option value="online">آنلاین (۵ دقیقهٔ اخیر)</option><option value="offline">آفلاین</option><option value="new">کاربران جدید (۷ روز)</option><option value="inactive">غیرفعال (۷ روز+)</option><option value="manual">فهرست دستی آی‌دی</option></select></div>'+
       '<div id="seg_filters">'+
         ntSegRow('<div class="field"><label>اشتراک</label><select id="seg_plan"><option value="">فرقی ندارد</option><option value="free">رایگان</option><option value="paid">پولی</option></select></div>'+
@@ -3088,9 +3085,22 @@ function ntRenderCompose(){
           '<div class="field"><label>موجودی بیشتر از</label><input id="seg_walletgt" type="number" placeholder="— تومان"></div>')+
       '</div>'+
       '<div class="field" id="seg_manual_wrap" style="display:none"><label>آی‌دی کاربران (با ویرگول)</label><textarea id="seg_uids" rows="2" dir="ltr" placeholder="uuid1, uuid2, ..."></textarea></div>'+
-      '<button class="btn info" onclick="ntPreview()">👁️ پیش‌نمایش مخاطب</button> <span id="seg_count" style="font-weight:900;margin-inline-start:8px"></span>'+
+      '<button class="btn info" onclick="'+previewFn+'">👁️ پیش‌نمایش مخاطب</button> <span id="seg_count" style="font-weight:900;margin-inline-start:8px"></span>'+
       '<div class="note" style="margin-top:8px">فیلترها با هم ترکیب می‌شوند (AND). «شهر» و «نسخهٔ اپ» عمداً نیامده‌اند چون اپ این داده‌ها را ذخیره نمی‌کند.</div>'+
+    '</div>';
+}
+
+function ntRenderCompose(){
+  $('#ntBody').innerHTML=
+    '<div class="card" style="max-width:640px"><h3>محتوای پیام</h3>'+
+      '<div class="field"><label>عنوان</label><input id="nt_title" maxlength="120" placeholder="مثلاً: جایزهٔ ویژهٔ امشب 🎁"></div>'+
+      '<div class="field"><label>متن پیام</label><textarea id="nt_body" rows="3" maxlength="700" placeholder="متن نوتیفیکیشن که به دست کاربر می‌رسد..."></textarea></div>'+
+      ntSegRow('<div class="field"><label>نوع</label><select id="nt_type">'+ntTypeOptions('system')+'</select></div>'+
+        '<div class="field"><label>مقصد کلیک (Deep-link)</label><select id="nt_link">'+Object.keys(NT_LINKS).map(k=>'<option value="'+k+'">'+NT_LINKS[k]+'</option>').join('')+'</select></div>')+
+      '<div class="field"><label>تصویر/بنر (URL اختیاری)</label><input id="nt_image" dir="ltr" placeholder="https://... .jpg"></div>'+
     '</div>'+
+    segPickerHtml('ntPreview()')+
+
     '<div class="card" style="max-width:640px"><h3>زمان ارسال</h3>'+
       '<div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center">'+
         '<label style="display:flex;gap:6px;align-items:center"><input type="radio" name="nt_when" value="now" checked onchange="ntWhenChange()"> فوری</label>'+
@@ -5031,16 +5041,101 @@ let SMS_SUB='config';
 const SMS_PROVIDERS={sandbox:'حالت تست (Sandbox)',niazpardaz:'نیازپرداز',kavenegar:'کاوه‌نگار',melipayamak:'ملی‌پیامک',farazsms:'فراز اس‌ام‌اس',generic:'سفارشی (Generic)'};
 const SMS_STLABEL={sent:'ارسال شد',pending:'در انتظار',failed:'ناموفق',blocked:'مسدود',disabled:'غیرفعال'};
 async function renderSms(){
-  const subtabs='<div class="subtabs">'+[['config','⚙️ سرویس'],['templates','📝 قالب‌ها'],['log','📄 گزارش'],['stats','📊 آمار'],['blacklist','🚫 لیست سیاه']].map(s=>'<button class="'+(SMS_SUB===s[0]?'active':'')+'" onclick="SMS_SUB=\''+s[0]+'\';renderSms()">'+s[1]+'</button>').join('')+'</div>';
+  const subtabs='<div class="subtabs">'+[['config','⚙️ سرویس'],['send','✉️ ارسال به کاربران'],['templates','📝 قالب‌ها'],['log','📄 گزارش'],['stats','📊 آمار'],['blacklist','🚫 لیست سیاه']].map(s=>'<button class="'+(SMS_SUB===s[0]?'active':'')+'" onclick="SMS_SUB=\''+s[0]+'\';renderSms()">'+s[1]+'</button>').join('')+'</div>';
   $('#main').innerHTML=head('پنل پیامکی','سرویس پیامک، قالب‌ها، گزارش ارسال، آمار و امنیت OTP')+subtabs+'<div id="smsBody"><div class="skel"></div></div>';
   const b=$('#smsBody');
   try{
     if(SMS_SUB==='config') return smsRenderConfig(b);
+    if(SMS_SUB==='send') return smsRenderSend(b);
     if(SMS_SUB==='templates') return smsRenderTemplates(b);
     if(SMS_SUB==='log') return smsRenderLog(b);
     if(SMS_SUB==='stats') return smsRenderStats(b);
     if(SMS_SUB==='blacklist') return smsRenderBlacklist(b);
   }catch(e){ b.innerHTML='<div class="card empty">'+(e.message||'خطا')+'</div>'; }
+}
+/* ✉️ SENDING A TEXT TO PLAYERS.
+   The panel could text a number, and keep lists of numbers typed in by hand.
+   It could not text PLAYERS — the people in the users table — which is the only
+   audience anybody actually thinks in. The audience picker is the very same one
+   the notification centre uses, because the server resolves both with one
+   engine.
+   Every message here is a bill, so nothing is sent until it has been PRICED —
+   in messages, not people, because a long Persian text is several messages to
+   every recipient — and the send is guarded against going out twice. */
+let _SMS_PLAN=null;
+function smsRenderSend(b){
+  _SMS_PLAN=null;
+  b.innerHTML='<div class="card" style="max-width:640px"><h3>متن پیامک</h3>'+
+      '<div class="field"><label>متن</label><textarea id="sb_text" rows="4" oninput="smsCountChars()" placeholder="متن پیامک…"></textarea></div>'+
+      '<div class="note" id="sb_chars">—</div>'+
+    '</div>'+
+    segPickerHtml('smsPreviewSend()')+
+    '<div class="card" style="max-width:640px"><h3>ارسال</h3>'+
+      '<div id="sb_plan" class="note">اول «پیش‌نمایش مخاطب» را بزن تا معلوم شود به چند نفر می‌رود و چند پیامک حساب می‌شود.</div>'+
+      '<button class="btn pri" id="sb_go" onclick="smsDoSend()" disabled>✉️ ارسال</button>'+
+    '</div>';
+  smsCountChars();
+}
+/* Persian is outside GSM-7, so seventy characters fill a message and sixty-seven
+   once it has to be split. Shown while typing, because the difference between
+   one message and three is the difference between one bill and three. */
+function smsPartsOf(t){
+  const s2=String(t||''); if(!s2) return 0;
+  const uni=!/^[\x20-\x7E\r\n]*$/.test(s2);
+  const single=uni?70:160, multi=uni?67:153;
+  return s2.length<=single?1:Math.ceil(s2.length/multi);
+}
+function smsCountChars(){
+  const t=($('#sb_text')||{}).value||'';
+  const el=$('#sb_chars'); if(!el) return;
+  const p=smsPartsOf(t);
+  el.innerHTML=fa(t.length)+' کاراکتر — <b>'+fa(p)+'</b> پیامک به ازای هر نفر'+(p>1?' <span style="color:var(--gold)">(هزینه چند برابر می‌شود)</span>':'');
+  _SMS_PLAN=null; const go=$('#sb_go'); if(go) go.disabled=true;
+}
+async function smsPreviewSend(){
+  const text=($('#sb_text')||{}).value||'';
+  if(!text.trim()) return toast('اول متن را بنویس','bad');
+  try{
+    const seg=ntCollectSegment();
+    const plan=await api('POST','/admin/sms/broadcast/preview',{text:text,segment:seg});
+    _SMS_PLAN={plan:plan,seg:seg,text:text};
+    $('#seg_count').innerHTML='👥 <b style="color:var(--ok,#3c9)">'+fa(plan.audience||0)+'</b> کاربر — <span style="color:var(--muted)">'+esc(plan.description||'')+'</span>';
+    const warn=[];
+    if(!plan.smsEnabled) warn.push('<div class="note" style="color:var(--bad)">سرویس پیامک خاموش است — هیچ پیامی ارسال نمی‌شود.</div>');
+    else if(!plan.live) warn.push('<div class="note" style="color:var(--gold)">سرویس روی حالت تست است — پیامی واقعاً فرستاده نمی‌شود.</div>');
+    if(plan.overCap) warn.push('<div class="note" style="color:var(--bad)">این گروه از سقفِ '+fa(plan.max||0)+' نفر در هر ارسال بزرگ‌تر است. گروه را کوچک‌تر کن.</div>');
+    $('#sb_plan').innerHTML=
+      '<div class="cfg-row"><label>در گروه</label><b>'+fa(plan.audience||0)+' نفر</b></div>'+
+      '<div class="cfg-row"><label>شمارهٔ قابل ارسال دارند</label><b style="color:var(--ok)">'+fa(plan.reachable||0)+'</b></div>'+
+      (plan.noPhone?'<div class="cfg-row"><label>بدون شماره</label><b>'+fa(plan.noPhone)+'</b></div>':'')+
+      (plan.blacklisted?'<div class="cfg-row"><label>در لیست سیاه</label><b style="color:var(--bad)">'+fa(plan.blacklisted)+'</b></div>':'')+
+      '<div class="cfg-row"><label>تعداد پیامکی که حساب می‌شود</label><b style="color:var(--gold)">'+fa(plan.messages||0)+'</b></div>'+
+      warn.join('');
+    const go=$('#sb_go');
+    if(go) go.disabled=!(plan.reachable>0)||!!plan.overCap;
+  }catch(e){ toast(e.message,'bad'); }
+}
+async function smsDoSend(){
+  if(!_SMS_PLAN) return toast('اول پیش‌نمایش بگیر','bad');
+  const p=_SMS_PLAN.plan;
+  if(!confirm('ارسال به '+p.reachable+' نفر؟ روی هم '+p.messages+' پیامک حساب می‌شود و برگشت‌پذیر نیست.')) return;
+  const go=$('#sb_go'); if(go){ go.disabled=true; go.textContent='در حال ارسال…'; }
+  /* The key is fixed to THIS previewed run, so a double click — or a retry
+     after a timeout — cannot bill a second time. */
+  if(!_SMS_PLAN.key) _SMS_PLAN.key='sb_'+Date.now()+'_'+Math.random().toString(36).slice(2,8);
+  try{
+    const r=await api('POST','/admin/sms/broadcast',{text:_SMS_PLAN.text,segment:_SMS_PLAN.seg,idempotencyKey:_SMS_PLAN.key});
+    modal(r.duplicate?'این ارسال قبلاً انجام شده بود':'نتیجهٔ ارسال',
+      '<div class="card">'+
+        '<div class="cfg-row"><label>ارسال شد</label><b style="color:var(--ok)">'+fa(r.sent||0)+'</b></div>'+
+        (r.blocked?'<div class="cfg-row"><label>مسدود/خاموش</label><b>'+fa(r.blocked)+'</b></div>':'')+
+        (r.failed?'<div class="cfg-row"><label>ناموفق</label><b style="color:var(--bad)">'+fa(r.failed)+'</b></div>':'')+
+        (r.noPhone?'<div class="cfg-row"><label>بدون شماره</label><b>'+fa(r.noPhone)+'</b></div>':'')+
+        (r.duplicate?'<div class="note">همین ارسال قبلاً انجام شده بود، پس دوباره فرستاده نشد و دوباره هزینه نکرد.</div>':'')+
+      '</div>');
+    toast((r.duplicate?'قبلاً ارسال شده بود — ':'')+fa(r.sent||0)+' پیامک ارسال شد',(r.sent>0||r.duplicate)?'ok':'bad');
+    SMS_SUB='log'; renderSms();
+  }catch(e){ toast(e.message,'bad'); if(go){ go.disabled=false; go.textContent='✉️ ارسال'; } }
 }
 async function smsRenderConfig(b){
   const c=await api('GET','/admin/sms/config');
