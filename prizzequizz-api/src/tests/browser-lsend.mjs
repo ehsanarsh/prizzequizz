@@ -480,7 +480,18 @@ async function eliminateMe(page) {
   }));
   ok('the prize is on the board', started.remain !== '', started.remain);
   ok('and the player’s own share beside it', started.share !== '', started.share);
-  ok('with nothing announced yet', started.hero === false, String(started.hero));
+  /* ARRIVING IS NOT AN ELIMINATION. Walking onto the dashboard turns a share of
+     nothing into a real figure, and that reveal is announced once — which is
+     right, and is not what this is about. What must be true before anybody goes
+     out is that nothing is STILL being announced: a steady board is quiet. */
+  const quiet = await page.evaluate(async () => {
+    for (let i = 0; i < 80; i++) {
+      if (!document.getElementById('lsPotHero')) return true;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    return false;
+  });
+  ok('and a steady board announces nothing', quiet === true, String(quiet));
 
   /* Somebody goes out: the pot grows — AND SO DOES THE PLAYER'S OWN SHARE,
      because that is what an elimination does to both figures. Only one of them
@@ -519,6 +530,7 @@ async function eliminateMe(page) {
       vw: window.innerWidth, vh: window.innerHeight,
       green: h.classList.contains('lph-green'),
       smallText: small ? small.textContent : '',
+      shareText: (document.getElementById('lsMyShare') || {}).textContent || '',
       heroes: document.querySelectorAll('.ls-pot-hero').length
     };
   });
@@ -528,14 +540,23 @@ async function eliminateMe(page) {
   ok('vertically centred', Math.abs(mid.cy - mid.vh / 2) < 60, mid.cy + ' of ' + mid.vh);
   /* «بصورت بزرگ» */
   ok('and it is big, not the board’s own size', mid.size >= 34 && mid.size > mid.smallSize * 1.6, mid.size + 'px vs ' + mid.smallSize + 'px');
-  /* «با موشن عددش بیشتر بشه» — part way through a climb from 40,000 to 60,000
-     the figure has to be between the two, not already at either end. */
+  /* «با موشن عددش بیشتر بشه» — part way through the climb the figure has to be
+     between the two ends, not already at either.
+     WHICH climb: the player's own share, 20,000 → 30,000. This used to read the
+     pot's 40,000 → 60,000, from when the pot was the figure thrown at the middle
+     of the screen. It is the share that is announced now — a player wants to
+     know what THEY are playing for — and the pot takes the ordinary climb in its
+     own corner. */
   const midVal = en(mid.text);
-  ok('it is mid-climb, not already arrived', midVal > 40000 && midVal < 60000, String(midVal));
+  ok('it is mid-climb, not already arrived', midVal > 20000 && midVal < 30000, String(midVal));
   ok('not green yet, because it is still counting', mid.green === false, String(mid.green));
-  /* The board holds its old figure while the big one is still climbing, so the
-     same total is never in two places at once. */
-  ok('the board has not jumped ahead', mid.smallText === started.remain, mid.smallText + ' vs ' + started.remain);
+  /* THE ANNOUNCED FIGURE IS NEVER IN TWO PLACES AT ONCE. The room keeps polling
+     while the big number climbs, and each repaint rebuilds the small <b> from
+     the new snapshot — so its slot has to be put back to the old value until the
+     flight lands on it. Only the announced figure holds back; the pot is not
+     being announced and climbs in its corner as usual. */
+  ok('the announced figure has not jumped ahead', mid.shareText === started.share,
+     mid.shareText + ' vs ' + started.share);
 
   const climbed = await page.evaluate(async () => {
     const num = document.querySelector('#lsPotHero .lph-num');
@@ -576,11 +597,15 @@ async function eliminateMe(page) {
   });
   ok('then it goes away', landed.gone === true, JSON.stringify(landed));
   ok('and the board is holding the new total', en(landed.smallText) === 60000, landed.smallText);
-  /* «جایزه» — the pot, not the player's share. The share grew at the same
-     moment and takes the ordinary climb in its own corner. */
-  ok('it was the prize that was announced, not the share', en(green.text) === 60000, green.text);
-  const share = await page.evaluate(() => (document.getElementById('lsMyShare') || {}).textContent || '');
-  ok('and the share arrived quietly at its own new figure', en(share) === 30000, share);
+  /* THE PLAYER'S OWN SHARE IS WHAT IS ANNOUNCED. Both figures grow when somebody
+     goes out, and only one of them can have the middle of the screen — two would
+     fight over it and the second would replace the first. It is the share: the
+     pot is the room's number, the share is the player's, and the player is who
+     the announcement is for. The pot grew at the same moment and takes the
+     ordinary climb in its own corner. */
+  ok('it was the share that was announced, not the whole prize', en(green.text) === 30000, green.text);
+  const pot = await page.evaluate(() => (document.getElementById('lsRemain') || {}).textContent || '');
+  ok('and the prize arrived quietly at its own new figure', en(pot) === 60000, pot);
   ok('no script errors', errs.length === 0, errs.join(' | '));
   await ctx.close();
 }
@@ -639,7 +664,12 @@ async function eliminateMe(page) {
     (0, eval)('lsLastKey=""');
     (0, eval)('lsRender')(s);
   });
-  await page.waitForTimeout(500);
+  /* Let the arrival announcement finish. An announcement already on screen
+     deliberately overrides the number a new one opens on — see below — so
+     starting this one on top of it would be measuring that rule instead. */
+  await page.evaluate(async () => {
+    for (let i = 0; i < 80 && document.getElementById('lsPotHero'); i++) await new Promise((r) => setTimeout(r, 100));
+  });
   const opened = await page.evaluate(() => {
     (0, eval)('lsPotHero')('lsRemain', 11111, 99999);
     /* No await, no timeout: requestAnimationFrame cannot have run yet. */
@@ -649,6 +679,28 @@ async function eliminateMe(page) {
   });
   ok('it opens on the number the board was showing', en(opened.first) === 11111, opened.first);
   ok('and says what is being added', en(opened.add) === 88888, opened.add);
+
+  /* AND A SECOND ELIMINATION DOES NOT SEND THE NUMBER BACKWARDS. One arriving
+     while the last is still climbing carries on from where the eye already is,
+     rather than snapping back to a figure the player has watched go past. */
+  /* Let the first one get properly under way, so «where the eye is» is a figure
+     the player has actually watched climb past — not the one it opened on. */
+  await page.waitForTimeout(500);
+  const second = await page.evaluate(() => {
+    const before = document.querySelector('#lsPotHero .lph-num').textContent;
+    (0, eval)('lsPotHero')('lsRemain', 11111, 120000);
+    const n = document.querySelector('#lsPotHero .lph-num');
+    const add = document.querySelector('#lsPotHero .lph-add');
+    return { before, first: n ? n.textContent : '', add: add ? add.textContent : '' };
+  });
+  ok('the first one really was mid-climb', en(second.before) > 11111 && en(second.before) < 99999,
+     second.before);
+  /* The `from` it was called with is deliberately ignored: snapping back to
+     11,111 would send the number backwards past figures already seen. */
+  ok('a second announcement carries on from where the eye is',
+     en(second.first) === en(second.before), second.before + ' → ' + second.first);
+  ok('and counts what is added from there', en(second.add) === 120000 - en(second.before),
+     second.add + ' on top of ' + second.before);
   ok('no script errors', errs.length === 0, errs.join(' | '));
   await ctx.close();
 }
@@ -720,7 +772,12 @@ async function eliminateMe(page) {
       addAnim: as ? as.animationName : '',
       border: cs ? parseFloat(cs.borderTopWidth) : -1,
       bg: cs ? cs.backgroundColor : '',
-      centred: num ? Math.abs((num.getBoundingClientRect().left + num.getBoundingClientRect().right) / 2 - window.innerWidth / 2) : 999
+      /* THE CARD, NOT THE NUMBER. `.lph-num` is laid out at its max-content width
+         and overflows its box on purpose (see its own CSS note), so its measured
+         centre wanders with the digit count of whichever frame is sampled — this
+         read 4px off centre one run and 14px the next, on identical code. The
+         card is the centred box, and it is what «وسط صفحه» is about. */
+      centred: card ? Math.abs((card.getBoundingClientRect().left + card.getBoundingClientRect().right) / 2 - window.innerWidth / 2) : 999
     };
   });
   /* «بزرگ» is the whole request — it has to dwarf ordinary text, not merely
