@@ -6,6 +6,7 @@
  */
 import { getPgPool } from '../database/postgres.js';
 import { repositories } from '../repositories/index.js';
+import { addCoins, addUserNumber } from './coinService.js';
 import { id } from '../utils/id.js';
 import { postEntry } from './walletLedgerService.js';
 import { refundTicket } from './ticketService.js';
@@ -99,10 +100,9 @@ async function grant(userId: string, gift: GiftCode, code: string): Promise<void
   if (gift.rewardType === 'ticket' && gift.tier) { await refundTicket(userId, gift.tier); return; }
   const user = await repositories.users.findById(userId);
   if (!user) return;
-  if (gift.rewardType === 'coins') user.coins = Number(user.coins ?? 0) + gift.amount;
-  if (gift.rewardType === 'xp') user.xp = Number(user.xp ?? 0) + gift.amount;
-  if (gift.rewardType === 'cup') user.weeklyScore = Number(user.weeklyScore ?? 0) + gift.amount;
-  await repositories.users.save(user);
+  if (gift.rewardType === 'coins') return addCoins(userId, gift.amount).then(() => undefined);
+  if (gift.rewardType === 'xp') return addUserNumber(userId, 'xp', gift.amount);
+  if (gift.rewardType === 'cup') return addUserNumber(userId, 'weeklyScore', gift.amount);
 }
 
 function fromRow(r: any): GiftCode {

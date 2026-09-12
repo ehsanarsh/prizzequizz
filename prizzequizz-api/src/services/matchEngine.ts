@@ -1,5 +1,6 @@
 import { gameConfig } from '../core/config.js';
 import { repositories } from '../repositories/index.js';
+import { addCoins } from './coinService.js';
 import { chargeEntry } from './economyEngine.js';
 import { applyReward, calculateDuelReward, duelStake } from './rewardEngine.js';
 import { openRunFor, attachMatch, recordWin, recordLoss } from './duelRunService.js';
@@ -49,8 +50,10 @@ async function payLevelUp(userId: string, before: number, after: number): Promis
   const coinTotal = coins * gained;
   const ticketTotal = tickets * gained;
   if (coinTotal > 0) {
-    const u = await repositories.users.findById(userId);
-    if (u) { u.coins = (Number(u.coins) || 0) + coinTotal; await repositories.users.save(u); }
+    /* Added to the row the database is holding. Read-modify-write lost a reward
+     * whenever two landed together — and rewriting the whole user from a stale
+     * snapshot could put back an old heart count or undo XP won in between. */
+    await addCoins(userId, coinTotal);
   }
   if (ticketTotal > 0) await grantTickets(userId, 'green', ticketTotal).catch(() => undefined);
   /* The player has to be told, or the balance just changes on its own — the

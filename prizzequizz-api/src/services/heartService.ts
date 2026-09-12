@@ -13,6 +13,7 @@
  */
 import { getPgPool } from '../database/postgres.js';
 import { repositories } from '../repositories/index.js';
+import { setUserNumber } from './coinService.js';
 import { logger } from './logger.js';
 
 export interface HeartConfig {
@@ -175,8 +176,11 @@ export async function addHearts(userId: string, n: number): Promise<HeartState> 
   const state = await getHearts(userId);
   const user = await repositories.users.findById(userId);
   if (!user) throw new HeartError('USER_NOT_FOUND', 'کاربر پیدا نشد.');
-  user.hearts = state.hearts + amount;
-  await repositories.users.save(user);
+  /* The figure is still worked out the same way — regeneration first, then the
+   * grant. What changed is that only the hearts column is written: saving the
+   * whole user put back every OTHER number as it was read a moment ago, which
+   * is how a heart granted by a purchase could undo the coins that paid for it. */
+  await setUserNumber(userId, 'hearts', state.hearts + amount);
   return getHearts(userId);
 }
 

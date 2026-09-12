@@ -18,6 +18,7 @@
 import { repositories } from '../repositories/index.js';
 import { getPgPool } from '../database/postgres.js';
 import { logger } from './logger.js';
+import { addCoins } from './coinService.js';
 import { onlineUserIds, lastSeenFor } from './presenceService.js';
 import { avatarUrlFor } from './avatarService.js';
 import { equippedCharacterFor } from './characterSelectionService.js';
@@ -198,12 +199,11 @@ export async function listOnlinePlayers(userId: string, refresh = false): Promis
     if (free > 0) {
       useFree(userId);
     } else if (cfg.refreshCost > 0) {
-      if ((Number(viewer.coins) || 0) < cfg.refreshCost) {
+      /* One step, so a double-tap cannot buy two refreshes for one. */
+      if (await addCoins(userId, -cfg.refreshCost) === null) {
         throw new OnlinePlayersError('INSUFFICIENT_COINS',
           'برای رفرش ' + cfg.refreshCost + ' سکه لازم است.');
       }
-      viewer.coins = (Number(viewer.coins) || 0) - cfg.refreshCost;
-      await repositories.users.save(viewer);
       charged = cfg.refreshCost;
     }
   }

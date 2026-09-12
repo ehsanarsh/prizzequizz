@@ -24,6 +24,7 @@ import { getPgPool } from '../database/postgres.js';
 import { repositories } from '../repositories/index.js';
 import { playerLevel } from './scoringConfig.js';
 import { postEntry } from './walletLedgerService.js';
+import { addCoins } from './coinService.js';
 import { id } from '../utils/id.js';
 
 export type CharacterKind = 'normal' | 'vip';
@@ -436,9 +437,12 @@ export async function purchaseCharacter(userId: string, characterId: string, ide
   const granted = await grantCharacter(userId, characterId, 'purchase');
   if (!granted) return { characterId, charged: 0, coins, currency: 'coins', alreadyOwned: true };
 
-  user.coins = coins - price;
-  await repositories.users.save(user);
-  return { characterId, charged: price, coins: user.coins, currency: 'coins', alreadyOwned: false };
+  /* The grant-then-charge order above is deliberate and is kept. What changes
+   * is the charge itself: taken from the row the database is holding, so it can
+   * neither be lost to a write that raced it nor take a player below zero. */
+  const left = await addCoins(userId, -price);
+  return { characterId, charged: left === null ? 0 : price,
+           coins: left === null ? coins : left, currency: 'coins', alreadyOwned: false };
 }
 
 // ---------------------------------------------------------------------------

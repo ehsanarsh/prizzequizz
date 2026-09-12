@@ -17,6 +17,7 @@ import { grantTickets } from './ticketService.js';
 import { repositories } from '../repositories/index.js';
 import { recordPurchase } from './missionService.js';
 import { claimFulfilment, settleFulfilment, abandonFulfilment, _resetFulfilmentGuard } from './fulfilmentGuard.js';
+import { addCoins, addUserNumber } from './coinService.js';
 import { logger } from './logger.js';
 
 export class ShopError extends Error {
@@ -102,9 +103,11 @@ async function runPurchase(input: PurchaseInput): Promise<PurchaseResult> {
   const price = Math.max(0, Math.floor(item.price)) * qty;
   const value = Math.max(0, Math.floor(item.effectValue)) * qty;
 
-  /* Pay first. If the charge fails there is nothing to unwind; if the grant
-   * fails afterwards it is a support case with a ledger entry to point at,
-   * which is far better than a granted item nobody was charged for. */
+  /* Pay first: a granted item nobody was charged for is the worse failure.
+   * What was actually taken in COINS is remembered, because coins have no
+   * ledger to point at afterwards — so if the grant then fails, the only way
+   * the player can be made whole is to put them straight back. */
+  let charged = 0;
   if (price > 0 && !input.paidExternally) {
     if (item.currency === 'cash') {
       const acct = await getAccount(userId).catch(() => ({ available: Number(user.wallet) || 0 } as any));
@@ -122,10 +125,14 @@ async function runPurchase(input: PurchaseInput): Promise<PurchaseResult> {
         metadata: { itemId: item.id, category: item.category, name: item.name, qty }
       });
     } else {
-      const have = Number(user.coins) || 0;
-      if (have < price) throw new ShopError('INSUFFICIENT_COINS', 'سکه‌ات کافی نیست.');
-      user.coins = have - price;
-      await repositories.users.save(user);
+      /* ASKING AND TAKING ARE ONE STEP. Reading the balance, comparing it and
+       * writing the difference back left a gap two purchases could both get
+       * through — both saw enough coins, both wrote «what I read minus my
+       * price», and one of the two charges vanished. The condition now lives
+       * in the write itself, so a refusal means nothing was taken. */
+      const left = await addCoins(userId, -price);
+      if (left === null) throw new ShopError('INSUFFICIENT_COINS', 'سکه‌ات کافی نیست.');
+      charged = price;
     }
   }
 
@@ -136,6 +143,7 @@ async function runPurchase(input: PurchaseInput): Promise<PurchaseResult> {
    * what was granted rather than a re-reading of what was advertised. */
   const granted: Array<{ key: string; value: number; label: string }> = [];
   let ticketsGranted = 0;
+  try {
   for (const row of rewardsOf(item)) {
     const k2 = row.key;
     const n = Math.max(0, Math.floor(row.value)) * qty;
@@ -143,9 +151,7 @@ async function runPurchase(input: PurchaseInput): Promise<PurchaseResult> {
     if (k2 === 'heart') {
       await addHearts(userId, n);
     } else if (k2 === 'coins') {
-      const u = (await repositories.users.findById(userId))!;
-      u.coins = (Number(u.coins) || 0) + n;
-      await repositories.users.save(u);
+      await addCoins(userId, n);
     } else if (k2.startsWith('ticket-')) {
       const tier = k2.slice('ticket-'.length) || 'green';
       /* League entry tickets are earned on the weekly board and nowhere else.
@@ -159,14 +165,32 @@ async function runPurchase(input: PurchaseInput): Promise<PurchaseResult> {
     } else if (k2 === 'p5050' || k2 === 'psecond' || k2 === 'pstats' || k2 === 'ptime') {
       await grantLifeline(userId, k2, n);
     } else if (k2 === 'xp') {
-      const u = (await repositories.users.findById(userId))!;
-      u.xp = (Number(u.xp) || 0) + n;
-      await repositories.users.save(u);
+      await addUserNumber(userId, 'xp', n);
     } else {
       /* Cosmetics and gifts have no balance to move; the purchase is the
          record. They are still listed, so the receipt is complete. */
     }
     granted.push({ key: k2, value: n, label: rewardLabel(k2) });
+  }
+  } catch (e) {
+    /* CHARGED AND GIVEN NOTHING IS THE ONE OUTCOME WORTH UNDOING.
+     * A cash purchase leaves a ledger row somebody can point at and reverse;
+     * coins have no ledger, so a grant that fails after the coins are taken
+     * would simply leave the player poorer with nothing to show and nothing to
+     * find. The charge goes straight back, and only then does the failure
+     * travel on — which is also what makes it safe for the caller to drop the
+     * idempotency claim and let them try again. */
+    if (charged > 0) {
+      await addCoins(userId, charged).catch((e2) => {
+        /* Now it IS a support case, so it says so with everything needed to
+         * settle it by hand. */
+        logger.error('shop_refund_failed', { userId, itemId: item.id, coins: charged, key,
+          message: e2 instanceof Error ? e2.message : 'unknown' });
+      });
+      logger.warn('shop_purchase_refunded', { userId, itemId: item.id, coins: charged,
+        reason: e instanceof Error ? e.message : 'unknown' });
+    }
+    throw e;
   }
 
   /* Missions. Only what was really charged and really granted is reported, so

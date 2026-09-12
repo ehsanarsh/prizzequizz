@@ -14,6 +14,8 @@
 import { randomInt } from 'node:crypto';
 import { getPgPool } from '../database/postgres.js';
 import { repositories } from '../repositories/index.js';
+import { addCoins, addUserNumber } from './coinService.js';
+import { addHearts } from './heartService.js';
 import { postEntry } from './walletLedgerService.js';
 import { grantTickets } from './ticketService.js';
 import { grantLifeline } from './lifelineService.js';
@@ -282,13 +284,13 @@ export async function grantReward(userId: string, p: { type: RewardType; amount:
        * the grant itself is idempotent and says whether it was new. */
       if (p.target) await grantCharacter(userId, p.target, 'reward').catch(() => false);
     } else {
-      const u = await repositories.users.findById(userId);
-      if (u) {
-        if (p.type === 'coins') u.coins = (Number(u.coins) || 0) + amount;
-        if (p.type === 'xp') u.xp = (Number(u.xp) || 0) + amount;
-        if (p.type === 'heart') u.hearts = (Number(u.hearts) || 0) + amount;
-        await repositories.users.save(u);
-      }
+      /* Coins go through the one place that adds them atomically; a prize
+       * lost to a write that raced it is a prize the player watched arrive. */
+      /* One number each, written on its own: a prize must not put back the
+       * other balances as they were when this user was read. */
+      if (p.type === 'coins') await addCoins(userId, amount);
+      else if (p.type === 'xp') await addUserNumber(userId, 'xp', amount);
+      else if (p.type === 'heart') await addHearts(userId, amount);
     }
   }
   return { type: p.type, amount, target: p.target, label: p.label, icon: p.icon };

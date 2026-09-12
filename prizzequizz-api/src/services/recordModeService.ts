@@ -21,6 +21,7 @@
 import { gameConfig } from '../core/config.js';
 import { getPgPool } from '../database/postgres.js';
 import { repositories } from '../repositories/index.js';
+import { addCoins, addUserNumber } from './coinService.js';
 import type { Question } from '../types/domain.js';
 import { id } from '../utils/id.js';
 import { HeartError, getHearts, spendHearts } from './heartService.js';
@@ -397,14 +398,10 @@ export async function answerRun(runId: string, userId: string, selectedIndex: nu
     run.score += 1; run.correct += 1;
     /* Zero by default — record mode is not supposed to move the rest of the
      * game. These exist so an operator can decide otherwise from the panel. */
-    if (cfg.xpPerCorrect > 0 || cfg.coinsPerCorrect > 0) {
-      const u = await repositories.users.findById(userId);
-      if (u) {
-        if (cfg.xpPerCorrect > 0) u.xp = (Number(u.xp) || 0) + cfg.xpPerCorrect;
-        if (cfg.coinsPerCorrect > 0) u.coins = (Number(u.coins) || 0) + cfg.coinsPerCorrect;
-        await repositories.users.save(u);
-      }
-    }
+    /* Every correct answer pays, so these land fast and often — exactly the
+     * shape that loses one of two writes when both read the balance first. */
+    if (cfg.coinsPerCorrect > 0) await addCoins(userId, cfg.coinsPerCorrect);
+    if (cfg.xpPerCorrect > 0) await addUserNumber(userId, 'xp', cfg.xpPerCorrect);
   } else {
     run.wrong += 1;
     /* One of the run's three goes out. The account balance is untouched: the
@@ -461,13 +458,9 @@ async function finishRun(run: RecordRun): Promise<RunResult> {
 
   /* Off by default; the panel decides whether a record touches XP or the cup. */
   const cfg = await getRecordConfig();
-  if (run.score > previousBest && (cfg.xpPerRecord > 0 || cfg.cupPerRecord > 0)) {
-    const u = await repositories.users.findById(run.userId);
-    if (u) {
-      if (cfg.xpPerRecord > 0) u.xp = (Number(u.xp) || 0) + cfg.xpPerRecord;
-      if (cfg.cupPerRecord > 0) u.weeklyScore = (Number(u.weeklyScore) || 0) + cfg.cupPerRecord;
-      await repositories.users.save(u);
-    }
+  if (run.score > previousBest) {
+    if (cfg.xpPerRecord > 0) await addUserNumber(run.userId, 'xp', cfg.xpPerRecord);
+    if (cfg.cupPerRecord > 0) await addUserNumber(run.userId, 'weeklyScore', cfg.cupPerRecord);
   }
 
   const board = await leaderboard({ mode: run.mode, category: run.category, period: 'all', limit: 100000 });

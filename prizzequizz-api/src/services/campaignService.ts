@@ -4,6 +4,7 @@
  * Dates are ISO (YYYY-MM-DD); empty = unbounded on that side. Never throws. */
 import { gameConfig } from '../core/config.js';
 import { repositories } from '../repositories/index.js';
+import { addUserNumber } from './coinService.js';
 import { postEntry } from './walletLedgerService.js';
 import { grantTickets } from './ticketService.js';
 import { notifications } from './notificationService.js';
@@ -26,7 +27,7 @@ export async function grantNewUserCampaign(userId: string): Promise<void> {
       await postEntry({ userId, entryType: 'bonus', kind: 'credit', amount: wallet, idempotencyKey: `campaign_bonus:${userId}`, description: 'هدیهٔ کاربر جدید' }).catch(() => undefined);
     }
     if (tickets > 0) await grantTickets(userId, String(c.ticketTier || 'green'), tickets).catch(() => undefined);
-    if (xp > 0) { const u = await repositories.users.findById(userId); if (u) { u.xp = (Number(u.xp) || 0) + xp; await repositories.users.save(u); } }
+    if (xp > 0) await addUserNumber(userId, 'xp', xp);
 
     const parts: string[] = [];
     if (wallet > 0) parts.push(`${wallet.toLocaleString('fa-IR')} تومان اعتبار`);

@@ -18,6 +18,7 @@ import { getPgPool } from '../database/postgres.js';
 import { postEntry, getAccount } from './walletLedgerService.js';
 import { repositories } from '../repositories/index.js';
 import { logger } from './logger.js';
+import { addCoins } from './coinService.js';
 
 export type ChatPackCurrency = 'coins' | 'cash';
 
@@ -367,10 +368,11 @@ export async function purchasePack(input: { userId: string; key: string; idempot
         idempotencyKey: 'chatpack:' + idem, description: 'خرید پک چت: ' + pack.name
       });
     } else {
-      const have = Number(user.coins) || 0;
-      if (have < price) throw new ChatPackError('INSUFFICIENT_COINS', 'سکه‌ات کافی نیست.');
-      user.coins = have - price;
-      await repositories.users.save(user);
+      /* Asking and taking in one step: two purchases that both read the same
+       * balance used to both pass the check and between them charge once. */
+      if (await addCoins(userId, -price) === null) {
+        throw new ChatPackError('INSUFFICIENT_COINS', 'سکه‌ات کافی نیست.');
+      }
     }
   }
 

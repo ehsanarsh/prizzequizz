@@ -13,6 +13,7 @@
 import { randomUUID } from 'node:crypto';
 import { getPgPool } from '../database/postgres.js';
 import { repositories } from '../repositories/index.js';
+import { addCoins, addUserNumber } from './coinService.js';
 import { postEntry } from './walletLedgerService.js';
 import { grantTickets } from './ticketService.js';
 import { grantLifeline } from './lifelineService.js';
@@ -1183,13 +1184,11 @@ async function grantReward(userId: string, r: MissionReward, idem: string): Prom
      * weekly_score by hand here would miss the week rollover and hand a player
      * last week's total back. */
     await awardScoring(userId, 0, amount).catch(() => undefined);
-  } else if (r.type === 'coins' || r.type === 'xp') {
-    const u = await repositories.users.findById(userId);
-    if (u) {
-      if (r.type === 'coins') u.coins = (Number(u.coins) || 0) + amount;
-      else u.xp = (Number(u.xp) || 0) + amount;
-      await repositories.users.save(u);
-    }
+  } else if (r.type === 'coins') {
+    /* Added to the row itself, so two claims landing together keep both. */
+    await addCoins(userId, amount);
+  } else if (r.type === 'xp') {
+    await addUserNumber(userId, 'xp', amount);
   }
   /* 'spin' and 'cosmetic' have no balance to move yet; the claim is the record. */
 }
