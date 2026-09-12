@@ -1,6 +1,6 @@
 import type { Router } from '../../http/router.js';
 import { json } from '../../http/response.js';
-import { listItems, rewardsOf, rewardLabel } from '../../services/shopService.js';
+import { listItems, shopCard } from '../../services/shopService.js';
 import { ShopError, purchase } from '../../services/shopPurchaseService.js';
 import { ticketPrizeTable } from '../../services/prizeService.js';
 import { getPromos, updatePromos, PromoError, PROMO_IMAGE_MAX_BYTES } from '../../services/ticketPromoService.js';
@@ -62,20 +62,10 @@ export function registerShopRoutes(router: Router, base: string): void {
   router.add('GET', `${base}/shop/items`, async (ctx) => {
     const category = ctx.query.get('category') || undefined;
     const items = await listItems({ category, enabledOnly: true });
-    /* ONE mapper, not two. This was written out twice — once for `categories`
-       and once for `items` — so a field added to the item had to be remembered
-       in both places, and `color` was added to neither. The panel saved it, the
-       database kept it, and it was dropped on the way out: every card stayed
-       grey however it was set.
-       `rewards` is what the card lists («۳ بلیط + ۴۰۰ سکه + ۲ کمک») and what the
-       receipt is written from. It is always present — a plain item is simply a
-       bundle of one — so the client never has to interpret effectKey itself. */
-    const toCard = (it: typeof items[number]) => ({
-      id: it.id, category: it.category, icon: it.icon, name: it.name, description: it.description,
-      price: it.price, currency: it.currency, effectKey: it.effectKey, effectValue: it.effectValue,
-      badge: it.badge, image: it.image, color: it.color,
-      rewards: rewardsOf(it).map((r) => ({ ...r, label: rewardLabel(r.key) }))
-    });
+    /* ONE mapper, and it lives beside the item rather than here — see
+       `shopCard`. It was written out twice in this handler, and `color` was
+       remembered in neither copy. */
+    const toCard = shopCard;
     const categories: Record<string, any[]> = {};
     for (const it of items) (categories[it.category] ??= []).push(toCard(it));
     json(ctx.res, 200, { items: items.map(toCard), categories });

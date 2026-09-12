@@ -864,7 +864,8 @@ export function registerAdminRoutes(router: Router, base: string): void {
            "the operator cleared it", and those must not be confused. */
         ...(b.rewards !== undefined ? { rewards: b.rewards } : {}),
         ...(b.image !== undefined ? { image: String(b.image || '') } : {}),
-        ...(b.color !== undefined ? { color: String(b.color || '') } : {})
+        ...(b.color !== undefined ? { color: String(b.color || '') } : {}),
+        ...(b.shine !== undefined ? { shine: !!b.shine } : {})
       });
       audit(ctx.userId, b.id ? 'SHOP_ITEM_UPDATED' : 'SHOP_ITEM_CREATED', 'shop_item', item.id, { name: item.name, price: item.price });
       json(ctx.res, 201, item);

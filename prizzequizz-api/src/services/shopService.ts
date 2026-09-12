@@ -33,6 +33,11 @@ export interface ShopItem {
   /** The card's own colour, as `#rrggbb`. Empty means the shelf's default, so
    *  an operator who sets nothing gets exactly what the shop looks like now. */
   color?: string;
+  /** Whether the coloured card carries the travelling shine. Absent means yes,
+   *  so every card that already had a colour keeps the look it has; an operator
+   *  who wants a plain card unticks it. Meaningless without `color` — there is
+   *  nothing to shine on the shelf's default card. */
+  shine?: boolean;
   badge?: string;            // e.g. «محبوب», «جدید», «٪۲۰ تخفیف»
   enabled: boolean;
   sortOrder: number;
@@ -51,6 +56,26 @@ const REWARD_LABELS: Record<string, string> = {
   gift: 'هدیه'
 };
 export function rewardLabel(key: string): string { return REWARD_LABELS[key] || key; }
+
+/* WHAT A PLAYER IS SENT FOR ONE ITEM — written once, here, beside the item.
+ *
+ * `GET /shop/items` used to build this by hand, twice: once for `items` and
+ * once for `categories`. A field added to the item then reached the shop only
+ * if somebody remembered both copies, and `color` was remembered in neither —
+ * the panel saved it, the database kept it, and every card stayed grey. It is a
+ * mapper rather than a habit now, so `shine` and whatever comes after it cannot
+ * be forgotten in one place and not the other.
+ *
+ * `rewards` is always present: a plain item is a bundle of one, so the client
+ * never has to interpret effectKey for itself. */
+export function shopCard(it: ShopItem): Record<string, unknown> {
+  return {
+    id: it.id, category: it.category, icon: it.icon, name: it.name, description: it.description,
+    price: it.price, currency: it.currency, effectKey: it.effectKey, effectValue: it.effectValue,
+    badge: it.badge, image: it.image, color: it.color, shine: it.shine !== false,
+    rewards: rewardsOf(it).map((r) => ({ ...r, label: rewardLabel(r.key) }))
+  };
+}
 
 /** The rows a purchase should hand over, whether the item is a bundle or not. */
 export function rewardsOf(item: ShopItem): ShopReward[] {
@@ -87,6 +112,10 @@ async function ensureSchema(pool: ReturnType<typeof getPgPool>): Promise<void> {
      exists, so a server created before bundles needs these explicitly. */
   await pool.query(`ALTER TABLE shop_items ADD COLUMN IF NOT EXISTS rewards JSONB`);
   await pool.query(`ALTER TABLE shop_items ADD COLUMN IF NOT EXISTS color VARCHAR(9)`);
+  /* NULL, not false, for every row that existed before the tick-box did — so
+     `r.shine !== false` below reads them as «yes» and no shelf changes on the
+     day this ships. */
+  await pool.query(`ALTER TABLE shop_items ADD COLUMN IF NOT EXISTS shine BOOLEAN`);
   await pool.query(`ALTER TABLE shop_items ADD COLUMN IF NOT EXISTS image TEXT`);
   _schemaReady = true;
 }
@@ -108,7 +137,7 @@ function rowToItem(r: any): ShopItem {
   return {
     id: r.id, category: r.category, icon: r.icon, name: r.name, description: r.description ?? '',
     price: Number(r.price ?? 0), currency: r.currency === 'cash' ? 'cash' : 'coins',
-    effectKey: r.effect_key, effectValue: Number(r.effect_value ?? 1), badge: r.badge ?? undefined, color: r.color ?? undefined,
+    effectKey: r.effect_key, effectValue: Number(r.effect_value ?? 1), badge: r.badge ?? undefined, color: r.color ?? undefined, shine: r.shine !== false,
     rewards: parseRewards(r.rewards), image: r.image || undefined,
     enabled: r.enabled !== false, sortOrder: Number(r.sort_order ?? 0),
     createdAt: r.created_at?.toISOString?.() ?? String(r.created_at),
@@ -235,6 +264,10 @@ export async function saveItem(input: Partial<ShopItem> & { name: string; catego
      * string the browser will not understand, and a card is not a place to let
      * somebody else's stylesheet in. */
     color: normalizeColor(input.color !== undefined ? input.color : existing?.color),
+    /* `!= null` and not `!== undefined`: the panel sends `false` to turn a
+       shine off, and that has to survive. An item nobody has an opinion about
+       shines. */
+    shine: input.shine != null ? !!input.shine : (existing?.shine ?? true),
     enabled: input.enabled != null ? !!input.enabled : (existing?.enabled ?? true),
     sortOrder: Number(input.sortOrder ?? existing?.sortOrder ?? 0),
     createdAt: existing?.createdAt || now,
@@ -250,11 +283,11 @@ export async function saveItem(input: Partial<ShopItem> & { name: string; catego
   if (pool) {
     await ensureSchema(pool);
     await pool.query(
-      `INSERT INTO shop_items(id,category,icon,name,description,price,currency,effect_key,effect_value,badge,enabled,sort_order,created_at,updated_at,rewards,image,color)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
-       ON CONFLICT (id) DO UPDATE SET category=$2,icon=$3,name=$4,description=$5,price=$6,currency=$7,effect_key=$8,effect_value=$9,badge=$10,enabled=$11,sort_order=$12,updated_at=$14,rewards=$15,image=$16,color=$17`,
+      `INSERT INTO shop_items(id,category,icon,name,description,price,currency,effect_key,effect_value,badge,enabled,sort_order,created_at,updated_at,rewards,image,color,shine)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+       ON CONFLICT (id) DO UPDATE SET category=$2,icon=$3,name=$4,description=$5,price=$6,currency=$7,effect_key=$8,effect_value=$9,badge=$10,enabled=$11,sort_order=$12,updated_at=$14,rewards=$15,image=$16,color=$17,shine=$18`,
       [item.id, item.category, item.icon, item.name, item.description, item.price, item.currency, item.effectKey, item.effectValue, item.badge ?? null, item.enabled, item.sortOrder, item.createdAt, item.updatedAt,
-       item.rewards ? JSON.stringify(item.rewards) : null, item.image ?? null, item.color ?? null]);
+       item.rewards ? JSON.stringify(item.rewards) : null, item.image ?? null, item.color ?? null, item.shine !== false]);
   } else {
     const i = mem.findIndex((x) => x.id === item.id);
     if (i >= 0) mem[i] = item; else mem.push(item);

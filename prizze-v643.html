@@ -14,7 +14,7 @@
      copy that was never uploaded look exactly alike. This is that version. It
      is readable from the server with one curl, and it is printed at the bottom
      of «تنظیمات» so it can be read off the phone with no terminal at all. -->
-<meta name="pz-build" content="20260912-2130">
+<meta name="pz-build" content="20260912-2340">
 <!-- App icon on the phone home screen (Add to Home Screen). Place appicon.png
      (a square PNG, ideally 512x512) in the same web folder as this file. -->
 <link rel="apple-touch-icon" sizes="180x180" href="appicon.png">
@@ -1389,27 +1389,51 @@ input,textarea,select,[contenteditable="true"],.pz-selectable,.pz-selectable *{
   box-shadow:var(--hard-sm), 0 0 22px -6px var(--sc-glow,transparent);
   overflow:hidden;
 }
-/* The sweep. A narrow diagonal band of light crossing the card and then waiting
-   — a shine that never stops is a card nobody can read the price on. The stagger
-   below keeps a shelf of them from flashing in unison like an alarm. */
-.item.has-color::before{
-  content:"";position:absolute;top:-60%;bottom:-60%;width:42%;left:0;z-index:0;pointer-events:none;
-  background:linear-gradient(100deg,rgba(255,255,255,0),rgba(255,255,255,.50),rgba(255,255,255,0));
-  will-change:transform;
-  animation:scShine 4.6s cubic-bezier(.4,0,.2,1) infinite;
+/* THE SWEEP — AND WHY IT IS EXACTLY THE SIZE OF THE CARD.
+   «وقتی روی کارت‌های رنگ‌شده تاچ می‌کنی کارت دراز می‌شه و صفحه قاطی می‌شه.»
+   This band used to be `top:-60%;bottom:-60%` — 433px tall on a 201px card —
+   and the only thing keeping the other 232px out of sight was the card's
+   rounded overflow clip. Press the card and `:active` puts a transform on it;
+   a composited layer (will-change) clipped by a ROUNDED, TRANSFORMED ancestor
+   is the one arrangement mobile Chrome is known to drop the clip on, and then
+   a band twice the height of the card paints straight across the shelf: the
+   card looks stretched and the screen looks broken.
+   The overhang bought nothing to begin with. skewX(θ) maps x → x + y·tanθ and
+   leaves y alone, so a band the exact height of the card still covers it from
+   top to bottom however far it leans. It is now inset to the card and rounded
+   like the card — with no clip at all there is nothing left to escape.
+   A shine that never stops is a card nobody can read the price on, so it
+   crosses and then waits; the stagger keeps a shelf of them from flashing
+   together like an alarm. */
+.item.shine-on::before{
+  content:"";position:absolute;top:0;bottom:0;width:56%;left:0;z-index:0;pointer-events:none;
+  border-radius:inherit;
+  /* Softer and wider than the first attempt, which was a hard white bar at half
+     opacity — light falling across a surface, not a stripe painted on it. */
+  background:linear-gradient(100deg,
+    rgba(255,255,255,0) 30%,
+    rgba(255,255,255,.09) 43%,
+    rgba(255,255,255,.34) 50%,
+    rgba(255,255,255,.09) 57%,
+    rgba(255,255,255,0) 70%);
+  will-change:transform,opacity;
+  animation:scShine 5.8s cubic-bezier(.36,.12,.22,1) infinite;
   animation-delay:var(--sc-delay,0s);
 }
 /* Moved with `transform`, not `left`: a shelf of these animating a layout
    property makes the whole grid recalculate on every frame, and there can be a
-   dozen cards on screen. */
+   dozen cards on screen. The opacity ramp is what stops the band appearing and
+   vanishing at the card's edges — it arrives and leaves as light does. */
 @keyframes scShine{
-  0%{transform:translateX(-160%) skewX(-18deg)}
-  26%{transform:translateX(300%) skewX(-18deg)}
-  100%{transform:translateX(300%) skewX(-18deg)}
+  0%{transform:translateX(-140%) skewX(-14deg);opacity:0}
+  7%{opacity:1}
+  19%{opacity:1}
+  24%{transform:translateX(285%) skewX(-14deg);opacity:0}
+  100%{transform:translateX(285%) skewX(-14deg);opacity:0}
 }
 /* The content sits above the light rather than under it. */
 .item.has-color>*{position:relative;z-index:1}
-@media(prefers-reduced-motion:reduce){.item.has-color::before{animation:none;opacity:0}}
+@media(prefers-reduced-motion:reduce){.item.shine-on::before{animation:none;opacity:0}}
 .item .it-ico{font-size:34px;margin-bottom:8px;filter:drop-shadow(0 3px 0 rgba(0,0,0,.3))}
 .item b{font-size:14px;font-weight:800;display:block}
 .item p{font-size:11px;color:var(--muted);font-weight:500;margin:4px 0 10px;line-height:1.4;min-height:30px}
@@ -15100,6 +15124,12 @@ function pzShopCard(it){
        together reads as an alarm rather than as a shine. */
     d.style.setProperty('--sc-delay',(pzHash(String(it.id||it.n||''))%26/10).toFixed(1)+'s');
     d.style.color=pzReadableOn(it.color);
+    /* «باید بتونم هر کدوم از کارت‌هارو خواستم براق کنم، هر کدوم نخواستم ساده
+       بمونه.» Per card, and the absence of an answer means yes — every card
+       that already had a colour keeps the look it has, and the operator turns
+       the ones they want plain off in the panel. A card with no colour has
+       nothing to shine on, so the flag only ever applies alongside one. */
+    if(it.shine!==false) d.classList.add('shine-on');
   }
   const cur=it.cur==='coins'?' 🪙':' ت';
   const art=it.img
@@ -15378,7 +15408,11 @@ async function buyItem(it,el){
   try{
     /* Toman-priced items ask how to pay first; coin-priced ones have no choice
        to offer and go straight through. Either way the server prices it. */
-    const bought=await pzBuyOrder({kind:'shop',itemId:it.id,qty:1}, it.name);
+    /* The sheet shows what is being bought — «عکس همون آیتم باید بزرگ بالای
+       مودال باشه به جای عکس کارتی که ما گذاشتیم». Its artwork when there is
+       some, its own emoji when there is not, and its colour lighting the halo
+       behind it; the 💳 was the same picture whatever you had tapped. */
+    const bought=await pzBuyOrder({kind:'shop',itemId:it.id,qty:1}, it.name, {art:it.img,icon:it.i,color:it.color});
     if(!bought){ if(pr)pr.textContent=priceTxt; if(el)el.dataset.busy=''; return; }
     const d={itemId:it.id};
 
@@ -22388,7 +22422,10 @@ function pzPayByMark(){
     : '<span class="mark">بلو پال</span>';
   return '<div class="aaa-payby">'+art+'<span>'+esc0(label)+'</span></div>';
 }
-window.pzBuyOrder=async function(order,label){
+/* `look` is optional and every older call site omits it: what the buyer is
+   looking at, so the sheet can show the thing itself rather than a credit card.
+   { art: a picture URL, icon: an emoji fallback, color: what to light it with } */
+window.pzBuyOrder=async function(order,label,look){
   /* Price it first. The server decides the amount and which doors are open —
      the client never sends a price and never guesses whether the صندوق can
      cover it. */
@@ -22406,8 +22443,15 @@ window.pzBuyOrder=async function(order,label){
     const vaultLine=d.canPayFromVault
       ? 'موجودی صندوق: <b>'+fa(d.vaultBalance)+' تومان</b>'
       : '<span style="color:var(--bad)">موجودی صندوق کافی نیست ('+fa(d.vaultBalance)+' تومان)</span>';
+    const lk=look||{};
     showAaaModal({
-      icon:'💳', title:name,
+      icon:lk.icon||'💳',
+      /* A picture when the item has one. showAaaModal falls back to `icon` by
+         itself if the file will not load, so a broken image is the emoji and
+         not an empty circle. */
+      art:lk.art||undefined,
+      accent:(lk.color&&pzAlpha(lk.color,.45))||undefined,
+      title:name,
       /* The price first and on its own. It used to be one clause in a line of
          explanation, which is not where anybody looks for what they are about
          to be charged. */

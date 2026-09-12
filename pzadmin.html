@@ -3523,7 +3523,14 @@ function shopEdit(id){
         '<button class="btn sm" type="button" onclick="shColorSync(\'\')">بدون رنگ</button>'+
         '<span id="sh_color_prev" style="flex:1;min-width:120px;border-radius:12px;padding:9px 12px;text-align:center;font-weight:800;border:1.5px solid rgba(255,255,255,.12)">پیش‌نمایش کارت</span>'+
       '</div>'+
-      '<div class="note">خالی بگذاری، همان رنگِ پیش‌فرضِ فروشگاه می‌ماند.</div></div>'+
+      '<div class="note">خالی بگذاری، همان رنگِ پیش‌فرضِ فروشگاه می‌ماند.</div>'+
+      /* «باید بتونم هر کدوم از کارت‌هارو خواستم براق کنم، هر کدوم نخواستم ساده
+         بمونه.» Ticked by default, so a shelf nobody touches looks exactly as
+         it does now; untick it and the card keeps its colour but stops moving. */
+      '<label style="display:flex;gap:8px;align-items:center;margin-top:10px;font-weight:800;cursor:pointer">'+
+        '<input type="checkbox" id="sh_shine" style="width:18px;height:18px"'+(it.shine!==false?' checked':'')+'>'+
+        '<span>درخشش متحرک روی کارت</span></label>'+
+      '<div class="note">فقط وقتی رنگ داشته باشد دیده می‌شود؛ برداری، کارت رنگی می‌ماند ولی بی‌حرکت.</div></div>'+
     '<button class="btn pri" onclick="shopSaveItem(\''+(id||'')+'\')">💾 ذخیره</button>');
   window._SH_IMG=it.image||'';
   window._SH_REWARDS=Array.isArray(it.rewards)?it.rewards.map(r=>({key:r.key,value:r.value})):[];
@@ -3598,7 +3605,10 @@ async function shopSaveItem(id){
        that was meant to clear it. */
     rewards:(window._SH_REWARDS||[]).filter(r=>r&&r.key&&Number(r.value)>0),
     image:window._SH_IMG||'',
-    color:($('#sh_color')?$('#sh_color').value.trim():'')};
+    color:($('#sh_color')?$('#sh_color').value.trim():''),
+    /* Sent as a real boolean every time, like the two above: an unticked box is
+       `false` and has to reach the server as `false`, not as «field missing». */
+    shine:($('#sh_shine')?!!$('#sh_shine').checked:true)};
   /* The mismatch that caused «یک کمک خریداری شد» on a ticket: an item sitting
      in the tickets category whose effect hands over something else. It is a
      legitimate thing to want (a bundle can live there), so this asks rather
