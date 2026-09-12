@@ -31,6 +31,11 @@ export interface PaymentSettings {
   withdraw: { enabled: boolean; min: number; max: number; dailyCap: number; fee: number; feePayer: 'user' | 'system'; autoApprove: boolean; hoursFrom: number; hoursTo: number };
   feePercent: number;      // platform deposit fee (0 = none)
   defaultGatewayId: string | null;
+  /* THE GATEWAY'S OWN MARK, shown to the player next to «پرداخت امن با بلو پال».
+   * Uploaded rather than shipped in the client: it is somebody else's brand, it
+   * changes without asking us, and baking it into the HTML would mean a deploy
+   * every time it did. A data: URI, so there is no second thing to host. */
+  gatewayLogo?: string;
 }
 
 export const GATEWAY_TYPES = ['zibal', 'zarinpal', 'nextpay', 'idpay', 'bitpay', 'sandbox', 'custom'] as const;
@@ -54,7 +59,7 @@ function defaultSettings(): PaymentSettings {
   return {
     deposit: { enabled: true, min: w.minDeposit, max: w.maxDeposit, dailyCap: w.maxDeposit, txPerDay: 20 },
     withdraw: { enabled: true, min: w.minWithdraw, max: w.maxWithdraw, dailyCap: w.dailyWithdrawCap, fee: w.withdrawFee, feePayer: 'user', autoApprove: false, hoursFrom: 0, hoursTo: 24 },
-    feePercent: 0, defaultGatewayId: null
+    feePercent: 0, defaultGatewayId: null, gatewayLogo: ''
   };
 }
 
@@ -126,9 +131,24 @@ export async function getPaymentSettings(): Promise<PaymentSettings> {
   if (!memSettings) memSettings = defaultSettings();
   return memSettings;
 }
+/* An image or nothing. Only the four formats a browser will certainly draw, and
+   only as a data: URI — a remote URL here would be a third party deciding what
+   every player sees on a payment screen. Bounded, because this rides on a
+   public endpoint that every shopper fetches. */
+export const GATEWAY_LOGO_MAX = 60 * 1024;
+export function normalizeLogo(raw: unknown): string {
+  const v = String(raw ?? '').trim();
+  if (!v) return '';
+  if (!/^data:image\/(png|jpeg|webp|svg\+xml);base64,[A-Za-z0-9+/=]+$/.test(v)) return '';
+  if (v.length > GATEWAY_LOGO_MAX) return '';
+  return v;
+}
+
 export async function updatePaymentSettings(patch: Partial<PaymentSettings>): Promise<PaymentSettings> {
   const cur = await getPaymentSettings();
   const next: PaymentSettings = { ...cur, ...patch, deposit: { ...cur.deposit, ...(patch.deposit || {}) }, withdraw: { ...cur.withdraw, ...(patch.withdraw || {}) } };
+  /* Checked here rather than at the route, so it holds however it is set. */
+  if (patch.gatewayLogo !== undefined) next.gatewayLogo = normalizeLogo(patch.gatewayLogo);
   const pool = pg();
   if (pool) { await ensureSchema(pool); await pool.query(`INSERT INTO payment_settings(id,data,updated_at) VALUES('default',$1,now()) ON CONFLICT (id) DO UPDATE SET data=$1, updated_at=now()`, [JSON.stringify(next)]); }
   else memSettings = next;

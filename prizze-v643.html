@@ -22285,18 +22285,35 @@ submitTopup=async function(){ toast('شارژ حذف شده است'); };
    hunting through the payment code, and until it is there the name is shown as
    a plain mark rather than a broken image — the sentence is the part that has
    to be true, and it is true either way. */
-const PZ_BLUPAL_LOGO='';   /* data: URI or URL — set when the artwork arrives */
+/* The mark comes from the SERVER, uploaded in the panel — it is somebody else's
+   brand, it changes without asking us, and baking it into this file would mean
+   a new build every time it did. Fetched once and kept; a game that cannot
+   reach it still shows the name, because the sentence is the part that has to
+   be true and it is true either way. */
+let _pzPayBrand=null;
+async function pzLoadPayBrand(){
+  if(_pzPayBrand) return _pzPayBrand;
+  try{
+    const r=await pzApi('GET','/payments/gateway',null,false);
+    _pzPayBrand=(r&&r.ok&&r.data)?r.data:{};
+  }catch(e){ _pzPayBrand={}; }
+  return _pzPayBrand;
+}
 function pzPayByMark(){
-  const art=PZ_BLUPAL_LOGO
-    ? '<img src="'+PZ_BLUPAL_LOGO+'" alt="بلو پال" onerror="this.replaceWith(Object.assign(document.createElement(\'span\'),{className:\'mark\',textContent:\'بلو پال\'}))">'
+  const b=_pzPayBrand||{};
+  const label=b.label||'پرداخت امن با بلو پال';
+  const art=b.logo
+    ? '<img src="'+b.logo+'" alt="" onerror="this.replaceWith(Object.assign(document.createElement(\'span\'),{className:\'mark\',textContent:\'بلو پال\'}))">'
     : '<span class="mark">بلو پال</span>';
-  return '<div class="aaa-payby">'+art+'<span>پرداخت امن با بلو پال</span></div>';
+  return '<div class="aaa-payby">'+art+'<span>'+esc0(label)+'</span></div>';
 }
 window.pzBuyOrder=async function(order,label){
   /* Price it first. The server decides the amount and which doors are open —
      the client never sends a price and never guesses whether the صندوق can
      cover it. */
-  const q=await pzApi('POST','/orders/quote',{order});
+  /* Priced and branded together: both are needed before the sheet is drawn, and
+     one waiting on the other would show the sheet twice. */
+  const [q]=await Promise.all([pzApi('POST','/orders/quote',{order}),pzLoadPayBrand()]);
   if(!q||!q.ok||!q.data){ toast((q&&q.error&&q.error.message)||'خطا در قیمت‌گذاری'); return false; }
   const d=q.data;
   const name=label||d.label||'خرید';

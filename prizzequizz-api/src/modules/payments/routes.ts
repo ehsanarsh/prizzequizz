@@ -85,9 +85,13 @@ export function registerPaymentRoutes(router: Router, base: string): void {
    * The key itself never appears — only which world it belongs to. */
   router.add('GET', `${base}/payments/gateway`, async (ctx) => {
     const a = await blupalActive();
+    const st = await getPaymentSettings().catch(() => ({} as any));
     /* «قابل استفاده» is both halves: a key that exists AND a switch that is on.
-     * The client only needs the one answer. */
-    json(ctx.res, 200, { cardToCard: a.configured && a.enabled, mode: a.mode, live: a.mode === 'live' });
+     * The client only needs the one answer — plus the mark to show beside it. */
+    json(ctx.res, 200, {
+      cardToCard: a.configured && a.enabled, mode: a.mode, live: a.mode === 'live',
+      logo: String(st.gatewayLogo || ''), label: 'پرداخت امن با بلو پال'
+    });
   });
 
   /* The switch itself, for the gateways screen. The KEY is never here — it is a

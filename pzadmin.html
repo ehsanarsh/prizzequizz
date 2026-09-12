@@ -5358,6 +5358,7 @@ async function payGateways(b){
   const d=await api('GET','/admin/payments/gateways'); const rows=d.rows||[];
   window._GW={};rows.forEach(g=>window._GW[g.id]=g);
   let bp={}; try{ bp=await api('GET','/admin/payments/blupal'); }catch(e){ bp={error:e.message}; }
+  let payCfg={}; try{ payCfg=await api('GET','/admin/payments/settings'); }catch(e){}
   b.innerHTML=blupalCardHtml(bp)+
     '<div class="note">درگاه‌ها به‌ترتیب «اولویت» (کوچک‌تر = زودتر) امتحان می‌شوند؛ اگر درگاهِ فعالِ اول در دسترس نبود، پرداخت به بعدی می‌رود.</div>'+
     '<button class="btn pri" style="margin-bottom:10px" onclick="gwEdit()">➕ افزودن درگاه</button>'+
@@ -5368,6 +5369,7 @@ async function payGateways(b){
       '<span class="mono" style="font-size:11px">'+esc(g.callbackUrl||'—')+'</span>',
       '<button class="btn sm" onclick="gwEdit(\''+g.id+'\')">ویرایش</button> <button class="btn sm" onclick="gwTest(\''+g.id+'\')">تست اتصال</button> <button class="btn sm bad" onclick="gwDel(\''+g.id+'\')">حذف</button>'
     ]));
+  blupalLogoPaint(payCfg&&payCfg.gatewayLogo||'');
 }
 function gwEdit(id){
   const g=(window._GW||{})[id]||{};
@@ -5412,8 +5414,39 @@ function blupalCardHtml(bp){
         ? '<button class="btn '+(bp.enabled?'bad':'pri')+'" onclick="blupalToggle('+(bp.enabled?'false':'true')+')">'+(bp.enabled?'⛔ خاموش کردن درگاه':'✅ روشن کردن درگاه')+'</button>'
         : '')+
     '</div>'+
+    /* THE MARK THE PLAYER SEES. Uploaded rather than shipped inside the game:
+       it is somebody else's brand, it changes without asking us, and baking it
+       into the client would mean a deploy every time it did. */
+    '<div class="field" style="margin-top:12px"><label>لوگوی درگاه (در مودال پرداخت به بازیکن نشان داده می‌شود)</label>'+
+      '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">'+
+        '<div id="bp_logo_prev" style="width:56px;height:36px;border-radius:10px;border:1px dashed var(--line);display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.04)"></div>'+
+        '<input type="file" id="bp_logo_file" accept="image/png,image/jpeg,image/webp,image/svg+xml" onchange="blupalLogoPick(this)">'+
+        '<button class="btn sm bad" type="button" onclick="blupalLogoSave(\'\')">حذف لوگو</button>'+
+      '</div>'+
+      '<div class="note">PNG یا WebP یا SVG، حداکثر ۶۰ کیلوبایت. کنارش همیشه نوشته می‌شود «پرداخت امن با بلو پال».</div></div>'+
     '<div class="note">کلید از <span class="mono">BLUPAL_API_KEY</span> روی سرور خوانده می‌شود و از اینجا قابل تغییر نیست — کلیدِ درگاه نباید در پنل یا مرورگر بگردد. '+
     'خاموش‌کردن فوری است و نیازی به ری‌استارت ندارد: پرداختِ جدیدی از این درگاه باز نمی‌شود.</div></div>';
+}
+function blupalLogoPaint(dataUri){
+  const box=$('#bp_logo_prev'); if(!box) return;
+  box.innerHTML=dataUri?'<img src="'+esc(dataUri)+'" style="max-width:100%;max-height:34px;object-fit:contain">':'<span class="note" style="margin:0;font-size:10px">بدون لوگو</span>';
+}
+function blupalLogoPick(inp){
+  const f=inp.files&&inp.files[0]; if(!f) return;
+  /* Checked here as well as on the server: telling somebody their file is too
+     big AFTER uploading it is a worse way to find out. */
+  if(f.size>60*1024) return toast('حجم لوگو باید کمتر از ۶۰ کیلوبایت باشد','bad');
+  const r=new FileReader();
+  r.onload=()=>blupalLogoSave(String(r.result||''));
+  r.onerror=()=>toast('فایل خوانده نشد','bad');
+  r.readAsDataURL(f);
+}
+async function blupalLogoSave(dataUri){
+  try{
+    await api('PUT','/admin/payments/settings',{gatewayLogo:dataUri});
+    blupalLogoPaint(dataUri);
+    toast(dataUri?'لوگو ذخیره شد ✅':'لوگو حذف شد','ok');
+  }catch(e){ toast(e.message,'bad'); }
 }
 async function blupalToggle(on){
   if(!on&&!confirm('درگاه کارت به کارت خاموش شود؟ از این به بعد پرداخت جدیدی از آن باز نمی‌شود.'))return;

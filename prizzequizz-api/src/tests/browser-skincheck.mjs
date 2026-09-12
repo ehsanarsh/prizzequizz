@@ -327,7 +327,9 @@ const railTags = (page) => page.evaluate(() => {
     for (const b of document.querySelectorAll('button')) {
       if (b.textContent.trim() !== '✕') continue;
       const c = b.className || '';
-      if (/ib-close|sheet-x|qcp-x|pz-lb-x|pzm-quit/.test(c)) continue;
+      /* `aaa-x` is the way out of the purchase and gateway sheets — red on
+         purpose, because leaving a payment should look like leaving. */
+      if (/ib-close|sheet-x|qcp-x|pz-lb-x|pzm-quit|aaa-x/.test(c)) continue;
       out.push(c || '(no class)');
     }
     return out;

@@ -229,8 +229,13 @@ const render = (snap) => page.evaluate((s) => {
   await render(room({ n: 10, round: 4, phase: 'dashboard', outIds: ['p7'], meStatus: 'alive', myShare: 62500, pot: 500000 }));
   /* The share COUNTS UP to its new figure now, so reading it at once catches it
      part way through the climb. Waited out on purpose: the number under test is
-     where it lands, not where it was passing. */
-  await page.waitForTimeout(3400);
+     where it lands, not where it was passing.
+     The wait covers the WHOLE announcement — the climb, the three blinks, and
+     the flight back to the small figure — because the small one now holds its
+     old value until the big one lands on it. It used to jump to the new total
+     straight away, which is the bug that was fixed, and 3.4s was long enough
+     only because of it. */
+  await page.waitForTimeout(5600);
   const board = await page.evaluate(() => {
     const el = document.getElementById('lsMyShare');
     return { shown: !!el && !!el.offsetParent, value: el && el.textContent, all: document.getElementById('lsBody').innerText,

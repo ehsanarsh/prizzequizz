@@ -51,6 +51,8 @@ async function open(opts = {}) {
     let body = { ok: true, data: {} };
     if (url.includes('/orders/pay')) {
       body = { ok: true, data: { method: 'gateway', intentId: 'int-1', amount: 25000, status: 'pending', paymentUrl: GATEWAY_URL } };
+    } else if (url.includes('/payments/gateway')) {
+      body = { ok: true, data: opts.brand ?? { cardToCard: true, mode: 'live', live: true, logo: '', label: 'پرداخت امن با بلو پال' } };
     } else if (/\/payments\/intents\/[^/]+\/verify/.test(url)) {
       body = { ok: true, data: opts.verify ?? { id: 'int-1', status: 'paid', paid: true } };
     }
@@ -258,6 +260,11 @@ async function open(opts = {}) {
     let body = { ok: true, data: {} };
     if (url.includes('/orders/quote')) {
       body = { ok: true, data: { order: {}, amount: 25000, currency: 'cash', label: 'بلیط سبز', vaultBalance: 90000, canPayFromVault: true, canPayByGateway: true } };
+    } else if (url.includes('/payments/gateway')) {
+      /* The mark is uploaded in the panel and served from here, so the sheet
+         has to ask for it — a logo baked into the client would need a build
+         every time the gateway changed its own branding. */
+      body = { ok: true, data: { cardToCard: true, mode: 'live', live: true, logo: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=', label: 'پرداخت امن با بلو پال' } };
     }
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
   });
@@ -292,6 +299,8 @@ async function open(opts = {}) {
   ok('and paying from the صندوق is not dressed as the gateway',
      !/63, 208, 122/.test(green.primaryBg), green.primary);
   ok('the sheet says who is taking the money', /پرداخت امن با بلو پال/.test(txt), txt.replace(/\n/g, ' | ').slice(0, 70));
+  ok('and shows the mark the panel uploaded, not one baked into the game',
+     await page.evaluate(() => { const i = document.querySelector('.aaa-payby img'); return !!i && i.getAttribute('src').startsWith('data:image/'); }));
   await ctx.close();
 }
 
