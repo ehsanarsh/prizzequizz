@@ -135,6 +135,47 @@ export async function updatePaymentSettings(patch: Partial<PaymentSettings>): Pr
   return next;
 }
 
+/* ---------------------------------------------------------------------------
+ * THE CARD-TO-CARD GATEWAY, IN THE PLACE EVERY OTHER GATEWAY LIVES.
+ *
+ * «درگاه blupal هم باید خیلی راحت از قسمت درگاه‌ها قابل کنترل باشه.»
+ *
+ * BluPal was switched on purely by the presence of BLUPAL_API_KEY, which meant
+ * the only way to turn it OFF was to edit the server's environment and rebuild
+ * the container — no use at all at the moment you need it, which is when the
+ * gateway is misbehaving and money is involved.
+ *
+ * So it gets a row like the others, and the row carries the switch. What the
+ * row does NOT carry is the key: that stays an environment variable on purpose.
+ * A gateway key in the panel is a gateway key in a browser, and this one can
+ * move real money.
+ *
+ * Absent row means ON, so nothing changes for a system that already has the key
+ * set and has never opened this screen.
+ * ------------------------------------------------------------------------- */
+export const BLUPAL_TYPE = 'blupal';
+
+export async function getBlupalGateway(): Promise<PaymentGateway | null> {
+  return (await listGateways()).find((g) => g.type === BLUPAL_TYPE) ?? null;
+}
+
+/** Is the card-to-card gateway switched on? The key still has to be there. */
+export async function blupalSwitchedOn(): Promise<boolean> {
+  try { const g = await getBlupalGateway(); return g ? !!g.enabled : true; }
+  catch { return true; }   /* never let a config read stop a payment working */
+}
+
+/** Turn it on or off, creating the row the first time. */
+export async function setBlupalEnabled(on: boolean): Promise<PaymentGateway> {
+  const existing = await getBlupalGateway();
+  return saveGateway({
+    id: existing?.id, name: existing?.name || 'BluPal (کارت به کارت)', type: BLUPAL_TYPE,
+    enabled: on,
+    callbackUrl: existing?.callbackUrl || '/v1/payments/blupal/webhook',
+    priority: existing?.priority ?? 10
+  });
+}
+
 // ---- gateway selection + failover ----
 /** Highest-priority enabled gateway, skipping any excluded ids (auto-switch). */
 export async function pickActiveGateway(excludeIds: string[] = []): Promise<PaymentGateway | null> {

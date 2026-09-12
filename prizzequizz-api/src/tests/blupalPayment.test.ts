@@ -14,7 +14,8 @@
  *
  * Run: npx tsx src/tests/blupalPayment.test.ts */
 import assert from 'node:assert/strict';
-import { createPaymentIntent, settleBlupalIntent, findIntentByBlupalInvoice } from '../services/paymentService.js';
+import { createPaymentIntent, settleBlupalIntent, findIntentByBlupalInvoice, blupalActive } from '../services/paymentService.js';
+import { setBlupalEnabled, blupalSwitchedOn } from '../services/paymentGatewayService.js';
 import { _resetFulfilled } from '../services/purchaseOrderService.js';
 import { getTickets } from '../services/ticketService.js';
 import { getTicketPrices } from '../services/economyConfig.js';
@@ -261,6 +262,53 @@ const KEEP = process.env.BLUPAL_API_KEY;
     serve((i) => INV(i, { status: 'PAID' }));
     assert.equal((await settleBlupalIntent(intent.id)).paid, true);
     assert.equal((await getTickets(uid))[TIER], 1, 'the retry delivers it');
+  });
+
+  /* ── THE OFF SWITCH ────────────────────────────────────────────────
+   * «درگاه blupal هم باید خیلی راحت از قسمت درگاه‌ها قابل کنترل باشه.»
+   * It used to be switched on solely by the key being present, so turning it
+   * OFF meant editing the server environment and rebuilding — no use at the one
+   * moment you need it, which is when the gateway is misbehaving. */
+
+  await check('with no row at all it is on, so nothing changes for a live system', async () => {
+    assert.equal(await blupalSwitchedOn(), true);
+  });
+
+  await check('turning it off stops new payments being opened', async () => {
+    serve((i) => INV(i));
+    await setBlupalEnabled(false);
+    const uid = await player();
+    const intent = await createPaymentIntent({ userId: uid, order: ORDER });
+    assert.ok(!/blupal\.net/.test(String(intent.paymentUrl)),
+      'the player was still sent to a gateway that was switched off');
+    assert.notEqual((intent.metadata as any).gatewayType, 'blupal');
+  });
+
+  await check('and the client is told it is unavailable', async () => {
+    const a = await blupalActive();
+    assert.equal(a.configured, true, 'the key is still there');
+    assert.equal(a.enabled, false, 'but the switch is off, and those are different things');
+  });
+
+  await check('turning it back on resumes immediately, with no restart', async () => {
+    serve((i) => INV(i));
+    await setBlupalEnabled(true);
+    const uid = await player();
+    const intent = await createPaymentIntent({ userId: uid, order: ORDER });
+    assert.match(String(intent.paymentUrl), /blupal\.net/);
+  });
+
+  await check('a payment already opened can still be settled after it is switched off', async () => {
+    /* Switching off must stop NEW payments, not strand money somebody has
+       already transferred. */
+    serve((i) => INV(i, { status: 'PAID' }));
+    const uid = await player();
+    const intent = await createPaymentIntent({ userId: uid, order: ORDER });
+    await setBlupalEnabled(false);
+    const r = await settleBlupalIntent(intent.id);
+    assert.equal(r.paid, true, 'a player who paid must get their ticket whatever the switch says now');
+    assert.equal((await getTickets(uid))[TIER], 1);
+    await setBlupalEnabled(true);
   });
 
   globalThis.fetch = realFetch;

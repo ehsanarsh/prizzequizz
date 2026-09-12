@@ -4,7 +4,7 @@ import { requireAdmin } from '../../services/adminGuard.js';
 import { WalletError } from '../../services/walletLedgerService.js';
 import { createPaymentIntent, getPaymentIntent, listPaymentIntents, paymentDiagnostics, settlePaymentIntent, settleBlupalIntent, findIntentByBlupalInvoice, blupalActive } from '../../services/paymentService.js';
 import { BlupalError } from '../../services/blupalService.js';
-import { listGatewaysMasked, saveGateway, removeGateway, getPaymentSettings, updatePaymentSettings, testConnection, gatewayReports } from '../../services/paymentGatewayService.js';
+import { listGatewaysMasked, saveGateway, removeGateway, getPaymentSettings, updatePaymentSettings, testConnection, gatewayReports, setBlupalEnabled } from '../../services/paymentGatewayService.js';
 import type { PaymentIntentStatus, PaymentProvider } from '../../types/domain.js';
 import { bodyObject, optionalString, requiredNumber } from '../../utils/validation.js';
 
@@ -84,8 +84,30 @@ export function registerPaymentRoutes(router: Router, base: string): void {
    * card-to-card gateway is configured at all, and whether it is the real one.
    * The key itself never appears — only which world it belongs to. */
   router.add('GET', `${base}/payments/gateway`, async (ctx) => {
-    const a = blupalActive();
-    json(ctx.res, 200, { cardToCard: a.configured, mode: a.mode, live: a.mode === 'live' });
+    const a = await blupalActive();
+    /* «قابل استفاده» is both halves: a key that exists AND a switch that is on.
+     * The client only needs the one answer. */
+    json(ctx.res, 200, { cardToCard: a.configured && a.enabled, mode: a.mode, live: a.mode === 'live' });
+  });
+
+  /* The switch itself, for the gateways screen. The KEY is never here — it is a
+   * server environment variable, and a gateway key in the panel is a gateway
+   * key in a browser. What the panel gets is on/off and the truth about what
+   * the server is holding. */
+  router.add('GET', `${base}/admin/payments/blupal`, async (ctx) => {
+    if (!requireAdmin(ctx, { tab: 'payments' })) return;
+    const a = await blupalActive();
+    json(ctx.res, 200, {
+      configured: a.configured, enabled: a.enabled, mode: a.mode, live: a.mode === 'live',
+      webhookUrl: '/v1/payments/blupal/webhook', callbackPage: '/?pay=back'
+    });
+  });
+  router.add('POST', `${base}/admin/payments/blupal`, async (ctx) => {
+    if (!requireAdmin(ctx, { tab: 'payments' })) return;
+    const on = (ctx.body as any)?.enabled !== false;
+    await setBlupalEnabled(on);
+    const a = await blupalActive();
+    json(ctx.res, 200, { configured: a.configured, enabled: a.enabled, mode: a.mode });
   });
 
   // Gateway-side settlement: requires the HMAC signature the gateway (or the

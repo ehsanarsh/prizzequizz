@@ -5190,7 +5190,9 @@ async function renderPayments(){
 async function payGateways(b){
   const d=await api('GET','/admin/payments/gateways'); const rows=d.rows||[];
   window._GW={};rows.forEach(g=>window._GW[g.id]=g);
-  b.innerHTML='<div class="note">درگاه‌ها به‌ترتیب «اولویت» (کوچک‌تر = زودتر) امتحان می‌شوند؛ اگر درگاهِ فعالِ اول در دسترس نبود، پرداخت به بعدی می‌رود.</div>'+
+  let bp={}; try{ bp=await api('GET','/admin/payments/blupal'); }catch(e){ bp={error:e.message}; }
+  b.innerHTML=blupalCardHtml(bp)+
+    '<div class="note">درگاه‌ها به‌ترتیب «اولویت» (کوچک‌تر = زودتر) امتحان می‌شوند؛ اگر درگاهِ فعالِ اول در دسترس نبود، پرداخت به بعدی می‌رود.</div>'+
     '<button class="btn pri" style="margin-bottom:10px" onclick="gwEdit()">➕ افزودن درگاه</button>'+
     tbl(['اولویت','نام','نوع','وضعیت','حالت','Callback','عملیات'],rows.map(g=>[
       fa(g.priority),'<b>'+esc(g.name)+'</b>',esc(GW_TYPES[g.type]||g.type),
@@ -5219,6 +5221,37 @@ async function gwSave(id){
   const name=$('#gw_name').value.trim(); if(!name)return toast('نام لازم است','bad');
   const body={id:id||undefined,name,type:$('#gw_type').value,merchantId:$('#gw_merchant').value.trim(),secret:$('#gw_secret').value.trim(),apiKey:$('#gw_apikey').value.trim(),callbackUrl:$('#gw_cb').value.trim(),priority:Number($('#gw_prio').value||100),enabled:$('#gw_enabled').value==='1',sandbox:$('#gw_sandbox').value==='1'};
   try{await api('POST','/admin/payments/gateways',body);toast('ذخیره شد ✅','ok');document.querySelector('.modal-bg').remove();renderPayments();}catch(e){toast(e.message,'bad');}
+}
+/* BLUPAL — کارت به کارت.
+   It is not a row in the table below because it is not configured like one: its
+   key is a server environment variable and deliberately stays there. A gateway
+   key in the panel is a gateway key in a browser, and this one moves real
+   money. What the screen owes instead is the truth about what the server holds
+   — is a key loaded, is it a LIVE key or a test one — and the one control that
+   has to be reachable in a hurry: the off switch. */
+function blupalCardHtml(bp){
+  if(bp.error) return '<div class="card" style="margin-bottom:13px"><h3>💳 کارت به کارت (BluPal)</h3><div class="note" style="color:var(--bad)">وضعیت خوانده نشد: '+esc(bp.error)+'</div></div>';
+  const on=!!bp.configured&&!!bp.enabled;
+  const origin=(API||'').replace(/\/v1$/,'');
+  return '<div class="card" style="margin-bottom:13px"><h3>💳 کارت به کارت (BluPal) '+
+      (on?'<span class="pill ok">در حال کار</span>':(bp.configured?'<span class="pill bad">خاموش شده</span>':'<span class="pill bad">کلید تنظیم نشده</span>'))+'</h3>'+
+    '<div class="cfg-row"><label>کلید روی سرور</label><b style="color:'+(bp.configured?'var(--ok)':'var(--bad)')+'">'+(bp.configured?'تنظیم شده':'تنظیم نشده')+'</b></div>'+
+    '<div class="cfg-row"><label>حالت</label><b>'+(bp.live?'<span class="pill ok">واقعی</span>':'<span class="pill">تست — پولی جابه‌جا نمی‌شود</span>')+'</b></div>'+
+    (bp.configured&&!bp.live?'<div class="note" style="color:var(--gold)">کلیدِ تستی است. هرچه از این درگاه فروخته شود واقعاً پرداخت نشده — برای واقعی‌شدن باید کلیدی باشد که با <span class="mono">blu_live_</span> شروع می‌شود.</div>':'')+
+    '<div class="cfg-row"><label>آدرس Webhook (در پنل BluPal ثبت شود)</label><b class="mono" style="font-size:11px">'+esc(origin+(bp.webhookUrl||''))+'</b></div>'+
+    '<div class="cfg-row"><label>صفحهٔ بازگشت</label><b class="mono" style="font-size:11px">'+esc(origin+(bp.callbackPage||''))+'</b></div>'+
+    '<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">'+
+      (bp.configured
+        ? '<button class="btn '+(bp.enabled?'bad':'pri')+'" onclick="blupalToggle('+(bp.enabled?'false':'true')+')">'+(bp.enabled?'⛔ خاموش کردن درگاه':'✅ روشن کردن درگاه')+'</button>'
+        : '')+
+    '</div>'+
+    '<div class="note">کلید از <span class="mono">BLUPAL_API_KEY</span> روی سرور خوانده می‌شود و از اینجا قابل تغییر نیست — کلیدِ درگاه نباید در پنل یا مرورگر بگردد. '+
+    'خاموش‌کردن فوری است و نیازی به ری‌استارت ندارد: پرداختِ جدیدی از این درگاه باز نمی‌شود.</div></div>';
+}
+async function blupalToggle(on){
+  if(!on&&!confirm('درگاه کارت به کارت خاموش شود؟ از این به بعد پرداخت جدیدی از آن باز نمی‌شود.'))return;
+  try{ await api('POST','/admin/payments/blupal',{enabled:!!on}); toast(on?'روشن شد ✅':'خاموش شد','ok'); renderPayments(); }
+  catch(e){ toast(e.message,'bad'); }
 }
 async function gwTest(id){ try{const r=await api('POST','/admin/payments/gateways/'+id+'/test');toast(r.message,r.ok?'ok':'bad');}catch(e){toast(e.message,'bad');} }
 async function gwDel(id){ if(!confirm('این درگاه حذف شود؟'))return; try{await api('DELETE','/admin/payments/gateways/'+id);toast('حذف شد','ok');renderPayments();}catch(e){toast(e.message,'bad');} }

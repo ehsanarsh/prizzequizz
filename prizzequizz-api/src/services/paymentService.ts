@@ -19,7 +19,7 @@ import { logger } from './logger.js';
 import { notifications } from './notificationService.js';
 import { WALLET_LIMITS, WalletError, postEntry } from './walletLedgerService.js';
 import { recordMoney } from './missionService.js';
-import { getPaymentSettings, pickActiveGateway } from './paymentGatewayService.js';
+import { getPaymentSettings, pickActiveGateway, blupalSwitchedOn } from './paymentGatewayService.js';
 import { fulfil, isGatewayPayable, parseOrder, quote, type PurchaseOrder } from './purchaseOrderService.js';
 import { blupalConfigured, blupalMode, createInvoice as createBlupalInvoice, verifyPaid as verifyBlupalPaid } from './blupalService.js';
 
@@ -88,7 +88,10 @@ export async function createPaymentIntent(input: { userId: string; amount?: numb
    * from anybody else afterwards: which invoice this is, and the exact rial
    * figure that counts as paid. */
   let blupal: { invoiceId: number; finalRial: number; link: string; card: string; mode: string } | null = null;
-  if (blupalConfigured()) {
+  /* Both have to be true: the key has to exist AND the switch in the panel has
+   * to be on. The switch is what lets an operator stop taking card payments
+   * without touching the server. */
+  if (blupalConfigured() && await blupalSwitchedOn()) {
     const inv = await createBlupalInvoice(amount);
     blupal = { invoiceId: inv.invoiceId, finalRial: inv.finalAmountRial, link: inv.paymentLink, card: inv.cardNumber, mode: inv.mode };
     if (inv.mode !== 'live' && process.env.NODE_ENV === 'production') {
@@ -248,8 +251,8 @@ export async function findIntentByBlupalInvoice(invoiceId: number): Promise<Paym
 }
 
 /** Is the card-to-card gateway the one a payment would go to right now? */
-export function blupalActive(): { configured: boolean; mode: ReturnType<typeof blupalMode> } {
-  return { configured: blupalConfigured(), mode: blupalMode() };
+export async function blupalActive(): Promise<{ configured: boolean; enabled: boolean; mode: ReturnType<typeof blupalMode> }> {
+  return { configured: blupalConfigured(), enabled: await blupalSwitchedOn(), mode: blupalMode() };
 }
 
 /* One-winner claim of a pending intent. */
