@@ -2077,6 +2077,11 @@ async function renderAiStudio(){
       '<div style="display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap">'+
         '<span class="note" style="display:inline;margin:0">مدل:</span>'+
         '<input id="ai_m_'+stage+'" list="ai_models" value="'+esc(md[stage]||'')+'" placeholder="claude-sonnet-5" style="width:230px" class="mono">'+
+        /* One real call, so «کار نمی‌کنه» becomes the provider's own sentence.
+           «مدل پیدا نشد» and «کلید اشتباه است» look identical from here
+           otherwise, and they need completely different fixes. */
+        '<button class="btn sm" onclick="aiTestModel(\''+stage+'\')">🔌 تست این مدل</button>'+
+        '<span id="ai_m_'+stage+'_res" class="note" style="display:inline;margin:0"></span>'+
         '<button class="btn sm" onclick="aiResetPrompt(\''+id+'\')">بازگرداندن پرامپت به پیش‌فرض</button>'+
       '</div></div>';
   };
@@ -2139,6 +2144,21 @@ function aiResetPrompt(id){
   const el=$('#'+id); if(!el) return;
   el.value='';
   toast('خالی شد — با ذخیره، پیش‌فرض به کار می‌رود','ok');
+}
+async function aiTestModel(stage){
+  const inp=$('#ai_m_'+stage), out=$('#ai_m_'+stage+'_res');
+  const m=String((inp&&inp.value)||'').trim();
+  if(!m) return toast('اول شناسهٔ مدل را بنویس','bad');
+  if(out) out.innerHTML='<span style="color:var(--muted)">در حال تست…</span>';
+  try{
+    const r=await api('POST','/admin/questions/ai/test-model',{model:m});
+    if(r.ok){ if(out) out.innerHTML='<span style="color:var(--ok)">✅ کار می‌کند</span>'; toast('مدل جواب داد ✅','ok'); }
+    else{
+      if(out) out.innerHTML='<span style="color:var(--bad)">✖ '+esc(String(r.error||'').slice(0,90))+'</span>';
+      modal('این مدل جواب نداد','<div class="card"><div class="cfg-row"><label>مدل</label><b class="mono">'+esc(m)+'</b></div>'+
+        '<div class="note" style="color:var(--bad)">'+esc(r.error||'')+'</div>'+aiErrorHelp(r.error)+'</div>');
+    }
+  }catch(e){ if(out) out.innerHTML='<span style="color:var(--bad)">✖ '+esc(e.message)+'</span>'; }
 }
 async function aiSavePrompts(){
   const g=($('#ai_p_generator')||{}).value||'', r=($('#ai_p_reviewer')||{}).value||'', f=($('#ai_p_factChecker')||{}).value||'';
@@ -5431,15 +5451,48 @@ function blupalLogoPaint(dataUri){
   const box=$('#bp_logo_prev'); if(!box) return;
   box.innerHTML=dataUri?'<img src="'+esc(dataUri)+'" style="max-width:100%;max-height:34px;object-fit:contain">':'<span class="note" style="margin:0;font-size:10px">بدون لوگو</span>';
 }
-function blupalLogoPick(inp){
+/* A LOGO IS NOT A TILE, so it is fitted rather than cropped — `catShrink`
+   square-crops to fill an avatar, which would cut the ends off a wide mark.
+   Converted to WebP like every other upload in this panel: a 400KB PNG of a
+   logo rides on the endpoint every shopper fetches before the payment sheet
+   opens. Transparency is kept, so a mark drawn for a light background does not
+   arrive on a white box. SVG passes through — it is already small and scaling
+   it through a canvas would only make it worse. */
+function logoShrink(file){
+  return new Promise((res,rej)=>{
+    if(file.type==='image/svg+xml'){
+      const fr=new FileReader(); fr.onload=()=>res(String(fr.result)); fr.onerror=()=>rej(new Error('خواندن فایل ناموفق بود')); fr.readAsDataURL(file); return;
+    }
+    const fr=new FileReader();
+    fr.onerror=()=>rej(new Error('خواندن فایل ناموفق بود'));
+    fr.onload=()=>{
+      const im=new Image();
+      im.onerror=()=>rej(new Error('این فایل تصویر معتبری نیست'));
+      im.onload=()=>{
+        const MAX=320;
+        const k=Math.min(1,MAX/Math.max(im.width||1,im.height||1));
+        const w=Math.max(1,Math.round((im.width||1)*k)), h=Math.max(1,Math.round((im.height||1)*k));
+        const cv=document.createElement('canvas'); cv.width=w; cv.height=h;
+        cv.getContext('2d').drawImage(im,0,0,w,h);
+        let out=''; try{ out=cv.toDataURL('image/webp',.92); }catch(e){}
+        if(!out||out.indexOf('data:image/webp')!==0) out=cv.toDataURL('image/png');
+        res(out);
+      };
+      im.src=String(fr.result);
+    };
+    fr.readAsDataURL(file);
+  });
+}
+async function blupalLogoPick(inp){
   const f=inp.files&&inp.files[0]; if(!f) return;
-  /* Checked here as well as on the server: telling somebody their file is too
-     big AFTER uploading it is a worse way to find out. */
-  if(f.size>60*1024) return toast('حجم لوگو باید کمتر از ۶۰ کیلوبایت باشد','bad');
-  const r=new FileReader();
-  r.onload=()=>blupalLogoSave(String(r.result||''));
-  r.onerror=()=>toast('فایل خوانده نشد','bad');
-  r.readAsDataURL(f);
+  try{
+    const dataUri=await logoShrink(f);
+    /* Checked AFTER shrinking, because that is the size that actually travels —
+       and told here rather than by a server refusal, which is a worse way to
+       find out. */
+    if(dataUri.length>60*1024) return toast('لوگو حتی بعد از فشرده‌سازی بزرگ است — تصویر کوچک‌تری بگذار','bad');
+    await blupalLogoSave(dataUri);
+  }catch(e){ toast(e.message||'فایل خوانده نشد','bad'); }
 }
 async function blupalLogoSave(dataUri){
   try{

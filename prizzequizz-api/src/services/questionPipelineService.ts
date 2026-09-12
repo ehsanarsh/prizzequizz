@@ -123,7 +123,7 @@ export function aiPromptDefaults(): Record<PromptStage, string> { return { ...PR
 // ---------------------------------------------------------------------------
 export interface DraftQuestion { topic: string; difficulty: string; question: string; options: string[]; correctAnswer: number; explanation?: string; source?: string }
 
-export async function aiGenerate(input: { topic: string; difficulty?: string; count?: number; category?: string }): Promise<{ configured: boolean; drafts: DraftQuestion[]; error?: string }> {
+export async function aiGenerate(input: { topic: string; difficulty?: string; count?: number; category?: string }): Promise<{ configured: boolean; drafts: DraftQuestion[]; error?: string; dropped?: Array<{ why: string; sample: string }> }> {
   const count = Math.min(10, Math.max(1, Number(input.count) || 1));
   const difficulty = input.difficulty || 'medium';
   const r = await aiJson<{ questions: DraftQuestion[] }>({
@@ -134,10 +134,89 @@ export async function aiGenerate(input: { topic: string; difficulty?: string; co
   });
   if (!r.configured) return { configured: false, drafts: [], error: 'AI not configured' };
   if (!r.ok || !r.data) return { configured: true, drafts: [], error: r.error };
-  const arr = Array.isArray((r.data as any).questions) ? (r.data as any).questions : (Array.isArray(r.data) ? r.data : []);
-  const drafts = arr.filter((q: any) => q && Array.isArray(q.options) && q.options.length === 4 && Number.isInteger(q.correctAnswer))
-    .map((q: any) => ({ topic: String(q.topic ?? input.topic), difficulty: String(q.difficulty ?? difficulty), question: String(q.question), options: q.options.map(String), correctAnswer: Number(q.correctAnswer), explanation: q.explanation ? String(q.explanation) : undefined, source: q.source ? String(q.source) : undefined }));
-  return { configured: true, drafts };
+  const arr = Array.isArray((r.data as any).questions) ? (r.data as any).questions
+    : Array.isArray((r.data as any).items) ? (r.data as any).items
+    : Array.isArray(r.data) ? r.data : [];
+  const drafts: DraftQuestion[] = [];
+  const dropped: Array<{ why: string; sample: string }> = [];
+  for (const q of arr) {
+    const d = readDraft(q, input.topic, difficulty);
+    if (d.ok) drafts.push(d.draft); else dropped.push({ why: d.why, sample: d.sample });
+  }
+  /* A MODEL THAT ANSWERED AND STILL PRODUCED NOTHING HAS TO SAY SO.
+   * Every question used to be dropped in silence when its shape was not the
+   * exact one asked for, and the run reported «۰ تولید شد» with nothing to
+   * explain it — which is indistinguishable from a key that does not work, a
+   * model id that does not exist, or a gateway that is down. Three completely
+   * different fixes, and no way to tell which one was needed. */
+  if (!drafts.length && dropped.length) {
+    logger.warn('ai_generate_all_dropped', { count: dropped.length, first: dropped[0] });
+    return { configured: true, drafts: [], dropped,
+      error: `مدل ${dropped.length} سؤال داد ولی هیچ‌کدام قابل استفاده نبود — ${dropped[0]!.why}` };
+  }
+  return { configured: true, drafts, dropped };
+}
+
+/* WHAT A MODEL ACTUALLY SENDS BACK.
+ *
+ * The prompt asks for one exact shape and the good ones obey, but «obey» is not
+ * a guarantee: the answer index arrives as "2" rather than 2, the key is
+ * `correct_answer` instead of `correctAnswer`, the options come as
+ * {a,b,c,d} instead of a list. None of that is a bad question — it is the same
+ * question wearing different clothes, and rejecting it silently threw away work
+ * that had already been paid for.
+ *
+ * So this is liberal about the shape and strict about the RESULT: four real
+ * options and an index that points at one of them, or it is refused with a
+ * reason somebody can act on. */
+function readDraft(raw: any, topic: string, difficulty: string):
+  { ok: true; draft: DraftQuestion } | { ok: false; why: string; sample: string } {
+  const sample = String(raw == null ? '' : (typeof raw === 'object' ? JSON.stringify(raw) : raw)).slice(0, 140);
+  if (!raw || typeof raw !== 'object') return { ok: false, why: 'پاسخ یک شیء نبود', sample };
+
+  const text = String(raw.question ?? raw.text ?? raw.prompt ?? raw.title ?? '').trim();
+  if (!text) return { ok: false, why: 'سؤال متن نداشت', sample };
+
+  /* A list, or the lettered/numbered object shapes models fall back to. */
+  let opts: string[] = [];
+  if (Array.isArray(raw.options)) opts = raw.options.map((o: any) => String(o ?? '').trim());
+  else if (Array.isArray(raw.choices)) opts = raw.choices.map((o: any) => String(o ?? '').trim());
+  else if (raw.options && typeof raw.options === 'object') {
+    for (const k of ['a', 'b', 'c', 'd', 'A', 'B', 'C', 'D', '1', '2', '3', '4']) {
+      const v = raw.options[k];
+      if (v != null && String(v).trim()) opts.push(String(v).trim());
+    }
+  }
+  opts = opts.filter((o) => o !== '');
+  if (opts.length !== 4) return { ok: false, why: `به‌جای ۴ گزینه، ${opts.length} گزینه داشت`, sample };
+
+  /* The index, however it was expressed: a number, a numeric string, a letter,
+   * or the text of the correct option itself. */
+  const rawIdx = raw.correctAnswer ?? raw.correct_answer ?? raw.correctIndex ?? raw.correct_index ?? raw.answer ?? raw.answerIndex;
+  let idx = -1;
+  if (typeof rawIdx === 'number' && Number.isFinite(rawIdx)) idx = Math.trunc(rawIdx);
+  else if (typeof rawIdx === 'string') {
+    const t = rawIdx.trim();
+    if (/^[0-9]+$/.test(t)) idx = Number(t);
+    else if (/^[a-dA-D]$/.test(t)) idx = t.toLowerCase().charCodeAt(0) - 97;
+    else {
+      /* The answer given as the option's own words — common, and unambiguous. */
+      const at = opts.findIndex((o) => o === t);
+      if (at >= 0) idx = at;
+    }
+  }
+  /* Some models answer 1-based. A 4 can only mean the fourth option. */
+  if (idx === 4 && opts.length === 4) idx = 3;
+  if (!Number.isInteger(idx) || idx < 0 || idx >= 4) {
+    return { ok: false, why: 'جواب درست مشخص نبود', sample };
+  }
+
+  return { ok: true, draft: {
+    topic: String(raw.topic ?? topic), difficulty: String(raw.difficulty ?? difficulty),
+    question: text, options: opts, correctAnswer: idx,
+    explanation: raw.explanation ? String(raw.explanation) : undefined,
+    source: raw.source ? String(raw.source) : undefined
+  } };
 }
 
 // ---------------------------------------------------------------------------
@@ -312,6 +391,11 @@ export async function aiRunBatch(input: {
     const want = requested - out.questions.length;
     const gen = await aiGenerate({ topic: input.topic, difficulty: input.difficulty, count: Math.min(10, want), category: input.category });
     if (!gen.configured) return { ...out, configured: false, error: gen.error ?? 'AI not configured' };
+    /* Questions the model sent that could not be read are reported, not thrown
+     * away quietly — «۰ تولید شد» with no reason is the same message whether the
+     * key is wrong, the model id does not exist, or the answers came back in a
+     * shape nobody expected, and those need three different fixes. */
+    for (const d of (gen.dropped ?? [])) out.skipped.push({ question: d.sample, reason: 'malformed', detail: d.why });
     if (gen.error && !gen.drafts.length) { out.error = gen.error; break; }
     if (!gen.drafts.length) break;
     out.generated += gen.drafts.length;

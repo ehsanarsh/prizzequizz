@@ -201,6 +201,81 @@ const KEEP = process.env.ANTHROPIC_API_KEY;
     assert.equal(await repositories.questions.findById(idq), null);
   });
 
+  /* ── WHAT MODELS ACTUALLY SEND BACK ────────────────────────────────
+   * «تولید سوال کار نمیکنه، مینویسه ۰ سوال تولید شد.» The reader demanded one
+   * exact shape and dropped everything else in silence — so a model that had
+   * answered perfectly well, in slightly different clothes, produced a zero
+   * with no reason attached. A zero that cannot say why is the same message
+   * whether the key is wrong, the model id does not exist, or the answers came
+   * back keyed differently, and those need three different fixes. */
+
+  await check('an answer index sent as a STRING is still an answer', async () => {
+    let n = 500;
+    serve((b) => stage(b) === 'gen' ? { questions: [{ ...q(n++), correctAnswer: '2' }] } : stage(b) === 'fact' ? GOOD_FACT : GOOD_REVIEW);
+    const r = await aiRunBatch({ topic: 'تاریخ', count: 1 });
+    assert.equal(r.added, 1, 'a quotation mark is not a broken question');
+  });
+
+  await check('and so is one under a snake_case key', async () => {
+    let n = 510;
+    serve((b) => { if (stage(b) !== 'gen') return stage(b) === 'fact' ? GOOD_FACT : GOOD_REVIEW;
+      const d: any = q(n++); const idx = d.correctAnswer; delete d.correctAnswer; d.correct_answer = idx; return { questions: [d] }; });
+    const r = await aiRunBatch({ topic: 'تاریخ', count: 1 });
+    assert.equal(r.added, 1);
+  });
+
+  await check('a lettered answer is read as the option it points at', async () => {
+    let n = 520;
+    serve((b) => stage(b) === 'gen' ? { questions: [{ ...q(n++), correctAnswer: 'C' }] } : stage(b) === 'fact' ? GOOD_FACT : GOOD_REVIEW);
+    const r = await aiRunBatch({ topic: 'تاریخ', count: 1 });
+    assert.equal(r.added, 1);
+  });
+
+  await check('and so is one given as the correct option’s own words', async () => {
+    let n = 530;
+    serve((b) => { if (stage(b) !== 'gen') return stage(b) === 'fact' ? GOOD_FACT : GOOD_REVIEW;
+      const d: any = q(n++); d.correctAnswer = d.options[1]; return { questions: [d] }; });
+    const r = await aiRunBatch({ topic: 'تاریخ', count: 1 });
+    assert.equal(r.added, 1);
+  });
+
+  await check('options given as {a,b,c,d} are options', async () => {
+    let n = 540;
+    serve((b) => { if (stage(b) !== 'gen') return stage(b) === 'fact' ? GOOD_FACT : GOOD_REVIEW;
+      const d: any = q(n++); const o = d.options;
+      d.options = { a: o[0], b: o[1], c: o[2], d: o[3] }; return { questions: [d] }; });
+    const r = await aiRunBatch({ topic: 'تاریخ', count: 1 });
+    assert.equal(r.added, 1);
+  });
+
+  await check('a one-based answer is not read as the wrong option', async () => {
+    /* 4 with four options can only be the fourth. Reading it as an index would
+       silently make every such question wrong — worse than refusing it. */
+    let n = 550;
+    serve((b) => stage(b) === 'gen' ? { questions: [{ ...q(n++), correctAnswer: 4 }] } : stage(b) === 'fact' ? GOOD_FACT : GOOD_REVIEW);
+    const r = await aiRunBatch({ topic: 'تاریخ', count: 1 });
+    assert.equal(r.added, 1);
+    const saved = await repositories.questions.findById(r.questions[0]!.id);
+    assert.equal(saved!.correctIndex, 3, 'it must point at the LAST option, not past the end');
+  });
+
+  await check('A ZERO IS NEVER BARE — it says what the model sent', async () => {
+    serve((b) => stage(b) === 'gen' ? { questions: [{ question: 'سؤالی بدون گزینه' }] } : stage(b) === 'fact' ? GOOD_FACT : GOOD_REVIEW);
+    const r = await aiRunBatch({ topic: 'تاریخ', count: 1 });
+    assert.equal(r.added, 0);
+    assert.ok(r.error, 'a zero with no reason is indistinguishable from a broken key');
+    assert.match(String(r.error), /گزینه/, 'and the reason has to name the actual problem: ' + r.error);
+    assert.ok(r.skipped.length >= 1, 'the thing the model sent has to be shown');
+  });
+
+  await check('and an unreadable answer says THAT, not something else', async () => {
+    let n = 560;
+    serve((b) => stage(b) === 'gen' ? { questions: [{ ...q(n++), correctAnswer: 'شاید' }] } : stage(b) === 'fact' ? GOOD_FACT : GOOD_REVIEW);
+    const r = await aiRunBatch({ topic: 'تاریخ', count: 1 });
+    assert.equal(r.added, 0);
+    assert.match(String(r.error), /جواب درست/, r.error || '');
+  });
+
   await check('with no key it says so instead of pretending', async () => {
     delete process.env.ANTHROPIC_API_KEY;
     const r = await aiRunBatch({ topic: 'تاریخ', count: 3 });

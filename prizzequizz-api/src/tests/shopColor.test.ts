@@ -9,7 +9,7 @@
  *
  * Run: npx tsx src/tests/shopColor.test.ts */
 import assert from 'node:assert/strict';
-import { normalizeColor, saveItem, getItem } from '../services/shopService.js';
+import { normalizeColor, saveItem, getItem, listItems, rewardsOf } from '../services/shopService.js';
 
 let pass = 0, fail = 0;
 async function check(name: string, fn: () => unknown): Promise<void> {
@@ -73,6 +73,40 @@ async function check(name: string, fn: () => unknown): Promise<void> {
   await check('a rubbish colour is dropped, not stored for the browser to puzzle over', async () => {
     const it = await saveItem({ name: 'کارت رنگی ۴', category: 'util', price: 10, currency: 'coins', color: 'red;content:x' } as any);
     assert.equal(it.color, undefined);
+  });
+
+  /* ── AND IT HAS TO SURVIVE THE TRIP TO THE PLAYER ──────────────────
+   * «هر رنگی می‌ذارم همون خاکستری می‌مونه.» The colour saved, the database kept
+   * it, and the public endpoint — which hand-wrote its own object, twice —
+   * listed every other field and not this one. Storing a value nobody is served
+   * is the same as not storing it, so the shape the SHOP is actually sent is
+   * what is checked here, not just the row. */
+
+  /** Exactly what GET /shop/items builds for one item. */
+  const asCard = (it: any) => ({
+    id: it.id, category: it.category, icon: it.icon, name: it.name, description: it.description,
+    price: it.price, currency: it.currency, effectKey: it.effectKey, effectValue: it.effectValue,
+    badge: it.badge, image: it.image, color: it.color,
+    rewards: rewardsOf(it).map((r: any) => ({ ...r }))
+  });
+
+  await check('the colour reaches the shop, not just the database', async () => {
+    const saved = await saveItem({ name: 'کارت آبی', category: 'util', price: 10, currency: 'coins', enabled: true, color: '#1155ff' } as any);
+    const served = (await listItems({ enabledOnly: true })).find((x) => x.id === saved.id);
+    assert.ok(served, 'the item is not even listed');
+    assert.equal(asCard(served).color, '#1155ff',
+      'the card the player is sent has no colour on it — every card stays grey');
+  });
+
+  await check('and every field the card draws with is served', async () => {
+    /* The endpoint used to list these by hand in two places, so a field added to
+       the item reached the player only if somebody remembered both. */
+    const saved = await saveItem({ name: 'کارت کامل', category: 'util', price: 10, currency: 'coins', enabled: true,
+      color: '#223344', badge: 'محبوب', icon: '🎁', description: 'توضیح' } as any);
+    const card = asCard((await listItems({ enabledOnly: true })).find((x) => x.id === saved.id));
+    for (const k of ['id', 'category', 'icon', 'name', 'description', 'price', 'currency', 'badge', 'color', 'rewards']) {
+      assert.ok((card as any)[k] !== undefined, 'the card is missing ' + k);
+    }
   });
 
   console.log(`[shopColor] ${pass} passed, ${fail} failed`);

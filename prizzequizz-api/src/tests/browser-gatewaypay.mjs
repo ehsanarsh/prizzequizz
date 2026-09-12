@@ -52,7 +52,9 @@ async function open(opts = {}) {
     if (url.includes('/orders/pay')) {
       body = { ok: true, data: { method: 'gateway', intentId: 'int-1', amount: 25000, status: 'pending', paymentUrl: GATEWAY_URL } };
     } else if (url.includes('/payments/gateway')) {
-      body = { ok: true, data: opts.brand ?? { cardToCard: true, mode: 'live', live: true, logo: '', label: 'پرداخت امن با بلو پال' } };
+      body = { ok: true, data: opts.brand ?? { cardToCard: true, mode: 'live', live: true,
+        logo: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
+        label: 'پرداخت امن با بلو پال' } };
     } else if (/\/payments\/intents\/[^/]+\/verify/.test(url)) {
       body = { ok: true, data: opts.verify ?? { id: 'int-1', status: 'paid', paid: true } };
     }
@@ -231,6 +233,22 @@ async function open(opts = {}) {
     secondaryBg: getComputedStyle(document.getElementById('aaaSecondary')).backgroundImage
   }));
   ok('the hand-off names the gateway too', /پرداخت امن با بلو پال/.test(hand.text));
+  /* «لوگو بلوپال بزرگ به جای عکس کارت، بالای نوشتهٔ کارت به کارت» — the player
+     is about to be handed to somebody else with real money, so the thing at the
+     top of the card is WHO, not a generic 💳. */
+  const mark = await page.evaluate(() => {
+    const ic = document.getElementById('aaaIcon');
+    const img = ic && ic.querySelector('img');
+    const r = ic ? ic.getBoundingClientRect() : null;
+    return { paylogo: !!ic && ic.classList.contains('has-paylogo'), hasImg: !!img,
+             src: img ? String(img.getAttribute('src')).slice(0, 24) : '', size: r ? Math.round(r.width) : 0,
+             emoji: ic ? ic.textContent.trim() : '' };
+  });
+  ok('the gateway mark takes the icon slot, not a 💳', mark.paylogo && mark.emoji !== '💳', JSON.stringify(mark).slice(0, 90));
+  ok('and it is big, not a strip of text', mark.size >= 70, mark.size + 'px');
+  ok('drawn from the uploaded artwork', mark.hasImg && mark.src.startsWith('data:image/'), mark.src);
+  const xshape = await page.evaluate(() => getComputedStyle(document.getElementById('aaaClose')).borderRadius);
+  ok('the ✕ is a square, not a circle', !/50%/.test(xshape) && parseFloat(xshape) < 17, xshape);
   ok('its «go» button is green', /63, 208, 122|rgb\(63/.test(hand.primaryBg), hand.primaryBg.slice(0, 44));
   ok('and «بعداً» is red, because it is the way out', /229, 72, 77|rgb\(229/.test(hand.secondaryBg), hand.secondaryBg.slice(0, 44));
 

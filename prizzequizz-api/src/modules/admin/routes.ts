@@ -12,7 +12,7 @@ import { getMatch, claimTimeout, forfeitMatch } from '../../services/matchEngine
 import { activeMatchState } from '../../services/matchStateStore.js';
 import { createGiftCode, listGiftCodes, redeemGiftCode } from '../../services/giftCodeService.js';
 import { aiGenerate, aiRunBatch, BATCH_MAX, aiPrompt, aiPromptDefaults, approve as approvePipeline, createDraft, getMeta as getPipelineMeta, listPipeline, reject as rejectPipeline, runPipeline } from '../../services/questionPipelineService.js';
-import { aiConfigured, aiEndpoint, aiListModels, aiModel } from '../../services/aiClient.js';
+import { aiConfigured, aiEndpoint, aiListModels, aiModel, aiTestModel } from '../../services/aiClient.js';
 import { listAdminAudit, recordAdmin } from '../../services/adminAuditService.js';
 import { listPartners, savePartner, removePartner, addCodes, listCodes, stock as payoutStock, PayoutError } from '../../services/payoutPartnerService.js';
 import { getOtpSettings, setOtpSettings } from '../../services/withdrawOtpService.js';
@@ -722,6 +722,12 @@ export function registerAdminRoutes(router: Router, base: string): void {
   router.add('GET', `${base}/admin/questions/ai/models`, async (ctx) => {
     if (!requireAdmin(ctx)) return;
     json(ctx.res, 200, await aiListModels());
+  });
+  /* One real call with one model id, so «it doesn't work» becomes the
+   * provider's own sentence instead of a silence the panel has to guess at. */
+  router.add('POST', `${base}/admin/questions/ai/test-model`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    json(ctx.res, 200, await aiTestModel(String((ctx.body as any)?.model ?? '')));
   });
   router.add('POST', `${base}/admin/questions/ai/generate`, async (ctx) => {
     if (!requireAdmin(ctx)) return;

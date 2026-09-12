@@ -32,7 +32,12 @@ export function aiEndpoint(): string { return aiBaseUrl() + '/v1/messages'; }
 function pipelineCfg(): any { return (gameConfig as any)?.questionPipeline ?? {}; }
 export function aiModel(kind: 'generator' | 'reviewer' | 'factChecker'): string {
   const c = pipelineCfg();
-  return c[kind + 'Model'] || c.model || 'claude-sonnet-5';
+  /* Trimmed, because these are PASTED. A model id carrying a stray space is
+   * rejected by the provider as an unknown model, and the panel then looks
+   * exactly like a bad key or a model that cannot be changed — which is how it
+   * was reported. */
+  const pick = (v: unknown) => String(v ?? '').trim();
+  return pick(c[kind + 'Model']) || pick(c.model) || 'claude-sonnet-5';
 }
 
 /* WHICH MODELS THIS KEY MAY ACTUALLY USE.
@@ -73,6 +78,26 @@ export async function aiListModels(): Promise<{ ok: boolean; models: string[]; e
   } catch (e) {
     return { ok: false, models: [], error: e instanceof Error ? e.message : 'unreachable' };
   }
+}
+
+/* DOES THIS MODEL ACTUALLY WORK, for this key, on this host?
+ *
+ * «تولید سوال کار نمیکنه» and «نمی‌تونم مدل رو عوض کنم» look the same from the
+ * panel and have completely different fixes. One tiny real call answers it: the
+ * provider's own words come back, so «model not found» and «billing type
+ * mismatch» stop being the same silence. */
+export async function aiTestModel(model: string): Promise<{ ok: boolean; model: string; error?: string; reply?: string }> {
+  const m = String(model || '').trim();
+  if (!m) return { ok: false, model: m, error: 'شناسهٔ مدل خالی است.' };
+  if (!aiConfigured()) return { ok: false, model: m, error: 'ANTHROPIC_API_KEY روی سرور تنظیم نشده.' };
+  const r = await aiJson<{ ok?: unknown }>({
+    model: m,
+    system: 'Reply with JSON only.',
+    user: 'Return exactly: {"ok":true}',
+    maxTokens: 32
+  });
+  if (!r.ok) return { ok: false, model: m, error: r.error || 'پاسخی نداد.' };
+  return { ok: true, model: m, reply: String(r.raw || '').slice(0, 120) };
 }
 
 export interface AiResult<T> { configured: boolean; ok: boolean; data?: T; error?: string; raw?: string }

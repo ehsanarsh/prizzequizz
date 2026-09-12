@@ -62,18 +62,23 @@ export function registerShopRoutes(router: Router, base: string): void {
   router.add('GET', `${base}/shop/items`, async (ctx) => {
     const category = ctx.query.get('category') || undefined;
     const items = await listItems({ category, enabledOnly: true });
-    const categories: Record<string, any[]> = {};
-    for (const it of items) {
-      (categories[it.category] ??= []).push({
-        id: it.id, category: it.category, icon: it.icon, name: it.name, description: it.description,
-        price: it.price, currency: it.currency, effectKey: it.effectKey, effectValue: it.effectValue, badge: it.badge,
-        rewards: rewardsOf(it).map((r) => ({ ...r, label: rewardLabel(r.key) })), image: it.image
-      });
-    }
-    /* `rewards` is what the card lists («۳ بلیط + ۴۰۰ سکه + ۲ کمک») and what the
+    /* ONE mapper, not two. This was written out twice — once for `categories`
+       and once for `items` — so a field added to the item had to be remembered
+       in both places, and `color` was added to neither. The panel saved it, the
+       database kept it, and it was dropped on the way out: every card stayed
+       grey however it was set.
+       `rewards` is what the card lists («۳ بلیط + ۴۰۰ سکه + ۲ کمک») and what the
        receipt is written from. It is always present — a plain item is simply a
        bundle of one — so the client never has to interpret effectKey itself. */
-    json(ctx.res, 200, { items: items.map((it) => ({ id: it.id, category: it.category, icon: it.icon, name: it.name, description: it.description, price: it.price, currency: it.currency, effectKey: it.effectKey, effectValue: it.effectValue, badge: it.badge, rewards: rewardsOf(it).map((r) => ({ ...r, label: rewardLabel(r.key) })), image: it.image })), categories });
+    const toCard = (it: typeof items[number]) => ({
+      id: it.id, category: it.category, icon: it.icon, name: it.name, description: it.description,
+      price: it.price, currency: it.currency, effectKey: it.effectKey, effectValue: it.effectValue,
+      badge: it.badge, image: it.image, color: it.color,
+      rewards: rewardsOf(it).map((r) => ({ ...r, label: rewardLabel(r.key) }))
+    });
+    const categories: Record<string, any[]> = {};
+    for (const it of items) (categories[it.category] ??= []).push(toCard(it));
+    json(ctx.res, 200, { items: items.map(toCard), categories });
   });
 
   /* The half that was missing: paying for an item and receiving it. Without
