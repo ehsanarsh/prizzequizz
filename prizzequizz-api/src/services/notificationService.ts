@@ -179,16 +179,21 @@ export class NotificationService {
    * single bad entry aborted the send and the panel showed the raw database
    * error instead of delivering to the thousands of people who were fine.
    * A failure is now counted and reported, and the rest still go out. */
-  async broadcast(input: { userIds: string[]; type: NotificationType; title: string; body: string; data?: Record<string, unknown>; push?: boolean }): Promise<{ created: number; sent: number; skipped: number; failed: number; errors: string[] }> {
+  async broadcast(input: { userIds: string[]; type: NotificationType; title: string; body: string; data?: Record<string, unknown>; push?: boolean }): Promise<{ created: number; sent: number; skipped: number; failed: number; errors: string[]; skippedBy: { preference: number; quietHours: number } }> {
     let created = 0;
     let sent = 0;
     let skipped = 0;
     let failed = 0;
+    const skippedBy = { preference: 0, quietHours: 0 };
     const errors: string[] = [];
     for (const userId of input.userIds) {
       try {
-        const allowed = await this.allowedByPreference(userId, input.type);
-        if (!allowed) { skipped += 1; continue; }
+        const why = await this.skipReason(userId, input.type);
+        if (why) {
+          skipped += 1;
+          if (why === 'preference') skippedBy.preference += 1; else skippedBy.quietHours += 1;
+          continue;
+        }
         const notification = await this.create({ userId, type: input.type, title: input.title, body: input.body, data: input.data, push: input.push });
         created += 1;
         if (notification.status === 'sent') sent += 1;
@@ -200,7 +205,13 @@ export class NotificationService {
       }
     }
     if (failed) logger.error('notification_broadcast_partial', { failed, created, total: input.userIds.length });
-    return { created, sent, skipped, failed, errors };
+    /* Reaching nobody is not a quiet success. It is almost always a type every
+     * account has switched off, and the only way anyone finds out is if it is
+     * said. */
+    if (!created && input.userIds.length) {
+      logger.warn('notification_broadcast_reached_nobody', { type: input.type, audience: input.userIds.length, ...skippedBy });
+    }
+    return { created, sent, skipped, failed, errors, skippedBy };
   }
 
   async diagnostics(): Promise<NotificationDiagnostics> {
@@ -292,7 +303,12 @@ export class NotificationService {
    * falls back to the defaults: the player gets the notification, which is the
    * safe direction to fail in, and the game carries on.
    */
-  private async allowedByPreference(userId: string, type: NotificationType): Promise<boolean> {
+  /* WHY a message was not delivered, not merely that it was not.
+   * «اعلان رو از پنل دستی نمی‌فرسته» turned out to be this: every account
+   * starts with promos OFF, so an announcement sent as «تبلیغی» reached nobody
+   * — and the panel reported the AUDIENCE SIZE as if it were a delivery. A
+   * refusal that cannot say why is indistinguishable from a broken button. */
+  private async skipReason(userId: string, type: NotificationType): Promise<'preference' | 'quiet_hours' | null> {
     let prefs: NotificationPreferences;
     try {
       prefs = await this.preferences(userId);
@@ -300,13 +316,18 @@ export class NotificationService {
       logger.warn('notification_preferences_unreadable', { userId, message: e instanceof Error ? e.message : 'unknown' });
       prefs = defaultPreferences(userId);
     }
-    if (inQuietHours(prefs)) return false;
-    if (type === 'match_update') return prefs.matchUpdates;
-    if (type === 'leaderboard_update') return prefs.leaderboardUpdates;
-    if (type === 'wallet_update') return prefs.walletUpdates;
-    if (type === 'promo') return prefs.promos;
-    if (type === 'friend_message') return prefs.friendMessages !== false;
-    return true;
+    if (inQuietHours(prefs)) return 'quiet_hours';
+    const on = type === 'match_update' ? prefs.matchUpdates
+      : type === 'leaderboard_update' ? prefs.leaderboardUpdates
+      : type === 'wallet_update' ? prefs.walletUpdates
+      : type === 'promo' ? prefs.promos
+      : type === 'friend_message' ? prefs.friendMessages !== false
+      : true;
+    return on ? null : 'preference';
+  }
+
+  private async allowedByPreference(userId: string, type: NotificationType): Promise<boolean> {
+    return (await this.skipReason(userId, type)) === null;
   }
 }
 

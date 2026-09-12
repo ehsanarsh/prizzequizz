@@ -2932,7 +2932,7 @@ async function renderLeaderboard(){
 
 /* ================= NOTIFICATIONS ================= */
 const NT_STFA={pending:'در انتظار',sending:'در حال ارسال',sent:'ارسال شد',canceled:'لغو شد',failed:'ناموفق'};
-function ntTypeOptions(sel){const t={system:'عمومی/مهم (همه دریافت می‌کنند)',promo:'تبلیغی (طبق تنظیمات کاربر)',match_update:'مسابقه',wallet_update:'صندوق جایزه',leaderboard_update:'لیدربرد'};return Object.keys(t).map(k=>'<option value="'+k+'"'+(sel===k?' selected':'')+'>'+t[k]+'</option>').join('');}
+function ntTypeOptions(sel){const t={system:'عمومی/مهم (همه دریافت می‌کنند)',promo:'تبلیغی (پیش‌فرضِ همه خاموش است ⚠️)',match_update:'مسابقه',wallet_update:'صندوق جایزه',leaderboard_update:'لیدربرد'};return Object.keys(t).map(k=>'<option value="'+k+'"'+(sel===k?' selected':'')+'>'+t[k]+'</option>').join('');}
 function ntLocalDefault(){const d=new Date(Date.now()+3600000);d.setSeconds(0,0);const p=n=>String(n).padStart(2,'0');return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+'T'+p(d.getHours())+':'+p(d.getMinutes());}
 let NT_TAB='compose';
 const NT_LINKS={'':'— بدون مقصد —','/home':'🏠 خانه','/shop':'🛒 فروشگاه','/wallet':'👛 صندوق جایزه','/match':'⚔️ شروع مسابقه','/league':'🛡️ لیگ','/rewards':'🎡 جوایز و گردونه','/profile':'👤 پروفایل','/notifications':'🔔 صندوق پیام'};
@@ -3138,17 +3138,50 @@ async function ntSubmit(testToSelf){
       const tid=prompt('آی‌دی کاربرِ آزمایشی (فقط به همین یک نفر ارسال می‌شود):');
       if(!tid||!tid.trim())return;
       const r=await api('POST','/admin/notifications/broadcast',{...payload,segment:{userIds:[tid.trim()]}});
-      toast('پیام آزمایشی ارسال شد 🧪 — '+fa(r.audienceCount||0)+' مخاطب','ok');return;
+      ntReport(r,true);return;
     }
     if(when==='now'){
       const r=await api('POST','/admin/notifications/broadcast',{...payload,segment:seg});
-      toast('ارسال شد ✅ — '+fa(r.audienceCount||0)+' مخاطب','ok');NT_TAB='history';render();
+      ntReport(r,false);
+      if(r.created>0){NT_TAB='history';render();}
     }else{
       const at=$('#nt_at').value;if(!at)return toast('زمان ارسال را انتخاب کن','bad');
       await api('POST','/admin/notifications/schedule',{...payload,segment:seg,scheduledAt:new Date(at).toISOString()});
       toast('زمان‌بندی شد 🕒','ok');NT_TAB='scheduled';render();
     }
   }catch(e){toast(e.message,'bad');}
+}
+/* WHAT ACTUALLY HAPPENED, not how many people were aimed at.
+   «اعلان رو از پنل دستی نمی‌فرسته» was this line: it reported audienceCount —
+   the size of the group — as if it were a delivery. A promo sent to five
+   hundred people said «ارسال شد ✅ — ۵۰۰ مخاطب» while it had reached nobody at
+   all, because every account starts with promos switched OFF. The button was
+   working perfectly and saying something untrue, which is worse than failing. */
+function ntReport(r,isTest){
+  const created=Number(r.created||0), aud=Number(r.audienceCount||0);
+  const sb=r.skippedBy||{}, byPref=Number(sb.preference||0), byQuiet=Number(sb.quietHours||0);
+  if(created>0){
+    let msg=(isTest?'پیام آزمایشی ارسال شد 🧪 — ':'ارسال شد ✅ — ')+fa(created)+' نفر از '+fa(aud)+' نفر';
+    if(byPref||byQuiet) msg+=' (به '+fa(byPref+byQuiet)+' نفر نرسید)';
+    toast(msg,'ok');
+    if(byPref||byQuiet) modal('چرا به همه نرسید؟',ntSkipHtml(byPref,byQuiet,aud));
+    return;
+  }
+  toast('به هیچ‌کس نرسید','bad');
+  modal('به هیچ‌کس نرسید',ntSkipHtml(byPref,byQuiet,aud));
+}
+function ntSkipHtml(byPref,byQuiet,aud){
+  const t=($('#nt_type')||{}).value||'system';
+  const rows=[];
+  if(byPref) rows.push('<div class="cfg-row"><label>این نوع پیام را خاموش کرده‌اند</label><b style="color:var(--bad)">'+fa(byPref)+'</b></div>');
+  if(byQuiet) rows.push('<div class="cfg-row"><label>در ساعت سکوتشان بودند</label><b style="color:var(--gold)">'+fa(byQuiet)+'</b></div>');
+  const why=(t==='promo')
+    ? '<div class="note">نوع پیام «تبلیغی» است و <b>هر حساب به‌صورت پیش‌فرض تبلیغات را خاموش دارد</b> — این عمدی است و رضایتِ کاربر را رعایت می‌کند. '+
+      'برای اطلاعیه‌ای که همه باید ببینند، نوع را روی <b>«عمومی/مهم»</b> بگذار.</div>'
+    : (byQuiet
+      ? '<div class="note">این‌ها ساعتِ سکوت تعیین کرده‌اند و پیام در آن بازه نگه داشته می‌شود. کمی بعد دوباره بفرست.</div>'
+      : '<div class="note">این کاربران این نوع پیام را در تنظیماتشان خاموش کرده‌اند.</div>');
+  return '<div class="card"><div class="cfg-row"><label>مخاطب</label><b>'+fa(aud)+'</b></div>'+rows.join('')+why+'</div>';
 }
 /* ---- History (campaigns + analytics) ---- */
 async function ntRenderHistory(){
