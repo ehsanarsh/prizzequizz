@@ -14,7 +14,7 @@
      copy that was never uploaded look exactly alike. This is that version. It
      is readable from the server with one curl, and it is printed at the bottom
      of «تنظیمات» so it can be read off the phone with no terminal at all. -->
-<meta name="pz-build" content="20260910-2002">
+<meta name="pz-build" content="20260912-0030">
 <!-- App icon on the phone home screen (Add to Home Screen). Place appicon.png
      (a square PNG, ideally 512x512) in the same web folder as this file. -->
 <link rel="apple-touch-icon" sizes="180x180" href="appicon.png">
@@ -19482,6 +19482,14 @@ let _usr = JSON.parse(localStorage.getItem('pz_usr') || 'null');
 let _rid = null, _mid = null, _mmt = null, _mmi = null;
 
 if(_tok && _usr) setTimeout(()=>{ wallet = _usr.balances?.wallet||0; updateWalletUI(); try{applyMyName();}catch(e){} try{pzApplyMyAvatar(_usr.avatar||'');}catch(e){} try{pzApplyMyCharacter(_usr.character||null);}catch(e){} try{pzHydrateAll();}catch(e){} },300);
+/* A payment left open by a player who wandered off to their banking app is
+   finished here, on the next open — not lost because the tab was closed.
+   The address bar is read NOW, while it still says what it said when the
+   gateway sent them back; `?pay=back` only decides whether they are TOLD what
+   happened, because they may equally come back by reopening the game. */
+var _pzCameBackToPay=false;
+try{ _pzCameBackToPay=new URLSearchParams(location.search||'').get('pay')==='back'; }catch(e){}
+if(_tok && _usr) setTimeout(()=>{ try{ pzResumeGatewayPayment(_pzCameBackToPay); }catch(e){} },1800);
 
 let _pzRefreshing=null; // shared in-flight refresh so parallel 401s refresh once
 async function pzApi(m,p,b,a=true){
@@ -22236,10 +22244,18 @@ async function pzPayOrder(order,method,name){
     return true;
   }
 
-  /* Gateway: a real PSP redirects; the sandbox link carries the same signed
-     proof. Settlement only ever happens server-side. */
+  /* GATEWAY. Two different shapes come back here and they are not interchangeable:
+     a RELATIVE url is the built-in sandbox link, which settles by being fetched;
+     an ABSOLUTE one is a real gateway's own page, which the player has to go to.
+     The old code glued the origin onto whatever it got, so the moment a real
+     gateway was switched on it built `https://prizequiz.irhttps://…`, fetched
+     nothing, polled eight times and told every paying player «تأیید نشد».
+     Settlement is still only ever decided server-side. */
+  const payUrl=String(r.data.paymentUrl||'');
+  if(/^https?:\/\//i.test(payUrl)) return pzGatewayHandoff(r.data,payUrl,name);
+
   showAaaModal({icon:'💳',title:'اتصال به درگاه پرداخت',sub:'در حال پرداخت امن '+fa(r.data.amount)+' تومان…',primaryText:'',secondaryText:''});
-  try{ await fetch(_A.replace(/\/v1$/,'')+r.data.paymentUrl).then(x=>x.json()); }catch(e){}
+  try{ await fetch(_A.replace(/\/v1$/,'')+payUrl).then(x=>x.json()); }catch(e){}
   let paid=false;
   for(let i=0;i<8&&!paid;i++){
     await new Promise(res=>setTimeout(res,700));
@@ -22247,13 +22263,84 @@ async function pzPayOrder(order,method,name){
   }
   closeAaaModal(false);
   if(!paid){ toast('پرداخت هنوز تأیید نشده؛ چند لحظه دیگر دوباره چک کن'); return false; }
-  sfx('correct');
-  try{ pzHydrateAll(); }catch(e){}
-  try{ pzSyncWallet(); }catch(e){}
-  toast(name+' خریداری شد ✅');
-  try{ pzShopReturnAfterBuy(); }catch(e){}
+  pzPaymentDelivered(name);
   return true;
 }
+
+/* ---- Leaving the game to pay, and coming back ----
+   A card-to-card gateway is not a redirect that returns in two seconds: the
+   player leaves, opens their banking app, makes a transfer and comes back
+   minutes later — sometimes in a different tab, sometimes the next morning.
+   So what they were buying is written down BEFORE they go, and checked when
+   they return, instead of being held in a variable that the navigation kills. */
+const PZ_PAY_PENDING='pz_pay_pending';
+const PZ_PAY_MAX_AGE=6*3600*1000;   /* after this, a forgotten payment is stale */
+
+function pzPayRemember(intentId,name,amount){
+  try{ localStorage.setItem(PZ_PAY_PENDING,JSON.stringify({intentId:intentId,name:name||'',amount:amount||0,at:Date.now()})); }catch(e){}
+}
+function pzPayForget(){ try{ localStorage.removeItem(PZ_PAY_PENDING); }catch(e){} }
+function pzPayPending(){
+  try{
+    const raw=localStorage.getItem(PZ_PAY_PENDING); if(!raw) return null;
+    const v=JSON.parse(raw); if(!v||!v.intentId) return null;
+    if(Date.now()-(Number(v.at)||0)>PZ_PAY_MAX_AGE){ pzPayForget(); return null; }
+    return v;
+  }catch(e){ return null; }
+}
+
+function pzPaymentDelivered(name){
+  try{ sfx('correct'); }catch(e){}
+  try{ pzHydrateAll(); }catch(e){}
+  try{ pzSyncWallet(); }catch(e){}
+  toast((name||'خریدت')+' خریداری شد ✅');
+  try{ pzShopReturnAfterBuy(); }catch(e){}
+}
+
+/* The handoff is a BUTTON, not an automatic redirect: an in-app browser can
+   swallow a scripted navigation, and a player about to be sent to their bank
+   should be the one who decides to go. Backing out costs nothing — the order
+   is still open and the shop will offer it again. */
+function pzGatewayHandoff(d,url,name){
+  pzPayRemember(d.intentId,name,d.amount);
+  return new Promise((resolve)=>{
+    showAaaModal({
+      icon:'💳', title:'پرداخت کارت به کارت',
+      sub:'<div style="text-align:center;line-height:2.1">مبلغ: <b>'+fa(d.amount)+' تومان</b><br><span style="color:var(--muted);font-size:12px">به صفحهٔ امن پرداخت می‌روی و بعد از واریز به بازی برمی‌گردی.</span></div>',
+      primaryText:'رفتن به صفحهٔ پرداخت', secondaryText:'بعداً',
+      onPrimary:()=>{ closeAaaModal(false); try{ location.href=url; }catch(e){ try{ window.open(url,'_blank'); }catch(e2){} } resolve(false); },
+      onSecondary:()=>{ closeAaaModal(false); pzPayForget(); resolve(false); }
+    });
+  });
+}
+
+/* Back from the gateway. The server goes and ASKS the gateway — nothing in
+   this request decides whether anything was paid — so a player who really
+   transferred gets their ticket without waiting for a webhook, and one who
+   did not gets told so plainly rather than being left on a spinner. */
+async function pzResumeGatewayPayment(announce){
+  const p=pzPayPending(); if(!p||!_tok) return false;
+  let paid=false, last=null;
+  /* Three tries: a bank transfer can be a few seconds behind the tap on «پرداخت کردم». */
+  for(let i=0;i<3&&!paid;i++){
+    if(i) await new Promise(res=>setTimeout(res,2500));
+    try{
+      const st=await pzApi('POST','/payments/intents/'+p.intentId+'/verify',{});
+      if(st&&st.ok&&st.data){ last=st.data; if(st.data.paid===true||st.data.status==='paid') paid=true; }
+    }catch(e){}
+  }
+  if(paid){ pzPayForget(); pzPaymentDelivered(p.name); return true; }
+  /* Not paid yet is not a failure — the transfer may still be on its way, so
+     the note is kept and checked again next time the game opens. */
+  if(last&&(last.status==='failed'||last.reason==='status_expired'||last.reason==='status_canceled')){
+    pzPayForget();
+    if(announce) toast('پرداخت انجام نشد یا منقضی شد. می‌تونی دوباره تلاش کنی.');
+    return false;
+  }
+  if(announce) toast('هنوز واریزت تأیید نشده. اگر کارت به کارت کردی، چند دقیقه دیگر دوباره سر بزن.');
+  return false;
+}
+
 
 /* What was actually handed over, as the server reported it — not a re-reading
    of what the item advertised. */
