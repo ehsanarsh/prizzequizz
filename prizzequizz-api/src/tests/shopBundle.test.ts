@@ -34,7 +34,7 @@ async function buyer(coins = 100000): Promise<string> {
 const uniq = () => 'k_' + Math.random().toString(36).slice(2);
 
 async function run(): Promise<void> {
-  _resetPurchaseMemory();
+  await _resetPurchaseMemory();
 
   const bundle = await saveItem({
     category: 'tickets', name: 'بستهٔ شروع', description: 'برای شروع', icon: '🎁',

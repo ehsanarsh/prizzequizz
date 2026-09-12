@@ -21,6 +21,7 @@ import { WALLET_LIMITS, WalletError, postEntry } from './walletLedgerService.js'
 import { recordMoney } from './missionService.js';
 import { getPaymentSettings, pickActiveGateway } from './paymentGatewayService.js';
 import { fulfil, isGatewayPayable, parseOrder, quote, type PurchaseOrder } from './purchaseOrderService.js';
+import { blupalConfigured, blupalMode, createInvoice as createBlupalInvoice, verifyPaid as verifyBlupalPaid } from './blupalService.js';
 
 export interface PaymentDiagnostics {
   provider: PaymentProvider;
@@ -75,6 +76,28 @@ export async function createPaymentIntent(input: { userId: string; amount?: numb
   const intentId = id();
   const transactionId = id();
   const now = new Date().toISOString();
+
+  /* THE CARD-TO-CARD GATEWAY.
+   *
+   * BluPal opens an invoice and gives back a page the player pays on. That call
+   * happens BEFORE anything is written down, so a gateway that refuses (amount
+   * out of their range, key rejected, their service down) leaves no half-made
+   * intent behind for a callback to stumble on later.
+   *
+   * What is written down is the part settlement will need and must not take
+   * from anybody else afterwards: which invoice this is, and the exact rial
+   * figure that counts as paid. */
+  let blupal: { invoiceId: number; finalRial: number; link: string; card: string; mode: string } | null = null;
+  if (blupalConfigured()) {
+    const inv = await createBlupalInvoice(amount);
+    blupal = { invoiceId: inv.invoiceId, finalRial: inv.finalAmountRial, link: inv.paymentLink, card: inv.cardNumber, mode: inv.mode };
+    if (inv.mode !== 'live' && process.env.NODE_ENV === 'production') {
+      /* A test key on a live system can only make test invoices, and a test
+       * invoice can be marked paid without any money moving. Everything still
+       * matches — which is exactly why it has to be said out loud. */
+      logger.warn('blupal_sandbox_key_in_production', { intentId, hint: 'BLUPAL_API_KEY is not a blu_live_ key; nothing sold through it is really paid for' });
+    }
+  }
   /* 'purchase', not 'topup': nothing is being added to a balance. */
   await repositories.transactions.save({ id: transactionId, userId: input.userId, type: 'purchase' as any, currency: 'cash', amount, direction: 'out', status: 'pending', reference: intentId, createdAt: now });
   const sig = paymentSignature(intentId, amount, 'paid');
@@ -88,14 +111,16 @@ export async function createPaymentIntent(input: { userId: string; amount?: numb
     transactionId,
     // The sandbox pay URL carries the same signed proof a real gateway callback
     // would; without it, settlement is impossible.
-    paymentUrl: `/v1/payments/sandbox/${intentId}/pay?sig=${sig}`,
+    paymentUrl: blupal ? blupal.link : `/v1/payments/sandbox/${intentId}/pay?sig=${sig}`,
     callbackUrl: input.callbackUrl,
-    providerReference: `sandbox_${intentId}`,
+    providerReference: blupal ? `blupal:${blupal.invoiceId}` : `sandbox_${intentId}`,
     idempotencyKey: key,
     /* The order travels WITH the intent, because the callback that settles it
      * may arrive minutes later on a different process with no memory of the
      * request that started it. */
-    metadata: { sandbox: gateway ? gateway.sandbox : provider() === 'sandbox', gatewayId: gateway?.id, gatewayName: gateway?.name, gatewayType: gateway?.type, order: input.order, orderLabel: q.label },
+    metadata: blupal
+      ? { sandbox: blupal.mode !== 'live', gatewayType: 'blupal', blupalInvoiceId: blupal.invoiceId, blupalFinalRial: blupal.finalRial, blupalCard: blupal.card, order: input.order, orderLabel: q.label }
+      : { sandbox: gateway ? gateway.sandbox : provider() === 'sandbox', gatewayId: gateway?.id, gatewayName: gateway?.name, gatewayType: gateway?.type, order: input.order, orderLabel: q.label },
     createdAt: now,
     updatedAt: now
   };
@@ -149,6 +174,82 @@ export async function settlePaymentIntent(intentId: string, sig: string, status:
   const what = (intent.metadata as any)?.orderLabel || 'خریدت';
   await notifications.create({ userId: intent.userId, type: 'wallet_update', title: 'پرداخت موفق بود', body: `${what} فعال شد.`, data: { paymentIntentId: intent.id, amount: intent.amount, url: '/shop' }, push: true });
   return paid;
+}
+
+/* ---------------------------------------------------------------------------
+ * BLUPAL SETTLEMENT — the one door, used by both ways the news can arrive.
+ *
+ * BluPal's webhook carries no signature. None. Their whole verification advice
+ * is «check the invoice_id against your database», which only proves that WE
+ * opened that invoice — it says nothing whatever about anybody having paid it.
+ * Anyone who learns an invoice id could post it.
+ *
+ * So a webhook body is treated as a NUDGE and never as evidence: all it does is
+ * name an invoice. What decides is `verifyPaid`, which asks BluPal over our own
+ * connection with our own key, and refuses anything whose status, amount or
+ * mode is not exactly what we recorded when we opened the invoice.
+ *
+ * The player coming back from the payment page goes through the same function,
+ * so they do not sit staring at a spinner waiting for a webhook — and because
+ * both doors lead here, and settlement is claimed exactly once, the two of them
+ * arriving together still delivers one order.
+ * ------------------------------------------------------------------------- */
+export interface BlupalSettlement { paid: boolean; reason?: string; intent: PaymentIntent | null }
+
+export async function settleBlupalIntent(intentId: string): Promise<BlupalSettlement> {
+  const intent = await repositories.payments.findById(intentId);
+  if (!intent) return { paid: false, reason: 'not_found', intent: null };
+  /* Already delivered. Saying so is not the same as delivering again: nothing
+   * below runs, and the answer a repeat callback gets is the true one. */
+  if (intent.status === 'paid') return { paid: true, intent };
+  if (intent.status === 'failed') return { paid: false, reason: 'failed', intent };
+
+  const meta = (intent.metadata ?? {}) as Record<string, unknown>;
+  const invoiceId = Number(meta.blupalInvoiceId ?? 0);
+  const expected = Number(meta.blupalFinalRial ?? 0);
+  if (!invoiceId || !expected) return { paid: false, reason: 'not_a_blupal_intent', intent };
+
+  const v = await verifyBlupalPaid({ invoiceId, expectedFinalAmountRial: expected });
+  if (!v.paid) {
+    logger.info('blupal_not_paid_yet', { intentId: intent.id, invoiceId, reason: v.reason });
+    return { paid: false, reason: v.reason, intent };
+  }
+  /* Who paid, for the support case that always follows a card-to-card payment.
+   * It is written to the log rather than into the intent because BluPal's own
+   * panel is the record of the transfer; this is the thread back to it. */
+  logger.info('blupal_paid', {
+    intentId: intent.id, userId: intent.userId, invoiceId,
+    transactionId: v.invoice?.transactionId, payerBank: v.invoice?.payerBank, amountToman: intent.amount
+  });
+
+  /* The proof is the answer BluPal just gave us. The signature below is not a
+   * second proof — it is simply how settlePaymentIntent is addressed, and the
+   * secret it is made with is ours. Settlement itself claims the intent
+   * exactly once, so two callbacks reaching this line still deliver one order. */
+  const settled = await settlePaymentIntent(intent.id, paymentSignature(intent.id, intent.amount, 'paid'), 'paid');
+  return { paid: settled?.status === 'paid', intent: settled };
+}
+
+/** Find the intent an invoice id belongs to. The id in a webhook body is the
+ *  only thing it may be used for: naming which intent to go and verify. */
+export async function findIntentByBlupalInvoice(invoiceId: number): Promise<PaymentIntent | null> {
+  const ref = 'blupal:' + Math.floor(Number(invoiceId) || 0);
+  try {
+    if (process.env.DATABASE_URL) {
+      const pool = getPgPool();
+      const { rows } = await pool.query(`SELECT id FROM payment_intents WHERE provider_reference = $1 ORDER BY created_at DESC LIMIT 1`, [ref]);
+      return rows[0]?.id ? repositories.payments.findById(String(rows[0].id)) : null;
+    }
+  } catch (e) {
+    logger.warn('blupal_invoice_lookup_failed', { invoiceId, message: e instanceof Error ? e.message : 'unknown' });
+  }
+  const rows = await repositories.payments.list({ limit: 1000 });
+  return rows.find((i) => i.providerReference === ref) ?? null;
+}
+
+/** Is the card-to-card gateway the one a payment would go to right now? */
+export function blupalActive(): { configured: boolean; mode: ReturnType<typeof blupalMode> } {
+  return { configured: blupalConfigured(), mode: blupalMode() };
 }
 
 /* One-winner claim of a pending intent. */

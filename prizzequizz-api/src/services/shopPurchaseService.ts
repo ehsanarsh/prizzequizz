@@ -16,6 +16,7 @@ import { isLeagueTicketTier } from './leagueService.js';
 import { grantTickets } from './ticketService.js';
 import { repositories } from '../repositories/index.js';
 import { recordPurchase } from './missionService.js';
+import { claimFulfilment, settleFulfilment, abandonFulfilment, _resetFulfilmentGuard } from './fulfilmentGuard.js';
 import { logger } from './logger.js';
 
 export class ShopError extends Error {
@@ -39,10 +40,6 @@ export interface PurchaseResult {
   balances: { wallet: number; coins: number; hearts: number };
 }
 
-/* Purchases already settled, so a repeat returns the same answer instead of
- * charging again. Keyed by the caller's idempotency key. */
-const _seen = new Map<string, PurchaseResult>();
-
 async function balancesOf(userId: string): Promise<{ wallet: number; coins: number; hearts: number }> {
   const user = await repositories.users.findById(userId);
   let wallet = Number(user?.wallet ?? 0);
@@ -52,19 +49,48 @@ async function balancesOf(userId: string): Promise<{ wallet: number; coins: numb
   return { wallet, coins: Number(user?.coins ?? 0), hearts: Number(user?.hearts ?? 0) };
 }
 
-export async function purchase(input: {
+export interface PurchaseInput {
   userId: string; itemId: string; idempotencyKey: string; qty?: number;
   /* The money has already been taken somewhere else — a gateway payment for
    * THIS order. Grant the goods and charge nothing; the صندوق must not move,
    * because the player did not pay from it. */
   paidExternally?: boolean;
-}): Promise<PurchaseResult> {
-  const { userId, itemId } = input;
+}
+
+/* The idempotency key is honoured OUTSIDE the purchase itself, by the same
+ * durable guard the gateway's callbacks use: claim the key, buy, record what
+ * was handed over. A repeat gets told what the first one delivered instead of
+ * being charged again — and it still gets told that after a restart, which a
+ * Map in this process could not manage. */
+export async function purchase(input: PurchaseInput): Promise<PurchaseResult> {
   const key = String(input.idempotencyKey || '').trim();
   if (!key) throw new ShopError('IDEMPOTENCY_REQUIRED', 'کلید یکتا لازم است.');
-  const cached = _seen.get(key);
-  if (cached) return { ...cached, duplicate: true };
+  const ref = 'shop:' + key;
+  const claim = await claimFulfilment(ref);
+  if (!claim.fresh) {
+    const prior = claim.payload as PurchaseResult | null;
+    if (prior) return { ...prior, duplicate: true };
+    /* Claimed but not yet settled: the very same purchase is being served right
+     * now, somewhere else. Going ahead would charge twice, which is the one
+     * thing the key exists to prevent, so this one is told to come back. */
+    throw new ShopError('PURCHASE_IN_FLIGHT', 'همین خرید همین حالا در حال انجام است؛ چند لحظه دیگر دوباره امتحان کن.');
+  }
+  let result: PurchaseResult;
+  try {
+    result = await runPurchase(input);
+  } catch (e) {
+    /* Nothing was handed over, so the key must not stay burnt: a player who
+     * refused, topped up, or fixed whatever failed has to be able to retry. */
+    await abandonFulfilment(ref);
+    throw e;
+  }
+  await settleFulfilment(ref, result);
+  return result;
+}
 
+async function runPurchase(input: PurchaseInput): Promise<PurchaseResult> {
+  const { userId, itemId } = input;
+  const key = String(input.idempotencyKey).trim();
   const qty = Math.max(1, Math.min(20, Math.floor(Number(input.qty) || 1)));
   const item = await getItem(itemId);
   if (!item) throw new ShopError('ITEM_NOT_FOUND', 'این محصول وجود ندارد.');
@@ -157,13 +183,9 @@ export async function purchase(input: {
     price, currency: item.currency, duplicate: false,
     balances: await balancesOf(userId)
   };
-  _seen.set(key, result);
-  /* Bounded: this only has to outlive a retry, not the process. */
-  if (_seen.size > 5000) for (const k2 of [..._seen.keys()].slice(0, 1000)) _seen.delete(k2);
-
   logger.info('shop_purchase', { userId, itemId: item.id, effectKey: item.effectKey, value, price, currency: item.currency });
   return result;
 }
 
 /** Test seam. */
-export function _resetPurchaseMemory(): void { _seen.clear(); }
+export const _resetPurchaseMemory = _resetFulfilmentGuard;

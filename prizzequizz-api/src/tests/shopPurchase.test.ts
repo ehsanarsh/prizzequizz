@@ -36,7 +36,7 @@ async function makeUser(opts: { wallet?: number; coins?: number; hearts?: number
 const uniq = () => 'k-' + id();
 
 async function run() {
-  _resetPurchaseMemory(); _resetHeartMemory();
+  await _resetPurchaseMemory(); _resetHeartMemory();
   const items = await listItems({ enabledOnly: true });
 
   const heartItem = items.find((i) => i.effectKey === 'heart' && i.effectValue === 1);

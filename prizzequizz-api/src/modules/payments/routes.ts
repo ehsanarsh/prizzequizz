@@ -2,7 +2,8 @@ import type { Router } from '../../http/router.js';
 import { error, json } from '../../http/response.js';
 import { requireAdmin } from '../../services/adminGuard.js';
 import { WalletError } from '../../services/walletLedgerService.js';
-import { createPaymentIntent, getPaymentIntent, listPaymentIntents, paymentDiagnostics, paymentSignature, settlePaymentIntent } from '../../services/paymentService.js';
+import { createPaymentIntent, getPaymentIntent, listPaymentIntents, paymentDiagnostics, settlePaymentIntent, settleBlupalIntent, findIntentByBlupalInvoice, blupalActive } from '../../services/paymentService.js';
+import { BlupalError } from '../../services/blupalService.js';
 import { listGatewaysMasked, saveGateway, removeGateway, getPaymentSettings, updatePaymentSettings, testConnection, gatewayReports } from '../../services/paymentGatewayService.js';
 import type { PaymentIntentStatus, PaymentProvider } from '../../types/domain.js';
 import { bodyObject, optionalString, requiredNumber } from '../../utils/validation.js';
@@ -27,13 +28,64 @@ export function registerPaymentRoutes(router: Router, base: string): void {
     json(ctx.res, 200, intent);
   });
 
-  // READ-ONLY now: a client can only ask for the current status; it can never
-  // flip an intent to paid (that required hole let players self-credit).
+  /* «Have I been charged yet?» — asked by the player coming back from the
+   * payment page, who should not have to sit and wait for a webhook.
+   *
+   * The client still cannot flip anything: it names an intent it owns, and the
+   * server goes and asks the GATEWAY. Nothing in the request decides the
+   * answer, which is the hole that once let players credit themselves. */
   router.add('POST', `${base}/payments/intents/:id/verify`, async (ctx) => {
     if (!ctx.userId) return error(ctx.res, 401, 'UNAUTHORIZED', 'Login required.');
     const intent = await getPaymentIntent(ctx.params.id!, ctx.userId);
     if (!intent) return error(ctx.res, 404, 'PAYMENT_INTENT_NOT_FOUND', 'Payment intent not found.');
-    json(ctx.res, 200, intent);
+    if ((intent.metadata as any)?.gatewayType !== 'blupal') return json(ctx.res, 200, intent);
+    try {
+      const r = await settleBlupalIntent(intent.id);
+      json(ctx.res, 200, { ...(r.intent ?? intent), paid: r.paid, reason: r.reason });
+    } catch (e) {
+      /* The gateway being unreachable is not a failed payment. Answering with
+       * the intent as it stands lets the player try again in a moment, instead
+       * of being told something went wrong with their money. */
+      if (e instanceof BlupalError) return json(ctx.res, 200, { ...intent, paid: false, reason: 'gateway_unreachable' });
+      throw e;
+    }
+  });
+
+  /* BLUPAL'S WEBHOOK. Open on purpose: it carries no signature, because BluPal
+   * does not send one — there is no secret in their contract to check against.
+   *
+   * So the body is treated as a nudge and never as evidence. The only thing
+   * taken from it is an invoice number, and all that does is say WHICH invoice
+   * to go and ask BluPal about, over our own connection with our own key. A
+   * stranger posting invoice ids all day can make this endpoint do lookups and
+   * nothing else — no id, real or invented, can deliver anything that BluPal
+   * does not independently confirm was paid, for the exact amount we recorded.
+   *
+   * Always answers 200. A webhook that is told «error» is a webhook that will
+   * be retried forever, and none of the refusals here are things a retry fixes. */
+  router.add('POST', `${base}/payments/blupal/webhook`, async (ctx) => {
+    const b = bodyObject(ctx.body) as any;
+    const invoiceId = Number(b.invoice_id ?? b.invoiceId ?? 0);
+    if (!invoiceId) return json(ctx.res, 200, { ok: true, ignored: 'no_invoice_id' });
+    const intent = await findIntentByBlupalInvoice(invoiceId);
+    if (!intent) return json(ctx.res, 200, { ok: true, ignored: 'unknown_invoice' });
+    try {
+      const r = await settleBlupalIntent(intent.id);
+      json(ctx.res, 200, { ok: true, paid: r.paid, reason: r.reason });
+    } catch (e) {
+      /* Their service refusing us is the one case a retry DOES fix, so this is
+       * the one case that is allowed to look like a failure to them. */
+      if (e instanceof BlupalError) return error(ctx.res, 503, e.code, e.message);
+      throw e;
+    }
+  });
+
+  /* What the client needs to know before it opens the payment sheet: whether a
+   * card-to-card gateway is configured at all, and whether it is the real one.
+   * The key itself never appears — only which world it belongs to. */
+  router.add('GET', `${base}/payments/gateway`, async (ctx) => {
+    const a = blupalActive();
+    json(ctx.res, 200, { cardToCard: a.configured, mode: a.mode, live: a.mode === 'live' });
   });
 
   // Gateway-side settlement: requires the HMAC signature the gateway (or the

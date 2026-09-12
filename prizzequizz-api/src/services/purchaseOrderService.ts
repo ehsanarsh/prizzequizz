@@ -27,6 +27,7 @@ import { getItem, rewardsOf, rewardLabel } from './shopService.js';
 import { purchase as shopPurchase } from './shopPurchaseService.js';
 import { postEntry, getAccount, WalletError } from './walletLedgerService.js';
 import { recordPurchase } from './missionService.js';
+import { claimFulfilment, settleFulfilment, abandonFulfilment, _resetFulfilmentGuard } from './fulfilmentGuard.js';
 import { logger } from './logger.js';
 
 export type PayMethod = 'vault' | 'gateway';
@@ -109,21 +110,26 @@ export interface Fulfilment {
 export async function fulfil(userId: string, order: PurchaseOrder, ref: string): Promise<Fulfilment> {
   if (order.kind === 'ticket') {
     /* grantTickets is not idempotent on its own, so the reference is what
-     * stops a replayed callback issuing a second ticket. */
-    if (await alreadyFulfilled(ref)) return { granted: [], duplicate: true };
-    await markFulfilled(ref);
+     * stops a replayed callback issuing a second ticket. The mark is in
+     * Postgres, so it still stops it after a restart. */
+    const claim = await claimFulfilment(ref);
+    if (!claim.fresh) {
+      /* Tell the duplicate what the first caller actually handed over, rather
+       * than an empty list that reads like nothing was ever delivered. */
+      const before = (claim.payload as Fulfilment['granted'] | null) ?? [];
+      return { granted: before, duplicate: true };
+    }
+    const granted = [{ key: 'ticket-' + order.tier, value: order.qty, label: ticketName(order.tier!) }];
     try {
       await grantTickets(userId, order.tier!, order.qty);
       await recordPurchase(userId, { tickets: order.qty });
     } catch (e) {
-      /* Un-mark so a retry can still deliver what the player paid for. */
-      unmarkFulfilled(ref);
+      /* Drop the claim so a retry can still deliver what the player paid for. */
+      await abandonFulfilment(ref);
       throw e;
     }
-    return {
-      granted: [{ key: 'ticket-' + order.tier, value: order.qty, label: ticketName(order.tier!) }],
-      duplicate: false
-    };
+    await settleFulfilment(ref, granted);
+    return { granted, duplicate: false };
   }
   /* The shop already knows how to grant a bundle and is idempotent on its key;
    * `paidExternally` is what tells it the money has come from somewhere other
@@ -132,20 +138,11 @@ export async function fulfil(userId: string, order: PurchaseOrder, ref: string):
   return { granted: r.granted ?? [], duplicate: !!r.duplicate };
 }
 
-/* Fulfilment marks. Postgres-free on purpose: the shop path carries its own
- * idempotency and the ticket path only needs to survive a duplicate callback
- * within the life of the process plus a ledger row that records the payment.
- * A restart between two callbacks for the same intent is the one gap, and the
- * gateway's own retry window is far shorter than that. */
-const _fulfilled = new Set<string>();
-async function alreadyFulfilled(ref: string): Promise<boolean> { return _fulfilled.has(ref); }
-async function markFulfilled(ref: string): Promise<void> {
-  _fulfilled.add(ref);
-  if (_fulfilled.size > 20_000) { const first = _fulfilled.values().next().value; if (first) _fulfilled.delete(first); }
-}
-function unmarkFulfilled(ref: string): void { _fulfilled.delete(ref); }
+/* The marks themselves live in fulfilmentGuard, which keeps them in Postgres so
+ * they outlive the process. They used to be a Set in memory here; a deploy
+ * during a gateway's retry run would have emptied it and paid out twice. */
 /** Test seam. */
-export function _resetFulfilled(): void { _fulfilled.clear(); }
+export const _resetFulfilled = _resetFulfilmentGuard;
 
 /* ---------------------------------------------------------------------------
  * Paying from the صندوق جایزه.
