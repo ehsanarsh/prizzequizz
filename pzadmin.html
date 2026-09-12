@@ -1907,18 +1907,32 @@ function qBulkBar(){
   const el=$('#qbulk'); if(!el)return; const n=_QSEL.size;
   el.innerHTML=n?'<div class="toolbar" style="background:var(--panel2);padding:10px;border-radius:10px;border:1.5px solid var(--gold)"><b>'+fa(n)+' سوال انتخاب شد</b>'+
     '<button class="btn sm ok" onclick="qBulk(\'approve\')">✅ تأیید همه</button>'+
+    '<button class="btn sm" onclick="qBulk(\'reject\')">✖️ رد همه</button>'+
     '<button class="btn sm" onclick="qBulk(\'archive\')">📦 بایگانی همه</button>'+
     '<button class="btn sm bad" onclick="qBulk(\'delete\')">🗑 حذف همه</button>'+
     '<button class="btn sm" onclick="_QSEL.clear();render()">لغو انتخاب</button></div>':'';
 }
 async function qBulk(action){
   const ids=[..._QSEL]; if(!ids.length)return;
-  const label={approve:'تأیید',archive:'بایگانی',delete:'حذف'}[action];
+  const label={approve:'تأیید',reject:'رد',archive:'بایگانی',delete:'حذف'}[action];
   if(!confirm(label+' '+ids.length+' سوالِ انتخاب‌شده؟'+(action==='delete'?' (برگشت‌ناپذیر)':'')))return;
+  /* Approving and rejecting go in ONE request. Three hundred selected rows used
+     to be three hundred round trips, which is slow enough that an operator gives
+     up half way and then cannot tell which half went through. The server answers
+     with what failed, so a partial result is reported instead of guessed at. */
+  if(action==='approve'||action==='reject'){
+    try{
+      const r=await api('POST','/admin/questions/bulk/'+action,{ids:ids});
+      _QSEL.clear();
+      const bad=(r.failed||[]).length;
+      toast(label+' شد: '+fa(r.done||0)+(bad?' · ناموفق '+fa(bad):''),bad?'bad':'ok');
+    }catch(e){ toast(e.message,'bad'); }
+    render(); return;
+  }
   let ok=0,bad=0;
   for(const id of ids){try{
     if(action==='delete')await api('DELETE','/admin/questions/'+id);
-    else await api('PATCH','/admin/questions/'+id+'/status',{status:action==='approve'?'approved':'archived'});
+    else await api('PATCH','/admin/questions/'+id+'/status',{status:'archived'});
     ok++;
   }catch(e){bad++;}}
   _QSEL.clear();
@@ -2010,6 +2024,12 @@ async function renderAiStudio(){
      but the wrong address why nothing worked. */
   let st={}; try{ st=await api('GET','/admin/questions/ai/status'); }catch(e){ st={error:e.message}; }
   _AISTATUS=st;
+  /* «ارائه دهنده سرویس گفته بود همه مدل هوش مصنوعی میتونی انتخاب کنی» — so the
+     list comes from the provider rather than from memory. It stays TYPABLE as
+     well as pickable: a proxy often wants its own prefix on an id (a
+     token-based key needs «t-» in front of every model), and a dropdown that
+     only offered what /v1/models returned would make that impossible. */
+  let ml={ok:false,models:[]}; try{ ml=await api('GET','/admin/questions/ai/models'); }catch(e){ ml={ok:false,models:[],error:e.message}; }
   const aiOn=!!st.configured;
   const pr=st.prompts||{}, df=st.promptDefaults||{}, md=st.models||{};
   const box=(id,label,val,def,hint)=>{
@@ -2019,7 +2039,7 @@ async function renderAiStudio(){
       '<textarea id="'+id+'" rows="4" style="width:100%;font-family:inherit;line-height:1.9;resize:vertical">'+esc(val||'')+'</textarea>'+
       '<div style="display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap">'+
         '<span class="note" style="display:inline;margin:0">مدل:</span>'+
-        '<input id="ai_m_'+stage+'" value="'+esc(md[stage]||'')+'" placeholder="claude-sonnet-5" style="width:200px" class="mono">'+
+        '<input id="ai_m_'+stage+'" list="ai_models" value="'+esc(md[stage]||'')+'" placeholder="claude-sonnet-5" style="width:230px" class="mono">'+
         '<button class="btn sm" onclick="aiResetPrompt(\''+id+'\')">بازگرداندن پرامپت به پیش‌فرض</button>'+
       '</div></div>';
   };
@@ -2033,7 +2053,12 @@ async function renderAiStudio(){
       'برای عوض کردنشان <span class="mono">ANTHROPIC_API_KEY</span> و <span class="mono">ANTHROPIC_BASE_URL</span> را در docker-compose ست کن و کانتینر api را ری‌استارت کن.</div>'+
       (st.error?'<div class="note" style="color:var(--bad)">خطا در خواندن وضعیت: '+esc(st.error)+'</div>':'')+
     '</div>'+
+    '<datalist id="ai_models">'+(ml.models||[]).map(m=>'<option value="'+esc(m)+'">').join('')+'</datalist>'+
     '<div class="card" style="margin-bottom:13px"><h3>📝 پرامپت‌ها</h3>'+
+      '<div class="note">'+(ml.ok
+        ? ('مدل‌های در دسترس این کلید: <b>'+fa((ml.models||[]).length)+'</b> — روی کادرِ مدل کلیک کن تا فهرست بیاید. '+
+           'می‌توانی چیزی خارج از فهرست هم بنویسی، چون بعضی سرویس‌ها پیشوند خودشان را لازم دارند.')
+        : ('فهرست مدل‌ها از سرویس گرفته نشد'+(ml.error?' ('+esc(ml.error)+')':'')+' — کادرِ مدل را دستی پر کن.'))+'</div>'+
       '<div class="note">این متن‌ها به‌عنوان <span class="mono">system</span> به مدل داده می‌شوند. قالبِ JSONِ پاسخ اینجا نیست و عمداً هم نیست: '+
       'خروجی بر اساس همان قالب پارس می‌شود، پس پرامپتی که بتواند شکلش را عوض کند می‌تواند همهٔ مراحل بعدی را بشکند. '+
       'کادر خالی یعنی «پیش‌فرض».</div>'+
@@ -2044,9 +2069,15 @@ async function renderAiStudio(){
     '<div class="card" style="margin-bottom:13px"><h3>۱) تولید سوال '+(aiOn?'<span class="pill ok">AI فعال</span>':'<span class="pill pend">AI غیرفعال — دستی</span>')+'</h3>'+
       '<div class="grid g3"><div class="field"><label>موضوع</label><input id="ai_topic" placeholder="مثلاً فوتبال"></div>'+
       '<div class="field"><label>سختی</label><select id="ai_diff"><option value="easy">آسان</option><option value="medium" selected>متوسط</option><option value="hard">سخت</option></select></div>'+
-      '<div class="field"><label>تعداد</label><input id="ai_count" type="number" value="3"></div></div>'+
-      '<button class="btn pri" onclick="aiGen()">🤖 تولید با AI</button> <button class="btn" onclick="aiManual()">✍️ ساخت دستی</button></div>'+
-    '<div id="ai_out"></div>';
+      '<div class="field"><label>تعداد (حداکثر ۲۵)</label><input id="ai_count" type="number" value="5" min="1" max="25"></div></div>'+
+      '<label class="note" style="display:flex;align-items:center;gap:8px;margin:0 0 10px">'+
+        '<input type="checkbox" id="ai_auto" checked> سوال‌هایی که همهٔ مرحله‌ها را رد کردند خودکار تأیید شوند'+
+      '</label>'+
+      '<button class="btn pri" onclick="aiRun()">🤖 تولید و افزودن به بانک</button> '+
+      '<button class="btn" onclick="aiManual()">✍️ ساخت دستی</button>'+
+      '<div class="note" style="margin-top:9px">هر سوال پیش از برگشتنِ نتیجه در دیتابیس نوشته می‌شود، پس عوض‌کردنِ تب چیزی را پاک نمی‌کند. '+
+      'سوالی که خیلی شبیهِ سوالِ موجود باشد اصلاً نوشته نمی‌شود؛ سوالی که صحتش تأیید نشود نوشته می‌شود ولی تأیید نمی‌شود.</div></div>'+
+    '<div id="ai_out">'+aiLastRunHtml()+'</div>';
 }
 /* Blank means «use the shipped default», so a reset is an empty box — not a
    copy of the default text pasted in, which would freeze today's wording into
@@ -2085,16 +2116,104 @@ async function aiSavePrompts(){
     await loadCfg(); render();
   }catch(e){ toast(e.message,'bad'); }
 }
-async function aiGen(){
-  const out=$('#ai_out'); out.innerHTML='<div class="skel"></div>';
+/* THE RUN, AND WHAT IT LEAVES BEHIND.
+   The old button only ASKED the model: the drafts came back into a variable and
+   the operator saved them one at a time, and changing tab threw them away. This
+   one finishes the job on the server — every question is in the bank before the
+   answer comes back — so the report below is a record of what happened, not a
+   basket of things still waiting to be kept. It is remembered across tabs too,
+   because reading «۱۲ سوال اضافه شد» and then losing the list is its own kind
+   of not-working. */
+const AI_RUN_KEY='pz_ai_last_run';
+function aiSaveRun(r){ try{ sessionStorage.setItem(AI_RUN_KEY,JSON.stringify({at:Date.now(),r:r})); }catch(e){} }
+function aiLastRun(){ try{ const v=JSON.parse(sessionStorage.getItem(AI_RUN_KEY)||'null'); return v&&v.r?v:null; }catch(e){ return null; } }
+function aiClearRun(){ try{ sessionStorage.removeItem(AI_RUN_KEY); }catch(e){} const o=$('#ai_out'); if(o) o.innerHTML=''; }
+function aiLastRunHtml(){ const v=aiLastRun(); return v?aiRunHtml(v.r,true):''; }
+
+async function aiRun(){
+  const topic=$('#ai_topic').value.trim();
+  if(!topic) return toast('موضوع را بنویس','bad');
+  const n=Math.max(1,Math.min(25,Number($('#ai_count').value||1)));
+  const out=$('#ai_out');
+  out.innerHTML='<div class="card"><h3>در حال ساختن…</h3><div class="note">هر سوال بازبینی، راستی‌آزمایی و با بانک مقایسه می‌شود، پس برای '+fa(n)+' سوال کمی طول می‌کشد. صفحه را نبند.</div><div class="skel"></div></div>';
   try{
-    const r=await api('POST','/admin/questions/ai/generate',{topic:$('#ai_topic').value.trim(),difficulty:$('#ai_diff').value,count:Number($('#ai_count').value||1)});
-    if(!r.configured){ out.innerHTML='<div class="note">🔌 AI پیکربندی نشده (ANTHROPIC_API_KEY تنظیم نیست). فعلاً «ساخت دستی» را بزن یا کلید را روی سرور ست کن.</div>'; return; }
-    AI_DRAFTS=r.drafts||[];
-    if(!AI_DRAFTS.length){ out.innerHTML='<div class="empty">مدل چیزی تولید نکرد'+(r.error?': '+esc(r.error):'')+'</div>'+aiErrorHelp(r.error); return; }
-    out.innerHTML=AI_DRAFTS.map((d,i)=>draftCard(d,i)).join('');
-  }catch(e){ out.innerHTML='<div class="empty">'+esc(e.message)+'</div>'; }
+    const r=await api('POST','/admin/questions/ai/run',{
+      topic:topic, difficulty:$('#ai_diff').value, count:n,
+      autoApprove:!!(($('#ai_auto')||{}).checked)
+    });
+    if(!r.configured){ out.innerHTML='<div class="note">🔌 AI پیکربندی نشده (ANTHROPIC_API_KEY تنظیم نیست). «ساخت دستی» را بزن یا کلید را روی سرور ست کن.</div>'; return; }
+    aiSaveRun(r);
+    out.innerHTML=aiRunHtml(r,false);
+    toast(fa(r.added)+' سوال به بانک اضافه شد',(r.added>0?'ok':'bad'));
+  }catch(e){ out.innerHTML='<div class="empty">اجرا نشد: '+esc(e.message)+'</div>'+aiErrorHelp(e.message); toast(e.message,'bad'); }
 }
+
+function aiRunHtml(r,old){
+  const rows=r.questions||[], skipped=r.skipped||[];
+  const kept=rows.filter(q=>!q.approved);
+  const head='<div class="card" style="margin-bottom:11px"><h3>نتیجهٔ اجرا'+(old?' <span class="pill info">اجرای قبلی</span>':'')+'</h3>'+
+    '<div class="cfg-row"><label>درخواست شده</label><b>'+fa(r.requested||0)+'</b></div>'+
+    '<div class="cfg-row"><label>مدل تولید کرد</label><b>'+fa(r.generated||0)+'</b></div>'+
+    '<div class="cfg-row"><label>تأیید شد و وارد بازی شد</label><b style="color:var(--ok)">'+fa(r.added||0)+'</b></div>'+
+    '<div class="cfg-row"><label>ذخیره شد ولی تأیید نشد</label><b style="color:'+((r.pending||0)?'var(--gold)':'var(--ok)')+'">'+fa(r.pending||0)+'</b></div>'+
+    '<div class="cfg-row"><label>اصلاً نوشته نشد</label><b>'+fa(skipped.length)+'</b></div>'+
+    (r.error?'<div class="note" style="color:var(--bad)">'+esc(r.error)+'</div>'+aiErrorHelp(r.error):'')+
+    '<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">'+
+      '<button class="btn" onclick="go(\'questions\')">دیدن بانک سوالات</button>'+
+      (kept.length?'<button class="btn pri" onclick="aiApproveHeld()">تأیید همهٔ '+fa(kept.length)+' سوالِ نگه‌داشته‌شده</button>':'')+
+      '<button class="btn" onclick="aiClearRun()">پاک کردن این گزارش</button>'+
+    '</div></div>';
+  const list=rows.length?('<div class="card" style="margin-bottom:11px"><h3>سوال‌هایی که ساخته شد</h3>'+
+    rows.map(q=>'<div class="cfg-row" style="align-items:flex-start">'+
+      '<label style="flex:1;white-space:normal;line-height:1.9">'+esc(q.text)+
+        '<div class="note" style="margin:3px 0 0;display:block">'+
+          (q.approved?'<span class="pill ok">تأیید شد</span>':'<span class="pill pend">'+esc(q.reason||'تأیید نشد')+'</span>')+
+          ' <span class="pill info">کیفیت '+fa(q.quality||0)+'</span>'+
+          ' <span class="pill info">'+esc(q.difficulty||'')+'</span>'+
+        '</div></label>'+
+      '<span style="display:flex;gap:6px">'+
+        (q.approved?'':'<button class="btn sm" onclick="aiOneApprove(\''+q.id+'\')">تأیید</button>')+
+        '<button class="btn sm danger" onclick="aiOneDelete(\''+q.id+'\',this)">حذف</button>'+
+      '</span></div>').join('')+'</div>'):'';
+  const bad=skipped.length?('<div class="card"><h3>نوشته نشد</h3>'+
+    skipped.map(x=>'<div class="cfg-row" style="align-items:flex-start"><label style="flex:1;white-space:normal;line-height:1.9">'+esc(x.question)+
+      '<div class="note" style="margin:3px 0 0;display:block"><span class="pill bad">'+
+      (x.reason==='duplicate'?'تکراری':x.reason==='malformed'?'ناقص':'خطا')+'</span> '+esc(x.detail||'')+'</div></label></div>').join('')+'</div>'):'';
+  return head+list+bad;
+}
+async function aiOneApprove(id){
+  try{ await api('POST','/admin/questions/'+id+'/approve',{}); toast('تأیید شد','ok'); const v=aiLastRun(); if(v){ (v.r.questions||[]).forEach(q=>{ if(q.id===id){ q.approved=true; q.reason=undefined; } }); v.r.added=(v.r.added||0)+1; v.r.pending=Math.max(0,(v.r.pending||0)-1); aiSaveRun(v.r); $('#ai_out').innerHTML=aiRunHtml(v.r,false); } }
+  catch(e){ toast(e.message,'bad'); }
+}
+async function aiApproveHeld(){
+  const v=aiLastRun(); if(!v) return;
+  const ids=(v.r.questions||[]).filter(q=>!q.approved).map(q=>q.id);
+  if(!ids.length) return;
+  if(!confirm('«'+fa(ids.length)+' سوالی که از دروازه رد نشدند» تأیید و وارد بازی شوند؟')) return;
+  try{
+    const r=await api('POST','/admin/questions/bulk/approve',{ids:ids});
+    (v.r.questions||[]).forEach(q=>{ q.approved=true; q.reason=undefined; });
+    v.r.added=(v.r.questions||[]).length; v.r.pending=0; aiSaveRun(v.r);
+    $('#ai_out').innerHTML=aiRunHtml(v.r,false);
+    toast(fa(r.done)+' سوال تأیید شد',(r.failed&&r.failed.length?'bad':'ok'));
+  }catch(e){ toast(e.message,'bad'); }
+}
+async function aiOneDelete(id,btn){
+  if(!confirm('این سوال برای همیشه حذف شود؟')) return;
+  try{
+    await api('DELETE','/admin/questions/'+id);
+    const v=aiLastRun();
+    if(v){ v.r.questions=(v.r.questions||[]).filter(q=>q.id!==id); aiSaveRun(v.r); $('#ai_out').innerHTML=aiRunHtml(v.r,false); }
+    toast('حذف شد','ok');
+  }catch(e){ toast(e.message,'bad'); }
+}
+
+/* `aiGen` — ask the model and leave the drafts in a browser variable for
+   somebody to save one at a time — is GONE, not kept as a second option. It is
+   the thing that was reported broken: «وقتی تب رو عوض میکنه همه سوالات ساخته
+   شده پاک میشه». Leaving it beside aiRun would leave the losing path one click
+   away, and it is the click that looks familiar.
+   The manual path stays: it writes to the bank the moment it is saved. */
 function aiManual(){ AI_DRAFTS=[{topic:$('#ai_topic').value.trim(),difficulty:$('#ai_diff').value,question:'',options:['','','',''],correctAnswer:0,explanation:''}]; $('#ai_out').innerHTML=draftCard(AI_DRAFTS[0],0,true); }
 function draftCard(d,i,edit){
   return '<div class="card" style="margin-bottom:11px"><h3>سوال '+fa(i+1)+' <span class="pill info">'+esc(d.difficulty||'')+'</span></h3>'+

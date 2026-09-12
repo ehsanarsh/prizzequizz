@@ -35,6 +35,46 @@ export function aiModel(kind: 'generator' | 'reviewer' | 'factChecker'): string 
   return c[kind + 'Model'] || c.model || 'claude-sonnet-5';
 }
 
+/* WHICH MODELS THIS KEY MAY ACTUALLY USE.
+ *
+ * The three model boxes were free text, so «choose any model» meant «type an
+ * id exactly right, from memory, and find out it was wrong only when a run
+ * fails». The provider knows the list; this asks it.
+ *
+ * It is a best effort on purpose: a proxy that does not implement /v1/models
+ * is not broken, it just cannot be listed — so the boxes stay typable and the
+ * panel says the list is unavailable rather than pretending there are none.
+ */
+export async function aiListModels(): Promise<{ ok: boolean; models: string[]; error?: string }> {
+  if (!aiConfigured()) return { ok: false, models: [], error: 'ANTHROPIC_API_KEY not set' };
+  try {
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), 12_000);
+    let res: Response;
+    try {
+      res = await fetch(aiBaseUrl() + '/v1/models?limit=200', {
+        headers: { 'x-api-key': aiKey(), 'authorization': 'Bearer ' + aiKey(), 'anthropic-version': '2023-06-01' },
+        signal: ac.signal
+      });
+    } finally { clearTimeout(timer); }
+    if (!res.ok) return { ok: false, models: [], error: `HTTP ${res.status}` };
+    const body: any = await res.json().catch(() => null);
+    /* Anthropic answers {data:[{id}]}; some proxies answer {models:[...]} or a
+     * bare array. All three are read rather than insisting on one. */
+    const rows = Array.isArray(body?.data) ? body.data
+      : Array.isArray(body?.models) ? body.models
+      : Array.isArray(body) ? body : [];
+    const models = rows
+      .map((m: any) => String(typeof m === 'string' ? m : (m?.id ?? m?.name ?? '')).trim())
+      .filter(Boolean)
+      .filter((v: string, i: number, a: string[]) => a.indexOf(v) === i)
+      .sort();
+    return { ok: true, models };
+  } catch (e) {
+    return { ok: false, models: [], error: e instanceof Error ? e.message : 'unreachable' };
+  }
+}
+
 export interface AiResult<T> { configured: boolean; ok: boolean; data?: T; error?: string; raw?: string }
 
 /* Ask a model for a JSON object. `schemaHint` is embedded in the prompt so the

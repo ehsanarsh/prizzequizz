@@ -12,7 +12,7 @@ import { getMatch, claimTimeout, forfeitMatch } from '../../services/matchEngine
 import { activeMatchState } from '../../services/matchStateStore.js';
 import { createGiftCode, listGiftCodes, redeemGiftCode } from '../../services/giftCodeService.js';
 import { aiGenerate, aiRunBatch, BATCH_MAX, aiPrompt, aiPromptDefaults, approve as approvePipeline, createDraft, getMeta as getPipelineMeta, listPipeline, reject as rejectPipeline, runPipeline } from '../../services/questionPipelineService.js';
-import { aiConfigured, aiEndpoint, aiModel } from '../../services/aiClient.js';
+import { aiConfigured, aiEndpoint, aiListModels, aiModel } from '../../services/aiClient.js';
 import { listAdminAudit, recordAdmin } from '../../services/adminAuditService.js';
 import { listPartners, savePartner, removePartner, addCodes, listCodes, stock as payoutStock, PayoutError } from '../../services/payoutPartnerService.js';
 import { getOtpSettings, setOtpSettings } from '../../services/withdrawOtpService.js';
@@ -715,6 +715,13 @@ export function registerAdminRoutes(router: Router, base: string): void {
       prompts: { generator: aiPrompt('generator'), reviewer: aiPrompt('reviewer'), factChecker: aiPrompt('factChecker') },
       promptDefaults: aiPromptDefaults()
     });
+  });
+  /* The list the provider itself offers, so the model boxes can be chosen from
+   * rather than typed from memory. Best effort: a proxy that does not implement
+   * it is not broken, so this reports why instead of failing the page. */
+  router.add('GET', `${base}/admin/questions/ai/models`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    json(ctx.res, 200, await aiListModels());
   });
   router.add('POST', `${base}/admin/questions/ai/generate`, async (ctx) => {
     if (!requireAdmin(ctx)) return;
