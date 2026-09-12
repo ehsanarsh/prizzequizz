@@ -14,7 +14,7 @@
      copy that was never uploaded look exactly alike. This is that version. It
      is readable from the server with one curl, and it is printed at the bottom
      of «تنظیمات» so it can be read off the phone with no terminal at all. -->
-<meta name="pz-build" content="20260912-1700">
+<meta name="pz-build" content="20260912-2130">
 <!-- App icon on the phone home screen (Add to Home Screen). Place appicon.png
      (a square PNG, ideally 512x512) in the same web folder as this file. -->
 <link rel="apple-touch-icon" sizes="180x180" href="appicon.png">
@@ -1372,6 +1372,44 @@ input,textarea,select,[contenteditable="true"],.pz-selectable,.pz-selectable *{
 @media(max-width:370px){.shop-grid .it-ico.char-art{width:80px;height:98px}}
 .item{background:var(--ink-2);border:var(--stroke);border-radius:18px;padding:16px;text-align:center;cursor:pointer;transition:transform .1s,box-shadow .1s;box-shadow:var(--hard-sm)}
 .item:active{transform:translateY(3px);box-shadow:0 1px 0 #000}
+/* A COLOURED CARD IS NOT A BLOCK OF PAINT.
+   «آبی می‌ذاری همه جا یک‌دست همون آبیه — باید از روشن شروع بشه بره تا رنگی که
+    انتخاب کردیم، از هاله شروع بشه، و یه موشن درخشش روش باشه که از یه سمت کارت
+    بره سمت دیگه.»
+   So the operator's colour is the DEEP end of the card, not the whole of it:
+   the light tint is mixed toward white in JS and handed over as --sc-lite, and
+   the two are poured top-left to bottom-right. The halo is a soft light at the
+   top that fades out before the middle — it is what stops a strong colour
+   reading as a flat rectangle. */
+.item.has-color{
+  background:
+    radial-gradient(120% 78% at 26% -12%, rgba(255,255,255,.42), rgba(255,255,255,0) 58%),
+    linear-gradient(152deg, var(--sc-lite,#fff) 0%, var(--sc,#444) 72%);
+  border-color:rgba(0,0,0,.34);
+  box-shadow:var(--hard-sm), 0 0 22px -6px var(--sc-glow,transparent);
+  overflow:hidden;
+}
+/* The sweep. A narrow diagonal band of light crossing the card and then waiting
+   — a shine that never stops is a card nobody can read the price on. The stagger
+   below keeps a shelf of them from flashing in unison like an alarm. */
+.item.has-color::before{
+  content:"";position:absolute;top:-60%;bottom:-60%;width:42%;left:0;z-index:0;pointer-events:none;
+  background:linear-gradient(100deg,rgba(255,255,255,0),rgba(255,255,255,.50),rgba(255,255,255,0));
+  will-change:transform;
+  animation:scShine 4.6s cubic-bezier(.4,0,.2,1) infinite;
+  animation-delay:var(--sc-delay,0s);
+}
+/* Moved with `transform`, not `left`: a shelf of these animating a layout
+   property makes the whole grid recalculate on every frame, and there can be a
+   dozen cards on screen. */
+@keyframes scShine{
+  0%{transform:translateX(-160%) skewX(-18deg)}
+  26%{transform:translateX(300%) skewX(-18deg)}
+  100%{transform:translateX(300%) skewX(-18deg)}
+}
+/* The content sits above the light rather than under it. */
+.item.has-color>*{position:relative;z-index:1}
+@media(prefers-reduced-motion:reduce){.item.has-color::before{animation:none;opacity:0}}
 .item .it-ico{font-size:34px;margin-bottom:8px;filter:drop-shadow(0 3px 0 rgba(0,0,0,.3))}
 .item b{font-size:14px;font-weight:800;display:block}
 .item p{font-size:11px;color:var(--muted);font-weight:500;margin:4px 0 10px;line-height:1.4;min-height:30px}
@@ -15007,12 +15045,32 @@ function renderShop(tab){
   const g=c.querySelector('.shop-grid');
   items.forEach(it=>{ g.appendChild(pzShopCard(it)); });
 }
-/* Black or white, whichever can actually be read on that colour. */
-function pzReadableOn(hex){
+/* The pale end of the card: the chosen colour walked toward white. A gradient
+   from «lighter version of itself» to itself is what makes a colour read as a
+   surface rather than as a rectangle of paint. */
+function pzMixWhite(hex,k){
+  const c=pzRgb(hex); if(!c) return '#ffffff';
+  const m=(v)=>Math.round(v+(255-v)*k);
+  return 'rgb('+m(c[0])+','+m(c[1])+','+m(c[2])+')';
+}
+function pzAlpha(hex,a){ const c=pzRgb(hex); return c?('rgba('+c[0]+','+c[1]+','+c[2]+','+a+')'):'transparent'; }
+function pzRgb(hex){
   const h=String(hex||'').replace('#','');
   const f=h.length===3?h.split('').map(c=>c+c).join(''):h;
-  const r=parseInt(f.slice(0,2),16)||0,g=parseInt(f.slice(2,4),16)||0,b=parseInt(f.slice(4,6),16)||0;
-  return (0.2126*r+0.7152*g+0.0722*b)>150?'#12121a':'#fff';
+  if(!/^[0-9a-fA-F]{6}$/.test(f)) return null;
+  return [parseInt(f.slice(0,2),16),parseInt(f.slice(2,4),16),parseInt(f.slice(4,6),16)];
+}
+/* A stable number per card, so the same card always starts its shine at the
+   same moment instead of jumping about on every repaint. */
+function pzHash(s){ let h=0; for(const ch of String(s)) h=((h<<5)-h+ch.charCodeAt(0))|0; return Math.abs(h); }
+/* Black or white, whichever can actually be read on that colour. */
+function pzReadableOn(hex){
+  const c=pzRgb(hex); if(!c) return '#fff';
+  /* Judged against the MIDDLE of the gradient, not the deep end: most of the
+     card is lighter than the colour that was picked, and choosing the text
+     colour from the darkest corner puts white lettering on a pale card. */
+  const m=c.map(v=>v+(255-v)*0.3);
+  return (0.2126*m[0]+0.7152*m[1]+0.0722*m[2])>150?'#12121a':'#fff';
 }
 /* ONE card for every shelf. Artwork when the operator uploaded some, the
    emoji otherwise; and for a package, the contents listed under the name so
@@ -15032,8 +15090,15 @@ function pzShopCard(it){
      The text colour is decided from the background rather than fixed, because a
      pale card with the usual near-white lettering is a card nobody can read. */
   if(/^#[0-9a-fA-F]{6}$/.test(String(it.color||''))){
-    d.style.background=it.color;
-    d.style.borderColor='rgba(0,0,0,.35)';
+    d.classList.add('has-color');
+    d.style.setProperty('--sc',it.color);
+    /* The light end, mixed toward white here rather than in CSS so the same
+       figure can decide whether the lettering goes dark or light. */
+    d.style.setProperty('--sc-lite',pzMixWhite(it.color,.55));
+    d.style.setProperty('--sc-glow',pzAlpha(it.color,.55));
+    /* Each card starts its sweep at its own moment; a shelf of them flashing
+       together reads as an alarm rather than as a shine. */
+    d.style.setProperty('--sc-delay',(pzHash(String(it.id||it.n||''))%26/10).toFixed(1)+'s');
     d.style.color=pzReadableOn(it.color);
   }
   const cur=it.cur==='coins'?' 🪙':' ت';

@@ -2080,6 +2080,7 @@ async function renderAiStudio(){
         /* One real call, so «کار نمی‌کنه» becomes the provider's own sentence.
            «مدل پیدا نشد» and «کلید اشتباه است» look identical from here
            otherwise, and they need completely different fixes. */
+        '<span class="note" style="display:inline;margin:0;font-size:10.5px">'+aiDialectPill((st.dialects||{})[stage])+'</span>'+
         '<button class="btn sm" onclick="aiTestModel(\''+stage+'\')">🔌 تست این مدل</button>'+
         '<span id="ai_m_'+stage+'_res" class="note" style="display:inline;margin:0"></span>'+
         '<button class="btn sm" onclick="aiResetPrompt(\''+id+'\')">بازگرداندن پرامپت به پیش‌فرض</button>'+
@@ -2089,7 +2090,12 @@ async function renderAiStudio(){
     '<button class="btn" onclick="go(\'pipeline\')">صف کیفیت</button>')+
     '<div class="note">معماری: <b>Generator → Reviewer → Fact-Checker → Duplicate → Quality → Database</b>. تشخیصِ تکرار و امتیازِ کیفیت همیشه کار می‌کنند، حتی وقتی AI خاموش است.</div>'+
     '<div class="card" style="margin-bottom:13px"><h3>🔌 اتصال '+(aiOn?'<span class="pill ok">کلید تنظیم شده</span>':'<span class="pill bad">کلید تنظیم نشده</span>')+'</h3>'+
-      '<div class="cfg-row"><label>آدرسی که درخواست به آن می‌رود</label><b class="mono">'+esc(st.endpoint||'—')+'</b></div>'+
+      /* Two protocols on one host — Claude on /v1/messages, everything else on
+         /v1/chat/completions — so «the endpoint» as one line could be wrong for
+         two stages out of three. Each stage says where it really goes. */
+      ['generator','reviewer','factChecker'].map(k=>'<div class="cfg-row"><label>'+
+        ({generator:'آدرس تولیدکننده',reviewer:'آدرس بازبین',factChecker:'آدرس راستی‌آزما'})[k]+
+        '</label><b class="mono" style="font-size:11px">'+esc(((st.endpoints||{})[k])||st.endpoint||'—')+'</b></div>').join('')+
       '<div class="cfg-row"><label>کلید</label><b class="mono">'+(st.keyTail?('…'+esc(st.keyTail)):'—')+'</b></div>'+
       '<div class="note">هر دو از <b>متغیر محیطی روی سرور</b> خوانده می‌شوند و از اینجا قابل تغییر نیستند — کلید نباید در پنل یا مرورگر بگردد. '+
       'برای عوض کردنشان <span class="mono">ANTHROPIC_API_KEY</span> و <span class="mono">ANTHROPIC_BASE_URL</span> را در docker-compose ست کن و کانتینر api را ری‌استارت کن.</div>'+
@@ -2138,12 +2144,28 @@ function aiErrorHelp(err){
     return '<div class="note" style="border-color:var(--bad)"><b>کلید پذیرفته نشد.</b> مقدار <span class="mono">ANTHROPIC_API_KEY</span> در فایل <span class="mono">.env</span> روی سرور را بررسی کن، بعد کانتینر api را بازبساز.</div>';
   if(/\b404\b/.test(e))
     return '<div class="note" style="border-color:var(--bad)"><b>آدرس پیدا نشد.</b> معمولاً یعنی <span class="mono">ANTHROPIC_BASE_URL</span> با <span class="mono">/v1</span> نوشته شده. بدون آن بنویسش.</div>';
+  /* Handled in the client now — it retries on the endpoint the provider names —
+     so seeing this after an update means the server is still the old build. */
+  if(/chat\/completions|not supported via \/v1\/messages/i.test(e))
+    return '<div class="note" style="border-color:var(--gold)"><b>این مدل پروتکل دیگری می‌خواهد.</b> سرور خودش باید روی <span class="mono">/v1/chat/completions</span> دوباره تلاش کند. '+
+      'اگر هنوز این پیام را می‌بینی، یعنی <b>dist روی سرور به‌روز نشده</b> — بستهٔ تازه را جا بینداز و کانتینر api را ری‌استارت کن.</div>';
+  if(/model.*not found|unknown model|does not exist/i.test(e))
+    return '<div class="note" style="border-color:var(--bad)"><b>این شناسهٔ مدل نزد ارائه‌دهنده وجود ندارد.</b> املای آن را از پنل خودِ سرویس بردار — و اگر کلیدت توکنی است، پیشوند <span class="mono">t-</span> را فراموش نکن.</div>';
   return '';
 }
 function aiResetPrompt(id){
   const el=$('#'+id); if(!el) return;
   el.value='';
   toast('خالی شد — با ذخیره، پیش‌فرض به کار می‌رود','ok');
+}
+/* Which of the two protocols this model will be spoken to with. The host
+   accepts both, and picking a GPT model used to fail with a 400 that said so —
+   this makes the choice visible BEFORE the run rather than after it. */
+function aiDialectPill(d){
+  if(!d) return '';
+  return d==='openai'
+    ? '<span class="pill info">Chat Completions</span>'
+    : '<span class="pill info">Messages</span>';
 }
 async function aiTestModel(stage){
   const inp=$('#ai_m_'+stage), out=$('#ai_m_'+stage+'_res');
@@ -2152,10 +2174,11 @@ async function aiTestModel(stage){
   if(out) out.innerHTML='<span style="color:var(--muted)">در حال تست…</span>';
   try{
     const r=await api('POST','/admin/questions/ai/test-model',{model:m});
-    if(r.ok){ if(out) out.innerHTML='<span style="color:var(--ok)">✅ کار می‌کند</span>'; toast('مدل جواب داد ✅','ok'); }
+    if(r.ok){ if(out) out.innerHTML='<span style="color:var(--ok)">✅ کار می‌کند</span> <span class="note" style="display:inline;margin:0;font-size:10px">'+esc(r.dialect==='openai'?'Chat Completions':'Messages')+'</span>'; toast('مدل جواب داد ✅','ok'); }
     else{
       if(out) out.innerHTML='<span style="color:var(--bad)">✖ '+esc(String(r.error||'').slice(0,90))+'</span>';
       modal('این مدل جواب نداد','<div class="card"><div class="cfg-row"><label>مدل</label><b class="mono">'+esc(m)+'</b></div>'+
+        '<div class="cfg-row"><label>آدرسی که امتحان شد</label><b class="mono" style="font-size:11px">'+esc(r.endpoint||'—')+'</b></div>'+
         '<div class="note" style="color:var(--bad)">'+esc(r.error||'')+'</div>'+aiErrorHelp(r.error)+'</div>');
     }
   }catch(e){ if(out) out.innerHTML='<span style="color:var(--bad)">✖ '+esc(e.message)+'</span>'; }

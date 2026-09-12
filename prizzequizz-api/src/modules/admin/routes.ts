@@ -12,7 +12,7 @@ import { getMatch, claimTimeout, forfeitMatch } from '../../services/matchEngine
 import { activeMatchState } from '../../services/matchStateStore.js';
 import { createGiftCode, listGiftCodes, redeemGiftCode } from '../../services/giftCodeService.js';
 import { aiGenerate, aiRunBatch, BATCH_MAX, aiPrompt, aiPromptDefaults, approve as approvePipeline, createDraft, getMeta as getPipelineMeta, listPipeline, reject as rejectPipeline, runPipeline } from '../../services/questionPipelineService.js';
-import { aiConfigured, aiEndpoint, aiListModels, aiModel, aiTestModel } from '../../services/aiClient.js';
+import { aiConfigured, aiEndpoint, aiListModels, aiModel, aiTestModel, dialectFor } from '../../services/aiClient.js';
 import { listAdminAudit, recordAdmin } from '../../services/adminAuditService.js';
 import { listPartners, savePartner, removePartner, addCodes, listCodes, stock as payoutStock, PayoutError } from '../../services/payoutPartnerService.js';
 import { getOtpSettings, setOtpSettings } from '../../services/withdrawOtpService.js';
@@ -712,6 +712,20 @@ export function registerAdminRoutes(router: Router, base: string): void {
       endpoint: aiEndpoint(),
       keyTail: key ? key.slice(-4) : '',
       models: { generator: aiModel('generator'), reviewer: aiModel('reviewer'), factChecker: aiModel('factChecker') },
+      /* WHERE EACH STAGE'S REQUEST REALLY GOES. The host speaks two protocols —
+       * Claude on /v1/messages, everything else on /v1/chat/completions — so
+       * with mixed models there is no single answer, and «the endpoint» shown
+       * as one line was a line that could be wrong for two stages out of three. */
+      endpoints: {
+        generator: aiEndpoint(aiModel('generator')),
+        reviewer: aiEndpoint(aiModel('reviewer')),
+        factChecker: aiEndpoint(aiModel('factChecker'))
+      },
+      dialects: {
+        generator: dialectFor(aiModel('generator')),
+        reviewer: dialectFor(aiModel('reviewer')),
+        factChecker: dialectFor(aiModel('factChecker'))
+      },
       prompts: { generator: aiPrompt('generator'), reviewer: aiPrompt('reviewer'), factChecker: aiPrompt('factChecker') },
       promptDefaults: aiPromptDefaults()
     });
