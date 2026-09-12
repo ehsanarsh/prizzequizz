@@ -16,7 +16,7 @@ import { repositories } from '../repositories/index.js';
 import type { Question } from '../types/domain.js';
 import { id } from '../utils/id.js';
 import { logger } from './logger.js';
-import { aiConfigured, aiJson, aiModel } from './aiClient.js';
+import { aiConfigured, aiJson, aiModel, wasTruncated } from './aiClient.js';
 
 export interface PipelineMeta {
   questionId: string;
@@ -130,13 +130,15 @@ export async function aiGenerate(input: { topic: string; difficulty?: string; co
     model: aiModel('generator'),
     system: aiPrompt('generator'),
     user: `Create ${count} multiple-choice quiz question(s) in PERSIAN about "${input.topic}" at "${difficulty}" difficulty. Return JSON: {"questions":[{"topic":"${input.topic}","difficulty":"${difficulty}","question":"...","options":["..","..","..",".."],"correctAnswer":0,"explanation":"...","source":".."}]}. correctAnswer is the 0-based index of the correct option.`,
-    maxTokens: 1600
+    /* SIZED FOR THE ANSWER BEING ASKED FOR, not a fixed number that happened to
+     * be enough once. A flat 1600 is roughly four Persian questions with their
+     * explanations; asking for ten inside it guarantees the reply is cut off
+     * mid-object, and a truncated reply does not parse. */
+    maxTokens: Math.min(8000, 700 + 520 * count)
   });
   if (!r.configured) return { configured: false, drafts: [], error: 'AI not configured' };
-  if (!r.ok || !r.data) return { configured: true, drafts: [], error: r.error };
-  const arr = Array.isArray((r.data as any).questions) ? (r.data as any).questions
-    : Array.isArray((r.data as any).items) ? (r.data as any).items
-    : Array.isArray(r.data) ? r.data : [];
+  if (!r.ok || !r.data) return { configured: true, drafts: [], error: r.error || 'مدل پاسخ قابل خواندنی نداد.' };
+  const arr = findDrafts(r.data);
   const drafts: DraftQuestion[] = [];
   const dropped: Array<{ why: string; sample: string }> = [];
   for (const q of arr) {
@@ -154,7 +156,70 @@ export async function aiGenerate(input: { topic: string; difficulty?: string; co
     return { configured: true, drafts: [], dropped,
       error: `مدل ${dropped.length} سؤال داد ولی هیچ‌کدام قابل استفاده نبود — ${dropped[0]!.why}` };
   }
+  /* THE ZERO THAT SAID NOTHING AT ALL.
+   * A reply that parsed but held no list of questions fell through every check
+   * above: no drafts, nothing dropped, no error — so the panel printed «۰ سؤال
+   * تولید شد» with not one word about why, and «۰ اصلاً نوشته نشد» underneath
+   * it, which reads as «nothing went wrong». It is the only outcome of this
+   * function that a person cannot act on, so it is the one that most needs to
+   * say what came back. */
+  if (!drafts.length) {
+    const keys = (r.data && typeof r.data === 'object' && !Array.isArray(r.data))
+      ? Object.keys(r.data as any).slice(0, 8).join(', ') : '';
+    logger.warn('ai_generate_no_list', { model: aiModel('generator'), keys, raw: String(r.raw || '').slice(0, 200) });
+    return { configured: true, drafts: [], dropped,
+      error: wasTruncated(r.stop)
+        ? 'پاسخ مدل وسط کار قطع شد (سقف توکن) — تعداد کمتری در هر بار بخواه.'
+        : `مدل پاسخ داد ولی فهرست سؤالی در آن نبود${keys ? ` (کلیدهایی که فرستاد: ${keys})` : ''} — ${String(r.raw || '').slice(0, 160)}` };
+  }
   return { configured: true, drafts, dropped };
+}
+
+/* THE LIST, WHEREVER THE MODEL PUT IT.
+ *
+ * The prompt asks for {"questions":[…]} and only `questions`, `items` and a
+ * bare array were ever looked at. A model that answered {"quiz":[…]} or
+ * {"data":{"questions":[…]}} — both of which answer the question asked — had
+ * its entire reply silently read as «no questions». So the shape is searched
+ * rather than assumed: the first array whose entries look like questions wins,
+ * at any depth. */
+export function findDrafts(data: unknown): any[] {
+  /* TWO PASSES, AND THE ORDER MATTERS.
+   * Strict first: an entry with both a question and its options is certainly a
+   * question, and taking those before anything else stops a list of topics or
+   * of tags being read as the answer.
+   * Loose second, and only if the strict pass found nothing: a question that
+   * arrived WITHOUT its options is still a question the model tried to give,
+   * and it has to reach readDraft so the operator is told «this one had no
+   * options» rather than «there was no list of questions» — the first is true
+   * and points at the model's output, the second is false and points nowhere. */
+  const textOf = (o: any) => String((o?.question ?? o?.text ?? o?.prompt ?? o?.title) ?? '').trim();
+  const isObj = (o: any) => !!o && typeof o === 'object' && !Array.isArray(o);
+  const strong = (o: any) => isObj(o) && !!textOf(o) && (o.options ?? o.choices) != null;
+  const weak = (o: any) => isObj(o) && !!textOf(o);
+
+  const pass = (fits: (o: any) => boolean): any[] => {
+    const seen = new Set<unknown>();
+    const walk = (node: any, depth: number): any[] => {
+      if (node == null || depth > 5) return [];
+      if (Array.isArray(node)) return node.some(fits) ? node.filter(isObj) : [];
+      if (typeof node !== 'object' || seen.has(node)) return [];
+      seen.add(node);
+      /* The named keys first, so a well-formed reply is barely searched. */
+      for (const k of ['questions', 'items', 'results', 'data', 'quiz', 'list', 'output']) {
+        const hit = walk((node as any)[k], depth + 1);
+        if (hit.length) return hit;
+      }
+      for (const v of Object.values(node)) {
+        const hit = walk(v, depth + 1);
+        if (hit.length) return hit;
+      }
+      return [];
+    };
+    return walk(data, 0);
+  };
+  const sure = pass(strong);
+  return sure.length ? sure : pass(weak);
 }
 
 /* WHAT A MODEL ACTUALLY SENDS BACK.

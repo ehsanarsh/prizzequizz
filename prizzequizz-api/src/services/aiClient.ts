@@ -127,7 +127,11 @@ export async function aiTestModel(model: string): Promise<{ ok: boolean; model: 
   return { ok: true, model: m, dialect: d, endpoint: ep, reply: String(r.raw || '').slice(0, 120) };
 }
 
-export interface AiResult<T> { configured: boolean; ok: boolean; data?: T; error?: string; raw?: string }
+export interface AiResult<T> { configured: boolean; ok: boolean; data?: T; error?: string; raw?: string; stop?: string }
+/** The model was cut off at the token cap rather than finishing. */
+export function wasTruncated(stop?: string): boolean {
+  return /^(max_tokens|length|max_output_tokens)$/i.test(String(stop ?? '').trim());
+}
 
 /* Ask a model for a JSON object. `schemaHint` is embedded in the prompt so the
  * model returns exactly the shape we parse. Returns a defensively-parsed value. */
@@ -146,17 +150,33 @@ function buildRequest(dialect: AiDialect, input: { model: string; system: string
   };
 }
 
+/** WHY THE MODEL STOPPED — the difference between «it had nothing to say» and
+ *  «it was cut off mid-sentence». A reply truncated at the token cap is not a
+ *  broken model and not a bad key: it is a number in this file being too small,
+ *  and that is the one cause you cannot guess from a parse failure. */
+function readStop(dialect: AiDialect, body: any): string {
+  const v = dialect === 'anthropic' ? body?.stop_reason : body?.choices?.[0]?.finish_reason;
+  return String(v ?? '').trim();
+}
+
 /** The text, out of whichever answer shape came back. */
 function readReply(dialect: AiDialect, body: any): string {
   if (dialect === 'anthropic') return (body?.content ?? []).map((b: any) => b?.text ?? '').join('').trim();
-  const c = body?.choices?.[0]?.message?.content;
+  const msg = body?.choices?.[0]?.message;
+  const c = msg?.content;
   /* Some gateways answer with the content already split into parts. */
   if (Array.isArray(c)) return c.map((x: any) => x?.text ?? x?.content ?? '').join('').trim();
-  return String(c ?? '').trim();
+  const text = String(c ?? '').trim();
+  /* A reasoning model can put everything in its thinking channel and leave
+   * `content` empty. That is still an answer — reading only the one field
+   * turned it into «the model said nothing», which is a different problem with
+   * a different fix. */
+  if (text) return text;
+  return String(msg?.reasoning_content ?? body?.choices?.[0]?.text ?? '').trim();
 }
 
 async function callOnce(dialect: AiDialect, input: { model: string; system: string; user: string; maxTokens?: number }, tokenKey: 'max_tokens' | 'max_completion_tokens'):
-  Promise<{ ok: true; raw: string } | { ok: false; status: number; text: string } | { ok: false; status: 0; text: string }> {
+  Promise<{ ok: true; raw: string; stop: string } | { ok: false; status: number; text: string } | { ok: false; status: 0; text: string }> {
   const url = aiBaseUrl() + (dialect === 'openai' ? '/v1/chat/completions' : '/v1/messages');
   const res = await fetch(url, {
     method: 'POST',
@@ -176,7 +196,7 @@ async function callOnce(dialect: AiDialect, input: { model: string; system: stri
     return { ok: false, status: res.status, text };
   }
   const body: any = await res.json().catch(() => null);
-  return { ok: true, raw: readReply(dialect, body) };
+  return { ok: true, raw: readReply(dialect, body), stop: readStop(dialect, body) };
 }
 
 export async function aiJson<T = any>(input: { model: string; system: string; user: string; maxTokens?: number }): Promise<AiResult<T>> {
@@ -207,20 +227,45 @@ export async function aiJson<T = any>(input: { model: string; system: string; us
       return { configured: true, ok: false, error: `AI HTTP ${r.status}: ${r.text.slice(0, 220)}` };
     }
     const parsed = extractJson(r.raw);
-    if (parsed == null) return { configured: true, ok: false, error: 'AI returned non-JSON', raw: r.raw };
-    return { configured: true, ok: true, data: parsed as T, raw: r.raw };
+    if (parsed == null) {
+      /* Three different faults used to share one sentence. Cut off at the cap,
+       * answered with nothing at all, or answered with prose — each needs a
+       * different fix, and «AI returned non-JSON» pointed at none of them. */
+      const why = wasTruncated(r.stop)
+        ? `پاسخ مدل وسط کار قطع شد (سقف توکن). سؤال کمتری در هر بار بخواه یا سقف را بالا ببر.`
+        : !String(r.raw || '').trim()
+          ? 'مدل پاسخ خالی داد.'
+          : `پاسخ مدل JSON نبود — ${String(r.raw).slice(0, 160)}`;
+      logger.warn('ai_reply_unparsable', { model: input.model, dialect, stop: r.stop, len: String(r.raw || '').length });
+      return { configured: true, ok: false, error: why, raw: r.raw, stop: r.stop };
+    }
+    return { configured: true, ok: true, data: parsed as T, raw: r.raw, stop: r.stop };
   } catch (e) {
     return { configured: true, ok: false, error: e instanceof Error ? e.message : 'AI error' };
   }
 }
 
+/* AN ARRAY IS ALSO JSON.
+ *
+ * This looked for `{` … `}` and nothing else, so a model that answered with a
+ * bare `[{…},{…}]` — which is a perfectly reasonable reading of «return the
+ * questions» — had its whole reply thrown away: the first `{` is inside the
+ * first element and the slice that came out was never valid. Whichever bracket
+ * opens first is the document. */
 function extractJson(text: string): unknown | null {
   if (!text) return null;
   // strip ```json fences if present
   const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
   const candidate = fenced ? fenced[1]! : text;
-  const start = candidate.indexOf('{');
-  const end = candidate.lastIndexOf('}');
-  if (start < 0 || end <= start) return null;
-  try { return JSON.parse(candidate.slice(start, end + 1)); } catch { return null; }
+  const obj = candidate.indexOf('{'), arr = candidate.indexOf('[');
+  const pairs: Array<[number, string]> = [];
+  if (obj >= 0) pairs.push([obj, '}']);
+  if (arr >= 0) pairs.push([arr, ']']);
+  pairs.sort((a, b) => a[0] - b[0]);
+  for (const [start, close] of pairs) {
+    const end = candidate.lastIndexOf(close);
+    if (end <= start) continue;
+    try { return JSON.parse(candidate.slice(start, end + 1)); } catch { /* try the other bracket */ }
+  }
+  return null;
 }

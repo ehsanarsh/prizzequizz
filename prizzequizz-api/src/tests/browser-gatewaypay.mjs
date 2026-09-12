@@ -124,10 +124,9 @@ async function open(opts = {}) {
   const { ctx, page } = await open();
   await page.evaluate(() => { (0, eval)('pzPayOrder')({ kind: 'ticket', tier: 'green', qty: 1 }, 'gateway', 'بلیط سبز'); });
   await page.waitForTimeout(500);
-  await page.evaluate(() => {
-    const btns = [...document.querySelectorAll('button')].filter((b) => /بعداً/.test(b.textContent || ''));
-    if (btns[0]) btns[0].click();
-  });
+  /* The way out is the ✕ — «بعداً» said the same thing in a button the same
+     size as the one that matters, so it is gone and the cross carries it. */
+  await page.evaluate(() => { const x = document.getElementById('aaaClose'); if (x) x.click(); });
   await page.waitForTimeout(400);
   const pending = await page.evaluate(() => localStorage.getItem('pz_pay_pending'));
   ok('changing your mind leaves no half-finished payment behind', pending === null, String(pending));
@@ -250,7 +249,23 @@ async function open(opts = {}) {
   const xshape = await page.evaluate(() => getComputedStyle(document.getElementById('aaaClose')).borderRadius);
   ok('the ✕ is a square, not a circle', !/50%/.test(xshape) && parseFloat(xshape) < 17, xshape);
   ok('its «go» button is green', /63, 208, 122|rgb\(63/.test(hand.primaryBg), hand.primaryBg.slice(0, 44));
-  ok('and «بعداً» is red, because it is the way out', /229, 72, 77|rgb\(229/.test(hand.secondaryBg), hand.secondaryBg.slice(0, 44));
+
+  /* ONE BUTTON, THE WHOLE ROW. «دکمه بعدا حذف بشه و دکمه پرداخت بزرگ بشه و جای
+     اونم بگیره.» The ✕ in the corner already offers «later», and offering it
+     twice put an equal-sized button next to the only one that matters. */
+  const solo = await page.evaluate(() => {
+    const p = document.getElementById('aaaPrimary'), sec = document.getElementById('aaaSecondary');
+    const row = document.getElementById('aaaActions');
+    const pr = p.getBoundingClientRect(), rr = row.getBoundingClientRect();
+    return { secShown: sec.offsetParent !== null, secText: sec.textContent.trim(),
+             w: Math.round(pr.width), row: Math.round(rr.width),
+             size: Math.round(parseFloat(getComputedStyle(p).fontSize)),
+             x: document.getElementById('aaaClose').offsetParent !== null };
+  });
+  ok('«بعداً» is gone from the hand-off sheet', !solo.secShown, solo.secText || '(hidden)');
+  ok('and the payment button takes the whole row', solo.w >= solo.row - 2, solo.w + ' of ' + solo.row);
+  ok('at full size, not the cramped two-up size', solo.size >= 15, solo.size + 'px');
+  ok('the ✕ is still there, so «later» is still possible', solo.x, String(solo.x));
 
   /* Leaving by the X must not leave a half-open payment behind. */
   await page.evaluate(() => document.getElementById('aaaClose').click());

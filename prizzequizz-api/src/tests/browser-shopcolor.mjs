@@ -183,6 +183,62 @@ ok('it is rounded like the card, so a dropped clip shows nothing', parseFloat(ba
 ok('the card still clips its own contents', band.clip === 'hidden', band.clip);
 ok('and the band is narrower than the card', band.w < band.cardW, band.w + ' of ' + band.cardW);
 
+/* ── AND NOTHING ANIMATES UNDER A TRANSFORM ──────────────────────────────
+   Sizing the band to the card was not enough — the user pressed a card and it
+   stretched again. Two things transform it: `:active` puts a transform on the
+   card itself, and opening a sheet puts `filter:blur(7px)` AND
+   `transform:scale(.985)` on the whole viewport behind it, both transitioned.
+   A layer that is animating underneath that has to be folded into the blur
+   while it moves, and it is folded in at the wrong size — the band smears and
+   the shelf looks broken. Nobody can see a shine through a blur at 48%
+   brightness, so it simply stops. */
+ok('the shine claims no permanent layer of its own',
+   !/transform|opacity/.test(await page.evaluate(() =>
+     getComputedStyle(document.querySelector('#shopContent .item.shine-on'), '::before').willChange)),
+   await page.evaluate(() => getComputedStyle(document.querySelector('#shopContent .item.shine-on'), '::before').willChange));
+
+const held = await (async () => {
+  const box = await page.evaluate(() => {
+    const e = document.querySelector('#shopContent .item.shine-on');
+    const r = e.getBoundingClientRect();
+    return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+  });
+  await page.mouse.move(box.x, box.y);
+  await page.mouse.down();
+  const v = await page.evaluate(() => {
+    const el = document.querySelector('#shopContent .item.shine-on');
+    const b = getComputedStyle(el, '::before');
+    return { pressed: el.matches(':active'), anim: b.animationName, op: b.opacity };
+  });
+  await page.mouse.up();
+  await page.waitForTimeout(300);
+  return v;
+})();
+ok('the card really is in its pressed state for this check', held.pressed, String(held.pressed));
+ok('and the light stops while a finger is on it', held.anim === 'none', held.anim);
+ok('with nothing left painted to smear', held.op === '0', held.op);
+
+/* The sheet is open over the shelf, and the shelf behind it is blurred. */
+await page.evaluate(() => (0, eval)('showAaaModal')({ title: 'آزمایش', primaryText: 'باشه' }));
+await page.waitForTimeout(400);
+const behind = await page.evaluate(() => {
+  const el = document.querySelector('#shopContent .item.shine-on');
+  const b = getComputedStyle(el, '::before');
+  const vp = document.querySelector('.phone.modal-open .viewport');
+  return { anim: b.animationName, op: b.opacity,
+           blurred: !!vp && /blur/.test(getComputedStyle(vp).filter),
+           scaled: !!vp && getComputedStyle(vp).transform !== 'none' };
+});
+ok('the shelf behind a sheet really is blurred and scaled', behind.blurred && behind.scaled,
+   JSON.stringify(behind));
+ok('and the shine stops there too', behind.anim === 'none', behind.anim);
+ok('again with nothing painted under the blur', behind.op === '0', behind.op);
+await page.evaluate(() => (0, eval)('closeAaaModal')(false));
+await page.waitForTimeout(400);
+const after = await page.evaluate(() =>
+  getComputedStyle(document.querySelector('#shopContent .item.shine-on'), '::before').animationName);
+ok('once the sheet is closed it shines again', after === 'scShine', after);
+
 /* ── ONE CARD SHINY, THE NEXT ONE PLAIN ──────────────────────────────────── */
 const perCard = await page.evaluate(() => {
   const out = {};

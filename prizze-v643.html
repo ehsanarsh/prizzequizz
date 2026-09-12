@@ -14,7 +14,7 @@
      copy that was never uploaded look exactly alike. This is that version. It
      is readable from the server with one curl, and it is printed at the bottom
      of «تنظیمات» so it can be read off the phone with no terminal at all. -->
-<meta name="pz-build" content="20260912-2340">
+<meta name="pz-build" content="20260913-0110">
 <!-- App icon on the phone home screen (Add to Home Screen). Place appicon.png
      (a square PNG, ideally 512x512) in the same web folder as this file. -->
 <link rel="apple-touch-icon" sizes="180x180" href="appicon.png">
@@ -1416,10 +1416,27 @@ input,textarea,select,[contenteditable="true"],.pz-selectable,.pz-selectable *{
     rgba(255,255,255,.34) 50%,
     rgba(255,255,255,.09) 57%,
     rgba(255,255,255,0) 70%);
-  will-change:transform,opacity;
+  /* NO `will-change`. It was here for smoothness and it is what made the card
+     stretch: it pins the band into a composited layer of its own, permanently,
+     on every coloured card on the shelf. A browser promotes a running transform
+     animation by itself for as long as it runs — the only thing `will-change`
+     added was a dozen layers standing by. */
   animation:scShine 5.8s cubic-bezier(.36,.12,.22,1) infinite;
   animation-delay:var(--sc-delay,0s);
 }
+/* AND IT STOPS THE MOMENT ANYTHING TRANSFORMS THE CARD.
+   «بازم وقتی تاچ می‌کنی دراز می‌شه.» Two things happen when a card is touched:
+   `:active` puts a transform on the card, and opening the sheet puts
+   `filter:blur(7px)` AND `transform:scale(.985)` on the whole viewport behind
+   it — with a transition, so both are re-rastered frame by frame. A layer that
+   is animating underneath that has to be folded into the blur while it moves,
+   and it is folded in at the wrong size: the band smears across the card and
+   the shelf looks broken.
+   Nobody can see a shine through a blur at 48% brightness anyway, so there is
+   nothing to weigh here — while the card is pressed, and while a sheet is open
+   over it, there is no animation and therefore no layer to smear. */
+.item.shine-on:active::before,
+.phone.modal-open .item.shine-on::before{animation:none;opacity:0}
 /* Moved with `transform`, not `left`: a shelf of these animating a layout
    property makes the whole grid recalculate on every frame, and there can be a
    dozen cards on screen. The opacity ramp is what stops the band appearing and
@@ -2002,6 +2019,11 @@ input,textarea,select,[contenteditable="true"],.pz-selectable,.pz-selectable *{
 .aaa-bar{height:10px;border-radius:8px;background:#000;border:2px solid #000;overflow:hidden}.aaa-bar i{display:block;height:100%;width:100%;background:linear-gradient(90deg,var(--bolt),#fff27a);transition:width 1s linear}
 .aaa-check{display:none;align-items:center;justify-content:center;gap:8px;margin:10px 0 12px;color:var(--muted);font-size:12px;font-weight:800;cursor:pointer}.aaa-check.show{display:flex}.aaa-check input{accent-color:#FFD21F;width:16px;height:16px}
 .aaa-actions{display:flex;gap:10px;margin-top:8px}.aaa-actions .btn{box-shadow:var(--hard-sm);padding:12px 10px;font-size:13px}.aaa-actions .btn:only-child{width:100%}
+/* ONE ACTION, AT FULL SIZE. The cramped sizing above exists so two labels fit
+   side by side; a sheet with a single button does not need it and should not
+   look like half of a pair. `:only-child` cannot see this — the other buttons
+   are still in the row, just hidden — so the sheet says so itself. */
+.aaa-actions.solo .btn{padding:16px 14px;font-size:16px;border-radius:18px;box-shadow:var(--hard)}
 .cash-pop{position:absolute;z-index:86;left:50%;top:128px;transform:translateX(-50%);padding:9px 14px;border-radius:999px;border:2px solid #000;background:linear-gradient(180deg,#4ff09a,#1eaf5f);color:#04160B;font-weight:900;font-size:16px;box-shadow:var(--hard-sm),0 0 28px rgba(51,217,124,.45);pointer-events:none;animation:cashPop 1.25s cubic-bezier(.2,1.15,.4,1) forwards}@keyframes cashPop{0%{opacity:0;transform:translate(-50%,16px) scale(.7)}18%,70%{opacity:1;transform:translate(-50%,0) scale(1)}100%{opacity:0;transform:translate(-50%,-44px) scale(.82)}}
 #duel .q-body.next-fade,#duel .pzm-qcard.next-fade,#q-screen .q-body.next-fade,#wta .wta-qpanel.next-fade{animation:questionFadeIn .42s cubic-bezier(.2,.9,.3,1) both}@keyframes questionFadeIn{from{opacity:0;transform:translateY(14px);filter:blur(6px)}to{opacity:1;transform:none;filter:none}}
 /* WTA whitespace + studio picking/hitbox fixes */
@@ -11773,6 +11795,8 @@ function showAaaModal(opts){
      next sheet like this should not have to know. */
   primary.style.display=(opts.primaryText==='')?'none':'flex';
   secondary.style.display=opts.secondaryText?'flex':'none';
+  /* «دکمه بعدا حذف بشه و دکمه پرداخت بزرگ بشه و جای اونم بگیره.» */
+  actions.classList.toggle('solo',!!opts.primaryWide);
   if(tertiary){
     tertiary.className=_btnClass(opts.tertiaryClass,opts.tertiaryText,'btn-ghost');
     tertiary.textContent=opts.tertiaryText||'';
@@ -22567,10 +22591,13 @@ async function pzGatewayHandoff(d,url,name){
       sub:'<div style="text-align:center;line-height:2.1"><span class="aaa-amount"><b>'+fa(d.amount)+'</b><span>تومان</span></span><br>'+
           '<span style="color:#CFE9D8;font-size:12px;font-weight:800">پرداخت امن با بلو پال</span><br>'+
           '<span style="color:var(--muted);font-size:12px">به صفحهٔ امن پرداخت می‌روی و بعد از واریز به بازی برمی‌گردی.</span></div>',
-      closable:true, secondaryDanger:true, primaryPay:true,
-      primaryText:'رفتن به صفحهٔ پرداخت', secondaryText:'بعداً',
+      /* One action, the whole width. «بعداً» said exactly what the ✕ in the
+         corner already says, and it said it in a button the same size as the
+         one that matters — so the way out is the cross, and the payment button
+         takes the row. Backing out still forgets the order: see onDismiss. */
+      closable:true, primaryPay:true, primaryWide:true,
+      primaryText:'رفتن به صفحهٔ پرداخت', secondaryText:'',
       onPrimary:()=>{ closeAaaModal(false); try{ location.href=url; }catch(e){ try{ window.open(url,'_blank'); }catch(e2){} } resolve(false); },
-      onSecondary:()=>{ closeAaaModal(false); pzPayForget(); resolve(false); },
       /* Leaving by the X is «بعداً», not a half-open payment left behind. */
       onDismiss:()=>{ pzPayForget(); resolve(false); }
     });

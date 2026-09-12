@@ -2151,6 +2151,18 @@ function aiErrorHelp(err){
       'اگر هنوز این پیام را می‌بینی، یعنی <b>dist روی سرور به‌روز نشده</b> — بستهٔ تازه را جا بینداز و کانتینر api را ری‌استارت کن.</div>';
   if(/model.*not found|unknown model|does not exist/i.test(e))
     return '<div class="note" style="border-color:var(--bad)"><b>این شناسهٔ مدل نزد ارائه‌دهنده وجود ندارد.</b> املای آن را از پنل خودِ سرویس بردار — و اگر کلیدت توکنی است، پیشوند <span class="mono">t-</span> را فراموش نکن.</div>';
+  /* THE THREE «۰ سؤال تولید شد» CASES, each with a different fix. A connection
+     that tests fine and then produces nothing is not a key problem, and telling
+     the operator to check the key sends them the wrong way. */
+  if(/قطع شد|سقف توکن/.test(e))
+    return '<div class="note" style="border-color:var(--gold)"><b>پاسخ مدل کامل نشد.</b> مدل وسط نوشتن به سقف توکن خورد و متن ناتمام JSON نیست. '+
+      'در هر بار <b>سؤال کمتری</b> بخواه (مثلاً ۵ تا به‌جای ۲۵) — سرور خودش هر بار چند دور می‌زند تا تعداد کامل شود.</div>';
+  if(/فهرست سؤالی/.test(e))
+    return '<div class="note" style="border-color:var(--gold)"><b>مدل جواب داد ولی سؤالی در آن نبود.</b> کلیدهایی که فرستاده در همین پیام آمده. '+
+      'معمولاً یعنی مدل دستور را دنبال نکرده — <b>مدل دیگری</b> را امتحان کن، یا متن «دستور تولید» را پایین همین صفحه صریح‌تر بنویس.</div>';
+  if(/پاسخ خالی/.test(e))
+    return '<div class="note" style="border-color:var(--gold)"><b>مدل چیزی برنگرداند.</b> بعضی مدل‌های استدلالی همهٔ توکن‌ها را صرف فکر کردن می‌کنند و متنی نمی‌نویسند. '+
+      'یک مدل معمولی‌تر را امتحان کن.</div>';
   return '';
 }
 function aiResetPrompt(id){
