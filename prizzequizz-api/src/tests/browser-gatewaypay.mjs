@@ -199,6 +199,102 @@ async function open(opts = {}) {
   await ctx.close();
 }
 
+/* ── 9. A WAY OUT, AND A PRICE YOU CAN READ ─────────────────────────────── */
+{
+  const { ctx, page } = await open();
+  await page.evaluate(() => { (0, eval)('pzPayOrder')({ kind: 'ticket', tier: 'green', qty: 1 }, 'gateway', 'بلیط سبز'); });
+  await page.waitForTimeout(500);
+
+  ok('the gateway sheet has a way out', await page.evaluate(() => {
+    const x = document.getElementById('aaaClose');
+    return !!x && x.offsetParent !== null;
+  }));
+  ok('and it is red, not another quiet ghost button', await page.evaluate(() => {
+    const x = document.getElementById('aaaClose');
+    const bg = getComputedStyle(x).backgroundImage + getComputedStyle(x).backgroundColor;
+    return /229|E5484D|rgb\(2/.test(bg) || /gradient/.test(bg);
+  }), await page.evaluate(() => getComputedStyle(document.getElementById('aaaClose')).backgroundImage.slice(0, 60)));
+
+  const amt = await page.evaluate(() => {
+    const el = document.querySelector('.aaa-amount b');
+    if (!el) return null;
+    return { text: el.textContent, size: Math.round(parseFloat(getComputedStyle(el).fontSize)) };
+  });
+  ok('the amount is spelled out, not buried in a sentence', !!amt && /۲۵٬۰۰۰/.test(amt.text), amt ? amt.text : 'no amount element');
+  ok('and it is big enough to actually read', !!amt && amt.size >= 20, amt ? amt.size + 'px' : '—');
+
+  const hand = await page.evaluate(() => ({
+    text: (document.getElementById('aaaModal') || {}).innerText || '',
+    primaryBg: getComputedStyle(document.getElementById('aaaPrimary')).backgroundImage,
+    secondaryBg: getComputedStyle(document.getElementById('aaaSecondary')).backgroundImage
+  }));
+  ok('the hand-off names the gateway too', /پرداخت امن با بلو پال/.test(hand.text));
+  ok('its «go» button is green', /63, 208, 122|rgb\(63/.test(hand.primaryBg), hand.primaryBg.slice(0, 44));
+  ok('and «بعداً» is red, because it is the way out', /229, 72, 77|rgb\(229/.test(hand.secondaryBg), hand.secondaryBg.slice(0, 44));
+
+  /* Leaving by the X must not leave a half-open payment behind. */
+  await page.evaluate(() => document.getElementById('aaaClose').click());
+  await page.waitForTimeout(300);
+  ok('closing it leaves no pending payment behind',
+     await page.evaluate(() => localStorage.getItem('pz_pay_pending')) === null);
+  ok('and the sheet is gone', await page.evaluate(() => {
+    const m = document.getElementById('aaaModal');
+    return !m || !m.classList.contains('show');
+  }));
+  await ctx.close();
+}
+
+/* ── 10. the purchase sheet, when the vault could pay ───────────────────── */
+{
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+  await ctx.addInitScript(() => {
+    localStorage.setItem('pz_tok', 't'); localStorage.setItem('pz_rtok', 'r');
+    localStorage.setItem('pz_usr', JSON.stringify({ id: 'u1', username: 'e', displayName: 'ا', level: 5, xp: 9, wallet: 0, coins: 1, hearts: 4 }));
+    for (const k of ['leaderboard', 'missions', 'shop', 'wheel']) localStorage.setItem('pq_tut_' + k, '1');
+    try { sessionStorage.setItem('pz_push_asked_visit', '1'); } catch (e) {}
+  });
+  await ctx.route('**/v1/**', (route) => {
+    const url = route.request().url();
+    let body = { ok: true, data: {} };
+    if (url.includes('/orders/quote')) {
+      body = { ok: true, data: { order: {}, amount: 25000, currency: 'cash', label: 'بلیط سبز', vaultBalance: 90000, canPayFromVault: true, canPayByGateway: true } };
+    }
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+  });
+  const page = await ctx.newPage();
+  await page.goto(`http://127.0.0.1:${PORT}/`, { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(5400);
+
+  await page.evaluate(() => { window.pzBuyOrder({ kind: 'ticket', tier: 'green', qty: 1 }, 'بلیط سبز'); });
+  await page.waitForTimeout(600);
+  const txt = await page.evaluate(() => (document.getElementById('aaaModal') || {}).innerText || '');
+  /* BOTH buttons here spend money — «پرداخت از صندوق» and «درگاه پرداخت» — so
+     without the X there was no way to simply change your mind. */
+  ok('the purchase sheet has a way out even when both buttons spend money',
+     await page.evaluate(() => { const x = document.getElementById('aaaClose'); return !!x && x.offsetParent !== null; }),
+     txt.split('\n').filter(Boolean).slice(0, 4).join(' | '));
+  ok('and the price is its own line there too', /۲۵٬۰۰۰/.test(txt));
+
+  /* WHICH BUTTON IS THE GATEWAY depends on whether the صندوق can cover it, so
+     the green belongs to the action and has to follow it between slots. Here
+     the vault CAN pay, so the gateway is the secondary. */
+  const green = await page.evaluate(() => {
+    const g = (el) => el ? getComputedStyle(el).backgroundImage : '';
+    return {
+      secondary: document.getElementById('aaaSecondary').textContent.trim(),
+      secondaryBg: g(document.getElementById('aaaSecondary')),
+      primary: document.getElementById('aaaPrimary').textContent.trim(),
+      primaryBg: g(document.getElementById('aaaPrimary'))
+    };
+  });
+  ok('the gateway button is the green one', /درگاه/.test(green.secondary) && /63, 208, 122|rgb\(63/.test(green.secondaryBg),
+     green.secondary + ' → ' + green.secondaryBg.slice(0, 44));
+  ok('and paying from the صندوق is not dressed as the gateway',
+     !/63, 208, 122/.test(green.primaryBg), green.primary);
+  ok('the sheet says who is taking the money', /پرداخت امن با بلو پال/.test(txt), txt.replace(/\n/g, ' | ').slice(0, 70));
+  await ctx.close();
+}
+
 await browser.close(); server.close();
 console.log(`[browser-gatewaypay] ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

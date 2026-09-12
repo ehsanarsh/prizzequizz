@@ -133,14 +133,45 @@ export async function suspiciousUsers(): Promise<any[]> {
 // ---------------------------------------------------------------------------
 // RESET tools — destructive, per-area, atomic, audited by the caller.
 // ---------------------------------------------------------------------------
-export const RESET_AREAS = ['wallet', 'tickets', 'xp', 'cup', 'level', 'league', 'missions', 'stats', 'matchHistory', 'transactions', 'leaderboard', 'notifications', 'full'] as const;
+export const RESET_AREAS = ['wallet', 'tickets', 'lifelines', 'xp', 'cup', 'level', 'league', 'missions', 'stats', 'matchHistory', 'transactions', 'leaderboard', 'notifications', 'season', 'full'] as const;
 export type ResetArea = typeof RESET_AREAS[number];
+
+/* ---------------------------------------------------------------------------
+ * STARTING A NEW SEASON.
+ *
+ * «می‌خوام ریست کنم و فقط سطح و XP و اینا بمونه، تمام صندوق جایزه‌ها صفر بشه،
+ *  تمام بلیط‌ها و کمکی‌ها صفر بشه، و فقط به ازای هر نفر که دعوت کردند و بلیط
+ *  گرفتن اون بلیط‌ها بمونه — برای رقابت با پول واقعی.»
+ *
+ * Everything a player BOUGHT or WON goes; everything they EARNED by playing
+ * stays. Level and XP are the record of having played and are untouched.
+ *
+ * The exception is the point of the whole thing. A ticket handed over for
+ * bringing somebody to the game was not bought and was not won at the table —
+ * it is owed, and a season reset that took it back would be taking back an
+ * invitation that has already been honoured. So the referral tickets are
+ * counted from the referral ledger and put back exactly, rather than being
+ * «kept» by not clearing them (which would also keep every bought ticket
+ * sitting in the same column).
+ *
+ * Hearts and coins are deliberately NOT touched: nobody asked for them, and a
+ * reset that quietly takes more than it was asked to take is the kind of thing
+ * that is discovered by a player rather than by whoever ran it.
+ * ------------------------------------------------------------------------- */
+export interface SeasonResetPlan {
+  users: number;
+  vaultTotal: number;            // toman about to be wiped
+  ticketsHeld: number;           // tickets that exist right now
+  referralTicketsKept: number;   // …of which this many survive
+  lifelinesHeld: number;
+  usersWithReferralTickets: number;
+}
 
 export async function resetArea(area: ResetArea): Promise<{ area: string; affected: number }> {
   const pool = pg();
   let affected = 0;
   const run = async (sql: string, args: unknown[] = []) => { if (pool) { const r = await pool.query(sql, args); affected += r.rowCount ?? 0; } };
-  const areas: ResetArea[] = area === 'full' ? ['wallet', 'tickets', 'xp', 'cup', 'level', 'stats', 'matchHistory', 'transactions', 'leaderboard', 'notifications', 'missions', 'league'] : [area];
+  const areas: ResetArea[] = area === 'full' ? ['wallet', 'tickets', 'lifelines', 'xp', 'cup', 'level', 'stats', 'matchHistory', 'transactions', 'leaderboard', 'notifications', 'missions', 'league'] : [area];
 
   for (const a of areas) {
     switch (a) {
@@ -151,6 +182,8 @@ export async function resetArea(area: ResetArea): Promise<{ area: string; affect
         await run(`DELETE FROM withdraw_requests`);
         break;
       case 'tickets': await run(`UPDATE users SET tickets='{}'::jsonb`); break;
+      case 'lifelines': await run(`UPDATE users SET lifelines='{}'::jsonb`); break;
+      case 'season': await runSeasonReset(run); break;
       case 'xp': await run(`UPDATE users SET xp=0`); break;
       case 'cup': await run(`UPDATE users SET weekly_score=0, weekly_week=''`); break;
       case 'level': await run(`UPDATE users SET level=1`); break;
@@ -165,6 +198,65 @@ export async function resetArea(area: ResetArea): Promise<{ area: string; affect
   }
   if (!pool) logger.warn('reset_area_memory_noop', { area });
   return { area, affected };
+}
+
+/* The referral tickets, per owner, straight from the referral ledger.
+ * `referred_by` holds the INVITER'S CODE, not their id, so the table is joined
+ * to itself to get back to the person who owns that code. Only rows that were
+ * actually settled (`rewarded_at > 0`) count — a signup whose reward never paid
+ * out must not be restored as though it had. */
+const REFERRAL_EARNED_SQL = `
+  SELECT owner.user_id AS uid, count(*)::int AS invites
+    FROM referrals ref
+    JOIN referrals owner ON owner.code = ref.referred_by
+   WHERE ref.rewarded_at > 0 AND ref.referred_by <> ''
+   GROUP BY owner.user_id`;
+
+async function runSeasonReset(run: (sql: string, args?: unknown[]) => Promise<void>): Promise<void> {
+  const { REFERRAL_REWARD_TIER, REFERRAL_REWARD_COUNT } = await import('./referralService.js');
+  /* The prize vaults, and everything that could still draw on them. */
+  await run(`DELETE FROM wallet_ledger`);
+  await run(`DELETE FROM wallet_accounts`);
+  await run(`UPDATE users SET wallet_balance=0`);
+  await run(`DELETE FROM withdraw_requests`);
+  /* The consumables. */
+  await run(`UPDATE users SET lifelines='{}'::jsonb`);
+  /* Tickets: cleared for everybody FIRST, then the owed ones put back. Doing it
+   * the other way round — keeping what is there and subtracting — would leave a
+   * bought ticket behind whenever somebody had both. */
+  await run(`UPDATE users SET tickets='{}'::jsonb`);
+  await run(
+    `UPDATE users u
+        SET tickets = jsonb_build_object($1::text, (e.invites * $2::int))
+       FROM (${REFERRAL_EARNED_SQL}) e
+      WHERE u.id::text = e.uid AND e.invites > 0`,
+    [REFERRAL_REWARD_TIER, REFERRAL_REWARD_COUNT]
+  );
+}
+
+/** What a season reset would do, without doing any of it. */
+export async function seasonResetPlan(): Promise<SeasonResetPlan> {
+  const pool = pg();
+  const empty: SeasonResetPlan = { users: 0, vaultTotal: 0, ticketsHeld: 0, referralTicketsKept: 0, lifelinesHeld: 0, usersWithReferralTickets: 0 };
+  if (!pool) return empty;
+  const { REFERRAL_REWARD_COUNT } = await import('./referralService.js');
+  const num = async (sql: string, args: unknown[] = []): Promise<number> => {
+    try { const r = await pool.query(sql, args); return Number(r.rows[0]?.n ?? 0) || 0; } catch { return 0; }
+  };
+  /* Tickets and lifelines are JSON maps of tier → count, so the totals are a
+   * sum over the values rather than a column. */
+  const sumJson = (col: string) =>
+    `SELECT coalesce(sum(v.n),0)::bigint AS n FROM users u, LATERAL (
+        SELECT coalesce(sum((value)::int),0) AS n FROM jsonb_each_text(coalesce(u.${col},'{}'::jsonb))
+        WHERE value ~ '^[0-9]+$') v`;
+  return {
+    users: await num(`SELECT count(*)::int AS n FROM users`),
+    vaultTotal: await num(`SELECT coalesce(sum(available),0)::bigint AS n FROM wallet_accounts`),
+    ticketsHeld: await num(sumJson('tickets')),
+    lifelinesHeld: await num(sumJson('lifelines')),
+    referralTicketsKept: (await num(`SELECT coalesce(sum(invites),0)::bigint AS n FROM (${REFERRAL_EARNED_SQL}) e`)) * REFERRAL_REWARD_COUNT,
+    usersWithReferralTickets: await num(`SELECT count(*)::int AS n FROM (${REFERRAL_EARNED_SQL}) e`)
+  };
 }
 
 async function resetLeaderboards(): Promise<void> {

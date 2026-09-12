@@ -14,7 +14,7 @@
      copy that was never uploaded look exactly alike. This is that version. It
      is readable from the server with one curl, and it is printed at the bottom
      of «تنظیمات» so it can be read off the phone with no terminal at all. -->
-<meta name="pz-build" content="20260912-0030">
+<meta name="pz-build" content="20260912-0330">
 <!-- App icon on the phone home screen (Add to Home Screen). Place appicon.png
      (a square PNG, ideally 512x512) in the same web folder as this file. -->
 <link rel="apple-touch-icon" sizes="180x180" href="appicon.png">
@@ -493,6 +493,23 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
 .btn-blue{background:linear-gradient(180deg,#7fd0fb,#3f9fd8);color:#04202e}
 .btn-red{background:linear-gradient(180deg,#ff8b7a,#e64533);color:#fff}
 .btn-ghost{background:linear-gradient(180deg,#26262d,var(--ink-2));color:var(--paper)}
+/* A secondary that means «no». The ghost grey read as another neutral option
+   next to «رفتن به صفحهٔ پرداخت», and backing out of a payment should look
+   like backing out. Opt-in per modal — most «بعداً» buttons are not a refusal. */
+.aaa-actions .btn.is-cancel{background:linear-gradient(180deg,#E5484D,#B3272C)!important;color:#fff!important}
+/* THE GATEWAY BUTTON IS GREEN, wherever it happens to sit. Which slot it is in
+   depends on whether the صندوق can cover the price, so the colour belongs to
+   the ACTION rather than to the position — a yellow «درگاه پرداخت» on one
+   screen and a grey one on the next is the same button wearing two faces. */
+.aaa-actions .btn.is-pay{background:linear-gradient(180deg,#3FD07A,#1E7A45)!important;color:#06240f!important}
+.aaa-actions .btn.is-pay::after{background:linear-gradient(180deg,rgba(255,255,255,.20),transparent 42%)}
+/* The gateway's own mark, above the buttons. Kept small and quiet: it is there
+   to say WHO is taking the money, not to advertise. */
+.aaa-payby{display:flex;align-items:center;justify-content:center;gap:7px;margin:2px 0 9px;
+  font-size:12px;font-weight:800;color:#CFE9D8}
+.aaa-payby img{height:20px;width:auto;max-width:92px;object-fit:contain;border-radius:4px}
+.aaa-payby .mark{display:inline-grid;place-items:center;height:20px;padding:0 8px;border-radius:6px;
+  background:linear-gradient(180deg,#3FD07A,#1E7A45);color:#06240f;font-weight:900;font-size:11px}
 .btn-ghost::after{background:linear-gradient(180deg,rgba(255,255,255,.09),transparent 40%)}
 .btn-sm{padding:11px 15px;font-size:14px;border-radius:14px;width:auto;box-shadow:var(--hard-sm)}
 .btn-sm:active{transform:translateY(3px)}
@@ -1860,6 +1877,21 @@ input,textarea,select,[contenteditable="true"],.pz-selectable,.pz-selectable *{
 @keyframes aaaOverlayIn{from{opacity:0}to{opacity:1}}
 .aaa-card{width:min(330px,94%);position:relative;max-height:86vh;overflow:hidden;display:flex;flex-direction:column;text-align:center;background:linear-gradient(180deg,#24242b,#121216);border:var(--stroke);border-radius:26px;padding:22px 18px 18px;box-shadow:0 7px 0 #000,0 24px 55px rgba(0,0,0,.65);animation:aaaCardIn .38s cubic-bezier(.2,1.25,.35,1) both;isolation:isolate}
 @keyframes aaaCardIn{from{opacity:0;transform:translateY(18px) scale(.92);filter:blur(8px)}to{opacity:1;transform:none;filter:none}}
+/* Red, and in the corner rather than in the button row: the row is where the
+   thing the player CAME for lives, and a way out sitting next to it is the one
+   they press by accident. */
+.aaa-x{position:absolute;inset-inline-end:12px;top:12px;z-index:3;width:34px;height:34px;border-radius:50%;
+  display:grid;place-items:center;font-size:17px;font-weight:900;line-height:1;cursor:pointer;
+  color:#fff;background:linear-gradient(180deg,#E5484D,#B3272C);border:1.5px solid rgba(0,0,0,.45);
+  box-shadow:0 3px 0 rgba(0,0,0,.55);font-family:inherit;padding:0;transition:transform .12s ease,filter .12s ease}
+.aaa-x:hover{filter:brightness(1.1)}
+.aaa-x:active{transform:translateY(2px);box-shadow:0 1px 0 rgba(0,0,0,.55)}
+/* The amount, where a payment is about to happen. «مبلغ رو بصورت واضح بنویسه» —
+   a figure inside a paragraph of explanation is not a figure anyone reads. */
+.aaa-amount{margin:2px auto 10px;padding:10px 16px;border-radius:16px;display:inline-flex;align-items:baseline;gap:7px;
+  background:rgba(255,210,31,.12);border:1.5px solid rgba(255,210,31,.4)}
+.aaa-amount b{font-size:26px;font-weight:900;color:var(--bolt,#FFD21F);line-height:1.1}
+.aaa-amount span{font-size:13px;color:#EAE3D2;font-weight:800}
 .aaa-card::before{content:"";position:absolute;inset:-34%;z-index:-1;background:conic-gradient(from 0deg,transparent 0 22deg,rgba(255,210,31,.14) 22deg 38deg,transparent 38deg 62deg,rgba(93,183,236,.10) 62deg 78deg,transparent 78deg 110deg);animation:raysSpin 12s linear infinite;opacity:.85}
 .aaa-card::after{content:"";position:absolute;inset:3px;border-radius:21px;background:linear-gradient(180deg,rgba(255,255,255,.08),transparent 42%);pointer-events:none}
 .aaa-icon{flex:0 0 auto;width:96px;height:96px;margin:0 auto 10px;border-radius:28px;background:linear-gradient(180deg,#FFE24A,var(--bolt-2));border:var(--stroke);display:grid;place-items:center;font-size:50px;box-shadow:var(--hard-sm),0 0 34px rgba(255,210,31,.3);animation:aaaIconBob 2.2s ease-in-out infinite}
@@ -6503,8 +6535,8 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
            The header already carries the real one. -->
       <div class="topbar"><h1>فروشگاه 🛍️</h1><button class="iconbtn ib-close" onclick="go('home')">✕</button></div>
       <div class="tabs" id="shopTabs">
-        <button class="tab" id="shopTabTickets" onclick="shopTab(this,'tickets')">🎫 بلیط مسابقات</button>
-        <button class="tab active" onclick="shopTab(this,'util')">آیتم‌های کاربردی</button>
+        <button class="tab active" id="shopTabTickets" onclick="shopTab(this,'tickets')">🎫 بلیط مسابقات</button>
+        <button class="tab" onclick="shopTab(this,'util')">آیتم‌های کاربردی</button>
         <button class="tab" onclick="shopTab(this,'cosmetic')">آیتم‌های تزئینی</button>
         <button class="tab" onclick="shopTab(this,'gift')">هدیه به دوست</button>
         <button class="tab" onclick="shopTab(this,'chat')">💬 پک‌های چت</button>
@@ -7173,6 +7205,12 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
   <!-- Shared AAA modal system -->
   <div id="aaaModal" role="dialog" aria-modal="true" aria-hidden="true">
     <div class="aaa-card" role="document">
+      <!-- A WAY OUT. The purchase sheet and the gateway hand-off had no way to
+           leave without choosing something: «انصراف» only appeared when the
+           صندوق could not pay, and the gateway one had no buttons at all. It is
+           opt-in per modal, because a countdown before a question must NOT be
+           dismissible and this is the same card. -->
+      <button class="aaa-x" id="aaaClose" type="button" aria-label="بستن" style="display:none" onclick="dismissAaaModal()">✕</button>
       <div class="aaa-icon" id="aaaIcon">⚡</div>
       <h2 class="aaa-title" id="aaaTitle">آماده‌ای؟</h2>
       <p class="aaa-sub" id="aaaSub">تمرکز کن؛ سوال بعدی در راهه.</p>
@@ -10907,6 +10945,13 @@ function go(id){
   if(cur&&cur.id!==id)screenStack.push(cur.id);
   showScreen(id);
   if(id==='friends'&&typeof friendsLoad==='function'){try{friendsLoad();}catch(e){}}
+  /* THE SHOP ALWAYS OPENS ON THE TICKETS. «همیشه وقتی فروشگاه رو لمس میکنی
+     صفحهٔ پیش‌فرض صفحهٔ بلیط‌ها باشه.» It used to keep whichever shelf was last
+     looked at, so a player who once opened «تزئینی» met that shelf every time
+     afterwards — and tickets are what the shop is FOR.
+     The few places that send the player to a particular shelf still win: they
+     set their tab after this runs. */
+  if(id==='shop'){ try{ _shopCurTab='tickets'; }catch(e){} }
   if(id==='shop'&&typeof pzLoadShop==='function'){try{pzLoadShop();}catch(e){}}
   /* Walked out of the shop without buying — the errand is over, and a purchase
      made on some later visit must not teleport the player somewhere. */
@@ -11597,6 +11642,11 @@ function showAaaModal(opts){
   const checkRow=document.getElementById('aaaCheckRow'),check=document.getElementById('aaaCheck'),checkText=document.getElementById('aaaCheckText');
   const actions=document.getElementById('aaaActions'),primary=document.getElementById('aaaPrimary'),secondary=document.getElementById('aaaSecondary');
   const tertiary=document.getElementById('aaaTertiary');
+  /* Opt-in: only a modal that says it can be left shows the way out. A
+     countdown into a question shares this card and must not be dismissible. */
+  const xb=document.getElementById('aaaClose');
+  if(xb) xb.style.display=opts.closable?'grid':'none';
+
   /* `art` shows a character on a lit stage instead of the emoji tile. The emoji
      stays as the fallback, so a missing file degrades to what it looked like
      before rather than to an empty circle. */
@@ -11631,6 +11681,12 @@ function showAaaModal(opts){
   const _btnClass=(cls,txt,dflt)=>'btn '+(cls||(_isShut(txt)?'btn-red':dflt));
   primary.className=_btnClass(opts.primaryClass,opts.primaryText,'btn-primary');
   secondary.className=_btnClass(opts.secondaryClass,opts.secondaryText,'btn-ghost');
+  /* AFTER the class is rebuilt, not before. These two lines were first written
+     above, where `className` is assigned from scratch a moment later and threw
+     them away — the buttons simply never changed colour. */
+  primary.classList.toggle('is-pay',!!opts.primaryPay);
+  secondary.classList.toggle('is-pay',!!opts.secondaryPay);
+  secondary.classList.toggle('is-cancel',!!opts.secondaryDanger);
   primary.textContent=opts.primaryText||'متوجه شدم';secondary.textContent=opts.secondaryText||'بعداً';
   /* An EXPLICIT empty label means «this sheet has no primary action» — the
      picker sheets say so and were getting a “متوجه شدم” that did nothing but
@@ -14912,7 +14968,7 @@ const SHOP={
     {i:'🎁',n:'جعبه سورپرایز',d:'هدیه‌ی شانسی',p:80000,key:'gift'},
   ],
 };
-let _shopCurTab='util';
+let _shopCurTab='tickets';
 
 /* Shop cards for every sellable help the admin has switched on. */
 function pzLLShopItems(){
@@ -14935,6 +14991,13 @@ function renderShop(tab){
   const g=c.querySelector('.shop-grid');
   items.forEach(it=>{ g.appendChild(pzShopCard(it)); });
 }
+/* Black or white, whichever can actually be read on that colour. */
+function pzReadableOn(hex){
+  const h=String(hex||'').replace('#','');
+  const f=h.length===3?h.split('').map(c=>c+c).join(''):h;
+  const r=parseInt(f.slice(0,2),16)||0,g=parseInt(f.slice(2,4),16)||0,b=parseInt(f.slice(4,6),16)||0;
+  return (0.2126*r+0.7152*g+0.0722*b)>150?'#12121a':'#fff';
+}
 /* ONE card for every shelf. Artwork when the operator uploaded some, the
    emoji otherwise; and for a package, the contents listed under the name so
    «۳ بلیط + ۴۰۰ سکه + ۲ کمک» is visible before buying, not after. */
@@ -14947,6 +15010,16 @@ function pzShopContents(it){
 }
 function pzShopCard(it){
   const d=document.createElement('div');d.className='item';d.style.position='relative';
+  /* THE CARD'S OWN COLOUR, when the operator set one. Only a real #rrggbb gets
+     this far — the server drops anything else — and no colour at all means the
+     shelf's default, so a shop nobody has recoloured looks exactly as it did.
+     The text colour is decided from the background rather than fixed, because a
+     pale card with the usual near-white lettering is a card nobody can read. */
+  if(/^#[0-9a-fA-F]{6}$/.test(String(it.color||''))){
+    d.style.background=it.color;
+    d.style.borderColor='rgba(0,0,0,.35)';
+    d.style.color=pzReadableOn(it.color);
+  }
   const cur=it.cur==='coins'?' 🪙':' ت';
   const art=it.img
     ? '<div class="it-ico" style="height:58px;display:flex;align-items:center;justify-content:center"><img src="'+esc0(it.img)+'" alt="" style="max-width:100%;max-height:58px;object-fit:contain"></div>'
@@ -15149,7 +15222,7 @@ async function pzLoadShop(){
     _shopAnswered=true;
     if(!items.length) return;
     const byCat={};
-    items.forEach(it=>{ (byCat[it.category]??=[]).push({id:it.id,i:it.icon,n:it.name,d:it.description,p:it.price,key:it.effectKey,val:it.effectValue,cur:it.currency,badge:it.badge,img:it.image||'',rewards:Array.isArray(it.rewards)?it.rewards:null}); });
+    items.forEach(it=>{ (byCat[it.category]??=[]).push({id:it.id,i:it.icon,n:it.name,d:it.description,p:it.price,key:it.effectKey,val:it.effectValue,cur:it.currency,badge:it.badge,img:it.image||'',color:it.color||'',rewards:Array.isArray(it.rewards)?it.rewards:null}); });
     /* Tickets used to be excluded here and drawn as three big config-driven
        cards. They are ordinary catalogue items now — same card, same buy
        button — so the operator can price them, bundle them and give them
@@ -22207,6 +22280,18 @@ renderWalletSecurity=function(c){
    is shown BEFORE anything is charged; both buttons post the same order and
    differ only in `method`. */
 submitTopup=async function(){ toast('شارژ حذف شده است'); };
+/* WHO IS TAKING THE MONEY. «عکس بالاش لوگو بلوپال باشه و بنویسه پرداخت امن با
+   بلو پال.» The artwork lives in one constant so it can be dropped in without
+   hunting through the payment code, and until it is there the name is shown as
+   a plain mark rather than a broken image — the sentence is the part that has
+   to be true, and it is true either way. */
+const PZ_BLUPAL_LOGO='';   /* data: URI or URL — set when the artwork arrives */
+function pzPayByMark(){
+  const art=PZ_BLUPAL_LOGO
+    ? '<img src="'+PZ_BLUPAL_LOGO+'" alt="بلو پال" onerror="this.replaceWith(Object.assign(document.createElement(\'span\'),{className:\'mark\',textContent:\'بلو پال\'}))">'
+    : '<span class="mark">بلو پال</span>';
+  return '<div class="aaa-payby">'+art+'<span>پرداخت امن با بلو پال</span></div>';
+}
 window.pzBuyOrder=async function(order,label){
   /* Price it first. The server decides the amount and which doors are open —
      the client never sends a price and never guesses whether the صندوق can
@@ -22225,11 +22310,23 @@ window.pzBuyOrder=async function(order,label){
       : '<span style="color:var(--bad)">موجودی صندوق کافی نیست ('+fa(d.vaultBalance)+' تومان)</span>';
     showAaaModal({
       icon:'💳', title:name,
-      sub:'<div style="text-align:center;line-height:2.1">مبلغ: <b>'+fa(d.amount)+' تومان</b><br>'+vaultLine+'<br><span style="color:var(--muted);font-size:12px">روش پرداخت را انتخاب کن</span></div>',
+      /* The price first and on its own. It used to be one clause in a line of
+         explanation, which is not where anybody looks for what they are about
+         to be charged. */
+      sub:'<div style="text-align:center;line-height:2.1"><span class="aaa-amount"><b>'+fa(d.amount)+'</b><span>تومان</span></span><br>'+vaultLine+
+          (d.canPayByGateway?pzPayByMark():'')+
+          '<br><span style="color:var(--muted);font-size:12px">روش پرداخت را انتخاب کن</span></div>',
+      /* When the صندوق could pay, BOTH buttons used to be a way to spend money
+         and there was no way to simply leave. */
+      closable:true,
+      /* Green marks the gateway, whichever slot it lands in. */
+      primaryPay: !d.canPayFromVault,
+      secondaryPay: !!d.canPayFromVault,
       primaryText: d.canPayFromVault?'پرداخت از صندوق جایزه':'درگاه پرداخت',
       secondaryText: d.canPayFromVault?'درگاه پرداخت':'انصراف',
       onPrimary:async()=>{ closeAaaModal(false); resolve(await pzPayOrder(order, d.canPayFromVault?'vault':'gateway', name)); },
-      onSecondary:async()=>{ closeAaaModal(false); if(!d.canPayFromVault) return resolve(false); resolve(await pzPayOrder(order,'gateway',name)); }
+      onSecondary:async()=>{ closeAaaModal(false); if(!d.canPayFromVault) return resolve(false); resolve(await pzPayOrder(order,'gateway',name)); },
+      onDismiss:()=>{ resolve(false); }
     });
   });
 };
@@ -22259,7 +22356,11 @@ async function pzPayOrder(order,method,name){
   const payUrl=String(r.data.paymentUrl||'');
   if(/^https?:\/\//i.test(payUrl)) return pzGatewayHandoff(r.data,payUrl,name);
 
-  showAaaModal({icon:'💳',title:'اتصال به درگاه پرداخت',sub:'در حال پرداخت امن '+fa(r.data.amount)+' تومان…',primaryText:'',secondaryText:''});
+  /* This one had NO buttons whatsoever — if the settle call hung, the player
+     was sealed inside it. */
+  showAaaModal({icon:'💳',title:'اتصال به درگاه پرداخت',
+    sub:'<div style="text-align:center"><span class="aaa-amount"><b>'+fa(r.data.amount)+'</b><span>تومان</span></span><br><span style="color:var(--muted);font-size:12px">در حال پرداخت امن…</span></div>',
+    closable:true,primaryText:'',secondaryText:''});
   try{ await fetch(_A.replace(/\/v1$/,'')+payUrl).then(x=>x.json()); }catch(e){}
   let paid=false;
   for(let i=0;i<8&&!paid;i++){
@@ -22311,10 +22412,18 @@ function pzGatewayHandoff(d,url,name){
   return new Promise((resolve)=>{
     showAaaModal({
       icon:'💳', title:'پرداخت کارت به کارت',
-      sub:'<div style="text-align:center;line-height:2.1">مبلغ: <b>'+fa(d.amount)+' تومان</b><br><span style="color:var(--muted);font-size:12px">به صفحهٔ امن پرداخت می‌روی و بعد از واریز به بازی برمی‌گردی.</span></div>',
+      /* «در مودال رفتن به درگاه امن مبلغ رو بصورت واضح بنویسه» — this is the
+         last screen before the player leaves to move real money, so the figure
+         they are about to transfer is the largest thing on it. */
+      sub:'<div style="text-align:center;line-height:2.1"><span class="aaa-amount"><b>'+fa(d.amount)+'</b><span>تومان</span></span>'+
+          pzPayByMark()+
+          '<span style="color:var(--muted);font-size:12px">به صفحهٔ امن پرداخت می‌روی و بعد از واریز به بازی برمی‌گردی.</span></div>',
+      closable:true, secondaryDanger:true, primaryPay:true,
       primaryText:'رفتن به صفحهٔ پرداخت', secondaryText:'بعداً',
       onPrimary:()=>{ closeAaaModal(false); try{ location.href=url; }catch(e){ try{ window.open(url,'_blank'); }catch(e2){} } resolve(false); },
-      onSecondary:()=>{ closeAaaModal(false); pzPayForget(); resolve(false); }
+      onSecondary:()=>{ closeAaaModal(false); pzPayForget(); resolve(false); },
+      /* Leaving by the X is «بعداً», not a half-open payment left behind. */
+      onDismiss:()=>{ pzPayForget(); resolve(false); }
     });
   });
 }

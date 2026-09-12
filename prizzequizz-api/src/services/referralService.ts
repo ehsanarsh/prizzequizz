@@ -261,6 +261,44 @@ export async function wasRewarded(userId: string): Promise<boolean> {
   return !!(rows[0] && Number(rows[0].rewarded_at) > 0);
 }
 
+/* THE SAME COUNT FOR A WHOLE PAGE OF PLAYERS, IN ONE QUERY.
+ * The admin list draws a hundred rows at a time, and `inviteCount` costs two
+ * queries per player — so the list would spend two hundred round trips to show
+ * one column. `referred_by` holds the inviter's CODE, so the table is joined to
+ * itself to get back to who owns it.
+ *
+ * `rewarded` is the number that matters for anything involving money: a signup
+ * whose reward never settled is a person who joined, not a ticket that was
+ * handed over, and a season reset restores only the settled ones. */
+export async function inviteCountsFor(userIds: string[]): Promise<Map<string, { invited: number; rewarded: number }>> {
+  const out = new Map<string, { invited: number; rewarded: number }>();
+  const ids = [...new Set(userIds.map(String).filter(Boolean))];
+  if (!ids.length) return out;
+  const pool = pg();
+  if (!pool) {
+    for (const uid of ids) {
+      const code = mem.get(uid)?.code;
+      if (!code) continue;
+      const rows = [...mem.values()].filter((r) => r.referredBy === code);
+      out.set(uid, { invited: rows.length, rewarded: rows.filter((r) => r.rewardedAt > 0).length });
+    }
+    return out;
+  }
+  await ensureSchema(pool);
+  const { rows } = await pool.query(
+    `SELECT owner.user_id AS uid,
+            count(*)::int AS invited,
+            count(*) FILTER (WHERE ref.rewarded_at > 0)::int AS rewarded
+       FROM referrals ref
+       JOIN referrals owner ON owner.code = ref.referred_by
+      WHERE ref.referred_by <> '' AND owner.user_id = ANY($1::text[])
+      GROUP BY owner.user_id`,
+    [ids]
+  );
+  for (const r of rows) out.set(String(r.uid), { invited: Number(r.invited) || 0, rewarded: Number(r.rewarded) || 0 });
+  return out;
+}
+
 /** How many people have signed up with this player's code. */
 export async function inviteCount(userId: string): Promise<number> {
   const code = await codeFor(userId);

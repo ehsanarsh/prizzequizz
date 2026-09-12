@@ -18,7 +18,7 @@ import { listPartners, savePartner, removePartner, addCodes, listCodes, stock as
 import { getOtpSettings, setOtpSettings } from '../../services/withdrawOtpService.js';
 import { getSmsConfig, smsIsLive } from '../../services/smsService.js';
 import { listReports, reportCounts, setReportStatus } from '../../services/questionReportService.js';
-import { RESET_AREAS, type ResetArea, dashboardMetrics, financeSummary, finishedMatches, resetArea, runningMatches, suspiciousUsers } from '../../services/adminOpsService.js';
+import { RESET_AREAS, type ResetArea, dashboardMetrics, financeSummary, finishedMatches, resetArea, seasonResetPlan, runningMatches, suspiciousUsers } from '../../services/adminOpsService.js';
 import { listTrusted, trust, untrust } from '../../services/trustedUserService.js';
 import { currentMatchOf } from '../../services/matchEngine.js';
 import { getAccount } from '../../services/walletLedgerService.js';
@@ -843,7 +843,8 @@ export function registerAdminRoutes(router: Router, base: string): void {
            means "leave as it was"; an empty array or an empty string means
            "the operator cleared it", and those must not be confused. */
         ...(b.rewards !== undefined ? { rewards: b.rewards } : {}),
-        ...(b.image !== undefined ? { image: String(b.image || '') } : {})
+        ...(b.image !== undefined ? { image: String(b.image || '') } : {}),
+        ...(b.color !== undefined ? { color: String(b.color || '') } : {})
       });
       audit(ctx.userId, b.id ? 'SHOP_ITEM_UPDATED' : 'SHOP_ITEM_CREATED', 'shop_item', item.id, { name: item.name, price: item.price });
       json(ctx.res, 201, item);
@@ -1535,6 +1536,14 @@ export function registerAdminRoutes(router: Router, base: string): void {
   });
 
   // Per-area RESET — destructive, requires an explicit confirm token, audited.
+  /* WHAT A SEASON RESET WOULD DO, BEFORE IT DOES IT.
+   * It wipes every prize vault on the system. An irreversible action that
+   * cannot be inspected first is one nobody should be asked to press. */
+  router.add('GET', `${base}/admin/reset/season/plan`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    json(ctx.res, 200, await seasonResetPlan());
+  });
+
   router.add('POST', `${base}/admin/reset`, async (ctx) => {
     if (!requireAdmin(ctx)) return;
     const b = (ctx.body ?? {}) as any;

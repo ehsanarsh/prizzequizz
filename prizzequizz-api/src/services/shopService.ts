@@ -30,6 +30,9 @@ export interface ShopItem {
   rewards?: ShopReward[];
   /** Artwork, as a data: URI. Falls back to `icon` when empty. */
   image?: string;
+  /** The card's own colour, as `#rrggbb`. Empty means the shelf's default, so
+   *  an operator who sets nothing gets exactly what the shop looks like now. */
+  color?: string;
   badge?: string;            // e.g. «محبوب», «جدید», «٪۲۰ تخفیف»
   enabled: boolean;
   sortOrder: number;
@@ -83,6 +86,7 @@ async function ensureSchema(pool: ReturnType<typeof getPgPool>): Promise<void> {
   /* CREATE TABLE IF NOT EXISTS never adds a column to a table that already
      exists, so a server created before bundles needs these explicitly. */
   await pool.query(`ALTER TABLE shop_items ADD COLUMN IF NOT EXISTS rewards JSONB`);
+  await pool.query(`ALTER TABLE shop_items ADD COLUMN IF NOT EXISTS color VARCHAR(9)`);
   await pool.query(`ALTER TABLE shop_items ADD COLUMN IF NOT EXISTS image TEXT`);
   _schemaReady = true;
 }
@@ -104,7 +108,7 @@ function rowToItem(r: any): ShopItem {
   return {
     id: r.id, category: r.category, icon: r.icon, name: r.name, description: r.description ?? '',
     price: Number(r.price ?? 0), currency: r.currency === 'cash' ? 'cash' : 'coins',
-    effectKey: r.effect_key, effectValue: Number(r.effect_value ?? 1), badge: r.badge ?? undefined,
+    effectKey: r.effect_key, effectValue: Number(r.effect_value ?? 1), badge: r.badge ?? undefined, color: r.color ?? undefined,
     rewards: parseRewards(r.rewards), image: r.image || undefined,
     enabled: r.enabled !== false, sortOrder: Number(r.sort_order ?? 0),
     createdAt: r.created_at?.toISOString?.() ?? String(r.created_at),
@@ -199,6 +203,17 @@ export async function getItem(itemId: string): Promise<ShopItem | null> {
   return (await listAllRaw()).find((i) => i.id === itemId) ?? null;
 }
 
+/* A colour or nothing. `#abc` is expanded because that is what people type,
+   and everything else is dropped rather than passed through. */
+export function normalizeColor(raw: unknown): string | undefined {
+  const v = String(raw ?? '').trim();
+  if (!v) return undefined;
+  const m = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(v);
+  if (!m) return undefined;
+  const hex = m[1]!.toLowerCase();
+  return '#' + (hex.length === 3 ? hex.split('').map((c) => c + c).join('') : hex);
+}
+
 export async function saveItem(input: Partial<ShopItem> & { name: string; category: string }): Promise<ShopItem> {
   const now = new Date().toISOString();
   const existing = input.id ? await getItem(input.id) : null;
@@ -215,6 +230,11 @@ export async function saveItem(input: Partial<ShopItem> & { name: string; catego
     rewards: input.rewards !== undefined ? parseRewards(input.rewards) : existing?.rewards,
     image: (input.image !== undefined ? String(input.image || '') : (existing?.image || '')) || undefined,
     badge: (input.badge ?? existing?.badge) || undefined,
+    /* Only a real #rrggbb is stored. Anything else becomes «no colour», which
+     * is the shelf default — a half-typed value must not paint a card with a
+     * string the browser will not understand, and a card is not a place to let
+     * somebody else's stylesheet in. */
+    color: normalizeColor(input.color !== undefined ? input.color : existing?.color),
     enabled: input.enabled != null ? !!input.enabled : (existing?.enabled ?? true),
     sortOrder: Number(input.sortOrder ?? existing?.sortOrder ?? 0),
     createdAt: existing?.createdAt || now,
@@ -230,11 +250,11 @@ export async function saveItem(input: Partial<ShopItem> & { name: string; catego
   if (pool) {
     await ensureSchema(pool);
     await pool.query(
-      `INSERT INTO shop_items(id,category,icon,name,description,price,currency,effect_key,effect_value,badge,enabled,sort_order,created_at,updated_at,rewards,image)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
-       ON CONFLICT (id) DO UPDATE SET category=$2,icon=$3,name=$4,description=$5,price=$6,currency=$7,effect_key=$8,effect_value=$9,badge=$10,enabled=$11,sort_order=$12,updated_at=$14,rewards=$15,image=$16`,
+      `INSERT INTO shop_items(id,category,icon,name,description,price,currency,effect_key,effect_value,badge,enabled,sort_order,created_at,updated_at,rewards,image,color)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+       ON CONFLICT (id) DO UPDATE SET category=$2,icon=$3,name=$4,description=$5,price=$6,currency=$7,effect_key=$8,effect_value=$9,badge=$10,enabled=$11,sort_order=$12,updated_at=$14,rewards=$15,image=$16,color=$17`,
       [item.id, item.category, item.icon, item.name, item.description, item.price, item.currency, item.effectKey, item.effectValue, item.badge ?? null, item.enabled, item.sortOrder, item.createdAt, item.updatedAt,
-       item.rewards ? JSON.stringify(item.rewards) : null, item.image ?? null]);
+       item.rewards ? JSON.stringify(item.rewards) : null, item.image ?? null, item.color ?? null]);
   } else {
     const i = mem.findIndex((x) => x.id === item.id);
     if (i >= 0) mem[i] = item; else mem.push(item);

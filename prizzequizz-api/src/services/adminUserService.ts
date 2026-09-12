@@ -1,4 +1,6 @@
 import { repositories } from '../repositories/index.js';
+import { avatarUrlsFor } from './avatarService.js';
+import { inviteCountsFor } from './referralService.js';
 import type { User, UserStatus } from '../types/domain.js';
 import { calculateUserRisk, listCurrentUserDevices } from './deviceRiskService.js';
 
@@ -18,6 +20,13 @@ export interface AdminUserListItem {
   hearts: number;
   riskScore?: number;
   riskLevel?: string;
+  /** The picture the player uploaded, if they have one. */
+  avatarUrl?: string | null;
+  /** How many people signed up with this player's code… */
+  invited?: number;
+  /** …and how many of those actually paid out a referral ticket. The two differ
+   *  whenever a signup never completed, and only the second is money. */
+  invitesRewarded?: number;
 }
 
 /* SEARCH LOOKS AT EVERY ACCOUNT, NOT THE LAST TWO HUNDRED.
@@ -35,10 +44,25 @@ export async function searchAdminUsers(query = '', limit = 100): Promise<AdminUs
   const cap = Math.min(1000, Math.max(1, limit));
   const q = query.trim();
   const filtered = q ? await repositories.users.search(q, cap) : await repositories.users.list(cap);
+  const page = filtered.slice(0, limit);
+  /* Both of these are fetched for the WHOLE page in one go. Asking per row is
+   * what turns a hundred-row list into three hundred queries, and it is the
+   * reason neither column existed before. */
+  const ids = page.map((u) => u.id);
+  const [avatars, invites] = await Promise.all([
+    avatarUrlsFor(ids).catch(() => new Map<string, string>()),
+    inviteCountsFor(ids).catch(() => new Map<string, { invited: number; rewarded: number }>())
+  ]);
   const rows: AdminUserListItem[] = [];
-  for (const user of filtered.slice(0, limit)) {
+  for (const user of page) {
     const risk = await repositories.devices.getRiskProfile(user.id).catch(() => null);
-    rows.push(toListItem(user, risk ?? undefined));
+    const inv = invites.get(user.id);
+    rows.push({
+      ...toListItem(user, risk ?? undefined),
+      avatarUrl: avatars.get(user.id) ?? null,
+      invited: inv?.invited ?? 0,
+      invitesRewarded: inv?.rewarded ?? 0
+    });
   }
   return rows;
 }

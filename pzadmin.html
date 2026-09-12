@@ -1024,7 +1024,7 @@ async function renderUsers(){
       '<span class="note" id="uqnote" style="margin:0 8px;align-self:center"></span></div>'+
     '<div id="ubulk"></div>'+
     '<div class="tbl-wrap"><table><thead><tr><th style="width:34px"><input type="checkbox" id="uselall" onclick="uSelAll(this.checked)"></th>'+
-      ['کاربر','لول/XP','کاپ','صندوق جایزه','وضعیت','عملیات'].map(c=>'<th>'+c+'</th>').join('')+'</tr></thead><tbody id="urows"></tbody></table></div>';
+      ['کاربر','دعوت‌شده','سطح/XP','کاپ','صندوق جایزه','وضعیت','عملیات'].map(c=>'<th>'+c+'</th>').join('')+'</tr></thead><tbody id="urows"></tbody></table></div>';
   uPaintRows();
   uBulkBar();
   /* The input is built once and then left alone — every keystroke repaints
@@ -1067,14 +1067,51 @@ function uPaintRows(){
   if(note) note.textContent=q?(list.length?(fa(list.length)+' کاربر'):'چیزی پیدا نشد'):'';
   box.innerHTML=(list.length?list.map(u=>'<tr>'+
     '<td><input type="checkbox" class="usel" value="'+u.id+'" '+(_USEL.has(u.id)?'checked':'')+' onclick="uSelOne(\''+u.id+'\',this.checked)"></td>'+
-    '<td>'+esc(u.username||'')+' <span class="mono" style="color:var(--muted)">'+String(u.id).slice(0,8)+'</span>'+
-      (u.phone?' <span class="mono" style="color:var(--muted)">'+esc(u.phone)+'</span>':'')+newTag('users',u.createdAt)+'</td>'+
+    '<td><div style="display:flex;align-items:center;gap:8px">'+uAvatarHtml(u)+
+      '<div style="min-width:0">'+esc(u.displayName||u.username||'')+
+        '<div class="note" style="margin:0;display:block;font-size:11px">'+
+          '<span class="mono">'+String(u.id).slice(0,8)+'</span>'+
+          (u.phone?' · <span class="mono">'+esc(u.phone)+'</span>':'')+
+        '</div></div>'+newTag('users',u.createdAt)+'</div></td>'+
+    '<td>'+uInvitesHtml(u)+'</td>'+
     '<td>'+fa(u.level)+' / '+fa(u.xp)+'</td><td>'+fa(u.weeklyScore)+'</td>'+
     '<td><b style="color:var(--ok)">'+fa(u.wallet)+'</b></td>'+
     '<td><span class="pill '+(u.status==='banned'?'bad':u.status==='limited'?'pend':'ok')+'">'+(u.status||'active')+'</span></td>'+
     '<td><button class="btn sm info" onclick="userDetail(\''+u.id+'\')">مدیریت</button> '+
       '<button class="btn sm bad" onclick="askDeleteUser(\''+u.id+'\',\''+jsq(u.username||'')+'\')">حذف</button></td></tr>').join('')
-    :'<tr><td colspan="7" class="empty">'+(q?'کاربری با این مشخصات پیدا نشد':'کاربری نیست')+'</td></tr>');
+    :'<tr><td colspan="8" class="empty">'+(q?'کاربری با این مشخصات پیدا نشد':'کاربری نیست')+'</td></tr>');
+}
+/* THE PICTURE THE PLAYER ACTUALLY PUT THERE.
+   A row of usernames says nothing about who these people are; the avatar is the
+   one thing on this screen that does. Clicking it opens it full size, because
+   the reason an operator looks at an avatar at all is usually to check whether
+   it should be there. Anyone without one keeps their initial, so the column
+   never collapses into a row of broken images. */
+function uAvatarHtml(u){
+  const box='width:30px;height:30px;border-radius:50%;flex:0 0 auto;object-fit:cover;border:1.5px solid rgba(255,255,255,.16)';
+  if(u.avatarUrl){
+    return '<img src="'+esc(API.replace(/\/v1$/,'')+u.avatarUrl)+'" style="'+box+';cursor:zoom-in" '+
+      'onclick="uAvatarBig(\''+jsq(u.avatarUrl)+'\',\''+jsq(u.displayName||u.username||'')+'\')" '+
+      'onerror="this.replaceWith(Object.assign(document.createElement(\'span\'),{textContent:\'—\'}))" alt="">';
+  }
+  const ch=String(u.displayName||u.username||'؟').trim().slice(0,1);
+  return '<span style="'+box+';display:inline-flex;align-items:center;justify-content:center;background:rgba(255,255,255,.07);font-weight:900">'+esc(ch)+'</span>';
+}
+function uAvatarBig(url,name){
+  modal(name||'تصویر کاربر','<div style="text-align:center"><img src="'+esc(API.replace(/\/v1$/,'')+url)+'" style="max-width:100%;max-height:60vh;border-radius:14px"></div>');
+}
+/* HOW MANY PEOPLE THIS PLAYER BROUGHT IN.
+   Two numbers, because they are not the same thing and only one of them is
+   money: how many signed up with their code, and how many of those actually
+   settled into a referral ticket. A signup that never completed is a person who
+   arrived, not a ticket that was handed over — and a season reset restores only
+   the settled ones. */
+function uInvitesHtml(u){
+  const n=Number(u.invited||0), r=Number(u.invitesRewarded||0);
+  if(!n) return '<span style="color:var(--muted)">—</span>';
+  return '<b style="color:var(--ok)">'+fa(n)+'</b>'+
+    (r!==n?' <span class="note" style="display:inline;margin:0;font-size:11px">('+fa(r)+' بلیط)</span>'
+          :' <span class="note" style="display:inline;margin:0;font-size:11px">بلیط</span>');
 }
 /* DELETING A PLAYER IS THE ONE ACTION HERE WITH NO UNDO.
    So it asks for the username to be typed out rather than offering a button
@@ -3432,10 +3469,44 @@ function shopEdit(id){
     '</div>'+
     '<div class="grid g2"><div class="field"><label>برچسب (اختیاری)</label><input id="sh_badge" value="'+esc(it.badge||'')+'" placeholder="مثلاً محبوب / ٪۲۰ تخفیف"></div>'+
     '<div class="field"><label>وضعیت</label><select id="sh_enabled"><option value="1"'+(it.enabled!==false?' selected':'')+'>فعال</option><option value="0"'+(it.enabled===false?' selected':'')+'>غیرفعال</option></select></div></div>'+
+    /* THE CARD'S OWN COLOUR. Empty means the shelf default, which is what every
+       item looks like today — so an operator who never opens this gets no
+       change at all. The swatch and the text box are the same value: a colour
+       picker cannot express «none», and the text box is the only way back. */
+    '<div class="field"><label>رنگ کارت در فروشگاه (اختیاری)</label>'+
+      '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'+
+        '<input type="color" id="sh_color_pick" value="'+esc(it.color||'#2b2b33')+'" style="width:54px;height:38px;padding:2px;border-radius:10px" oninput="shColorSync(this.value)">'+
+        '<input id="sh_color" class="mono" dir="ltr" style="width:130px" value="'+esc(it.color||'')+'" placeholder="#RRGGBB" oninput="shColorSync(this.value,true)">'+
+        '<button class="btn sm" type="button" onclick="shColorSync(\'\')">بدون رنگ</button>'+
+        '<span id="sh_color_prev" style="flex:1;min-width:120px;border-radius:12px;padding:9px 12px;text-align:center;font-weight:800;border:1.5px solid rgba(255,255,255,.12)">پیش‌نمایش کارت</span>'+
+      '</div>'+
+      '<div class="note">خالی بگذاری، همان رنگِ پیش‌فرضِ فروشگاه می‌ماند.</div></div>'+
     '<button class="btn pri" onclick="shopSaveItem(\''+(id||'')+'\')">💾 ذخیره</button>');
   window._SH_IMG=it.image||'';
   window._SH_REWARDS=Array.isArray(it.rewards)?it.rewards.map(r=>({key:r.key,value:r.value})):[];
-  shopRewardsRender(); shopImgRender();
+  shopRewardsRender(); shopImgRender(); shColorSync(it.color||'');
+}
+/* Keeps the swatch, the text box and the preview saying the same thing. `fromText`
+   stops the picker fighting the keyboard while a hex code is half-typed. */
+function shColorSync(v,fromText){
+  const t=$('#sh_color'),p=$('#sh_color_pick'),prev=$('#sh_color_prev');
+  const ok=/^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(String(v||'').trim());
+  const hex=ok?(String(v).trim().startsWith('#')?String(v).trim():'#'+String(v).trim()):'';
+  if(t&&!fromText) t.value=hex;
+  if(p&&hex&&hex.length===7) p.value=hex;
+  if(prev){
+    prev.style.background=hex||'';
+    prev.style.color=hex?pzReadableOn(hex):'';
+    prev.textContent=hex?('پیش‌نمایش کارت — '+hex):'پیش‌نمایش کارت (بدون رنگ)';
+  }
+}
+/* Black or white, whichever can be read on that colour. An operator picking a
+   pale yellow should not get white text they cannot see. */
+function pzReadableOn(hex){
+  const h=String(hex||'').replace('#','');
+  const f=h.length===3?h.split('').map(c=>c+c).join(''):h;
+  const r=parseInt(f.slice(0,2),16)||0,g=parseInt(f.slice(2,4),16)||0,b=parseInt(f.slice(4,6),16)||0;
+  return (0.2126*r+0.7152*g+0.0722*b)>150?'#12121a':'#fff';
 }
 /* ---- package rows ---- */
 function shopRewardsRender(){
@@ -3483,7 +3554,8 @@ async function shopSaveItem(id){
        there", so an emptied package or a removed picture would survive a save
        that was meant to clear it. */
     rewards:(window._SH_REWARDS||[]).filter(r=>r&&r.key&&Number(r.value)>0),
-    image:window._SH_IMG||''};
+    image:window._SH_IMG||'',
+    color:($('#sh_color')?$('#sh_color').value.trim():'')};
   /* The mismatch that caused «یک کمک خریداری شد» on a ticket: an item sitting
      in the tickets category whose effect hands over something else. It is a
      legitimate thing to want (a bundle can live there), so this asks rather
@@ -5711,7 +5783,8 @@ async function suspBan(uid){if(!confirm('این کاربر بن شود؟'))retur
 /* ================= RESET TOOLS (per-area, confirmation-gated) ================= */
 const RESET_AREAS=[
   ['wallet','صندوق جایزه','دفترکل + موجودی + درخواست‌های دریافت جایزه را پاک می‌کند',1],
-  ['tickets','بلیط‌ها','همهٔ بلیط‌های کاربران صفر می‌شود',0],
+  ['tickets','بلیط‌ها','همهٔ بلیط‌های کاربران صفر می‌شود — بدون استثنا',0],
+  ['lifelines','کمکی‌ها','همهٔ کمکی‌های کاربران صفر می‌شود',0],
   ['xp','XP کاربران','XP همه صفر می‌شود',0],
   ['cup','کاپ هفتگی','امتیازِ کاپِ هفتگی صفر می‌شود',0],
   ['level','سطح کاربران','سطحِ همه به ۱ برمی‌گردد',0],
@@ -5725,13 +5798,43 @@ const RESET_AREAS=[
   ['full','ریست کاملِ سیستم','همهٔ موارد بالا با هم — فقط برای شروعِ تازه',2]
 ];
 async function renderReset(){
-  $('#main').innerHTML=head('ابزار ریست','ریستِ هر بخش به‌صورت جداگانه — عملیاتِ حساس نیازمندِ تأییدِ نهایی است')+
+  $('#main').innerHTML=head('ابزار ریست','شروعِ فصل تازه، یا ریستِ هر بخش به‌صورت جداگانه')+
+    '<div id="seasonCard"><div class="card"><div class="skel"></div></div></div>'+
     '<div class="note">⚠️ این عملیات‌ها <b>برگشت‌ناپذیر</b>اند و مستقیم روی دیتابیس اثر می‌گذارند. هر ریست در <b>Audit Log</b> ثبت می‌شود (چه کسی، چه بخشی، چند رکورد). مواردِ حساس (صندوق جایزه، تراکنش، تاریخچه، ریستِ کامل) قبلِ اجرا نیازمندِ تایپِ کلمهٔ <span class="mono">RESET</span> هستند.</div>'+
     '<div class="grid g3">'+RESET_AREAS.map(a=>{
       const danger=a[3]; const bcls=danger>=2?'bad':danger>=1?'bad':'';
       const border=danger>=2?'border-color:var(--bad);box-shadow:0 0 0 1.5px var(--bad) inset':danger>=1?'border-color:#5a2020':'';
       return '<div class="card" style="'+border+'"><h3>'+(danger>=2?'☢️ ':danger>=1?'⚠️ ':'♻️ ')+esc(a[1])+'</h3><div style="color:var(--muted);font-size:12px;min-height:34px;line-height:1.6">'+esc(a[2])+'</div><button class="btn '+(bcls||'')+' sm" style="width:100%;margin-top:8px" onclick="doReset(\''+a[0]+'\','+danger+',\''+esc(a[1])+'\')">ریست '+esc(a[1])+'</button></div>';
     }).join('')+'</div>';
+  seasonPaint();
+}
+/* ⭐ THE SEASON RESET — the one an operator actually wants.
+   «فقط سطح و XP بمونه، صندوق جایزه‌ها و بلیط‌ها و کمکی‌ها صفر بشه، و فقط
+    بلیط‌هایی که بابت دعوت گرفتن بمونه.»
+   It wipes every prize vault on the system, so it is shown with the real
+   numbers BEFORE it is pressed. An irreversible action nobody can inspect first
+   is one nobody should be asked to press. */
+async function seasonPaint(){
+  const box=$('#seasonCard'); if(!box) return;
+  let p=null; try{ p=await api('GET','/admin/reset/season/plan'); }catch(e){ p={error:e.message}; }
+  if(p&&p.error){ box.innerHTML='<div class="card"><h3>⭐ شروع فصل تازه</h3><div class="note" style="color:var(--bad)">وضعیت خوانده نشد: '+esc(p.error)+'</div></div>'; return; }
+  box.innerHTML='<div class="card" style="border-color:var(--gold);box-shadow:0 0 0 1.5px rgba(255,210,31,.35) inset;margin-bottom:13px">'+
+    '<h3>⭐ شروع فصل تازه</h3>'+
+    '<div class="note">سطح و XP و کاپ دست‌نخورده می‌مانند — آن‌ها سابقهٔ بازی‌کردن‌اند. '+
+      'صندوقِ جایزهٔ همه صفر می‌شود، همهٔ بلیط‌ها و کمکی‌ها صفر می‌شود، '+
+      '<b>ولی بلیط‌هایی که هر کس بابت دعوتِ دوستانش گرفته سرِ جایش می‌ماند</b> — آن بلیط خریده نشده و در بازی هم برده نشده، بابتِ آوردنِ یک نفر به بازی داده شده. '+
+      'قلب و سکه دست نمی‌خورد.</div>'+
+    '<div class="grid g3" style="margin-top:10px">'+
+      '<div class="cfg-row"><label>کاربر</label><b>'+fa(p.users||0)+'</b></div>'+
+      '<div class="cfg-row"><label>صندوق‌ها (پاک می‌شود)</label><b style="color:var(--bad)">'+fa(p.vaultTotal||0)+' ت</b></div>'+
+      '<div class="cfg-row"><label>کمکی‌ها (پاک می‌شود)</label><b style="color:var(--bad)">'+fa(p.lifelinesHeld||0)+'</b></div>'+
+      '<div class="cfg-row"><label>بلیط‌های موجود</label><b>'+fa(p.ticketsHeld||0)+'</b></div>'+
+      '<div class="cfg-row"><label>از این‌ها باقی می‌ماند</label><b style="color:var(--ok)">'+fa(p.referralTicketsKept||0)+'</b></div>'+
+      '<div class="cfg-row"><label>برای چند نفر</label><b>'+fa(p.usersWithReferralTickets||0)+'</b></div>'+
+    '</div>'+
+    '<button class="btn bad" style="margin-top:10px" onclick="doReset(\'season\',2,\'شروع فصل تازه\')">☢️ شروع فصل تازه</button>'+
+    '<button class="btn sm" style="margin-top:10px" onclick="seasonPaint()">↻ به‌روزرسانی اعداد</button>'+
+  '</div>';
 }
 function doReset(area,danger,label){
   if(danger>=1){
