@@ -34,26 +34,14 @@ function pgAvailable(): ReturnType<typeof getPgPool> | null {
   try { return process.env.DATABASE_URL ? getPgPool() : null; } catch { return null; }
 }
 
-/* One writer at a time per player on the memory driver. The awaits inside a
- * spend are real suspension points, so «single-threaded» is not the same as
- * «uninterrupted» — two purchases interleave there exactly as they would on two
- * processes, and the mutex is what makes the memory driver behave like the
- * statement above rather than merely look like it in a quiet test. */
-const _locks = new Map<string, Promise<unknown>>();
-async function underLock<T>(userId: string, fn: () => Promise<T>): Promise<T> {
-  const prev = _locks.get(userId) ?? Promise.resolve();
-  const mine = prev.then(fn, fn);
-  /* The queue holds a promise that never rejects, so one caller's failure does
-   * not poison everybody waiting behind them. */
-  const queued = mine.catch(() => undefined);
-  _locks.set(userId, queued);
-  try { return await mine; }
-  finally {
-    /* Only the last in the queue clears it; anyone else doing so would let the
-     * next caller start while this one is still going. */
-    if (_locks.get(userId) === queued) _locks.delete(userId);
-  }
-}
+/* WHY THE MEMORY DRIVER NEEDS NO LOCK, which is worth saying because it looks
+ * like it should. `findById` there hands back the LIVE row out of the map, not
+ * a copy, and nothing below awaits between reading the number and writing it —
+ * so the change is already applied by the time anything else can run. A mutex
+ * was written here first and then removed: no test could reach it, because
+ * there is no window for it to close. If that repository is ever changed to
+ * hand back copies, this stops being true, which is what the test «two
+ * movements at once on the memory driver» is there to catch. */
 
 /**
  * Add `delta` coins (negative to spend).
@@ -62,7 +50,7 @@ async function underLock<T>(userId: string, fn: () => Promise<T>): Promise<T> {
  *          the player does not have it — in which case NOTHING was taken.
  */
 export async function addCoins(userId: string, delta: number): Promise<number | null> {
-  const d = Math.round(Number(delta) || 0);
+  const d = Math.round(Number(delta) || 0);   // coins move in whole numbers
   const pool = pgAvailable();
   if (pool) {
     try {
@@ -82,15 +70,13 @@ export async function addCoins(userId: string, delta: number): Promise<number | 
       throw e;
     }
   }
-  return underLock(userId, async () => {
-    const u = await repositories.users.findById(userId);
-    if (!u) return null;
-    const now = Number(u.coins) || 0;
-    if (now + d < 0) return null;
-    u.coins = now + d;
-    await repositories.users.save(u);
-    return u.coins;
-  });
+  const u = await repositories.users.findById(userId);
+  if (!u) return null;
+  const now = Number(u.coins) || 0;
+  if (now + d < 0) return null;
+  u.coins = now + d;
+  await repositories.users.save(u);
+  return u.coins;
 }
 
 /** What they have right now. */
@@ -135,12 +121,10 @@ export async function setUserNumber(userId: string, field: keyof typeof NUMERIC_
     try { await pool.query(`UPDATE users SET ${col} = $2, updated_at = now() WHERE id = $1`, [userId, v]); return; }
     catch (e) { logger.error('user_number_set_failed', { userId, field, message: e instanceof Error ? e.message : 'unknown' }); throw e; }
   }
-  await underLock(userId, async () => {
-    const u = await repositories.users.findById(userId);
-    if (!u) return;
-    (u as any)[field] = v;
-    await repositories.users.save(u);
-  });
+  const u = await repositories.users.findById(userId);
+  if (!u) return;
+  (u as any)[field] = v;
+  await repositories.users.save(u);
 }
 
 /** Add to one number, leaving every other column alone. */
@@ -154,13 +138,11 @@ export async function addUserNumber(userId: string, field: keyof typeof NUMERIC_
     try { await pool.query(`UPDATE users SET ${col} = GREATEST(0, ${col} + $2), updated_at = now() WHERE id = $1`, [userId, d]); return; }
     catch (e) { logger.error('user_number_add_failed', { userId, field, message: e instanceof Error ? e.message : 'unknown' }); throw e; }
   }
-  await underLock(userId, async () => {
-    const u = await repositories.users.findById(userId);
-    if (!u) return;
-    (u as any)[field] = Math.max(0, (Number((u as any)[field]) || 0) + d);
-    await repositories.users.save(u);
-  });
+  const u = await repositories.users.findById(userId);
+  if (!u) return;
+  (u as any)[field] = Math.max(0, (Number((u as any)[field]) || 0) + d);
+  await repositories.users.save(u);
 }
 
-/** Test seam: drop the memory driver's locks between runs. */
-export function _resetCoinLocks(): void { _locks.clear(); }
+/** Test seam. Kept as a no-op so callers need not care which driver is in use. */
+export function _resetCoinLocks(): void { /* nothing is held between runs */ }

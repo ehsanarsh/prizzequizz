@@ -15,8 +15,9 @@
  * Run: npx tsx src/tests/coins.test.ts
  *      DATABASE_URL=postgres://postgres@localhost:55432/pztest npx tsx src/tests/coins.test.ts */
 import assert from 'node:assert/strict';
-import { addCoins, getCoins, _resetCoinLocks } from '../services/coinService.js';
+import { addCoins, getCoins, setUserNumber, addUserNumber, _resetCoinLocks } from '../services/coinService.js';
 import { purchase, ShopError, _resetPurchaseMemory } from '../services/shopPurchaseService.js';
+import { addHearts } from '../services/heartService.js';
 import { saveItem } from '../services/shopService.js';
 import { repositories } from '../repositories/index.js';
 import { id } from '../utils/id.js';
@@ -205,6 +206,118 @@ const uniq = () => 'k_' + id();
     u.xp = 4242; await repositories.users.save(u);
     await addCoins(uid, 100);
     assert.equal(Number((await repositories.users.findById(uid))!.xp), 4242);
+  });
+
+  /* ── ONE NUMBER AT A TIME ──────────────────────────────────────────
+   * The deeper half of the same bug, and the one that made three purchases at
+   * once charge for two. Granting a heart read the user, changed hearts, and
+   * saved the WHOLE row back — carrying the coin figure as it had been a moment
+   * earlier. So the heart an item granted undid the coins that paid for it.
+   *
+   * Driven step by step rather than by racing, because a race reproduces it
+   * only sometimes and a test that catches a money bug «sometimes» is not
+   * catching it. This is the exact order that used to lose the charge. */
+
+  await check('a write to one number does not put back another', async () => {
+    const uid = await player(300);
+    const stale = (await repositories.users.findById(uid))!;   // what addHearts reads
+    const hearts = Number(stale.hearts) || 0;
+    await addCoins(uid, -100);                                  // a charge lands in between
+    await setUserNumber(uid, 'hearts', hearts + 1);             // and the heart write follows
+    assert.equal(await getCoins(uid), 200,
+      'the heart write put the old coin figure back — the item was free');
+    assert.equal(Number((await repositories.users.findById(uid))!.hearts), hearts + 1,
+      'and the heart still has to actually arrive');
+  });
+
+  await check('a heart granted MID-CHARGE does not put the coins back', async () => {
+    /* THE ACTUAL SHAPE OF THE BUG, and the reason three purchases at once only
+       charged for two: addHearts reads the user, works out the new heart count,
+       and writes it — and a charge landing in THAT window used to be put
+       straight back, because the write carried every other column along from
+       the object that was read before it.
+       Two things had to be got right for this to mean anything. Starting the
+       grant and hoping the charge lands inside the window does NOT reproduce
+       it: tried, and it passed against the bug every time. And the window has
+       to be held open on the heart write itself — holding the first save that
+       comes along can catch the charge's own write instead, which deadlocks.
+       So the save carrying the new heart count is the one that is paused, and
+       the charge is not made until it is definitely the thing being held.
+       On the memory driver this cannot bite at all: every read hands back the
+       SAME live row, so there is no stale copy for a write to carry. It bites
+       on Postgres, where each read is its own object — which is exactly where
+       the money is. */
+    const uid = await player(300);
+    const before = Number((await repositories.users.findById(uid))!.hearts) || 0;
+    const users: any = repositories.users;
+    const realSave = users.save.bind(users);
+    let release: () => void = () => undefined;
+    const held = new Promise<void>((r) => { release = r; });
+    let armed = true, engaged = false;
+    users.save = async (u: any) => {
+      if (armed && u && u.id === uid && Number(u.hearts) > before) { armed = false; engaged = true; await held; }
+      return realSave(u);
+    };
+    try {
+      const flying = addHearts(uid, 1);
+      /* Do not charge until the heart write is the thing being held. */
+      for (let i = 0; i < 200 && !engaged && armed; i++) await new Promise((r) => setTimeout(r, 5));
+      await addCoins(uid, -100);
+      release();
+      await flying;
+    } finally { users.save = realSave; release(); }
+    assert.equal(await getCoins(uid), 200,
+      'the heart write carried an older coin figure with it — the purchase was free');
+    assert.ok(Number((await repositories.users.findById(uid))!.hearts) > before, 'and the heart arrived');
+  });
+
+  await check('the same holds for a number that is added rather than set', async () => {
+    const uid = await player(300);
+    await repositories.users.findById(uid);
+    await addCoins(uid, -100);
+    await addUserNumber(uid, 'xp', 50);
+    assert.equal(await getCoins(uid), 200);
+    assert.equal(Number((await repositories.users.findById(uid))!.xp), 50);
+  });
+
+  await check('and a granted heart really lands', async () => {
+    /* setUserNumber quietly doing nothing would look exactly like success to
+       everything above, so the value is read back. */
+    const uid = await player(0);
+    await setUserNumber(uid, 'hearts', 7);
+    assert.equal(Number((await repositories.users.findById(uid))!.hearts), 7);
+  });
+
+  await check('a number added to cannot be driven below zero', async () => {
+    const uid = await player(0);
+    await addUserNumber(uid, 'xp', 30);
+    await addUserNumber(uid, 'xp', -1000);
+    assert.equal(Number((await repositories.users.findById(uid))!.xp), 0,
+      'negative XP is not a thing the rest of the game knows how to read');
+  });
+
+  await check('coins move in whole numbers', async () => {
+    const uid = await player(100);
+    await addCoins(uid, 10.6);
+    assert.equal(await getCoins(uid), 111, 'rounded, not truncated and not left a fraction');
+    assert.equal(Number.isInteger(await getCoins(uid)), true);
+  });
+
+  await check('and nonsense moves nothing', async () => {
+    const uid = await player(100);
+    assert.equal(await addCoins(uid, NaN as any), 100);
+    assert.equal(await addCoins(uid, undefined as any), 100);
+    assert.equal(await getCoins(uid), 100);
+  });
+
+  await check('two movements at once on the memory driver keep both', async () => {
+    /* The memory path has no lock because it needs none: the repository hands
+       back the live row and nothing awaits between reading a number and writing
+       it. If that repository is ever changed to hand back copies, this is the
+       test that says so. */
+    const uid = await player(0);
+    await Promise.all([addCoins(uid, 100), addCoins(uid, 100)]);
+    assert.equal(await getCoins(uid), 200);
   });
 
   console.log(`[coins] ${pass} passed, ${fail} failed`);
