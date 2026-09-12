@@ -237,6 +237,122 @@ export async function runPipeline(questionId: string, opts: { autoApprove?: bool
   return m;
 }
 
+/* ---------------------------------------------------------------------------
+ * THE WHOLE JOB, IN ONE GO.
+ *
+ * Everything below already existed — generate, review, fact-check, check the
+ * bank for something too similar, score — and none of it was joined up. The
+ * panel asked the model for drafts, held them in a JAVASCRIPT VARIABLE, and
+ * left the operator to save them one at a time. Switching tab threw the lot
+ * away, because nothing had been written down anywhere.
+ *
+ * So this is the join: ask, then for every question that comes back, put it
+ * through every stage and into the bank — and say at the end what happened to
+ * each one. Nothing lives in a browser tab, so nothing is lost by leaving it.
+ *
+ * Two things it refuses to do quietly:
+ *   - a question too close to one already in the bank is NOT written. Checking
+ *     after the fact would mean the bank is polluted by the time anybody looks.
+ *   - a question the fact-check could not stand behind is written but left
+ *     unapproved, never silently added, because this is a money game.
+ *
+ * Repeats WITHIN one batch are caught for free: each question is in the bank
+ * before the next is checked against it, and a model asked for ten questions
+ * on one topic will happily give the same one twice.
+ * ------------------------------------------------------------------------- */
+export interface BatchSkip { question: string; reason: 'duplicate' | 'malformed' | 'failed'; detail?: string }
+export interface BatchRow {
+  id: string; text: string; category?: string; difficulty: string;
+  stage: string; quality: number; approved: boolean; reason?: string;
+}
+export interface BatchOutcome {
+  configured: boolean;
+  requested: number;
+  generated: number;
+  added: number;
+  pending: number;
+  skipped: BatchSkip[];
+  questions: BatchRow[];
+  error?: string;
+}
+
+/** The most one run may ask for. A run is real money at the provider and real
+ *  time with somebody watching, so it is bounded rather than open-ended. */
+export const BATCH_MAX = 25;
+/** The model is asked in chunks; this is how many extra goes it gets when it
+ *  returns fewer than were asked for. */
+const BATCH_ROUNDS = 4;
+
+function usable(d: DraftQuestion): boolean {
+  return !!d && typeof d.question === 'string' && d.question.trim().length > 5
+    && Array.isArray(d.options) && d.options.length === 4
+    && d.options.every((o) => typeof o === 'string' && o.trim() !== '')
+    && Number.isInteger(d.correctAnswer) && d.correctAnswer >= 0 && d.correctAnswer < 4;
+}
+
+/** Why a question that went through every stage was not approved. */
+function holdReason(m: PipelineMeta): string | undefined {
+  if (m.duplicate?.isDuplicate) return 'شبیه سؤالی است که از قبل داریم';
+  if (m.factCheck && m.factCheck.verified === false) return 'صحت پاسخ تأیید نشد';
+  if ((m.qualityScore ?? 0) < minQuality()) return `امتیاز کیفیت ${m.qualityScore ?? 0} کمتر از حد ${minQuality()} است`;
+  return undefined;
+}
+
+export async function aiRunBatch(input: {
+  topic: string; difficulty?: string; count?: number; category?: string; autoApprove?: boolean;
+}): Promise<BatchOutcome> {
+  const requested = Math.min(BATCH_MAX, Math.max(1, Number(input.count) || 1));
+  const out: BatchOutcome = { configured: true, requested, generated: 0, added: 0, pending: 0, skipped: [], questions: [] };
+  const autoApprove = input.autoApprove !== false;   // doing the job is the point
+
+  const seen: string[] = [];   // accepted in THIS run, for a cheap same-batch check
+  let rounds = 0;
+  while (out.questions.length < requested && rounds < BATCH_ROUNDS) {
+    rounds++;
+    const want = requested - out.questions.length;
+    const gen = await aiGenerate({ topic: input.topic, difficulty: input.difficulty, count: Math.min(10, want), category: input.category });
+    if (!gen.configured) return { ...out, configured: false, error: gen.error ?? 'AI not configured' };
+    if (gen.error && !gen.drafts.length) { out.error = gen.error; break; }
+    if (!gen.drafts.length) break;
+    out.generated += gen.drafts.length;
+
+    for (const d of gen.drafts) {
+      if (out.questions.length >= requested) break;
+      if (!usable(d)) { out.skipped.push({ question: String(d?.question ?? '—').slice(0, 120), reason: 'malformed' }); continue; }
+
+      /* Checked BEFORE it is written. Writing first and checking after would
+       * leave the bank holding the very thing we decided not to keep. */
+      const dup = await dedupCheck(d.question);
+      const near = seen.find((t) => similarity(t, d.question) >= dupThreshold());
+      if (dup.isDuplicate || near) {
+        out.skipped.push({ question: d.question.slice(0, 120), reason: 'duplicate',
+          detail: near ? 'تکراری در همین دسته' : `شباهت ${dup.maxSimilarity}٪ به سؤال موجود` });
+        continue;
+      }
+
+      try {
+        const q = await createDraft({
+          text: d.question, options: d.options, correctIndex: d.correctAnswer,
+          category: input.category ?? d.topic, difficulty: d.difficulty || input.difficulty || 'medium',
+          source: 'ai', explanation: d.explanation, sourceRef: d.source
+        });
+        const m = await runPipeline(q.id, { autoApprove });
+        const approved = m.stage === 'approved';
+        if (approved) out.added++; else out.pending++;
+        seen.push(d.question);
+        out.questions.push({
+          id: q.id, text: d.question, category: q.category, difficulty: q.difficulty,
+          stage: m.stage, quality: m.qualityScore ?? 0, approved, reason: approved ? undefined : holdReason(m)
+        });
+      } catch (e) {
+        out.skipped.push({ question: d.question.slice(0, 120), reason: 'failed',
+          detail: e instanceof Error ? e.message : 'unknown' });
+      }
+    }
+  }
+  return out;
+}
+
 export async function approve(questionId: string): Promise<void> {
   const q = await repositories.questions.findById(questionId);
   if (!q) return;

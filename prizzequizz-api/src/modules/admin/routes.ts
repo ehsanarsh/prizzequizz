@@ -11,7 +11,7 @@ import { getAdminUserOverview, resetUserStats, searchAdminUsers, setUserTickets,
 import { getMatch, claimTimeout, forfeitMatch } from '../../services/matchEngine.js';
 import { activeMatchState } from '../../services/matchStateStore.js';
 import { createGiftCode, listGiftCodes, redeemGiftCode } from '../../services/giftCodeService.js';
-import { aiGenerate, aiPrompt, aiPromptDefaults, approve as approvePipeline, createDraft, getMeta as getPipelineMeta, listPipeline, reject as rejectPipeline, runPipeline } from '../../services/questionPipelineService.js';
+import { aiGenerate, aiRunBatch, BATCH_MAX, aiPrompt, aiPromptDefaults, approve as approvePipeline, createDraft, getMeta as getPipelineMeta, listPipeline, reject as rejectPipeline, runPipeline } from '../../services/questionPipelineService.js';
 import { aiConfigured, aiEndpoint, aiModel } from '../../services/aiClient.js';
 import { listAdminAudit, recordAdmin } from '../../services/adminAuditService.js';
 import { listPartners, savePartner, removePartner, addCodes, listCodes, stock as payoutStock, PayoutError } from '../../services/payoutPartnerService.js';
@@ -722,6 +722,45 @@ export function registerAdminRoutes(router: Router, base: string): void {
     const r = await aiGenerate({ topic: String(b.topic ?? ''), difficulty: b.difficulty, count: Number(b.count ?? 1), category: b.category });
     json(ctx.res, 200, r);
   });
+  /* THE WHOLE JOB IN ONE CALL: ask, review, fact-check, check the bank for a
+   * near-twin, score, and file. The old endpoint above only ASKED — the drafts
+   * came back and sat in a browser variable until somebody saved them one at a
+   * time, and changing tab threw them away. This writes as it goes, so what it
+   * reports is what is in the bank, not what is on screen. */
+  router.add('POST', `${base}/admin/questions/ai/run`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    const b = (ctx.body ?? {}) as any;
+    const topic = String(b.topic ?? '').trim();
+    if (!topic) return error(ctx.res, 422, 'TOPIC_REQUIRED', 'موضوع لازم است.');
+    const r = await aiRunBatch({
+      topic, difficulty: b.difficulty, category: b.category,
+      count: Number(b.count ?? 1),
+      /* Off only when the operator explicitly wants to look first. */
+      autoApprove: b.autoApprove !== false
+    });
+    audit(ctx.userId, 'QUESTIONS_AI_RUN', 'question', undefined, { topic, requested: r.requested, added: r.added, pending: r.pending, skipped: r.skipped.length });
+    json(ctx.res, 200, { ...r, max: BATCH_MAX });
+  });
+
+  /* APPROVING IN ONES WAS THE WHOLE COMPLAINT. Both take a list of ids and
+   * report what happened to each, so a failure in the middle does not leave the
+   * operator guessing which half went through. */
+  for (const act of ['approve', 'reject'] as const) {
+    router.add('POST', `${base}/admin/questions/bulk/${act}`, async (ctx) => {
+      if (!requireAdmin(ctx)) return;
+      const ids = Array.isArray((ctx.body as any)?.ids) ? (ctx.body as any).ids.map(String) : [];
+      if (!ids.length) return error(ctx.res, 422, 'IDS_REQUIRED', 'هیچ سؤالی انتخاب نشده.');
+      if (ids.length > 500) return error(ctx.res, 422, 'TOO_MANY', 'حداکثر ۵۰۰ سؤال در هر بار.');
+      const done: string[] = [], failed: Array<{ id: string; error: string }> = [];
+      for (const qid of ids) {
+        try { await (act === 'approve' ? approvePipeline(qid) : rejectPipeline(qid)); done.push(qid); }
+        catch (e) { failed.push({ id: qid, error: e instanceof Error ? e.message : 'failed' }); }
+      }
+      audit(ctx.userId, act === 'approve' ? 'QUESTIONS_BULK_APPROVED' : 'QUESTIONS_BULK_REJECTED', 'question', undefined, { count: done.length, failed: failed.length });
+      json(ctx.res, 200, { done: done.length, failed });
+    });
+  }
+
   // Save an AI draft (or a manual one) into the bank as a pending draft.
   router.add('POST', `${base}/admin/questions/draft`, async (ctx) => {
     if (!requireAdmin(ctx)) return;
