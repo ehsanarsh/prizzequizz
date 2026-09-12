@@ -45,6 +45,42 @@ class LogPushProvider implements PushProvider {
   }
 }
 
+/* HOW SOON THIS HAS TO ARRIVE, AND HOW LONG IT IS STILL WORTH DELIVERING.
+ *
+ * «اعلان‌ها در کروم دیر می‌رسه ولی مرورگرهای دیگه زود می‌ره.»
+ *
+ * Neither header was being sent at all, and the Web Push default for Urgency is
+ * `normal`. Chrome's push service is allowed to HOLD a normal-urgency message
+ * until the device next wakes for something else — which is why it arrives in a
+ * clump, minutes late — while Firefox's delivers it straight away. So the same
+ * code looked fine in one browser and broken in the other.
+ *
+ * `high` is not the answer for everything: it wakes the handset, and a shop
+ * promo that does that is exactly what makes people turn notifications off. So
+ * it is decided by what the message IS.
+ *
+ * TTL is the other half, and it is not a bigger-is-better number. A push about
+ * a match that starts in ninety seconds must EXPIRE rather than be handed over
+ * an hour later to a player who has long since missed it — a late notification
+ * about a finished match is worse than none.
+ */
+export function pushUrgency(type: NotificationType): 'very-low' | 'low' | 'normal' | 'high' {
+  /* A match starting and somebody talking to you are the two the player is
+   * actually waiting on. */
+  if (type === 'match_update' || type === 'friend_message') return 'high';
+  /* Money moving is worth waking for, but not worth interrupting for. */
+  if (type === 'wallet_update' || type === 'system') return 'normal';
+  if (type === 'promo') return 'low';
+  return 'normal';
+}
+
+export function pushTtlSeconds(type: NotificationType): number {
+  if (type === 'match_update') return 600;          // ten minutes, then it is stale news
+  if (type === 'friend_message') return 86_400;     // a day; still worth reading tomorrow
+  if (type === 'promo') return 259_200;             // three days, no hurry
+  return 86_400;
+}
+
 class WebPushProvider implements PushProvider {
   readonly name = 'webpush' as const;
   /* Keys are passed per call rather than through webPush.setVapidDetails().
@@ -54,10 +90,11 @@ class WebPushProvider implements PushProvider {
   constructor(private readonly vapid: { subject: string; publicKey: string; privateKey: string }) {}
 
   async send(subscription: PushSubscriptionRecord, payload: Record<string, unknown>): Promise<void> {
+    const type = String((payload as any).type || 'system') as NotificationType;
     await webPush.sendNotification(
       { endpoint: subscription.endpoint, keys: { p256dh: subscription.p256dh, auth: subscription.auth } },
       JSON.stringify(payload),
-      { vapidDetails: this.vapid }
+      { vapidDetails: this.vapid, urgency: pushUrgency(type), TTL: pushTtlSeconds(type) } as any
     );
   }
 }
