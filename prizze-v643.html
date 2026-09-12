@@ -9188,7 +9188,12 @@ function lsPotGrow(el,from,to){
      The pot is the only figure that gets this — it is the one the elimination
      was FOR. The small number holds its old value until the big one lands on
      it, so the same total is never in two places at once. */
-  if(el.id===lsHeroId()&&lsPotHeroOn()){ lsPotHero(el.id,start,to); return; }
+  /* AND IT REALLY DOES HOLD. The dashboard is redrawn from the new snapshot, so
+     the small <b> is rebuilt carrying the NEW total — which put the same figure
+     on screen twice while the big one was still climbing towards it. Put the
+     old value back; lsPotHeroSettle hands the new one over when the big number
+     lands, which is the whole point of the handover. */
+  if(el.id===lsHeroId()&&lsPotHeroOn()){ el.textContent=lsFa(start); lsPotHero(el.id,start,to); return; }
   const dur=2200, t0=performance.now();
   el.classList.remove('ls-pot-done'); el.classList.add('ls-pot-up');
   /* «حق حذف‌شده‌ها واریز اون صندوق بشه» — what was added, said out loud. */

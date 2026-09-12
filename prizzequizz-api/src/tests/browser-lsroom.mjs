@@ -273,17 +273,44 @@ const render = (snap) => page.evaluate((s) => {
     amt: document.getElementById('resultAmt').textContent,
     amtShown: !!document.getElementById('resultAmt').parentElement.offsetParent
   }));
-  ok('the last one out is told they were', /آخرین نفر/.test(end.title), end.title);
-  ok('and why they are being paid', /همه اشتباه جواب دادند/.test(end.sub), end.sub);
-  ok('naming how many the pot was split among', /۶/.test(end.sub), end.sub);
+  /* WHAT THIS SCREEN IS ALLOWED TO SAY was settled by the person who asked for
+     it: «باید باختی رو بنویسه ولی بهشون بگه با اینکه باختی فلان مبلغ رو برنده
+     شدی … بهشون نمی‌گیم که همه اشتباه جواب دادن». So the old assertions — that
+     it read «آخرین نفر», that it explained «همه اشتباه جواب دادند», and that it
+     named how many the pot was split among — are asserting the very wording
+     that was asked to go. They are held to the new rule instead. */
+  ok('the loss is named first, not softened away', /باختی/.test(end.title), end.title);
+  ok('and the prize rides along with it', /جایزه/.test(end.title), end.title);
+  ok('the amount they were paid is spelled out', /۴۱٬۰۰۰/.test(end.sub), end.sub);
+  ok('and the house is not explained to them', !/همه اشتباه جواب دادند/.test(end.sub), end.sub);
+  ok('nor how many ways the pot was cut', !/بین ۶|میان ۶/.test(end.sub), end.sub);
   ok('and their share is shown as a prize', end.amtShown && /۴۱٬۰۰۰/.test(end.amt), end.amt);
 
   /* Anybody ELSE from the same wiped room is not paid and is not told they were. */
   const snap2 = JSON.parse(JSON.stringify(snap));
   snap2.me.userId = 'me'; snap2.room.wipeout = { lastUserId: 'p4', share: 41000, splitAmong: 6 };
   snap2.me.payoutCash = 0;
+  /* THIS PLAYER LOOKS EXACTLY LIKE ONE WHOSE MONEY IS STILL IN FLIGHT — out in
+     the final round, room finished, nobody left alive, and a zero on their
+     figure. That is precisely the case lsFinish refuses to finalise on, because
+     finalising on it once printed «باختی» to players who had just been paid. So
+     it holds back and asks again, and that hold-back is checked first: nothing
+     may be repainted while the answer is still in doubt. */
   await page.evaluate((s) => {
-    (0, eval)("lsEndShown=false; lsWipeout=null;");
+    (0, eval)("lsEndShown=false; lsWipeout=null; _lsPayTries=0;");
+    (0, eval)('lsFinish')(s);
+  }, snap2);
+  await page.waitForTimeout(400);
+  const held = await page.evaluate(() => (0, eval)('lsEndShown'));
+  ok('a zero that might still become money is not finalised on', held === false,
+     'lsEndShown=' + held);
+
+  /* AND THE HOLD-BACK HAS AN END. The budget is capped so a player who really
+     was paid nothing is not left on a spinner — spend it, and the screen has to
+     tell them the truth. In the game the four retries are four real polls; here
+     the budget is simply spent, which is the state they leave behind. */
+  await page.evaluate((s) => {
+    (0, eval)("lsEndShown=false; lsWipeout=null; _lsPayTries=99;");
     (0, eval)('lsFinish')(s);
   }, snap2);
   await page.waitForTimeout(500);

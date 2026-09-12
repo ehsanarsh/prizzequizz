@@ -216,26 +216,48 @@ const tick = (page, n = 1) => page.evaluate(async (k) => {
       text: el ? el.textContent : '', cls: el ? el.className : '',
       colour: el ? getComputedStyle(el).color : '',
       delta: (document.querySelector('.ls-pot-delta') || {}).textContent || '',
-      mineText: mine ? mine.textContent : '', mineCls: mine ? mine.className : ''
+      mineText: mine ? mine.textContent : '', mineCls: mine ? mine.className : '',
+      heroCls: (document.querySelector('.ls-pot-hero') || {}).className || '',
+      /* The card holds three separate things — the label, the climbing number
+         and the «+N» — so they are read separately; mashing the card's text
+         together makes «+۲۰٬۰۰۰» and «۴۰٬۷۴۶» into one meaningless figure. */
+      heroNum: (document.querySelector('.ls-pot-hero .lph-num') || {}).textContent || '',
+      heroAdd: (document.querySelector('.ls-pot-hero .lph-add') || {}).textContent || ''
     };
   }, grown);
-  /* «عدد قبلی بیاد و با انیمیشن بزرگ‌تر بشه» — half a second in it must be part
-     way between the two numbers, not already at the new one. */
   const num = (t) => Number(String(t).replace(/[۰-۹]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d)).replace(/[^\d]/g, ''));
-  ok('the player’s own share is on the way up, not there yet', num(during.mineText) > 30_000 && num(during.mineText) < 50_000,
-     during.mineText + ' (' + num(during.mineText) + ')');
-  ok('and it is green while it climbs', /ls-pot-up/.test(during.mineCls) && /72, 229, 139|48, 229/.test(during.colour) === false ? /ls-pot-up/.test(during.mineCls) : true, during.mineCls);
-  ok('with the amount that was added floating out of it', /\+/.test(during.delta) && num(during.delta) === 20_000, during.delta);
 
-  /* And when it lands: gold, then back to itself. */
-  await page.waitForTimeout(2200);
+  /* «اون عدد اول باید بصورت بزرگ با موشن بیاد وسط صفحه و با موشن عددش بیشتر
+     بشه و رنگش سبز بشه … و بعد بره سر جای خودش اون بالا.»
+     The player's own share is the figure the elimination was FOR, so it does
+     not tick up quietly in its corner any more — it is announced, big, in the
+     middle of the screen, and only afterwards goes back to its place. These
+     used to assert the small inline ticker it replaced: `ls-pot-up` on the
+     little <b>, a `+N` chip floating out of it, `ls-pot-done` a couple of
+     seconds later. None of that is the design now, and asserting it meant
+     asserting the thing that was asked to go. */
+  ok('the announcement is the big number, not the small one',
+     /ls-pot-hero/.test(during.heroCls), during.heroCls || 'no hero card');
+  ok('it starts from the old figure and climbs',
+     num(during.heroNum) > 30_000 && num(during.heroNum) < 50_000,
+     during.heroNum + ' (' + num(during.heroNum) + ')');
+  ok('carrying what was added', /\+/.test(during.heroAdd) && num(during.heroAdd) === 20_000, during.heroAdd);
+
+  /* AND THE TOTAL IS NEVER IN TWO PLACES AT ONCE. The dashboard is redrawn from
+     the new snapshot, so the small <b> came back carrying the new total while
+     the big one was still on its way to it — the same number twice, one of them
+     pre-empting the announcement. It holds its old value until the handover. */
+  ok('while the small figure waits its turn', num(during.mineText) === 30_000,
+     during.mineText + ' (' + num(during.mineText) + ')');
+
+  /* And when it lands, the small figure takes it over and flashes once. */
+  await page.waitForTimeout(4200);
   const done = await page.evaluate(() => {
     const mine = document.getElementById('lsMyShare');
     return { text: mine ? mine.textContent : '', cls: mine ? mine.className : '' };
   });
   ok('it finishes on the real number', num(done.text) === 50_000, done.text);
-  ok('and turns gold as it settles', /ls-pot-done/.test(done.cls) && !/ls-pot-up/.test(done.cls), done.cls);
-  await page.waitForTimeout(1100);
+  await page.waitForTimeout(1400);
   const rest = await page.evaluate(() => (document.getElementById('lsMyShare') || {}).className || '');
   ok('then sits back in its place, plain', !/ls-pot-up|ls-pot-done/.test(rest), rest);
 
