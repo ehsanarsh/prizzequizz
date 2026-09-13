@@ -35,7 +35,19 @@ export interface PipelineMeta {
 }
 
 function cfg(): any { return (gameConfig as any)?.questionPipeline ?? {}; }
-function minQuality(): number { const n = Number(cfg().minQualityScore); return Number.isFinite(n) ? n : 95; }
+/* A BAR A GOOD QUESTION CAN ACTUALLY CLEAR.
+ *
+ * This defaulted to 95, and with the weights in computeQuality that is very
+ * nearly unreachable: a review of 95/90/92/88 on a question sharing almost
+ * nothing with the bank scores 93. Only straight 100s across all four axes get
+ * over 95, so in practice nothing was ever approved automatically — «۵ تا سوال
+ * هیچ‌کدام تأیید نشد» — which reads as the AI being broken rather than as one
+ * number being set where nothing fits through it.
+ * 80 means every axis around 80 or better. It is still a gate: `verified:false`
+ * from the fact-checker blocks approval on its own, whatever the score, and so
+ * does anything too close to a question already in the bank. Operators who want
+ * it stricter set minQualityScore in the panel. */
+function minQuality(): number { const n = Number(cfg().minQualityScore); return Number.isFinite(n) ? n : 80; }
 function dupThreshold(): number { const n = Number(cfg().duplicateThreshold); return Number.isFinite(n) ? n : 90; }
 function autoRetireReports(): number { const n = Number(cfg().autoRetireReports); return Number.isFinite(n) && n > 0 ? n : 10; }
 
@@ -219,7 +231,18 @@ export function findDrafts(data: unknown): any[] {
     return walk(data, 0);
   };
   const sure = pass(strong);
-  return sure.length ? sure : pass(weak);
+  if (sure.length) return sure;
+  const loose = pass(weak);
+  if (loose.length) return loose;
+  /* ONE QUESTION IS A LIST OF ONE.
+   * Seen in the wild, from the panel's own report: the model answered with a
+   * bare question object — {"question":…,"options":[…],"correct_answer":0,…} —
+   * with no array anywhere. That IS the thing that was asked for; it simply was
+   * not wrapped. Searching only for arrays read a perfectly good question as
+   * «there was no list of questions in the reply», which is how a run of five
+   * came back as «۰ تولید شد». */
+  if (strong(data) || weak(data)) return [data];
+  return [];
 }
 
 /* WHAT A MODEL ACTUALLY SENDS BACK.

@@ -137,9 +137,76 @@ const moved = await page.evaluate(async () => {
   return { found: true, frames, props, advanced: anim.currentTime !== t0, playing: anim.playState };
 });
 ok('the light is a real running animation', moved.found && moved.playing === 'running', JSON.stringify(moved).slice(0, 70));
-ok('it crosses the card from one side to the other',
-   moved.found && /-1[0-9]{2}%/.test(moved.frames.join(' ')) && /[23][0-9]{2}%/.test(moved.frames.join(' ')),
-   (moved.frames || []).join(' | ').slice(0, 80));
+/* Asked as geometry rather than as two literal percentages, which is what this
+   check used to be — it broke the moment the sweep was tuned, without anything
+   actually being wrong. translateX on the band is in units of the BAND's width,
+   so with a band `w` of the card's width, the band spans
+   [t·w, t·w + w] in card widths: it is off the left at t ≤ -100% and has
+   started leaving the right once t·w > 1. */
+const sweep = await page.evaluate(() => {
+  const el = document.querySelector('#shopContent .item.shine-on');
+  const w = parseFloat(getComputedStyle(el, '::before').width) / el.getBoundingClientRect().width;
+  const anim = document.getAnimations().find((a) => a.effect && a.effect.target === el && a.effect.pseudoElement === '::before');
+  const frames = (anim ? anim.effect.getKeyframes() : []).map((f) => ({
+    at: f.computedOffset,
+    t: (String(f.transform || '').match(/translateX\(([-0-9.]+)%\)/) || [])[1],
+    op: f.opacity
+  }));
+  return { w, frames };
+});
+const tOf = (f) => (f.t == null ? null : Number(f.t) / 100);
+const firstT = tOf(sweep.frames.find((f) => f.t != null) || {});
+const lastT = tOf([...sweep.frames].reverse().find((f) => f.t != null) || {});
+ok('it starts completely off one side of the card', firstT !== null && firstT <= -1,
+   String(firstT) + ' × band ' + sweep.w.toFixed(2));
+ok('and travels right across to the other', lastT !== null && lastT * sweep.w >= 0.8,
+   'ends with its near edge at ' + (lastT * sweep.w).toFixed(2) + ' of the card');
+
+/* THE DEFECT THIS REPLACED A GUESS WITH.
+   The first sweep ran to 285% and only faded at the very end, so it was still
+   painting at FULL opacity a whole card-width to the RIGHT of the card — with
+   nothing but the overflow clip keeping it off the shelf. A band is allowed
+   outside the card only while it is invisible. */
+/* Measured by WALKING THE ANIMATION, not by reading its keyframes. The frames
+   that set the opacity carry no transform and vice versa, so the keyframe list
+   never shows the two together — and the easing means the position at a given
+   moment is not the linear guess anyway. Stepping the clock and asking the
+   browser what it actually painted answers both. */
+const walk = await page.evaluate(() => {
+  const el = document.querySelector('#shopContent .item.shine-on');
+  const anim = document.getAnimations().find((a) => a.effect && a.effect.target === el && a.effect.pseudoElement === '::before');
+  if (!anim) return null;
+  const was = anim.currentTime;
+  anim.pause();
+  const dur = Number(anim.effect.getTiming().duration) || 0;
+  const box = el.getBoundingClientRect();
+  const out = [];
+  for (let i = 0; i <= 60; i++) {
+    anim.currentTime = (dur * i) / 60;
+    const cs = getComputedStyle(el, '::before');
+    const m = new DOMMatrixReadOnly(cs.transform === 'none' ? undefined : cs.transform);
+    out.push({ at: i / 60, op: Number(cs.opacity), x: m.m41, w: parseFloat(cs.width) });
+  }
+  anim.currentTime = was; anim.play();
+  /* skewX(-14deg) shifts the top and bottom edges sideways by (h/2)·tan(14°),
+     so the painted area is wider than the box by that much on each side. */
+  return { cardW: box.width, skew: (box.height / 2) * Math.tan(14 * Math.PI / 180), samples: out };
+});
+let lit = 0, strayed = '';
+for (const p of (walk ? walk.samples : [])) {
+  if (!(p.op > 0.02)) continue;
+  lit++;
+  const left = p.x - walk.skew, right = p.x + p.w + walk.skew;
+  if (right < 0 || left > walk.cardW) {
+    strayed += ` @${Math.round(p.at * 100)}% spans ${Math.round(left)}..${Math.round(right)}px of 0..${Math.round(walk.cardW)}`;
+  }
+}
+ok('the sweep is actually visible at some point', lit > 0, String(lit) + ' lit samples of 61');
+/* THE DEFECT THIS REPLACED A GUESS WITH. The first sweep ran to 285% and only
+   faded at the very end, so it was still painting at FULL opacity a whole
+   card-width to the RIGHT of the card — with nothing but the overflow clip
+   keeping it off the shelf. Outside the card is allowed only while invisible. */
+ok('and it is never visible while it is off the card', strayed === '', strayed.trim() || 'never strays');
 /* Frames that only fade carry no transform at all, so «every frame» is the
    wrong question — «does it ever move the card by a layout property» is the
    one that matters, and it is the stronger check of the two. */
@@ -307,6 +374,120 @@ const noArt = await page.evaluate(() => {
 });
 ok('an item without artwork shows its own emoji instead', !noArt.art && /🧸/.test(noArt.text),
    JSON.stringify(noArt).slice(0, 60));
+
+/* ── THE TRIP FROM THE SERVER, WHICH IS THE ONLY ONE THAT COUNTS ─────────
+   Everything above sets SHOP by hand, so it proves the CARD reads `shine` —
+   not that the answer from the server ever carries it. It did not: the line in
+   pzLoadShop that turns the server's items into shelf items listed every other
+   field and not this one, so every card shone whatever the operator chose. The
+   same line, and the same omission, that once lost `color`. */
+{
+  const ctx2 = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+  await ctx2.addInitScript(() => {
+    localStorage.setItem('pz_tok', 't'); localStorage.setItem('pz_rtok', 'r');
+    localStorage.setItem('pz_usr', JSON.stringify({ id: 'u1', username: 'e', displayName: 'ا', level: 5, xp: 9, wallet: 0, coins: 9999, hearts: 4 }));
+    for (const k of ['leaderboard', 'missions', 'shop', 'wheel']) localStorage.setItem('pq_tut_' + k, '1');
+    try { sessionStorage.setItem('pz_push_asked_visit', '1'); } catch (e) {}
+  });
+  /* Two ticket cards: one told to shine, one told not to. The catalogue is
+     deliberately SLOW, because the bug being checked below only exists in the
+     gap between opening the shop and the answer arriving. */
+  const SERVED = [
+    { id: 's1', category: 'tickets', icon: '🎫', name: 'بلیط براق', description: 'با درخشش', price: 1000, currency: 'cash', effectKey: 'ticket-green', effectValue: 1, color: '#1155ff', shine: true, rewards: [{ key: 'ticket-green', value: 1, label: 'بلیط سبز' }] },
+    { id: 's2', category: 'tickets', icon: '🎟️', name: 'بلیط مات', description: 'بدون درخشش', price: 2000, currency: 'cash', effectKey: 'ticket-green', effectValue: 1, color: '#1155ff', shine: false, rewards: [{ key: 'ticket-green', value: 1, label: 'بلیط سبز' }] }
+  ];
+  await ctx2.route('**/v1/**', (route) => {
+    const url = route.request().url();
+    let body = { ok: true, data: {} };
+    let wait = 30;
+    if (url.includes('/shop/items')) {
+      const cats = {}; for (const i of SERVED) (cats[i.category] ??= []).push(i);
+      body = { ok: true, data: { items: SERVED, categories: cats } };
+      wait = 500;                      // a real phone on a bad connection
+    }
+    setTimeout(() => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) }), wait);
+  });
+  const p2 = await ctx2.newPage();
+  await p2.goto(`http://127.0.0.1:${PORT}/`, { waitUntil: 'domcontentloaded' });
+  await p2.waitForTimeout(5400);
+
+  /* THE FLASH. «اول یه لحظه یه صفحه میاد که آیتم قلب داره، بعد می‌ره رو بلیط
+     مسابقات.» renderShop('util') ran at PAGE LOAD, painted the helps shelf into
+     #shopContent and left it there, so opening the shop showed helps until the
+     catalogue answered. Sampled while the answer is still in flight — which is
+     the only window in which it was ever visible. */
+  /* BEFORE THE SHOP IS EVER OPENED. renderShop('util') ran at page load: it
+     painted the helps into the shared #shopContent and — the part that did the
+     damage — set _shopCurTab to 'util' on the way past. Nothing at startup has
+     any business choosing which shelf the player will land on. */
+  const atLoad = await p2.evaluate(() => ({
+    tab: (0, eval)('_shopCurTab'),
+    painted: (document.getElementById('shopContent').innerText || '').trim().slice(0, 40)
+  }));
+  ok('nothing has chosen a shelf before the shop is opened', atLoad.tab === 'tickets', atLoad.tab);
+  ok('and nothing has been painted into it either', atLoad.painted === '', atLoad.painted || '(empty)');
+
+  await p2.evaluate(() => (0, eval)('go')('shop'));
+  await p2.waitForTimeout(180);
+  const early = await p2.evaluate(() => {
+    const c = document.getElementById('shopContent');
+    return { names: [...c.querySelectorAll('.item b')].map((b) => b.textContent).join(' | '),
+             text: (c.innerText || '').slice(0, 60), tab: (0, eval)('_shopCurTab') };
+  });
+  ok('the shop opens on the tickets shelf', early.tab === 'tickets', early.tab);
+  ok('and no other shelf is shown first, not even for a moment',
+     !/جان اضافی|حذف دو گزینه|وقت اضافه/.test(early.names + ' ' + early.text),
+     early.names || early.text.replace(/\n/g, ' '));
+  ok('what it shows while waiting is that it is waiting',
+     /در حال گرفتن|بلیط/.test(early.text), early.text.replace(/\n/g, ' ').slice(0, 44));
+  /* Checked HERE, in the gap, not after the catalogue lands. The load-time
+     renderShop('util') set _shopCurTab to 'util' as a side effect, and the tab
+     bar is built from it when the FIRST fetch answers — at page load, long
+     before the shop is opened. By the time the second fetch rebuilds the bar
+     the evidence is gone, so the only window in which the bar and the shelf
+     disagree is this one. */
+  const earlyBar = await p2.evaluate(() => {
+    const on = document.querySelector('#shopTabs .tab.active');
+    return { active: on ? on.textContent.trim() : '(none)', count: document.querySelectorAll('#shopTabs .tab.active').length };
+  });
+  ok('the highlighted tab agrees with the shelf from the first moment',
+     earlyBar.count === 1 && /بلیط/.test(earlyBar.active), earlyBar.active + ' ×' + earlyBar.count);
+
+  await p2.waitForTimeout(900);
+  const served = await p2.evaluate(() => {
+    const out = [];
+    for (const el of document.querySelectorAll('#shopContent .item')) {
+      out.push({ name: (el.querySelector('b') || {}).textContent || '',
+                 coloured: el.classList.contains('has-color'),
+                 shining: el.classList.contains('shine-on') });
+    }
+    return { cards: out, raw: ((0, eval)('SHOP').tickets || []).map((i) => i.shine) };
+  });
+  ok('the catalogue arrives and the tickets are drawn', served.cards.length === 2,
+     served.cards.map((c) => c.name).join(' | '));
+  ok('the server’s answer carries the shine flag into the shelf',
+     JSON.stringify(served.raw) === '[true,false]', JSON.stringify(served.raw));
+  ok('the card told to shine does', (served.cards[0] || {}).shining === true, JSON.stringify(served.cards[0]));
+  ok('and the one told not to does NOT — the whole point of the setting',
+     (served.cards[1] || {}).shining === false, JSON.stringify(served.cards[1]));
+  ok('both kept their colour either way',
+     served.cards.every((c) => c.coloured), JSON.stringify(served.cards));
+
+  /* AND THE TAB BAR AGREES WITH THE SHELF.
+     The load-time renderShop('util') did not only paint the wrong shelf — it
+     set _shopCurTab to 'util' as a side effect, and the tab bar is rebuilt from
+     that when the catalogue lands. So the tickets could be on show with
+     «آیتم‌های کاربردی» lit up above them: the highlighted tab and the shelf
+     underneath it disagreeing is how a player learns not to trust either. */
+  const bar = await p2.evaluate(() => {
+    const on = document.querySelector('#shopTabs .tab.active');
+    return { active: on ? on.textContent.trim() : '(none)',
+             count: document.querySelectorAll('#shopTabs .tab.active').length };
+  });
+  ok('exactly one tab is highlighted', bar.count === 1, String(bar.count));
+  ok('and it is the one whose shelf is actually on show', /بلیط/.test(bar.active), bar.active);
+  await ctx2.close();
+}
 
 await browser.close(); server.close();
 console.log(`[browser-shopcolor] ${pass} passed, ${fail} failed`);

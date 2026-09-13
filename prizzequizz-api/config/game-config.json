@@ -130,7 +130,7 @@
     "generatorModel": "",
     "reviewerModel": "",
     "factCheckerModel": "",
-    "minQualityScore": 95,
+    "minQualityScore": 80,
     "duplicateThreshold": 90,
     "autoRetireReports": 10,
     "autoApprove": false

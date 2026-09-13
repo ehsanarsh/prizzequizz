@@ -267,6 +267,27 @@ async function open(opts = {}) {
   ok('at full size, not the cramped two-up size', solo.size >= 15, solo.size + 'px');
   ok('the ✕ is still there, so «later» is still possible', solo.x, String(solo.x));
 
+  /* THE GATEWAY THAT IS COMING. «یه دونه هم باید درگاه شاپرک باشه که جلوش
+     بنویسیم (بزودی).» Named on the same sheet as the one that works, so a
+     player waiting for شاپرک can see it is on the way — and deliberately not a
+     button, because a row that looks pressable and does nothing is worse than
+     no row at all. */
+  const soon = await page.evaluate(() => {
+    const el = document.querySelector('#aaaModal .aaa-soon');
+    if (!el) return null;
+    const cs = getComputedStyle(el);
+    return { text: el.innerText.replace(/\n/g, ' ').trim(),
+             tag: el.tagName, clickable: !!el.closest('button') || el.tagName === 'BUTTON',
+             onclick: !!el.onclick, cursor: cs.cursor, muted: Number(cs.opacity) < 1 };
+  });
+  ok('شاپرک is named on the payment sheet', !!soon && /شاپرک/.test(soon.text), soon ? soon.text : '(missing)');
+  ok('and it says «بزودی» beside it', !!soon && /بزودی/.test(soon.text), soon ? soon.text : '—');
+  ok('it is not a button, because there is nothing behind it',
+     !!soon && !soon.clickable && !soon.onclick && soon.cursor !== 'pointer',
+     soon ? soon.tag + ' cursor:' + soon.cursor : '—');
+  ok('and it is dimmer than the gateway that works', !!soon && soon.muted, soon ? String(soon.muted) : '—');
+  ok('بلو پال is still the one on offer', /بلو پال/.test(hand.text), hand.text.replace(/\n/g, ' ').slice(0, 40));
+
   /* Leaving by the X must not leave a half-open payment behind. */
   await page.evaluate(() => document.getElementById('aaaClose').click());
   await page.waitForTimeout(300);

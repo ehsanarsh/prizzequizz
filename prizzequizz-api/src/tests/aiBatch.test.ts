@@ -276,6 +276,42 @@ const KEEP = process.env.ANTHROPIC_API_KEY;
     assert.match(String(r.error), /جواب درست/, r.error || '');
   });
 
+  await check('a genuinely good question can actually clear the default bar', async () => {
+    /* THE ARITHMETIC, PINNED. The default used to be 95 and the weights make
+       that all but unreachable — a review of 95/90/92/88 on an original
+       question scores 93 — so every run ended «ذخیره شد ولی تأیید نشد» and
+       looked like a broken pipeline. A default nothing can pass is not a
+       strict gate, it is an off switch. */
+    serve((b) => stage(b) === 'gen' ? { questions: [q(700)] }
+      : stage(b) === 'fact' ? GOOD_FACT
+      : { accuracy: 95, clarity: 90, grammar: 92, difficultyMatch: 88 });
+    const r = await aiRunBatch({ topic: 'تاریخ', count: 1 });
+    assert.equal(r.added, 1, 'a 95/90/92/88 question was not good enough: ' + (r.questions[0]?.reason || r.error || ''));
+    assert.ok((r.questions[0]?.quality ?? 0) >= 80, 'scored ' + r.questions[0]?.quality);
+  });
+
+  await check('and a mediocre one still does not', async () => {
+    /* The other half: a bar that lets everything through is also not a gate. */
+    serve((b) => stage(b) === 'gen' ? { questions: [q(710)] }
+      : stage(b) === 'fact' ? GOOD_FACT
+      : { accuracy: 60, clarity: 55, grammar: 70, difficultyMatch: 50 });
+    const r = await aiRunBatch({ topic: 'تاریخ', count: 1 });
+    assert.equal(r.added, 0, 'a 60/55/70/50 question was waved through');
+    assert.equal(r.pending, 1, 'it should be kept for a human, not thrown away');
+    assert.match(String(r.questions[0]?.reason), /امتیاز کیفیت/, String(r.questions[0]?.reason));
+  });
+
+  await check('a question the fact-check will not stand behind is held whatever it scores', async () => {
+    /* Independent of the score, and it must stay that way: this is a money
+       game, and lowering the quality bar must not open the correctness gate. */
+    serve((b) => stage(b) === 'gen' ? { questions: [q(720)] }
+      : stage(b) === 'fact' ? { verified: false, confidence: 20, note: 'مطمئن نیستم' }
+      : { accuracy: 100, clarity: 100, grammar: 100, difficultyMatch: 100 });
+    const r = await aiRunBatch({ topic: 'تاریخ', count: 1 });
+    assert.equal(r.added, 0, 'an unverified answer went straight into the game');
+    assert.match(String(r.questions[0]?.reason), /صحت پاسخ/, String(r.questions[0]?.reason));
+  });
+
   await check('with no key it says so instead of pretending', async () => {
     delete process.env.ANTHROPIC_API_KEY;
     const r = await aiRunBatch({ topic: 'تاریخ', count: 3 });

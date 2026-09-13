@@ -79,7 +79,7 @@ await page.evaluate((st) => {
   };
   /* CFG is null until loadCfg() runs, so it is assigned whole here rather than
      reached into — which is also why the renderers now guard it. */
-  (0, eval)('CFG = { questionPipeline: { aiEnabled: true, minQuality: 70, generatorModel: "claude-sonnet-5" } }');
+  (0, eval)('CFG = { categories: [{ name: "اطلاعات عمومی", icon: "🧠", enabled: true, order: 1 }, { name: "تاریخ", icon: "🏛️", enabled: true, order: 2 }, { name: "کهنه", icon: "📦", enabled: false, order: 9 }], questionPipeline: { aiEnabled: true, minQuality: 70, generatorModel: "t-claude-sonnet-5" } }');
   /* Saving ends with render(), which repaints whatever tab is open — so the
      tab has to be this one, exactly as it is for an operator. */
   (0, eval)('CUR = "aistudio"');
@@ -128,18 +128,50 @@ ok2('one left at the default shows empty, not the default text pasted in', shown
    the raw config JSON. */
 const models = await page.evaluate(() => {
   const v = (id) => { const e = document.getElementById(id); return e ? e.value : null; };
-  return { gen: v('ai_m_generator'), rev: v('ai_m_reviewer'), fact: v('ai_m_factChecker') };
+  /* Read through the helper, not off the <select>: the control is a picker with
+     a «دستی…» escape, and an id the catalogue does not know lives in the text
+     box beside it. The raw select value would be the sentinel. */
+  const read = (st) => (0, eval)('aiModelValue')(st);
+  return { gen: read('generator'), rev: read('reviewer'), fact: read('factChecker'),
+           rawGen: v('ai_m_generator'), isPicker: !!document.querySelector('#ai_m_generator option') };
 });
 console.log('the model each stage uses:');
 ok2('has a field of its own', models.gen !== null && models.rev !== null && models.fact !== null, JSON.stringify(models));
 ok2('filled from the server', models.gen === 'claude-sonnet-5' && models.fact === 'claude-opus-5', JSON.stringify(models));
+/* «عین همون منو کرکره‌ای باشه تا بتونم راحت انتخاب کنم، نه اینکه اسم مدل رو
+   بنویسم» — a typed id is a missing «t-» prefix waiting to happen. */
+ok2('and it is a menu, not a box to spell an id into', models.isPicker, String(models.isPicker));
+ok2('an id the catalogue does not know still survives', models.rawGen === '__other__' && models.gen === 'claude-sonnet-5',
+    models.rawGen + ' → ' + models.gen);
+
+const picker = await page.evaluate(() => {
+  const sel = document.getElementById('ai_m_generator');
+  const ids = [...sel.querySelectorAll('option')].map((o) => o.value);
+  const groups = [...sel.querySelectorAll('optgroup')].map((g) => g.label);
+  /* Pick a real one, as the operator would. */
+  sel.value = 't-claude-sonnet-5';
+  sel.dispatchEvent(new Event('change'));
+  return { ids, groups, chosen: (0, eval)('aiModelValue')('generator'),
+           otherHidden: document.getElementById('ai_mo_generator').style.display === 'none' };
+});
+ok2('the provider’s models are all in it', picker.ids.includes('t-claude-opus-5') && picker.ids.includes('t-gpt-5.5') && picker.ids.includes('t-deepseek-v4-pro'),
+    picker.ids.length + ' options');
+ok2('grouped by who makes them', picker.groups.includes('Anthropic') && picker.groups.includes('OpenAI'), picker.groups.join(', ').slice(0, 60));
+ok2('the ones a token key cannot use are kept apart, not hidden',
+    picker.groups.some((g) => /t-/.test(g)) && picker.ids.includes('gpt-6-astra'),
+    picker.groups.find((g) => /t-/.test(g)) || '(none)');
+ok2('choosing one takes effect', picker.chosen === 't-claude-sonnet-5', picker.chosen);
+ok2('and the hand-typed box gets out of the way', picker.otherHidden, String(picker.otherHidden));
 
 console.log('saving:');
 const saved = await page.evaluate(async () => {
   document.getElementById('ai_p_generator').value = '  سؤال فقط دربارهٔ تاریخ ایران  ';
   document.getElementById('ai_p_reviewer').value = 'سخت بگیر';
-  /* The «t-» prefix a token-based key needs — typed here, not in raw JSON. */
-  document.getElementById('ai_m_generator').value = '  t-claude-sonnet-5  ';
+  /* The «t-» prefix a token-based key needs — CHOSEN here, not typed into raw
+     JSON and not spelled by hand. A <select> only holds one of its own option
+     values, so there is no whitespace left to trim on this path; the typed one
+     is checked separately below, where whitespace is still possible. */
+  document.getElementById('ai_m_generator').value = 't-claude-sonnet-5';
   await (0, eval)('aiSavePrompts')();
   return window.__saved[0] || null;
 });
@@ -148,6 +180,19 @@ ok2('it sends the prompts under questionPipeline', !!(saved && saved.questionPip
 ok2('trimmed', saved.questionPipeline.prompts.generator === 'سؤال فقط دربارهٔ تاریخ ایران',
   JSON.stringify(saved.questionPipeline.prompts.generator));
 ok2('all three stages travel together', Object.keys(saved.questionPipeline.prompts).sort().join(',') === 'factChecker,generator,reviewer');
+/* And the escape hatch still trims: a model id pasted by hand arrives with the
+   spaces the paste brought, and a trailing space is a 404 from the provider. */
+const typed = await page.evaluate(async () => {
+  const sel = document.getElementById('ai_m_generator');
+  sel.value = '__other__'; sel.dispatchEvent(new Event('change'));
+  document.getElementById('ai_mo_generator').value = '  t-claude-opus-5  ';
+  const before = window.__saved.length;
+  await (0, eval)('aiSavePrompts')();
+  return window.__saved.slice(before)[0] || null;
+});
+ok2('a hand-typed id is trimmed before it is sent',
+    !!(typed && typed.questionPipeline && typed.questionPipeline.generatorModel === 't-claude-opus-5'),
+    JSON.stringify(typed && typed.questionPipeline ? typed.questionPipeline.generatorModel : null));
 ok2('and the models are saved with them', saved.questionPipeline.generatorModel === 't-claude-sonnet-5',
   JSON.stringify(saved.questionPipeline.generatorModel));
 /* The rest of questionPipeline — the thresholds, the on/off switch — must
@@ -197,6 +242,120 @@ const nullCfg = await page.evaluate(async (st) => {
 }, STATUS);
 ok2('the screen still renders', nullCfg.err === '', nullCfg.err || 'clean');
 ok2('and the prompts are still editable', nullCfg.areas === 3, nullCfg.areas + ' boxes');
+
+/* ── A RUN THAT KEEPS GOING WHEN YOU LOOK AWAY ──────────────────────────
+   «چون زمان‌بر هست، وقتی می‌ری به تب دیگه‌ای اون صفحه کار خودشو بکنه و وقتی
+    تموم شد بج بیاد که تموم شد. الان وقتی می‌ره تب دیگه تولید سوال متوقف می‌شه.»
+   The request never stopped; leaving the screen threw away the element the
+   answer was going to be written into, so it landed in a detached node and the
+   operator came back to the PREVIOUS run labelled «اجرای قبلی» — which looks
+   exactly like a cancelled one, except the questions really were in the bank
+   and nobody was told. */
+await page.evaluate(() => {
+  /* The «config never loaded» case above deliberately leaves CFG null. Put the
+     world back before driving the run, or the topic picker has nothing in it. */
+  (0, eval)('CFG = { categories: [{ name: "اطلاعات عمومی", icon: "🧠", enabled: true, order: 1 }, { name: "تاریخ", icon: "🏛️", enabled: true, order: 2 }, { name: "کهنه", icon: "📦", enabled: false, order: 9 }], questionPipeline: { aiEnabled: true } }');
+  /* A run that takes its time, and whose answer can be released on demand. */
+  window.__release = null;
+  const realApi = (0, eval)('api');
+  (0, eval)('api = ' + (function (m, p, body) {
+    const s = String(p);
+    if (m === 'POST' && s.indexOf('/admin/questions/ai/run') >= 0) {
+      return new Promise((res) => { window.__release = () => res({ configured: true, requested: 3, generated: 3, added: 2, pending: 1, skipped: [], questions: [{ id: 'q1', text: 'یک', difficulty: 'medium', stage: 'approved', quality: 91, approved: true }] }); });
+    }
+    if (m === 'PATCH' && s.indexOf('/admin/config') >= 0) { window.__saved.push(body); return Promise.resolve({ ok: true }); }
+    return Promise.resolve({});
+  }).toString());
+  (0, eval)('buildNav = () => {}');
+  (0, eval)('paintGroupBar = () => {}');
+});
+await page.evaluate(async () => { await (0, eval)('renderAiStudio')(); });
+await page.waitForTimeout(200);
+await page.evaluate(() => {
+  /* Chosen from the list, the way an operator now must. */
+  const t = document.getElementById('ai_topic');
+  t.value = [...t.options].map((o) => o.value).find((v) => /تاریخ/.test(v)) || t.options[1].value;
+  document.getElementById('ai_count').value = '3';
+});
+await page.evaluate(() => { (0, eval)('aiRun')(); });
+await page.waitForTimeout(300);
+
+const during = await page.evaluate(() => ({
+  running: !!(0, eval)('AI_RUNNING'),
+  text: (document.getElementById('ai_out') || {}).innerText || '',
+}));
+ok2('while it runs, the screen says so', during.running && /در حال ساختن/.test(during.text),
+    during.text.replace(/\n/g, ' ').slice(0, 50));
+ok2('and names what it is working on', /تاریخ/.test(during.text), during.text.replace(/\n/g, ' ').slice(0, 60));
+ok2('and says you may leave', /تب دیگری|تب دیگه/.test(during.text), during.text.replace(/\n/g, ' ').slice(0, 90));
+
+/* Now walk away, exactly as the operator did. */
+await page.evaluate(() => { (0, eval)('CUR = "questions"'); document.getElementById('main').innerHTML = '<div>بانک سوالات</div>'; });
+await page.waitForTimeout(150);
+const awayBefore = await page.evaluate(() => ({ running: !!(0, eval)('AI_RUNNING'), done: (0, eval)('AI_DONE') }));
+ok2('leaving the screen does not stop the run', awayBefore.running === true, String(awayBefore.running));
+ok2('and nothing is announced before it finishes', awayBefore.done === 0, String(awayBefore.done));
+
+/* It lands while the operator is somewhere else entirely. */
+await page.evaluate(() => window.__release());
+await page.waitForTimeout(300);
+const landed = await page.evaluate(() => ({
+  running: !!(0, eval)('AI_RUNNING'),
+  done: (0, eval)('AI_DONE'),
+  saved: JSON.parse(sessionStorage.getItem('pz_ai_last_run') || 'null')
+}));
+ok2('the answer is kept even though its screen was gone', !!(landed.saved && landed.saved.r && landed.saved.r.added === 2),
+    JSON.stringify(landed.saved && landed.saved.r ? { added: landed.saved.r.added, pending: landed.saved.r.pending } : null));
+ok2('the run is marked finished', landed.running === false, String(landed.running));
+ok2('and a badge is raised, because the operator is not looking', landed.done === 1, String(landed.done));
+ok2('the kept run is marked fresh, not «اجرای قبلی»', landed.saved && landed.saved.fresh === true,
+    String(landed.saved && landed.saved.fresh));
+
+/* Coming back: the finished result, and the badge cleared. */
+await page.evaluate(async () => { (0, eval)('CUR = "aistudio"'); await (0, eval)('renderAiStudio')(); });
+await page.waitForTimeout(300);
+const back = await page.evaluate(() => ({
+  done: (0, eval)('AI_DONE'),
+  text: (document.getElementById('ai_out') || {}).innerText || ''
+}));
+ok2('coming back shows the finished run', /نتیجهٔ اجرا/.test(back.text), back.text.replace(/\n/g, ' ').slice(0, 40));
+ok2('and not as somebody else’s old run', !/اجرای قبلی/.test(back.text), back.text.replace(/\n/g, ' ').slice(0, 60));
+ok2('the badge is cleared once it has been seen', back.done === 0, String(back.done));
+
+/* And two runs at once are refused rather than raced. */
+await page.evaluate(() => { (0, eval)('AI_RUNNING = { topic: "x", n: 1, at: Date.now() }'); });
+const second = await page.evaluate(async () => {
+  document.getElementById('ai_topic').value = document.getElementById('ai_topic').options[1].value;
+  const before = window.__saved.length;
+  await (0, eval)('aiRun')();
+  return { still: (0, eval)('AI_RUNNING').topic, saves: window.__saved.length - before };
+});
+ok2('a second run is refused while one is in flight', second.still === 'x', second.still);
+await page.evaluate(() => { (0, eval)('AI_RUNNING = null'); });
+
+/* ── THE GATE, WHERE THE OPERATOR CAN SEE IT ──────────────────────────── */
+await page.evaluate(async () => {
+  (0, eval)('CFG = { questionPipeline: { aiEnabled: true, minQualityScore: 80, duplicateThreshold: 90 } }');
+  await (0, eval)('renderAiStudio')();
+});
+await page.waitForTimeout(250);
+const gate = await page.evaluate(() => {
+  const q = document.getElementById('ai_minq'), d = document.getElementById('ai_dupth');
+  return { q: q ? q.value : null, d: d ? d.value : null,
+           text: (document.getElementById('main') || {}).innerText || '' };
+});
+ok2('the auto-approve bar is on the screen that uses it', gate.q === '80', String(gate.q));
+ok2('and the duplicate threshold beside it', gate.d === '90', String(gate.d));
+ok2('the number is a number the browser accepts', /^[0-9]+$/.test(String(gate.q)), String(gate.q));
+ok2('and it says what the score is made of', /دقت|اصالت/.test(gate.text), 'rubric shown');
+const savedGate = await page.evaluate(async () => {
+  document.getElementById('ai_minq').value = '75';
+  const before = window.__saved.length;
+  await (0, eval)('aiSaveGates')();
+  return window.__saved.slice(before)[0] || null;
+});
+ok2('changing it reaches the server', savedGate && savedGate.questionPipeline && savedGate.questionPipeline.minQualityScore === 75,
+    JSON.stringify(savedGate && savedGate.questionPipeline ? savedGate.questionPipeline.minQualityScore : null));
 
 console.log(`\n[aistudio] ${p2} passed, ${f2} failed`);
 await browser.close(); server.close();

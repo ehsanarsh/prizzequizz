@@ -14,7 +14,7 @@
      copy that was never uploaded look exactly alike. This is that version. It
      is readable from the server with one curl, and it is printed at the bottom
      of «تنظیمات» so it can be read off the phone with no terminal at all. -->
-<meta name="pz-build" content="20260913-0110">
+<meta name="pz-build" content="20260913-0330">
 <!-- App icon on the phone home screen (Add to Home Screen). Place appicon.png
      (a square PNG, ideally 512x512) in the same web folder as this file. -->
 <link rel="apple-touch-icon" sizes="180x180" href="appicon.png">
@@ -510,6 +510,19 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
 .aaa-payby img{height:20px;width:auto;max-width:92px;object-fit:contain;border-radius:4px}
 .aaa-payby .mark{display:inline-grid;place-items:center;height:20px;padding:0 8px;border-radius:6px;
   background:linear-gradient(180deg,#3FD07A,#1E7A45);color:#06240f;font-weight:900;font-size:11px}
+/* A GATEWAY THAT IS NOT OPEN YET, SAID SO PLAINLY.
+   «یه دونه هم باید درگاه شاپرک باشه که جلوش بنویسیم (بزودی) تا همه بفهمن که اون
+    پرداخت هم به‌زودی میاد.» It is deliberately NOT a button: a row that looks
+   pressable and does nothing is worse than no row at all. Muted, dashed, and
+   carrying its own «بزودی» — a promise, not an option. */
+.aaa-soon{display:flex;align-items:center;justify-content:center;gap:7px;margin:0 auto 10px;
+  padding:6px 10px;border:1.5px dashed rgba(255,255,255,.20);border-radius:12px;
+  width:fit-content;max-width:100%;opacity:.72;cursor:default;user-select:none}
+.aaa-soon .mark{display:inline-grid;place-items:center;height:20px;padding:0 8px;border-radius:6px;
+  background:rgba(255,255,255,.12);color:#EAE3D2;font-weight:900;font-size:11px}
+.aaa-soon .lbl{font-size:12px;font-weight:800;color:var(--muted)}
+.aaa-soon .soon{font-size:10.5px;font-weight:900;padding:2px 7px;border-radius:999px;
+  background:rgba(255,210,31,.16);color:var(--bolt,#FFD21F);border:1px solid rgba(255,210,31,.34)}
 /* THE GATEWAY'S MARK IN THE ICON SLOT. On the card-to-card sheet the player is
    about to be handed to somebody else with real money, so the thing at the top
    of the card is WHO — not a generic 💳. The tile's yellow ground and bob are
@@ -1441,12 +1454,18 @@ input,textarea,select,[contenteditable="true"],.pz-selectable,.pz-selectable *{
    property makes the whole grid recalculate on every frame, and there can be a
    dozen cards on screen. The opacity ramp is what stops the band appearing and
    vanishing at the card's edges — it arrives and leaves as light does. */
+/* The band is 56% of the card, so translateX is in units of ITS width: it has
+   left the card entirely once translateX passes about 179%. The first draft ran
+   to 285% and only reached opacity 0 at the very end, which meant it was still
+   painting at FULL opacity a whole card-width to the right of the card — kept
+   off screen by the overflow clip alone. It is transparent before it gets
+   there now, so the clip has nothing to hold back. */
 @keyframes scShine{
-  0%{transform:translateX(-140%) skewX(-14deg);opacity:0}
+  0%{transform:translateX(-120%) skewX(-14deg);opacity:0}
   7%{opacity:1}
-  19%{opacity:1}
-  24%{transform:translateX(285%) skewX(-14deg);opacity:0}
-  100%{transform:translateX(285%) skewX(-14deg);opacity:0}
+  17%{opacity:1}
+  23%{transform:translateX(150%) skewX(-14deg);opacity:0}
+  100%{transform:translateX(150%) skewX(-14deg);opacity:0}
 }
 /* The content sits above the light rather than under it. */
 .item.has-color>*{position:relative;z-index:1}
@@ -11044,6 +11063,12 @@ function go(id){
      The few places that send the player to a particular shelf still win: they
      set their tab after this runs. */
   if(id==='shop'){ try{ _shopCurTab='tickets'; }catch(e){} }
+  /* Drawn IMMEDIATELY, before the catalogue is asked for. Waiting for the fetch
+     to repaint means the first thing the player sees is whatever was in the
+     shelf last time — which is how a screen full of helps greeted somebody
+     opening the tickets. With nothing to show yet it says «در حال گرفتن
+     بلیط‌ها…», which is true. */
+  if(id==='shop'){ try{ renderShop(_shopCurTab); }catch(e){} }
   if(id==='shop'&&typeof pzLoadShop==='function'){try{pzLoadShop();}catch(e){}}
   /* Walked out of the shop without buying — the errand is over, and a purchase
      made on some later visit must not teleport the player somewhere. */
@@ -15357,7 +15382,11 @@ async function pzLoadShop(){
     _shopAnswered=true;
     if(!items.length) return;
     const byCat={};
-    items.forEach(it=>{ (byCat[it.category]??=[]).push({id:it.id,i:it.icon,n:it.name,d:it.description,p:it.price,key:it.effectKey,val:it.effectValue,cur:it.currency,badge:it.badge,img:it.image||'',color:it.color||'',rewards:Array.isArray(it.rewards)?it.rewards:null}); });
+    /* `shine` is copied here too. It was added to the item, to the panel, to the
+       database and to the card — and dropped on the one line that carries the
+       server's answer into the shelf, so every card shone whatever the operator
+       chose. The same line, and the same omission, that once lost `color`. */
+    items.forEach(it=>{ (byCat[it.category]??=[]).push({id:it.id,i:it.icon,n:it.name,d:it.description,p:it.price,key:it.effectKey,val:it.effectValue,cur:it.currency,badge:it.badge,img:it.image||'',color:it.color||'',shine:it.shine!==false,rewards:Array.isArray(it.rewards)?it.rewards:null}); });
     /* Tickets used to be excluded here and drawn as three big config-driven
        cards. They are ordinary catalogue items now — same card, same buy
        button — so the operator can price them, bundle them and give them
@@ -15494,7 +15523,13 @@ function applySkin(k){
   document.querySelectorAll('.mascot image,.brand-face').forEach(el=>el.style.filter=f);
   if(k==='skin-rainbow'){let h=0;setInterval(()=>{h=(h+4)%360;document.querySelectorAll('.mascot image').forEach(el=>el.style.filter='hue-rotate('+h+'deg)');},120);}
 }
-renderShop('util');
+/* NOT `renderShop('util')`.
+   This ran at page load, painted the HELPS shelf into #shopContent and left it
+   there — and it set _shopCurTab to 'util' as a side effect. Opening the shop
+   then showed that stale shelf for as long as /shop/items took to answer:
+   «اول یه لحظه یه صفحه میاد که آیتم قلب داره، بعد می‌ره رو بلیط مسابقات».
+   It dates from before tickets became the default shelf. The shop is drawn when
+   it is OPENED now, by go(), which is the only moment it can be right. */
 try{ pzLoadShop(); }catch(e){}
 
 /* ============================================================
@@ -22446,6 +22481,13 @@ function pzPayByMark(){
     : '<span class="mark">بلو پال</span>';
   return '<div class="aaa-payby">'+art+'<span>'+esc0(label)+'</span></div>';
 }
+/* The gateway that is coming, named on the same sheet as the one that works, so
+   a player who is waiting for شاپرک can see that it is on the way rather than
+   assuming it will never be here. Not a button — there is nothing behind it. */
+function pzSoonMark(){
+  return '<div class="aaa-soon"><span class="mark">شاپرک</span>'+
+         '<span class="lbl">درگاه شاپرک</span><span class="soon">بزودی</span></div>';
+}
 /* `look` is optional and every older call site omits it: what the buyer is
    looking at, so the sheet can show the thing itself rather than a credit card.
    { art: a picture URL, icon: an emoji fallback, color: what to light it with } */
@@ -22589,8 +22631,9 @@ async function pzGatewayHandoff(d,url,name){
          last screen before the player leaves to move real money, so the figure
          they are about to transfer is the largest thing on it. */
       sub:'<div style="text-align:center;line-height:2.1"><span class="aaa-amount"><b>'+fa(d.amount)+'</b><span>تومان</span></span><br>'+
-          '<span style="color:#CFE9D8;font-size:12px;font-weight:800">پرداخت امن با بلو پال</span><br>'+
-          '<span style="color:var(--muted);font-size:12px">به صفحهٔ امن پرداخت می‌روی و بعد از واریز به بازی برمی‌گردی.</span></div>',
+          '<span style="color:#CFE9D8;font-size:12px;font-weight:800">پرداخت امن با بلو پال</span></div>'+
+          pzSoonMark()+
+          '<div style="text-align:center"><span style="color:var(--muted);font-size:12px">به صفحهٔ امن پرداخت می‌روی و بعد از واریز به بازی برمی‌گردی.</span></div>',
       /* One action, the whole width. «بعداً» said exactly what the ✕ in the
          corner already says, and it said it in a button the same size as the
          one that matters — so the way out is the cross, and the payment button

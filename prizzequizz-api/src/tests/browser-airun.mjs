@@ -67,7 +67,9 @@ await page.evaluate(({ st, md, run }) => {
     if (m === 'DELETE') return { deleted: true };
     return {};
   };
-  (0, eval)('CFG = { questionPipeline: { aiEnabled: true } }');
+  /* The topic is chosen from the game's own categories now, so the picker needs
+     a game to choose from. */
+  (0, eval)('CFG = { categories: [{ name: "جغرافیا", icon: "🌍", enabled: true, order: 1 }, { name: "تاریخ", icon: "🏛️", enabled: true, order: 2 }], questionPipeline: { aiEnabled: true } }');
   (0, eval)('CUR = "aistudio"');
   try { (0, eval)('loadCfg = async () => {}'); } catch (e) {}
   try { (0, eval)('confirm = () => true'); } catch (e) {}
@@ -88,11 +90,32 @@ ok('there is no «تولید با AI» button left to press by mistake',
 /* ── the model list comes from the provider ─────────────────────────────── */
 ok('the models the key can use are offered as a list',
    await page.evaluate(() => document.querySelectorAll('#ai_models option').length) === 3);
-ok('and the box is still typable for a proxy that needs its own prefix',
-   await page.evaluate(() => { const el = document.getElementById('ai_m_generator'); return !!el && el.tagName === 'INPUT' && el.getAttribute('list') === 'ai_models'; }));
+/* It is a menu now — «عین همون منو کرکره‌ای باشه تا بتونم راحت انتخاب کنم، نه
+   اینکه اسم مدل رو بنویسم» — but the reason the box existed has not gone away:
+   some proxies need a prefix nobody's list knows. So the escape stays, one
+   option down, rather than the whole control being a place to make typos in. */
+ok('the model is chosen from a menu, not spelled',
+   await page.evaluate(() => { const el = document.getElementById('ai_m_generator'); return !!el && el.tagName === 'SELECT'; }),
+   await page.evaluate(() => (document.getElementById('ai_m_generator') || {}).tagName || 'missing'));
+ok('and a proxy that needs its own prefix can still be typed in',
+   await page.evaluate(() => {
+     const sel = document.getElementById('ai_m_generator');
+     sel.value = '__other__'; sel.dispatchEvent(new Event('change'));
+     const box = document.getElementById('ai_mo_generator');
+     box.value = 'x-custom-model';
+     return box.style.display !== 'none' && (0, eval)('aiModelValue')('generator') === 'x-custom-model';
+   }));
+ok('the topic is chosen from the game’s own list',
+   await page.evaluate(() => {
+     const t = document.getElementById('ai_topic');
+     return !!t && t.tagName === 'SELECT' && [...t.options].some((o) => o.value === 'جغرافیا');
+   }),
+   await page.evaluate(() => (document.getElementById('ai_topic') || {}).tagName || 'missing'));
 
 /* ── the run, and what it reports ───────────────────────────────────────── */
 await page.evaluate(() => { document.getElementById('ai_topic').value = 'جغرافیا'; document.getElementById('ai_count').value = '4'; });
+ok('and the topic reaches the run as the game spells it',
+   await page.evaluate(() => (0, eval)('aiTopicValue')()) === 'جغرافیا');
 await page.evaluate(() => (0, eval)('aiRun')());
 await page.waitForTimeout(500);
 
@@ -114,8 +137,23 @@ await page.waitForTimeout(400);
 const afterTab = await page.evaluate(() => document.getElementById('ai_out').innerText);
 ok('leaving the screen and coming back still shows the run',
    /تأیید شد و وارد بازی شد/.test(afterTab), afterTab.slice(0, 70).replace(/\n/g, ' | '));
-ok('and it is marked as the previous run, not passed off as fresh',
-   /اجرای قبلی/.test(afterTab));
+/* DELIBERATELY THE OTHER WAY ROUND NOW. This used to demand the «اجرای قبلی»
+   label here, because the only way back to a result was to find it lying in
+   sessionStorage and there was no telling whether it was yours. A finished run
+   is announced now — a badge on the sidebar, and the result kept as it lands —
+   so calling it «the previous run» in the same breath contradicts the badge.
+   The label belongs to a run restored after a RELOAD, which is the case below. */
+ok('coming back shows it as the run you just did, not as somebody’s leftovers',
+   !/اجرای قبلی/.test(afterTab), afterTab.slice(0, 60).replace(/\n/g, ' | '));
+const reloaded = await page.evaluate(async () => {
+  /* What a fresh page load sees: the same record, no longer fresh. */
+  const v = JSON.parse(sessionStorage.getItem('pz_ai_last_run'));
+  v.fresh = false; sessionStorage.setItem('pz_ai_last_run', JSON.stringify(v));
+  await (0, eval)('renderAiStudio')();
+  return document.getElementById('ai_out').innerText;
+});
+ok('and after a reload it IS marked as the previous run', /اجرای قبلی/.test(reloaded),
+   reloaded.slice(0, 60).replace(/\n/g, ' | '));
 
 /* ── acting on what came back ───────────────────────────────────────────── */
 ok('a held question can be approved from here', await page.evaluate(() => !!document.querySelector('button[onclick*="aiOneApprove"]')));

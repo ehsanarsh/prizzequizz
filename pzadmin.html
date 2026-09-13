@@ -294,6 +294,7 @@ function navLeaves(){
 let PZB={screens:{},total:0};      // what the server says is waiting
 const PZB_SINCE={};                // screen → when THIS admin last looked (for row tags)
 let PZB_TIMER=null, PZB_ERR='';    // why the counts are missing, if they are
+let AI_DONE=0;                     // generation runs that finished while you were elsewhere
 
 function badgeFor(key){
   /* A merged row carries the sum of the screens behind it — otherwise a
@@ -301,7 +302,13 @@ function badgeFor(key){
      opened, which is the problem this is meant to solve. */
   if(TAB_GROUPS[key]) return groupMembers(key).reduce((n,t)=>n+badgeFor(t[0]),0);
   const b=PZB.screens[key];
-  return b&&b.count>0?b.count:0;
+  let n=b&&b.count>0?b.count:0;
+  /* A finished generation run the operator has not come back to yet. It is not
+     a server counter — nothing is queued anywhere — it is «the thing you
+     started while you were on this screen has finished», and the sidebar is the
+     only place that is visible from every other screen. */
+  if(key==='aistudio') n+=AI_DONE;
+  return n;
 }
 function badgeHTML(key){
   const n=badgeFor(key);
@@ -2076,7 +2083,7 @@ async function renderAiStudio(){
       '<textarea id="'+id+'" rows="4" style="width:100%;font-family:inherit;line-height:1.9;resize:vertical">'+esc(val||'')+'</textarea>'+
       '<div style="display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap">'+
         '<span class="note" style="display:inline;margin:0">مدل:</span>'+
-        '<input id="ai_m_'+stage+'" list="ai_models" value="'+esc(md[stage]||'')+'" placeholder="claude-sonnet-5" style="width:230px" class="mono">'+
+        aiModelSelect(stage,md[stage]||'',(ml.models||[]))+
         /* One real call, so «کار نمی‌کنه» becomes the provider's own sentence.
            «مدل پیدا نشد» and «کلید اشتباه است» look identical from here
            otherwise, and they need completely different fixes. */
@@ -2086,6 +2093,9 @@ async function renderAiStudio(){
         '<button class="btn sm" onclick="aiResetPrompt(\''+id+'\')">بازگرداندن پرامپت به پیش‌فرض</button>'+
       '</div></div>';
   };
+  /* Come back and looked: the badge has done its job. */
+  if(AI_DONE){ AI_DONE=0; setTimeout(()=>{ try{ buildNav(); paintGroupBar(); }catch(e){} },0); }
+  if(AI_RUNNING) setTimeout(aiTickStart,0);
   $('#main').innerHTML=head('استودیوی سوال (AI)','تولید ← بازبینی ← راستی‌آزمایی ← تشخیص تکرار ← امتیاز کیفیت',
     '<button class="btn" onclick="go(\'pipeline\')">صف کیفیت</button>')+
     '<div class="note">معماری: <b>Generator → Reviewer → Fact-Checker → Duplicate → Quality → Database</b>. تشخیصِ تکرار و امتیازِ کیفیت همیشه کار می‌کنند، حتی وقتی AI خاموش است.</div>'+
@@ -2115,7 +2125,7 @@ async function renderAiStudio(){
       box('ai_p_factChecker','۳) راستی‌آزما','' + (pr.factChecker||''),df.factChecker,'— درستیِ جواب را چطور بسنجد')+
       '<button class="btn pri" onclick="aiSavePrompts()">💾 ذخیرهٔ پرامپت‌ها</button></div>'+
     '<div class="card" style="margin-bottom:13px"><h3>۱) تولید سوال '+(aiOn?'<span class="pill ok">AI فعال</span>':'<span class="pill pend">AI غیرفعال — دستی</span>')+'</h3>'+
-      '<div class="grid g3"><div class="field"><label>موضوع</label><input id="ai_topic" placeholder="مثلاً فوتبال"></div>'+
+      '<div class="grid g3"><div class="field"><label>موضوع</label>'+aiTopicSelect()+'</div>'+
       '<div class="field"><label>سختی</label><select id="ai_diff"><option value="easy">آسان</option><option value="medium" selected>متوسط</option><option value="hard">سخت</option></select></div>'+
       '<div class="field"><label>تعداد (حداکثر ۲۵)</label><input id="ai_count" type="number" value="5" min="1" max="25"></div></div>'+
       '<label class="note" style="display:flex;align-items:center;gap:8px;margin:0 0 10px">'+
@@ -2123,6 +2133,20 @@ async function renderAiStudio(){
       '</label>'+
       '<button class="btn pri" onclick="aiRun()">🤖 تولید و افزودن به بانک</button> '+
       '<button class="btn" onclick="aiManual()">✍️ ساخت دستی</button>'+
+      /* THE GATE, WHERE IT CAN BE SEEN. «۵ تا سوال هیچ‌کدام تأیید نشد» is what
+         an unreachable number looks like from here, and the number was three
+         screens away in the raw config. The arithmetic is printed beside it so
+         it is a choice rather than a guess. */
+      '<div class="grid g2" style="margin-top:12px">'+
+        '<div class="field"><label>حداقل امتیاز برای تأیید خودکار</label>'+
+          '<input id="ai_minq" type="number" min="0" max="100" value="'+fa0(qp.minQualityScore!=null?qp.minQualityScore:80)+'">'+
+          '<div class="note">امتیاز = دقت×۰٫۴ + روشنی×۰٫۲ + نگارش×۰٫۱۵ + تطابقِ سختی×۰٫۱ + اصالت×۰٫۱۵. '+
+          'یک سؤالِ خیلی خوب حدود ۹۰ می‌گیرد؛ روی ۹۵ عملاً هیچ‌چیز تأیید نمی‌شود.</div></div>'+
+        '<div class="field"><label>آستانهٔ تکراری بودن (٪ شباهت)</label>'+
+          '<input id="ai_dupth" type="number" min="50" max="100" value="'+fa0(qp.duplicateThreshold!=null?qp.duplicateThreshold:90)+'">'+
+          '<div class="note">بالاتر از این شباهت به سؤالی که داریم، اصلاً نوشته نمی‌شود.</div></div>'+
+      '</div>'+
+      '<button class="btn" onclick="aiSaveGates()">💾 ذخیرهٔ حدها</button>'+
       '<div class="note" style="margin-top:9px">هر سوال پیش از برگشتنِ نتیجه در دیتابیس نوشته می‌شود، پس عوض‌کردنِ تب چیزی را پاک نمی‌کند. '+
       'سوالی که خیلی شبیهِ سوالِ موجود باشد اصلاً نوشته نمی‌شود؛ سوالی که صحتش تأیید نشود نوشته می‌شود ولی تأیید نمی‌شود.</div></div>'+
     '<div id="ai_out">'+aiLastRunHtml()+'</div>';
@@ -2180,9 +2204,11 @@ function aiDialectPill(d){
     : '<span class="pill info">Messages</span>';
 }
 async function aiTestModel(stage){
-  const inp=$('#ai_m_'+stage), out=$('#ai_m_'+stage+'_res');
-  const m=String((inp&&inp.value)||'').trim();
-  if(!m) return toast('اول شناسهٔ مدل را بنویس','bad');
+  const out=$('#ai_m_'+stage+'_res');
+  /* Read through the same helper the save uses: the picker's own value is the
+     sentinel when «دستی» is chosen, and testing that would test nothing. */
+  const m=aiModelValue(stage);
+  if(!m) return toast('اول مدل را انتخاب کن','bad');
   if(out) out.innerHTML='<span style="color:var(--muted)">در حال تست…</span>';
   try{
     const r=await api('POST','/admin/questions/ai/test-model',{model:m});
@@ -2195,9 +2221,23 @@ async function aiTestModel(stage){
     }
   }catch(e){ if(out) out.innerHTML='<span style="color:var(--bad)">✖ '+esc(e.message)+'</span>'; }
 }
+/* Digits the browser can still treat as a number — fa() is for reading, and a
+   Persian numeral inside <input type="number"> is an empty field. */
+function fa0(v){ return String(v==null?'':v); }
+async function aiSaveGates(){
+  const q=Number(($('#ai_minq')||{}).value), d=Number(($('#ai_dupth')||{}).value);
+  if(!Number.isFinite(q)||q<0||q>100) return toast('حداقل امتیاز باید بین ۰ تا ۱۰۰ باشد','bad');
+  if(!Number.isFinite(d)||d<50||d>100) return toast('آستانهٔ تکرار باید بین ۵۰ تا ۱۰۰ باشد','bad');
+  const cur=((CFG&&CFG.questionPipeline)||{});
+  try{
+    await api('PATCH','/admin/config',{questionPipeline:Object.assign({},cur,{minQualityScore:q,duplicateThreshold:d})});
+    toast('ذخیره شد ✅','ok');
+    await loadCfg(); render();
+  }catch(e){ toast(e.message,'bad'); }
+}
 async function aiSavePrompts(){
   const g=($('#ai_p_generator')||{}).value||'', r=($('#ai_p_reviewer')||{}).value||'', f=($('#ai_p_factChecker')||{}).value||'';
-  const m=id=>String((($('#ai_m_'+id)||{}).value)||'').trim();
+  const m=aiModelValue;
   const cur=((CFG&&CFG.questionPipeline)||{});
   try{
     await api('PATCH','/admin/config',{questionPipeline:Object.assign({},cur,{
@@ -2216,28 +2256,214 @@ async function aiSavePrompts(){
    basket of things still waiting to be kept. It is remembered across tabs too,
    because reading «۱۲ سوال اضافه شد» and then losing the list is its own kind
    of not-working. */
+/* THE MODELS THE PROVIDER SELLS, SO NOBODY HAS TO SPELL ONE.
+ *
+ * «مدل‌های هوش مصنوعی هم لیستشو بهت می‌دم، عین همون منو کرکره‌ای باشه تا بتونم
+ *  راحت انتخاب کنم، نه اینکه اسم مدل رو بنویسم.»
+ *
+ * A typed model id is a whole class of failure that reads as «AI کار نمی‌کنه»:
+ * a missing `t-` prefix, a dot where a dash belongs, a space off the end. The
+ * live list from the provider is still preferred and merged in when the key can
+ * fetch it — this is what the picker offers when it cannot, which is most of
+ * the time from here.
+ *
+ * A token-billed key only works with the `t-` ids; the three without it are
+ * listed apart rather than left out, so picking one is a choice, not a trap. */
+const AI_MODEL_GROUPS=[
+  ['Anthropic',[['t-claude-fable-5.1','Claude Fable 5.1'],['t-claude-fable-5','Claude Fable 5'],
+                ['t-claude-opus-5','Claude Opus 5'],['t-claude-opus-4-8','Claude Opus 4.8'],
+                ['t-claude-sonnet-5','Claude Sonnet 5']]],
+  ['OpenAI',[['t-gpt-5.6-luna','GPT-5.6 Luna'],['t-gpt-5.6-terra','GPT-5.6 Terra'],
+             ['t-gpt-5.6-sol','GPT-5.6 Sol'],['t-gpt-5.5','GPT-5.5']]],
+  ['DeepSeek',[['t-deepseek-v4-pro','DeepSeek V4 Pro'],['t-deepseek-v4-flash','DeepSeek V4 Flash'],
+               ['t-deepseek-v4.1-flash','DeepSeek V4.1 Flash']]],
+  ['Google',[['t-gemini-3.8-flash','Gemini 3.8 Flash']]],
+  ['Zhipu AI (GLM)',[['t-glm-5.3','GLM 5.3'],['t-glm-5.3-flash','GLM 5.3 Flash']]],
+  ['xAI',[['t-grok-4.5','Grok 4.5']]],
+  ['Moonshot (Kimi)',[['t-kimi-k3','Kimi K3']]],
+  ['MiniMax',[['t-minimax-m3','MiniMax M3']]],
+  ['سایر',[['t-muse-spark-1.3','Muse Spark 1.3']]],
+  ['بدون پیشوند t- (با کلید توکنی کار نمی‌کند)',[['gpt-6-astra','GPT-6 Astra'],
+    ['muse-spark-1.2','Muse Spark 1.2'],['qwen-3.8-max','Qwen 3.8 Max']]]
+];
+const AI_OTHER='__other__';
+function aiKnownModels(){
+  const out=[]; AI_MODEL_GROUPS.forEach(g=>g[1].forEach(m=>out.push(m[0]))); return out;
+}
+/* The picker for one stage: the provider's own list when it answered, the
+   catalogue above otherwise, and «دستی…» for anything neither knows. */
+function aiModelSelect(stage,value,live){
+  const v=String(value||'').trim();
+  const known=aiKnownModels();
+  const extra=(live||[]).filter(m=>known.indexOf(m)<0);
+  const opt=(id,label,sel)=>'<option value="'+esc(id)+'"'+(sel?' selected':'')+'>'+esc(label)+'</option>';
+  let html='<select id="ai_m_'+stage+'" style="width:230px" onchange="aiModelSync(\''+stage+'\')">';
+  html+=opt('','— پیش‌فرض —',!v);
+  AI_MODEL_GROUPS.forEach(g=>{
+    html+='<optgroup label="'+esc(g[0])+'">';
+    g[1].forEach(m=>{ html+=opt(m[0],m[1]+' · '+m[0],v===m[0]); });
+    html+='</optgroup>';
+  });
+  if(extra.length){
+    html+='<optgroup label="از سرویس">';
+    extra.forEach(m=>{ html+=opt(m,m,v===m); });
+    html+='</optgroup>';
+  }
+  const isOther=!!v&&known.indexOf(v)<0&&extra.indexOf(v)<0;
+  html+=opt(AI_OTHER,'✍️ دستی…',isOther);
+  html+='</select>';
+  html+='<input id="ai_mo_'+stage+'" class="mono" dir="ltr" style="width:190px;margin-right:6px'+(isOther?'':';display:none')+'" '+
+        'placeholder="شناسهٔ مدل" value="'+esc(isOther?v:'')+'">';
+  return html;
+}
+function aiModelSync(stage){
+  const sel=$('#ai_m_'+stage), box=$('#ai_mo_'+stage);
+  if(!sel||!box) return;
+  box.style.display=(sel.value===AI_OTHER)?'':'none';
+  if(sel.value===AI_OTHER) box.focus();
+}
+/* What the stage is set to, whichever half of the control holds it. */
+function aiModelValue(stage){
+  const sel=$('#ai_m_'+stage), box=$('#ai_mo_'+stage);
+  if(!sel) return '';
+  if(sel.value===AI_OTHER) return String((box&&box.value)||'').trim();
+  return String(sel.value||'').trim();
+}
+
+/* THE TOPIC, PICKED FROM THE GAME'S OWN LIST.
+   «در قسمت موضوع باید یه منو کرکره‌ای بیاد و همهٔ موضوعات بازی توش باشه.»
+   A typed topic is a topic that matches no category the game has, so the
+   questions land in a shelf no player ever opens. The list is the config's own
+   categories — the same list the «موضوعات» screen edits. */
+function aiTopicSelect(){
+  const cats=(CFG&&Array.isArray(CFG.categories)?CFG.categories:[]).slice()
+    .sort((a,b)=>(Number(a.order)||99)-(Number(b.order)||99));
+  const on=cats.filter(c=>c&&c.name&&c.enabled!==false);
+  const off=cats.filter(c=>c&&c.name&&c.enabled===false);
+  const row=(c)=>'<option value="'+esc(c.name)+'">'+esc((c.icon?c.icon+' ':'')+c.name)+'</option>';
+  let h='<select id="ai_topic" onchange="aiTopicSync()">';
+  h+='<option value="">— موضوع را انتخاب کن —</option>';
+  on.forEach(c=>{ h+=row(c); });
+  if(off.length){ h+='<optgroup label="غیرفعال در بازی">'+off.map(row).join('')+'</optgroup>'; }
+  h+='<option value="'+AI_OTHER+'">✍️ موضوع دیگر…</option></select>'+
+     '<input id="ai_topic_other" style="margin-top:6px;display:none" placeholder="موضوع دلخواه">';
+  return h;
+}
+function aiTopicSync(){
+  const sel=$('#ai_topic'), box=$('#ai_topic_other');
+  if(!sel||!box) return;
+  box.style.display=(sel.value===AI_OTHER)?'':'none';
+  if(sel.value===AI_OTHER) box.focus();
+}
+function aiTopicValue(){
+  const sel=$('#ai_topic'), box=$('#ai_topic_other');
+  if(!sel) return '';
+  if(sel.value===AI_OTHER) return String((box&&box.value)||'').trim();
+  return String(sel.value||'').trim();
+}
+
 const AI_RUN_KEY='pz_ai_last_run';
-function aiSaveRun(r){ try{ sessionStorage.setItem(AI_RUN_KEY,JSON.stringify({at:Date.now(),r:r})); }catch(e){} }
+/* `fresh` is «this run just finished», as opposed to «this is what the last run
+   said, from before you reloaded». Only the second deserves the «اجرای قبلی»
+   label, and marking a result the operator has been waiting for as old is how
+   a finished run looks like a cancelled one. */
+function aiSaveRun(r,fresh){ try{ sessionStorage.setItem(AI_RUN_KEY,JSON.stringify({at:Date.now(),fresh:!!fresh,r:r})); }catch(e){} }
 function aiLastRun(){ try{ const v=JSON.parse(sessionStorage.getItem(AI_RUN_KEY)||'null'); return v&&v.r?v:null; }catch(e){ return null; } }
 function aiClearRun(){ try{ sessionStorage.removeItem(AI_RUN_KEY); }catch(e){} const o=$('#ai_out'); if(o) o.innerHTML=''; }
-function aiLastRunHtml(){ const v=aiLastRun(); return v?aiRunHtml(v.r,true):''; }
+function aiLastRunHtml(){
+  if(AI_RUNNING) return aiRunningHtml();
+  const v=aiLastRun(); return v?aiRunHtml(v.r,!v.fresh):'';
+}
 
+/* A RUN THAT DOES NOT NEED YOU TO WATCH IT.
+ *
+ * «چون زمان‌بر هست، وقتی می‌ری به تب دیگه‌ای اون صفحه کار خودشو بکنه و وقتی
+ *  تموم شد بج بیاد که تموم شد.»
+ *
+ * The request never actually stopped — leaving the screen only threw away the
+ * element the answer was going to be written into, so it landed in a detached
+ * node and the operator, coming back, saw the PREVIOUS run marked «اجرای قبلی»
+ * and concluded it had been cancelled. Which is worse than stopping: the
+ * questions were in the bank and nobody was told.
+ *
+ * So the run is state, not a screen. `AI_RUNNING` says one is in flight and
+ * survives navigation; the result is saved the moment it arrives, wherever the
+ * operator happens to be; and the sidebar carries a badge until they come back
+ * and look at it. */
+let AI_RUNNING=null;          // {topic, n, at} while a run is in flight
+let AI_TICK=null;             // repaints the «در حال ساختن» card's clock
+
+function aiElapsed(){ return Math.max(0,Math.round((Date.now()-((AI_RUNNING&&AI_RUNNING.at)||Date.now()))/1000)); }
+function aiRunningHtml(){
+  if(!AI_RUNNING) return '';
+  const s=aiElapsed(), mm=Math.floor(s/60), ss=s%60;
+  return '<div class="card" style="margin-bottom:11px"><h3>در حال ساختن… '+
+    '<span class="pill info mono">'+fa(mm)+':'+fa(ss<10?'0'+ss:ss)+'</span></h3>'+
+    '<div class="cfg-row"><label>موضوع</label><b>'+esc(AI_RUNNING.topic)+'</b></div>'+
+    '<div class="cfg-row"><label>تعداد</label><b>'+fa(AI_RUNNING.n)+'</b></div>'+
+    '<div class="note">هر سوال بازبینی، راستی‌آزمایی و با بانک مقایسه می‌شود، پس طول می‌کشد. '+
+    '<b>می‌توانی به تب دیگری بروی</b> — کار ادامه پیدا می‌کند و وقتی تمام شد کنارِ «استودیوی AI» نشان داده می‌شود. '+
+    'فقط صفحه را نبند.</div><div class="skel"></div></div>';
+}
+/* Keeps the clock moving while the studio is on screen, and stops itself the
+   moment it is not — an interval writing into a screen nobody is looking at is
+   how a panel gets slow. */
+function aiTickStart(){
+  if(AI_TICK) clearInterval(AI_TICK);
+  AI_TICK=setInterval(()=>{
+    const o=$('#ai_out');
+    if(!o||!document.body.contains(o)){ clearInterval(AI_TICK); AI_TICK=null; return; }
+    if(!AI_RUNNING){ clearInterval(AI_TICK); AI_TICK=null; return; }
+    const c=o.querySelector('.pill.mono'); if(c){ const s=aiElapsed(); c.textContent=fa(Math.floor(s/60))+':'+fa(s%60<10?'0'+(s%60):s%60); }
+  },1000);
+}
+/* Paint whatever the studio should be showing right now, if it is on screen. */
+function aiPaintOut(){
+  const o=$('#ai_out'); if(!o||!document.body.contains(o)) return;
+  if(AI_RUNNING){ o.innerHTML=aiRunningHtml(); aiTickStart(); return; }
+  const v=aiLastRun();
+  o.innerHTML=v?aiRunHtml(v.r,!v.fresh):'';
+}
 async function aiRun(){
-  const topic=$('#ai_topic').value.trim();
-  if(!topic) return toast('موضوع را بنویس','bad');
+  if(AI_RUNNING) return toast('یک اجرا در حال انجام است — صبر کن تمام شود','bad');
+  const topic=aiTopicValue();
+  if(!topic) return toast('موضوع را انتخاب کن','bad');
   const n=Math.max(1,Math.min(25,Number($('#ai_count').value||1)));
-  const out=$('#ai_out');
-  out.innerHTML='<div class="card"><h3>در حال ساختن…</h3><div class="note">هر سوال بازبینی، راستی‌آزمایی و با بانک مقایسه می‌شود، پس برای '+fa(n)+' سوال کمی طول می‌کشد. صفحه را نبند.</div><div class="skel"></div></div>';
+  AI_RUNNING={topic:topic,n:n,at:Date.now()};
+  aiPaintOut();
   try{
     const r=await api('POST','/admin/questions/ai/run',{
       topic:topic, difficulty:$('#ai_diff').value, count:n,
+      /* The topic IS the category now that it is picked from the game's own
+         list — so the questions land in the shelf players actually open, rather
+         than in whatever the model decided to call it. */
+      category:topic,
       autoApprove:!!(($('#ai_auto')||{}).checked)
     });
-    if(!r.configured){ out.innerHTML='<div class="note">🔌 AI پیکربندی نشده (ANTHROPIC_API_KEY تنظیم نیست). «ساخت دستی» را بزن یا کلید را روی سرور ست کن.</div>'; return; }
-    aiSaveRun(r);
-    out.innerHTML=aiRunHtml(r,false);
-    toast(fa(r.added)+' سوال به بانک اضافه شد',(r.added>0?'ok':'bad'));
-  }catch(e){ out.innerHTML='<div class="empty">اجرا نشد: '+esc(e.message)+'</div>'+aiErrorHelp(e.message); toast(e.message,'bad'); }
+    AI_RUNNING=null;
+    if(!r.configured){
+      aiSaveRun({configured:false,requested:n,generated:0,added:0,pending:0,skipped:[],questions:[],
+        error:'AI پیکربندی نشده (ANTHROPIC_API_KEY روی سرور تنظیم نیست).'},true);
+      aiPaintOut(); aiFinished(0,'AI پیکربندی نشده'); return;
+    }
+    aiSaveRun(r,true);
+    aiPaintOut();
+    aiFinished(r.added||0, r.error||'');
+  }catch(e){
+    AI_RUNNING=null;
+    aiSaveRun({requested:n,generated:0,added:0,pending:0,skipped:[],questions:[],error:e.message},true);
+    aiPaintOut();
+    aiFinished(0,e.message);
+  }
+}
+/* Told once, wherever the operator is. The toast is for the case where they are
+   still looking; the badge is for the case where they are not, and it stays
+   until the studio is opened. */
+function aiFinished(added,err){
+  const onStudio=(CUR==='aistudio');
+  if(!onStudio){ AI_DONE=1; try{ buildNav(); paintGroupBar(); }catch(e){} }
+  toast(err?('تولید سوال تمام شد — '+err):('تولید سوال تمام شد — '+fa(added)+' سوال تأیید و وارد بازی شد'),
+        (err||!added)?'bad':'ok');
 }
 
 function aiRunHtml(r,old){
@@ -2274,7 +2500,7 @@ function aiRunHtml(r,old){
   return head+list+bad;
 }
 async function aiOneApprove(id){
-  try{ await api('POST','/admin/questions/'+id+'/approve',{}); toast('تأیید شد','ok'); const v=aiLastRun(); if(v){ (v.r.questions||[]).forEach(q=>{ if(q.id===id){ q.approved=true; q.reason=undefined; } }); v.r.added=(v.r.added||0)+1; v.r.pending=Math.max(0,(v.r.pending||0)-1); aiSaveRun(v.r); $('#ai_out').innerHTML=aiRunHtml(v.r,false); } }
+  try{ await api('POST','/admin/questions/'+id+'/approve',{}); toast('تأیید شد','ok'); const v=aiLastRun(); if(v){ (v.r.questions||[]).forEach(q=>{ if(q.id===id){ q.approved=true; q.reason=undefined; } }); v.r.added=(v.r.added||0)+1; v.r.pending=Math.max(0,(v.r.pending||0)-1); aiSaveRun(v.r,v.fresh); $('#ai_out').innerHTML=aiRunHtml(v.r,!v.fresh); } }
   catch(e){ toast(e.message,'bad'); }
 }
 async function aiApproveHeld(){
@@ -2285,7 +2511,7 @@ async function aiApproveHeld(){
   try{
     const r=await api('POST','/admin/questions/bulk/approve',{ids:ids});
     (v.r.questions||[]).forEach(q=>{ q.approved=true; q.reason=undefined; });
-    v.r.added=(v.r.questions||[]).length; v.r.pending=0; aiSaveRun(v.r);
+    v.r.added=(v.r.questions||[]).length; v.r.pending=0; aiSaveRun(v.r,v.fresh);
     $('#ai_out').innerHTML=aiRunHtml(v.r,false);
     toast(fa(r.done)+' سوال تأیید شد',(r.failed&&r.failed.length?'bad':'ok'));
   }catch(e){ toast(e.message,'bad'); }
@@ -2295,7 +2521,7 @@ async function aiOneDelete(id,btn){
   try{
     await api('DELETE','/admin/questions/'+id);
     const v=aiLastRun();
-    if(v){ v.r.questions=(v.r.questions||[]).filter(q=>q.id!==id); aiSaveRun(v.r); $('#ai_out').innerHTML=aiRunHtml(v.r,false); }
+    if(v){ v.r.questions=(v.r.questions||[]).filter(q=>q.id!==id); aiSaveRun(v.r,v.fresh); $('#ai_out').innerHTML=aiRunHtml(v.r,!v.fresh); }
     toast('حذف شد','ok');
   }catch(e){ toast(e.message,'bad'); }
 }
@@ -2306,7 +2532,7 @@ async function aiOneDelete(id,btn){
    شده پاک میشه». Leaving it beside aiRun would leave the losing path one click
    away, and it is the click that looks familiar.
    The manual path stays: it writes to the bank the moment it is saved. */
-function aiManual(){ AI_DRAFTS=[{topic:$('#ai_topic').value.trim(),difficulty:$('#ai_diff').value,question:'',options:['','','',''],correctAnswer:0,explanation:''}]; $('#ai_out').innerHTML=draftCard(AI_DRAFTS[0],0,true); }
+function aiManual(){ AI_DRAFTS=[{topic:aiTopicValue(),difficulty:$('#ai_diff').value,question:'',options:['','','',''],correctAnswer:0,explanation:''}]; $('#ai_out').innerHTML=draftCard(AI_DRAFTS[0],0,true); }
 function draftCard(d,i,edit){
   return '<div class="card" style="margin-bottom:11px"><h3>سوال '+fa(i+1)+' <span class="pill info">'+esc(d.difficulty||'')+'</span></h3>'+
     '<div class="field"><label>متن سوال</label><input id="d_q_'+i+'" value="'+esc(d.question)+'"></div>'+

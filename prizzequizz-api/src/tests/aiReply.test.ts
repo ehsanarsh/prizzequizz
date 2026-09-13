@@ -204,6 +204,32 @@ const KEEP = process.env.ANTHROPIC_API_KEY;
     assert.ok(found.every((x: any) => x.options), 'it took the half-formed list instead');
   });
 
+  await check('a single unwrapped question is a list of one', () => {
+    /* STRAIGHT FROM THE PANEL'S OWN REPORT. The model answered with a bare
+       question object and no array at all — exactly the thing that was asked
+       for, simply not wrapped — and a search that only looks for arrays read it
+       as «there was no list of questions», so a run of five came back as zero.
+       The keys are the ones it really sent. */
+    const real = { question: 'کدام جانور به‌دلیل داشتن آبشش، بیشتر عمر خود را در آب می‌گذراند؟',
+                   options: ['ماهی', 'گربه', 'گنجشک', 'لاک‌پشت خشکی'], correct_answer: 0,
+                   explanation: 'ماهی‌ها با آبشش در آب تنفس می‌کنند.', knowledge_point: 'تنفس آبزیان',
+                   category: 'طبیعت و جانداران', difficulty: 'medium', fact_check_required: true };
+    assert.equal(findDrafts(real).length, 1, 'a lone question object was read as no questions at all');
+  });
+
+  await check('and it goes all the way into the bank', async () => {
+    generatorSays({ question: 'یک پرسش تنها و بی‌پوشش چیست؟',
+                    options: ['الف', 'ب', 'ج', 'د'], correct_answer: 2, explanation: 'چون.' });
+    const r = await aiRunBatch({ topic: 'تاریخ', count: 1 });
+    assert.equal(r.added, 1, 'the run found nothing: ' + (r.error || 'no reason given'));
+    assert.equal(r.questions[0]!.text, 'یک پرسش تنها و بی‌پوشش چیست؟');
+  });
+
+  await check('but a lone object that is not a question is still not one', () => {
+    assert.equal(findDrafts({ ok: true, model: 'x' }).length, 0);
+    assert.equal(findDrafts({ message: 'no questions today' }).length, 0);
+  });
+
   await check('and a run given one of those says there was no list, not «N bad questions»', async () => {
     generatorSays({ topics: [{ name: 'تاریخ' }, { name: 'جغرافیا' }] });
     const r = await aiRunBatch({ topic: 'تاریخ', count: 2 });
