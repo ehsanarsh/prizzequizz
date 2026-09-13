@@ -14,7 +14,7 @@
      copy that was never uploaded look exactly alike. This is that version. It
      is readable from the server with one curl, and it is printed at the bottom
      of «تنظیمات» so it can be read off the phone with no terminal at all. -->
-<meta name="pz-build" content="20260913-0330">
+<meta name="pz-build" content="20260913-0510">
 <!-- App icon on the phone home screen (Add to Home Screen). Place appicon.png
      (a square PNG, ideally 512x512) in the same web folder as this file. -->
 <link rel="apple-touch-icon" sizes="180x180" href="appicon.png">
@@ -1471,8 +1471,33 @@ input,textarea,select,[contenteditable="true"],.pz-selectable,.pz-selectable *{
 .item.has-color>*{position:relative;z-index:1}
 @media(prefers-reduced-motion:reduce){.item.shine-on::before{animation:none;opacity:0}}
 .item .it-ico{font-size:34px;margin-bottom:8px;filter:drop-shadow(0 3px 0 rgba(0,0,0,.3))}
-.item b{font-size:14px;font-weight:800;display:block}
-.item p{font-size:11px;color:var(--muted);font-weight:500;margin:4px 0 10px;line-height:1.4;min-height:30px}
+/* A NAME CANNOT STRETCH THE CARD IT IS ON.
+   An unbreakable run of characters — a latin product name, a pasted url, a
+   Persian phrase joined with ZWNJ — has no wrap opportunity, so it pushes the
+   line and the card grows to fit: one shelf item measured 201px tall beside a
+   245px twin, and grid stretch drags its neighbour up with it. Breaking inside
+   the word is uglier than a ragged edge for one card and tidier than a shelf
+   with two different card heights. `min-width:0` is the matching half — a grid
+   track whose item cannot shrink below its longest word grows the track and
+   pushes the whole grid sideways. */
+.item{min-width:0}
+/* EVERY CARD ON THE SHELF THE SAME HEIGHT.
+   Both halves matter. `overflow-wrap` stops an unbreakable run — a latin
+   product name, a pasted url, a Persian phrase joined with ZWNJ — from running
+   out of the side of its card. The line clamp then stops the wrapped text from
+   growing the card downwards: one item measured 245px beside a 201px twin, and
+   grid stretch drags the neighbour up to match, so a single long name makes a
+   whole row tall. Two lines each, always, whatever is typed in the panel.
+   `min-width:0` is the third half: a grid track whose item cannot shrink below
+   its longest word grows the track and pushes the grid sideways. */
+.item b,.item p{overflow-wrap:anywhere;word-break:break-word;min-width:0;
+  display:-webkit-box;-webkit-box-orient:vertical;overflow:hidden}
+/* Two lines of ROOM, not just a two-line ceiling: a one-word name would
+   otherwise sit on a card 22px shorter than its neighbour, which is the same
+   ragged shelf by another route. */
+.item b{font-size:14px;font-weight:800;line-height:1.35;min-height:2.7em;-webkit-line-clamp:2;line-clamp:2}
+.item p{font-size:11px;color:var(--muted);font-weight:500;margin:4px 0 10px;line-height:1.4;
+  min-height:2.8em;-webkit-line-clamp:2;line-clamp:2}
 .item .price{background:linear-gradient(180deg,#FFE24A,var(--bolt-2));border:2px solid #000;color:#141414;border-radius:100px;padding:6px;font-size:13px;font-weight:900}
 
 /* ===== RANKINGS ===== */
@@ -19760,8 +19785,12 @@ async function pzApi(m,p,b,a=true){
     if(res.status===401 && a && _tok){
       if(!_pzRefreshing) _pzRefreshing=pzRefreshToken().finally(()=>{ _pzRefreshing=null; });
       const refreshed=await _pzRefreshing;
-      if(refreshed){ res=await doFetch(); }
-      else { _pzAuthLost(); }
+      /* `'dead'` and `'unknown'` are both truthy strings — compared, not tested,
+         or a dead session would count as a successful refresh. */
+      if(refreshed==='ok'){ res=await doFetch(); }
+      else if(refreshed==='dead'){ _pzAuthLost(); }
+      /* 'unknown' — the phone, not the token. Leave the session alone and let
+         the caller see the 401; the next request will try again. */
     }
     /* PROOF THAT THE PHONE HAS INTERNET. An answer from our own server means the
        connection works, whatever the WebSocket is doing — and on the networks
@@ -19867,19 +19896,48 @@ try{ pzLoadTopicPool(); }catch(e){}
    token so the user never has to re-enter phone/OTP, and every device keeps its
    REAL userId (an expired token makes the server fall back to a shared id, which
    is why two devices then never matched). */
+/* WHY THE REFRESH FAILED, NOT JUST THAT IT DID.
+ *
+ * «POST /v1/auth/refresh 401 (Unauthorized)» in the console, and the game
+ * carried on anyway: the boot took «I still have a refresh token saved» as
+ * proof of a session, so a player whose token the server had already rejected
+ * was walked into the game with an access token every later request would
+ * refuse. Silent, and indistinguishable from the game being broken.
+ *
+ * A 401 is the server saying the token is DEAD — that is knowledge, and the
+ * answer to it is to log in again. A timeout or a 502 is the server saying
+ * NOTHING, and throwing a valid session away over a dropped packet on these
+ * networks would be its own bug. So the three outcomes are kept apart:
+ *   'ok'      — a fresh access token is in hand
+ *   'dead'    — the refresh token is rejected; the session is over
+ *   'unknown' — could not tell; keep what we have and try again later
+ * Fetched directly rather than through pzApi because the STATUS is the whole
+ * answer here, and pzApi returns a body. */
 async function pzRefreshToken(){
   let rtok=null; try{ rtok=localStorage.getItem('pz_rtok'); }catch(e){}
-  if(!rtok) return false;
+  if(!rtok) return 'dead';        // nothing to refresh with is not «try later»
+  let res=null;
   try{
-    const r=await pzApi('POST','/auth/refresh',{refreshToken:rtok},false);
-    if(r&&r.ok&&r.data&&r.data.accessToken){
-      _tok=r.data.accessToken; try{localStorage.setItem('pz_tok',_tok);}catch(e){}
-      if(r.data.refreshToken){ try{localStorage.setItem('pz_rtok',r.data.refreshToken);}catch(e){} }
-      if(r.data.user){ _usr=r.data.user; try{localStorage.setItem('pz_usr',JSON.stringify(_usr));}catch(e){} }
-      return true;
-    }
-  }catch(e){}
-  return false;
+    res=await fetch(_A+'/auth/refresh',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({refreshToken:rtok})});
+  }catch(e){ return 'unknown'; }  // the phone, not the token
+  if(res.status===401||res.status===403){
+    try{ localStorage.removeItem('pz_rtok'); }catch(e){}
+    return 'dead';
+  }
+  if(!res.ok) return 'unknown';
+  let r=null; try{ r=await res.json(); }catch(e){ return 'unknown'; }
+  if(r&&r.ok&&r.data&&r.data.accessToken){
+    _tok=r.data.accessToken; try{localStorage.setItem('pz_tok',_tok);}catch(e){}
+    if(r.data.refreshToken){ try{localStorage.setItem('pz_rtok',r.data.refreshToken);}catch(e){} }
+    if(r.data.user){ _usr=r.data.user; try{localStorage.setItem('pz_usr',JSON.stringify(_usr));}catch(e){} }
+    return 'ok';
+  }
+  /* ONLY A 401 ENDS A SESSION. A 200 that carries no token is a shape we did
+     not expect, and «unexpected» is not the same as «your token is invalid» —
+     logging somebody out over it would throw away a working session for a
+     reason the server never gave. Unknown, so keep what we have. */
+  return 'unknown';
 }
 
 /* AUTH */
@@ -22257,9 +22315,17 @@ function startIntroFlow(){
       let authed=false;
       if(_tok && _usr){
         const ok=await pzRefreshToken();
-        let hasR=false; try{ hasR=!!localStorage.getItem('pz_rtok'); }catch(e){}
-        authed = ok || hasR;
-        if(!ok && !hasR){ try{ _tok=null; localStorage.removeItem('pz_tok'); }catch(e){} }
+        if(ok==='ok') authed=true;
+        else if(ok==='dead'){
+          /* The server has REJECTED this token. Carrying on with it is how a
+             player ends up in a game where nothing loads and nothing says why. */
+          authed=false;
+          try{ _tok=null; localStorage.removeItem('pz_tok'); localStorage.removeItem('pz_rtok'); }catch(e){}
+        }else{
+          /* Could not reach the server, or it answered with nothing useful.
+             Keep the session: a dropped packet must not log anybody out. */
+          authed=true;
+        }
       }
       if(authed && _usr && !_pzNeedsRegister()){ try{applyMyName();}catch(e){} go('plans'); }
       else go('login');

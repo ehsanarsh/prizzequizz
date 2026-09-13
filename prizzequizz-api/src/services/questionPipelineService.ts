@@ -135,13 +135,57 @@ export function aiPromptDefaults(): Record<PromptStage, string> { return { ...PR
 // ---------------------------------------------------------------------------
 export interface DraftQuestion { topic: string; difficulty: string; question: string; options: string[]; correctAnswer: number; explanation?: string; source?: string }
 
-export async function aiGenerate(input: { topic: string; difficulty?: string; count?: number; category?: string }): Promise<{ configured: boolean; drafts: DraftQuestion[]; error?: string; dropped?: Array<{ why: string; sample: string }> }> {
+/* WHAT THE BANK ALREADY HAS, PUT IN FRONT OF THE MODEL.
+ *
+ * «با اینکه این سوالات در دیتابیس بود، بازم ساخت.» A run of ten produced
+ * eighteen questions and eight of them were thrown away as «شباهت ۱۰۰٪ به سؤال
+ * موجود» — the duplicate check was doing its job, and the model was being asked
+ * to guess what it must not write. It cannot: nothing ever told it.
+ *
+ * Sampled with a STRIDE rather than «the most recent N»: a model asked about
+ * جغرافیا reaches for the same canonical handful every time — the capital of
+ * France, the tallest mountain — and those were written on the first run, so
+ * the newest questions are the least likely to be repeated. Walking the whole
+ * category at a fixed step covers the old and the new for the same tokens.
+ *
+ * Bounded by CHARACTERS, not by count: the prompt has to leave room for the
+ * answer, and a category of nine hundred questions would otherwise push the
+ * reply straight into the token cap this same function just raised. */
+const AVOID_BUDGET = 5200;
+export async function existingTexts(category: string | undefined, budget = AVOID_BUDGET): Promise<string[]> {
+  const all = await repositories.questions.listAll().catch(() => [] as Question[]);
+  const cat = String(category ?? '').trim();
+  const pool = (cat ? all.filter((q) => String(q.category ?? '').trim() === cat) : all)
+    .map((q) => String(q.text ?? '').trim()).filter(Boolean);
+  if (!pool.length) return [];
+  /* How many fit, then a stride that spreads them across the whole category. */
+  const avg = Math.max(20, Math.round(pool.reduce((n, t) => n + t.length + 3, 0) / pool.length));
+  const room = Math.max(1, Math.floor(budget / avg));
+  if (pool.length <= room) return pool;
+  const step = pool.length / room;
+  const out: string[] = [];
+  for (let i = 0; out.length < room && Math.floor(i) < pool.length; i += step) out.push(pool[Math.floor(i)]!);
+  return out;
+}
+
+/** The «do not write these again» clause, or nothing when the bank is empty. */
+function avoidClause(avoid: string[]): string {
+  const rows = avoid.filter(Boolean);
+  if (!rows.length) return '';
+  return `\n\nThe question bank ALREADY contains the following. Do NOT write any of them again, and do NOT write a question that tests the same fact in different words — those are rejected and wasted:\n`
+    + rows.map((t, i) => `${i + 1}. ${t}`).join('\n')
+    + `\n\nWrite questions about DIFFERENT facts from the ones listed above.`;
+}
+
+export async function aiGenerate(input: { topic: string; difficulty?: string; count?: number; category?: string; avoid?: string[] }): Promise<{ configured: boolean; drafts: DraftQuestion[]; error?: string; dropped?: Array<{ why: string; sample: string }> }> {
   const count = Math.min(10, Math.max(1, Number(input.count) || 1));
   const difficulty = input.difficulty || 'medium';
+  const avoid = Array.isArray(input.avoid) ? input.avoid : await existingTexts(input.category ?? input.topic);
   const r = await aiJson<{ questions: DraftQuestion[] }>({
     model: aiModel('generator'),
     system: aiPrompt('generator'),
-    user: `Create ${count} multiple-choice quiz question(s) in PERSIAN about "${input.topic}" at "${difficulty}" difficulty. Return JSON: {"questions":[{"topic":"${input.topic}","difficulty":"${difficulty}","question":"...","options":["..","..","..",".."],"correctAnswer":0,"explanation":"...","source":".."}]}. correctAnswer is the 0-based index of the correct option.`,
+    user: `Create ${count} multiple-choice quiz question(s) in PERSIAN about "${input.topic}" at "${difficulty}" difficulty. Return JSON: {"questions":[{"topic":"${input.topic}","difficulty":"${difficulty}","question":"...","options":["..","..","..",".."],"correctAnswer":0,"explanation":"...","source":".."}]}. correctAnswer is the 0-based index of the correct option.`
+      + avoidClause(avoid),
     /* SIZED FOR THE ANSWER BEING ASKED FOR, not a fixed number that happened to
      * be enough once. A flat 1600 is roughly four Persian questions with their
      * explanations; asking for ten inside it guarantees the reply is cut off
@@ -473,11 +517,17 @@ export async function aiRunBatch(input: {
   const autoApprove = input.autoApprove !== false;   // doing the job is the point
 
   const seen: string[] = [];   // accepted in THIS run, for a cheap same-batch check
+  /* Read ONCE for the whole run, not per round — it is the same bank each time
+   * and a second read costs a full table scan for an identical answer. What
+   * gets added to it as the run goes is what the run itself has just written,
+   * which is how the second round stops repeating the first. */
+  const known = await existingTexts(input.category ?? input.topic);
   let rounds = 0;
   while (out.questions.length < requested && rounds < BATCH_ROUNDS) {
     rounds++;
     const want = requested - out.questions.length;
-    const gen = await aiGenerate({ topic: input.topic, difficulty: input.difficulty, count: Math.min(10, want), category: input.category });
+    const gen = await aiGenerate({ topic: input.topic, difficulty: input.difficulty, count: Math.min(10, want),
+      category: input.category, avoid: known.concat(seen) });
     if (!gen.configured) return { ...out, configured: false, error: gen.error ?? 'AI not configured' };
     /* Questions the model sent that could not be read are reported, not thrown
      * away quietly — «۰ تولید شد» with no reason is the same message whether the

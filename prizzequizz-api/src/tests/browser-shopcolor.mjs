@@ -250,6 +250,58 @@ ok('it is rounded like the card, so a dropped clip shows nothing', parseFloat(ba
 ok('the card still clips its own contents', band.clip === 'hidden', band.clip);
 ok('and the band is narrower than the card', band.w < band.cardW, band.w + ' of ' + band.cardW);
 
+/* ── ONE LONG NAME MUST NOT STRETCH THE SHELF ────────────────────────────
+   «کارت دراز می‌شه.» An unbreakable run of characters — a latin product name, a
+   pasted url, a Persian phrase joined with ZWNJ — has no wrap opportunity, so
+   it either runs out of the side of its card or pushes the card taller; one
+   item measured 245px beside a 201px twin, and grid stretch drags the whole row
+   up to match. Every card on the shelf is the same height whatever an operator
+   types into the panel, and the grid never grows wider than the screen. */
+const shapes = await page.evaluate(() => {
+  const S = (0, eval)('SHOP');
+  S.util = [
+    { id: 'x1', i: '🎫', n: 'قلب', d: 'یک جان', p: 1, cur: 'coins', key: 'heart', val: 1 },
+    { id: 'x2', i: '🎁', n: 'SUPER-MEGA-ULTRA-TICKET-PACK-2026-EDITION', d: 'x', p: 2, cur: 'coins', key: 'heart', val: 1 },
+    { id: 'x3', i: '📦', n: 'بستهٔ‌ویژهٔ‌بلیط‌های‌طلایی‌مسابقات‌بزرگ‌پاییزه', d: 'توضیح', p: 3, cur: 'coins', key: 'heart', val: 1, color: '#1155ff' },
+    { id: 'x4', i: '💎', n: 'بلیط', d: 'https://example.com/very/long/path/that/never/breaks/anywhere', p: 4, cur: 'coins', key: 'heart', val: 1 }
+  ];
+  (0, eval)('renderShop')('util');
+  const cards = [...document.querySelectorAll('#shopContent .item')].map((e) => {
+    const r = e.getBoundingClientRect();
+    return { n: (e.querySelector('b') || {}).textContent.slice(0, 12), w: Math.round(r.width), h: Math.round(r.height) };
+  });
+  const grid = document.querySelector('#shopContent .shop-grid');
+  return { cards, gridW: Math.round(grid.getBoundingClientRect().width), gridScroll: grid.scrollWidth,
+           bodyScroll: document.body.scrollWidth, view: window.innerWidth };
+});
+/* The NAME BOX, not just the card. `align-items:stretch` already levels the
+   cards within one row, so equal card heights alone would pass even if a short
+   name reserved less room than a long one — the difference would simply move
+   into the row below. The box that holds the name is where the reservation
+   either exists or does not. */
+const nameBoxes = await page.evaluate(() =>
+  [...new Set([...document.querySelectorAll('#shopContent .item b')]
+    .map((b) => Math.round(b.getBoundingClientRect().height)))]);
+ok('a one-word name reserves the same room as a two-line one',
+   nameBoxes.length === 1, nameBoxes.join(' / ') + 'px');
+const heights = [...new Set(shapes.cards.map((c) => c.h))];
+ok('every card on the shelf is the same height, whatever its name',
+   heights.length === 1, shapes.cards.map((c) => c.n + ':' + c.h).join(' | '));
+ok('and the same width', [...new Set(shapes.cards.map((c) => c.w))].length === 1,
+   shapes.cards.map((c) => c.w).join(' '));
+ok('a name with nowhere to wrap does not push the grid sideways',
+   shapes.gridScroll <= shapes.gridW + 1 && shapes.bodyScroll <= shapes.view,
+   'grid ' + shapes.gridScroll + '/' + shapes.gridW + ', page ' + shapes.bodyScroll + '/' + shapes.view);
+
+/* Put the shelf back the way the checks below expect to find it. */
+await page.evaluate((items) => {
+  (0, eval)('SHOP').util = items.map((it) => ({ id: it.id, i: it.icon, n: it.name, d: it.description, p: it.price,
+    key: it.effectKey, val: it.effectValue, cur: it.currency, badge: it.badge, img: it.image || '', color: it.color || '',
+    shine: it.shine, rewards: it.rewards }));
+  (0, eval)('renderShop')('util');
+}, ITEMS);
+await page.waitForTimeout(300);
+
 /* ── AND NOTHING ANIMATES UNDER A TRANSFORM ──────────────────────────────
    Sizing the band to the card was not enough — the user pressed a card and it
    stretched again. Two things transform it: `:active` puts a transform on the

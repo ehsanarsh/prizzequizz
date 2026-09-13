@@ -15,7 +15,7 @@
  * Run: npx tsx src/tests/aiReply.test.ts */
 import assert from 'node:assert/strict';
 import { aiJson, wasTruncated } from '../services/aiClient.js';
-import { aiRunBatch, findDrafts } from '../services/questionPipelineService.js';
+import { aiRunBatch, createDraft, existingTexts, findDrafts } from '../services/questionPipelineService.js';
 
 let pass = 0, fail = 0;
 async function check(name: string, fn: () => unknown): Promise<void> {
@@ -314,6 +314,66 @@ const KEEP = process.env.ANTHROPIC_API_KEY;
 
     assert.ok(large > small, `ten questions were given no more room than one (${small} vs ${large})`);
     assert.ok(large >= 5000, 'ten Persian questions do not fit in ' + large + ' tokens');
+  });
+
+  /* ── THE MODEL IS TOLD WHAT WE ALREADY HAVE ─────────────────────────────
+   * «با اینکه این سوالات در دیتابیس بود، بازم ساخت.» A run of ten produced
+   * eighteen questions and eight came back «شباهت ۱۰۰٪ به سؤال موجود». The
+   * duplicate check was working perfectly; the model was being asked to avoid
+   * something nobody had shown it. */
+  await check('the questions already in the bank are put in front of the model', async () => {
+    for (let i = 0; i < 4; i++) {
+      await createDraft({ text: `پرسشِ کهنهٔ شمارهٔ ${i} دربارهٔ جغرافیا چیست؟`, options: ['الف', 'ب', 'ج', 'د'],
+        correctIndex: 0, category: 'جغرافیا', difficulty: 'medium', source: 'manual' });
+    }
+    generatorSays({ questions: [q(301)] });
+    await aiRunBatch({ topic: 'جغرافیا', category: 'جغرافیا', count: 1 });
+    const gen = asked.find((b) => stage(b) === 'gen');
+    const user = String(gen?.messages?.[0]?.content ?? '');
+    assert.match(user, /پرسشِ کهنهٔ شمارهٔ 0/, 'the bank’s own questions never reached the prompt');
+    assert.match(user, /Do NOT write any of them again/i, 'they were listed with no instruction attached');
+  });
+
+  await check('and so is what the run itself has just written', async () => {
+    /* The second round used to meet the first round's questions afresh: it is
+       the same model, the same topic, and nothing said «you already wrote
+       these». «تکراری در همین دسته» was the result. */
+    let n = 320;
+    serveRaw((b) => {
+      const st = stage(b);
+      const out = st === 'gen' ? { questions: [q(n++)] } : st === 'fact' ? GOOD_FACT : GOOD_REVIEW;
+      return { content: [{ type: 'text', text: JSON.stringify(out) }], stop_reason: 'end_turn' };
+    });
+    const r = await aiRunBatch({ topic: 'جغرافیا', category: 'جغرافیا', count: 3 });
+    assert.ok(r.added >= 2, 'the run did not get far enough to ask twice: ' + (r.error || r.added));
+    const gens = asked.filter((b) => stage(b) === 'gen');
+    assert.ok(gens.length >= 2, 'only one round happened; nothing to check');
+    const later = String(gens[gens.length - 1]?.messages?.[0]?.content ?? '');
+    assert.match(later, new RegExp(q(320).question.slice(0, 14)), 'the later round was not told what the earlier one wrote');
+  });
+
+  await check('an empty bank adds no clause at all', async () => {
+    generatorSays({ questions: [q(340)] });
+    await aiRunBatch({ topic: 'موضوعی که هیچ سؤالی ندارد', category: 'موضوعی که هیچ سؤالی ندارد', count: 1 });
+    const user = String(asked.find((b) => stage(b) === 'gen')?.messages?.[0]?.content ?? '');
+    assert.ok(!/ALREADY contains/i.test(user), 'it told the model to avoid nothing, at the cost of tokens');
+  });
+
+  await check('and a huge bank is trimmed rather than sent whole', async () => {
+    /* The prompt has to leave room for the ANSWER. A category of hundreds would
+       otherwise push the reply straight into the token cap. */
+    for (let i = 0; i < 400; i++) {
+      await createDraft({ text: `پرسشِ انبوهِ شمارهٔ ${i} دربارهٔ تاریخِ طولانیِ ایران و جهان چیست؟`,
+        options: ['الف', 'ب', 'ج', 'د'], correctIndex: 0, category: 'انبوه', difficulty: 'medium', source: 'manual' });
+    }
+    const rows = await existingTexts('انبوه');
+    const chars = rows.reduce((n, t) => n + t.length, 0);
+    assert.ok(rows.length < 400, 'the whole category was sent: ' + rows.length);
+    assert.ok(chars <= 6000, 'the avoid list is ' + chars + ' characters');
+    /* Spread across the category, not just the newest — a model reaches for the
+       canonical questions, and those were written first. */
+    assert.match(rows[0]!, /شمارهٔ 0 /, 'the oldest was not sampled: ' + rows[0]);
+    assert.match(rows[rows.length - 1]!, /شمارهٔ 39[0-9] /, 'the newest was not sampled: ' + rows[rows.length - 1]);
   });
 
   globalThis.fetch = realFetch;
