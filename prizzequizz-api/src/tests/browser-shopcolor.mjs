@@ -85,7 +85,7 @@ const cards = await page.evaluate(() => {
       sc: cs.getPropertyValue('--sc').trim(),
       lite: cs.getPropertyValue('--sc-lite').trim(),
       delay: cs.getPropertyValue('--sc-delay').trim(),
-      shine: (() => { const b = getComputedStyle(el, '::before'); return { name: b.animationName, dur: b.animationDuration, w: b.width }; })(),
+      shine: { name: cs.animationName, dur: cs.animationDuration, size: cs.backgroundSize.split(',')[0].trim() },
       colour: cs.color
     });
   }
@@ -112,7 +112,8 @@ ok('there is a halo above the colour, not just the colour',
 
 /* ── the shine ──────────────────────────────────────────────────────────── */
 ok('a light sweeps across the card', cards[0].shine.name === 'scShine', JSON.stringify(cards[0].shine));
-ok('and it is a band, not the whole card', cards[0].shine.w !== '' && parseFloat(cards[0].shine.w) < 200, cards[0].shine.w);
+ok('and the light is a band wider than the card, so it can travel across it',
+   parseFloat(cards[0].shine.size) >= 200, cards[0].shine.size);
 ok('it pauses between passes rather than strobing', parseFloat(cards[0].shine.dur) >= 3, cards[0].shine.dur);
 
 /* Asked of the ANIMATION rather than of the computed style: Chromium does not
@@ -121,134 +122,104 @@ ok('it pauses between passes rather than strobing', parseFloat(cards[0].shine.du
    observation instead of the behaviour. */
 const moved = await page.evaluate(async () => {
   const el = document.querySelector('#shopContent .item.has-color');
-  const anim = document.getAnimations().find((a) => {
-    const t = a.effect && a.effect.target;
-    return t === el && a.effect.pseudoElement === '::before';
-  });
+  const anim = document.getAnimations().find((a) => a.effect && a.effect.target === el && !a.effect.pseudoElement);
   if (!anim) return { found: false };
   const raw = anim.effect.getKeyframes();
-  const frames = raw.map((f) => String(f.transform || ''));
-  /* Every property the animation touches, not only the transform: a sweep that
-     moved by `left` would still pass a transform-only check by having none. */
   const props = [...new Set(raw.flatMap((f) => Object.keys(f)))]
     .filter((k) => k !== 'offset' && k !== 'computedOffset' && k !== 'easing' && k !== 'composite');
+  /* Chromium expands the shorthand: the keyframes carry backgroundPositionX. */
+  const positions = raw.map((f) => String(f.backgroundPositionX || f.backgroundPosition || ''));
   const t0 = anim.currentTime;
   await new Promise((r) => setTimeout(r, 400));
-  return { found: true, frames, props, advanced: anim.currentTime !== t0, playing: anim.playState };
+  return { found: true, props, positions, advanced: anim.currentTime !== t0, playing: anim.playState };
 });
 ok('the light is a real running animation', moved.found && moved.playing === 'running', JSON.stringify(moved).slice(0, 70));
-/* Asked as geometry rather than as two literal percentages, which is what this
-   check used to be — it broke the moment the sweep was tuned, without anything
-   actually being wrong. translateX on the band is in units of the BAND's width,
-   so with a band `w` of the card's width, the band spans
-   [t·w, t·w + w] in card widths: it is off the left at t ≤ -100% and has
-   started leaving the right once t·w > 1. */
-const sweep = await page.evaluate(() => {
-  const el = document.querySelector('#shopContent .item.shine-on');
-  const w = parseFloat(getComputedStyle(el, '::before').width) / el.getBoundingClientRect().width;
-  const anim = document.getAnimations().find((a) => a.effect && a.effect.target === el && a.effect.pseudoElement === '::before');
-  const frames = (anim ? anim.effect.getKeyframes() : []).map((f) => ({
-    at: f.computedOffset,
-    t: (String(f.transform || '').match(/translateX\(([-0-9.]+)%\)/) || [])[1],
-    op: f.opacity
-  }));
-  return { w, frames };
-});
-const tOf = (f) => (f.t == null ? null : Number(f.t) / 100);
-const firstT = tOf(sweep.frames.find((f) => f.t != null) || {});
-const lastT = tOf([...sweep.frames].reverse().find((f) => f.t != null) || {});
-ok('it starts completely off one side of the card', firstT !== null && firstT <= -1,
-   String(firstT) + ' × band ' + sweep.w.toFixed(2));
-ok('and travels right across to the other', lastT !== null && lastT * sweep.w >= 0.8,
-   'ends with its near edge at ' + (lastT * sweep.w).toFixed(2) + ' of the card');
-
-/* THE DEFECT THIS REPLACED A GUESS WITH.
-   The first sweep ran to 285% and only faded at the very end, so it was still
-   painting at FULL opacity a whole card-width to the RIGHT of the card — with
-   nothing but the overflow clip keeping it off the shelf. A band is allowed
-   outside the card only while it is invisible. */
-/* Measured by WALKING THE ANIMATION, not by reading its keyframes. The frames
-   that set the opacity carry no transform and vice versa, so the keyframe list
-   never shows the two together — and the easing means the position at a given
-   moment is not the linear guess anyway. Stepping the clock and asking the
-   browser what it actually painted answers both. */
-const walk = await page.evaluate(() => {
-  const el = document.querySelector('#shopContent .item.shine-on');
-  const anim = document.getAnimations().find((a) => a.effect && a.effect.target === el && a.effect.pseudoElement === '::before');
-  if (!anim) return null;
-  const was = anim.currentTime;
-  anim.pause();
-  const dur = Number(anim.effect.getTiming().duration) || 0;
-  const box = el.getBoundingClientRect();
-  const out = [];
-  for (let i = 0; i <= 60; i++) {
-    anim.currentTime = (dur * i) / 60;
-    const cs = getComputedStyle(el, '::before');
-    const m = new DOMMatrixReadOnly(cs.transform === 'none' ? undefined : cs.transform);
-    out.push({ at: i / 60, op: Number(cs.opacity), x: m.m41, w: parseFloat(cs.width) });
-  }
-  anim.currentTime = was; anim.play();
-  /* skewX(-14deg) shifts the top and bottom edges sideways by (h/2)·tan(14°),
-     so the painted area is wider than the box by that much on each side. */
-  return { cardW: box.width, skew: (box.height / 2) * Math.tan(14 * Math.PI / 180), samples: out };
-});
-let lit = 0, strayed = '';
-for (const p of (walk ? walk.samples : [])) {
-  if (!(p.op > 0.02)) continue;
-  lit++;
-  const left = p.x - walk.skew, right = p.x + p.w + walk.skew;
-  if (right < 0 || left > walk.cardW) {
-    strayed += ` @${Math.round(p.at * 100)}% spans ${Math.round(left)}..${Math.round(right)}px of 0..${Math.round(walk.cardW)}`;
-  }
-}
-ok('the sweep is actually visible at some point', lit > 0, String(lit) + ' lit samples of 61');
-/* THE DEFECT THIS REPLACED A GUESS WITH. The first sweep ran to 285% and only
-   faded at the very end, so it was still painting at FULL opacity a whole
-   card-width to the RIGHT of the card — with nothing but the overflow clip
-   keeping it off the shelf. Outside the card is allowed only while invisible. */
-ok('and it is never visible while it is off the card', strayed === '', strayed.trim() || 'never strays');
-/* Frames that only fade carry no transform at all, so «every frame» is the
-   wrong question — «does it ever move the card by a layout property» is the
-   one that matters, and it is the stronger check of the two. */
-ok('and it moves by transform, not by relaying the card out',
-   moved.found
-   && moved.frames.filter(Boolean).every((f) => /translateX/.test(f))
-   && moved.frames.some(Boolean)
-   && !(moved.props || []).some((p) => /^(left|right|top|bottom|width|height|margin)/.test(p)),
-   (moved.props || []).join(',') || '—');
 ok('the clock is actually advancing', moved.advanced, String(moved.advanced));
+ok('it crosses the card from one end to the other',
+   moved.found && /(^|[^0-9])0%/.test(moved.positions.join(' ')) && /100%/.test(moved.positions.join(' ')),
+   (moved.positions || []).join(' | ').slice(0, 70));
 
-ok('two cards do not flash in unison', cards[0].delay !== cards[1].delay,
-   cards[0].delay + ' vs ' + cards[1].delay);
-
-/* ── and the card is still readable ─────────────────────────────────────── */
-ok('the lettering is chosen for the card it sits on', /rgb/.test(cards[0].colour), cards[0].colour);
-ok('an uncoloured card is left exactly as it was',
-   !/radial-gradient/.test(cards[2].bg) && cards[2].sc === '', cards[2].bg.slice(0, 40) || '(none)');
-
-/* ── THE CARD THAT STRETCHED ─────────────────────────────────────────────
-   «وقتی روی کارت‌های رنگ‌شده تاچ می‌کنی کارت دراز می‌شه و صفحه قاطی می‌شه.»
-   The band was 433px tall on a 201px card and only a rounded overflow clip on
-   a `:active`-transformed element kept the other 232px off the screen — the
-   one arrangement mobile Chrome drops the clip on. Nothing here needs to
-   reproduce that compositor bug: what is asserted is that there is no longer
-   anything outside the card TO escape. The old CSS fails this on the numbers
-   alone. */
-const band = await page.evaluate(() => {
-  const el = document.querySelector('#shopContent .item.shine-on');
-  const r = el.getBoundingClientRect();
-  const b = getComputedStyle(el, '::before');
-  return { card: +r.height.toFixed(1), h: parseFloat(b.height), w: parseFloat(b.width), cardW: +r.width.toFixed(1),
-           top: b.top, bottom: b.bottom, radius: b.borderTopLeftRadius, clip: getComputedStyle(el).overflow };
+/* ── THE FIX ITSELF: A COLOURED CARD IS A GREY CARD WITH DIFFERENT PAINT ──
+ * «اولش که رنگش خاکستری بود باگ نداشت و کارت‌ها موقع تاچ دراز نمی‌شدن، ولی وقتی
+ *  رنگش رو عوض کردم همون باگ روی همون کارت اومد.»
+ *
+ * That sentence is the whole diagnosis: whatever stretches the card is
+ * something the COLOUR adds. It used to add three structural things — an
+ * absolutely-positioned pseudo-element, the `overflow:hidden` that clipped it,
+ * and a z-index rule on every child. A background cannot move or resize
+ * anything, so the light lives in one now and the three are gone.
+ *
+ * This is checked as a DIFFERENCE against the plain card beside it rather than
+ * as a list of properties, because the list is the part that grows: the next
+ * thing somebody adds to `.has-color` is caught here without anybody
+ * remembering to add a line. */
+const sameShape = await page.evaluate(() => {
+  const cards = [...document.querySelectorAll('#shopContent .item')];
+  const plain = cards.find((e) => !e.classList.contains('has-color'));
+  const lit = cards.find((e) => e.classList.contains('has-color'));
+  if (!plain || !lit) return null;
+  /* Every property that can affect where something is drawn or how big it is.
+     Paint-only properties (background, border-color, box-shadow, color) are
+     deliberately NOT here — those are the ones a colour is allowed to change. */
+  /* Longhands, not shorthands: computed style resolves `overflowX`/`overflowY`
+     reliably where `overflow` can come back empty, and an empty string on both
+     sides is a difference that compares equal — a check that silently stops
+     checking. Same reason `borderTopWidth` rather than `border`. */
+  const LAYOUT = ['overflowX', 'overflowY', 'position', 'display', 'contain', 'isolation', 'transform',
+                  'paddingTop', 'paddingLeft', 'borderTopWidth', 'borderLeftWidth', 'borderTopLeftRadius',
+                  'boxSizing', 'minWidth', 'minHeight', 'width', 'height', 'marginTop', 'marginLeft',
+                  'willChange', 'clipPath', 'filter', 'perspective', 'zIndex', 'float'];
+  /* And prove the probe can see a difference at all, so it cannot pass by
+     comparing two empty strings for ever. */
+  if (getComputedStyle(plain).overflowX === undefined) return null;
+  const diff = [];
+  const cp = getComputedStyle(plain), cl = getComputedStyle(lit);
+  for (const k of LAYOUT) if (cp[k] !== cl[k]) diff.push(k + ': ' + cp[k] + ' → ' + cl[k]);
+  const pseudo = (el) => getComputedStyle(el, '::before').content;
+  return {
+    diff,
+    plainPseudo: pseudo(plain), litPseudo: pseudo(lit),
+    childZ: [...lit.children].map((c) => getComputedStyle(c).zIndex + '/' + getComputedStyle(c).position).join(' '),
+    plainChildZ: [...plain.children].map((c) => getComputedStyle(c).zIndex + '/' + getComputedStyle(c).position).join(' ')
+  };
 });
-ok('the shine is no taller than the card it lives on', band.h <= band.card,
-   band.h + 'px band on a ' + band.card + 'px card');
-ok('and it still covers the card top to bottom', band.h >= band.card - 8, band.h + ' vs ' + band.card);
-ok('it hangs off neither the top nor the bottom', band.top === '0px' && band.bottom === '0px',
-   band.top + ' / ' + band.bottom);
-ok('it is rounded like the card, so a dropped clip shows nothing', parseFloat(band.radius) > 0, band.radius);
-ok('the card still clips its own contents', band.clip === 'hidden', band.clip);
-ok('and the band is narrower than the card', band.w < band.cardW, band.w + ' of ' + band.cardW);
+ok('a coloured card has the same box as a plain one in every way that can move it',
+   sameShape && sameShape.diff.length === 0, sameShape ? sameShape.diff.join(' | ') || 'identical' : 'no pair to compare');
+ok('it grows no pseudo-element the plain card does not have',
+   sameShape && sameShape.litPseudo === sameShape.plainPseudo,
+   sameShape ? sameShape.plainPseudo + ' vs ' + sameShape.litPseudo : '—');
+ok('and its children are stacked exactly like the plain card’s',
+   sameShape && sameShape.childZ === sameShape.plainChildZ,
+   sameShape ? sameShape.childZ : '—');
+
+/* And the light really is painted — the point of all this is not to remove it. */
+const lightMoves = await page.evaluate(async () => {
+  const el = document.querySelector('#shopContent .item.shine-on');
+  const anim = document.getAnimations().find((a) => a.effect && a.effect.target === el && !a.effect.pseudoElement);
+  if (!anim) return null;
+  const t = anim.effect.getComputedTiming();
+  const dur = Number(t.duration) || 0;
+  /* PAST THE DELAY. Each card starts its sweep at its own moment so a shelf of
+     them does not flash in unison — and sampling from zero measures that wait,
+     not the sweep. The first attempt at this test read «the light never moves»
+     for exactly that reason, which is a test failing at arithmetic rather than
+     a product failing at anything. */
+  const d = Number(t.delay) || 0;
+  anim.pause();
+  const at = (ms) => { anim.currentTime = d + ms; return getComputedStyle(el).backgroundPosition.split(',')[0].trim(); };
+  const start = at(0), mid = at(dur * 0.12), rest = at(dur * 0.6);
+  anim.play();
+  return { start, mid, rest, delay: d, size: getComputedStyle(el).backgroundSize.split(',')[0].trim() };
+});
+ok('the band is somewhere else in the middle of the sweep than at the start',
+   lightMoves && lightMoves.start !== lightMoves.mid,
+   lightMoves ? lightMoves.start + ' → ' + lightMoves.mid : '—');
+ok('and it has come to rest by the time the pause begins',
+   lightMoves && lightMoves.mid !== lightMoves.rest,
+   lightMoves ? lightMoves.mid + ' → ' + lightMoves.rest : '—');
+ok('and it moves by repainting, never by laying the card out again',
+   moved.found && !(moved.props || []).some((p) => /^(left|right|top|bottom|width|height|margin|transform)/.test(p)),
+   (moved.props || []).join(',') || '—');
 
 /* ── ONE LONG NAME MUST NOT STRETCH THE SHELF ────────────────────────────
    «کارت دراز می‌شه.» An unbreakable run of characters — a latin product name, a
@@ -311,10 +282,10 @@ await page.waitForTimeout(300);
    while it moves, and it is folded in at the wrong size — the band smears and
    the shelf looks broken. Nobody can see a shine through a blur at 48%
    brightness, so it simply stops. */
-ok('the shine claims no permanent layer of its own',
-   !/transform|opacity/.test(await page.evaluate(() =>
-     getComputedStyle(document.querySelector('#shopContent .item.shine-on'), '::before').willChange)),
-   await page.evaluate(() => getComputedStyle(document.querySelector('#shopContent .item.shine-on'), '::before').willChange));
+ok('the shine claims no layer of its own at all',
+   'auto' === await page.evaluate(() =>
+     getComputedStyle(document.querySelector('#shopContent .item.shine-on')).willChange),
+   await page.evaluate(() => getComputedStyle(document.querySelector('#shopContent .item.shine-on')).willChange));
 
 const held = await (async () => {
   const box = await page.evaluate(() => {
@@ -326,8 +297,8 @@ const held = await (async () => {
   await page.mouse.down();
   const v = await page.evaluate(() => {
     const el = document.querySelector('#shopContent .item.shine-on');
-    const b = getComputedStyle(el, '::before');
-    return { pressed: el.matches(':active'), anim: b.animationName, op: b.opacity };
+    const cs = getComputedStyle(el);
+    return { pressed: el.matches(':active'), anim: cs.animationName, op: cs.opacity };
   });
   await page.mouse.up();
   await page.waitForTimeout(300);
@@ -335,27 +306,27 @@ const held = await (async () => {
 })();
 ok('the card really is in its pressed state for this check', held.pressed, String(held.pressed));
 ok('and the light stops while a finger is on it', held.anim === 'none', held.anim);
-ok('with nothing left painted to smear', held.op === '0', held.op);
+ok('and the card is still fully itself while pressed', held.op === '1', held.op);
 
 /* The sheet is open over the shelf, and the shelf behind it is blurred. */
 await page.evaluate(() => (0, eval)('showAaaModal')({ title: 'آزمایش', primaryText: 'باشه' }));
 await page.waitForTimeout(400);
 const behind = await page.evaluate(() => {
   const el = document.querySelector('#shopContent .item.shine-on');
-  const b = getComputedStyle(el, '::before');
+  const cs = getComputedStyle(el);
   const vp = document.querySelector('.phone.modal-open .viewport');
-  return { anim: b.animationName, op: b.opacity,
+  return { anim: cs.animationName, op: cs.opacity,
            blurred: !!vp && /blur/.test(getComputedStyle(vp).filter),
            scaled: !!vp && getComputedStyle(vp).transform !== 'none' };
 });
 ok('the shelf behind a sheet really is blurred and scaled', behind.blurred && behind.scaled,
    JSON.stringify(behind));
 ok('and the shine stops there too', behind.anim === 'none', behind.anim);
-ok('again with nothing painted under the blur', behind.op === '0', behind.op);
+ok('and nothing is repainting behind a blur nobody can see through', behind.op === '1', behind.op);
 await page.evaluate(() => (0, eval)('closeAaaModal')(false));
 await page.waitForTimeout(400);
 const after = await page.evaluate(() =>
-  getComputedStyle(document.querySelector('#shopContent .item.shine-on'), '::before').animationName);
+  getComputedStyle(document.querySelector('#shopContent .item.shine-on')).animationName);
 ok('once the sheet is closed it shines again', after === 'scShine', after);
 
 /* ── ONE CARD SHINY, THE NEXT ONE PLAIN ──────────────────────────────────── */
@@ -364,7 +335,7 @@ const perCard = await page.evaluate(() => {
   for (const el of document.querySelectorAll('#shopContent .item')) {
     const n = (el.querySelector('b') || {}).textContent || '';
     out[n] = { coloured: el.classList.contains('has-color'), shining: el.classList.contains('shine-on'),
-               anim: getComputedStyle(el, '::before').animationName };
+               anim: getComputedStyle(el).animationName };
   }
   return out;
 });
