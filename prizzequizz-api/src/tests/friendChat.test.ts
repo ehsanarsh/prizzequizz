@@ -73,15 +73,15 @@ const B = 'dddddddd-0000-4000-8000-00000000000b';
   await check('a message sent now appears straight away', async () => {
     await pool.query(`INSERT INTO friend_messages(sender_id, recipient_id, body) VALUES ($1,$2,'تازه')`, [B, A]);
     const page = await listChat(A, B);
-    assert.equal(page.messages[page.messages.length - 1].body, 'تازه',
+    assert.equal(page.messages[page.messages.length - 1]!.body, 'تازه',
       'the newest message is still not shown after two hundred');
   });
 
   await check('«mine» is decided per reader, not stored in the row', async () => {
     const forA = await listChat(A, B);
     const forB = await listChat(B, A);
-    const lastA = forA.messages[forA.messages.length - 1];
-    const lastB = forB.messages[forB.messages.length - 1];
+    const lastA = forA.messages[forA.messages.length - 1]!;
+    const lastB = forB.messages[forB.messages.length - 1]!;
     assert.equal(lastA.body, lastB.body, 'the two are not looking at the same message');
     assert.notEqual(lastA.mine, lastB.mine, 'the same message is «mine» to both of them');
   });
@@ -95,7 +95,7 @@ const B = 'dddddddd-0000-4000-8000-00000000000b';
        for that very message and every poll returns the last one again, for
        ever. The chat would fill with duplicates of whatever was said last. */
     const page = await listChat(A, B);
-    const last = page.messages[page.messages.length - 1];
+    const last = page.messages[page.messages.length - 1]!;
     assert.ok(/\.\d{6}Z$/.test(String(last.at)),
       'the timestamp is not precise enough to be handed back: ' + last.at);
     const again = await listChat(A, B, String(last.at));
@@ -105,7 +105,7 @@ const B = 'dddddddd-0000-4000-8000-00000000000b';
 
   await check('asking for what is new returns only what is new', async () => {
     const page = await listChat(A, B);
-    const last = String(page.messages[page.messages.length - 1].at);
+    const last = String(page.messages[page.messages.length - 1]!.at);
     const nothing = await listChat(A, B, last);
     assert.equal(nothing.messages.length, 0, 'a poll with nothing new returned ' + nothing.messages.length + ' messages');
     await pool.query(`INSERT INTO friend_messages(sender_id, recipient_id, body) VALUES ($1,$2,'بعدی')`, [B, A]);
