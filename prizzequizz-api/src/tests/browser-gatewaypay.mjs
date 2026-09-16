@@ -67,69 +67,171 @@ async function open(opts = {}) {
   page.on('pageerror', (e) => console.log('  page error: ' + String(e).slice(0, 120)));
   /* The gateway's own page is not ours to load; record the handoff instead. */
   const wentTo = [];
-  await ctx.route('https://blupal.net/**', (route) => { wentTo.push(route.request().url()); route.fulfill({ status: 200, contentType: 'text/html', body: '<html><body>blupal</body></html>' }); });
+  await ctx.route('https://blupal.net/**', (route) => {
+    wentTo.push(route.request().url());
+    route.fulfill({ status: 200, contentType: 'text/html', body: '<html><body>blupal</body></html>' });
+  });
   await page.goto(`http://127.0.0.1:${PORT}/`, { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(5400);
   return { ctx, page, calls, wentTo };
 }
 
-/* ── 1. the handoff ─────────────────────────────────────────────────────── */
+/* ── 1. leaving for the gateway ─────────────────────────────────────────── */
 {
   const { ctx, page, calls, wentTo } = await open();
-  ok('the client has a handoff for an absolute gateway url',
-     await page.evaluate(() => typeof (0, eval)('pzGatewayHandoff') === 'function'));
+  ok('the client has a way out to an absolute gateway url',
+     await page.evaluate(() => typeof (0, eval)('pzGatewayGo') === 'function'));
+  /* The second sheet is gone: the door is chosen on the one payment sheet and
+     the green button on it is the decision. Leaving the old function behind
+     would be a second way to reach a screen nobody can get to any more. */
+  ok('and the old second sheet is not still in the file',
+     await page.evaluate(() => (0, eval)('typeof pzGatewayHandoff')) === 'undefined',
+     await page.evaluate(() => (0, eval)('typeof pzGatewayHandoff')));
 
   await page.evaluate(() => { (0, eval)('pzPayOrder')({ kind: 'ticket', tier: 'green', qty: 1 }, 'gateway', 'بلیط سبز'); });
-  await page.waitForTimeout(500);
+  await page.waitForTimeout(900);
+  /* «What was bought is written down before leaving» is checked in section 2,
+     on the installed path: once this window has gone to the gateway there is no
+     longer any of OUR origin's storage to read, and both paths write the note
+     in the same place before they branch. */
 
-  const modal = await page.evaluate(() => {
-    const m = document.querySelector('.aaa-modal, #aaaModal, .modal');
-    return m ? (m.innerText || '') : '';
-  });
-  ok('a sheet explains the card-to-card payment before the player leaves',
-     /پرداخت/.test(modal) && /۲۵٬?۰۰۰|25,?000|٬/.test(modal.replace(/\s+/g, '')) === true || /پرداخت/.test(modal), modal.slice(0, 60).replace(/\n/g, ' | '));
+  ok('and the player really goes to the gateway',
+     wentTo.some((u) => u.startsWith('https://blupal.net/pay/')) || page.url().startsWith('https://blupal.net/'),
+     wentTo[0] || page.url());
 
-  const pending = await page.evaluate(() => { try { return JSON.parse(localStorage.getItem('pz_pay_pending') || 'null'); } catch (e) { return null; } });
-  ok('what is being bought is written down BEFORE the player leaves',
-     !!pending && pending.intentId === 'int-1', pending ? pending.intentId + '/' + pending.name : 'nothing stored');
-
-  /* THE BUG ITSELF. Nothing may be fetched at `origin + absoluteUrl`. */
+  /* THE OLD BUG. Nothing may be fetched at `origin + absoluteUrl`. */
   const glued = calls.concat(await page.evaluate(() => (window.__calls || []))).filter((c) => /127\.0\.0\.1:\d+https?:/.test(c) || c.includes('irhttps'));
   ok('the origin is never glued onto an absolute gateway url', glued.length === 0, glued.slice(0, 2).join(' ') || 'no glued url');
 
   const stubFetch = calls.filter((c) => c.includes('/payments/sandbox/'));
   ok('and the sandbox settle-by-fetch is not used for a real gateway', stubFetch.length === 0, stubFetch.join(' ') || 'none');
-
   await ctx.close();
 }
 
-/* ── 2. pressing the button really leaves ───────────────────────────────── */
+/* ── 2. AN INSTALLED GAME IS NOT NAVIGATED AWAY FROM ────────────────────── */
+/*
+ * «وقتی بازی رو تو هوم‌اسکرین می‌کنی و پرداخت می‌کنی، دوباره از کروم باز می‌شه…
+ *  و از اول ورود می‌کنه و کد و تلفن می‌خواد.»
+ *
+ * `location.href = url` points the app's OWN window at the gateway. The
+ * gateway is outside the app's scope, so Android hands the window to Chrome and
+ * the installed app — session and all — is gone; whatever the gateway redirects
+ * to afterwards lands in a browser that has never seen this player. What is
+ * checked here is that an installed game opens the gateway BESIDE itself and
+ * stays where it is.
+ */
+async function installed(openResult, blocked) {
+  await openResult.page.evaluate((b) => {
+    Object.defineProperty(navigator, 'standalone', { get: () => true, configurable: true });
+    window.__opens = [];
+    window.open = (u) => { window.__opens.push(String(u)); return b ? null : { closed: false, focus() {} }; };
+  }, blocked);
+}
 {
-  const { ctx, page, wentTo } = await open();
-  await page.evaluate(() => { (0, eval)('pzPayOrder')({ kind: 'ticket', tier: 'green', qty: 1 }, 'gateway', 'بلیط سبز'); });
-  await page.waitForTimeout(500);
-  await page.evaluate(() => {
-    const btns = [...document.querySelectorAll('button')].filter((b) => /رفتن به صفحهٔ پرداخت|رفتن به صفحه پرداخت/.test(b.textContent || ''));
-    if (btns[0]) btns[0].click();
+  const r = await open();
+  await installed(r, false);
+  await r.page.evaluate(() => { (0, eval)('pzPayOrder')({ kind: 'ticket', tier: 'green', qty: 1 }, 'gateway', 'بلیط سبز'); });
+  await r.page.waitForTimeout(900);
+  const opens = await r.page.evaluate(() => window.__opens || []);
+  ok('an installed game opens the gateway beside itself', opens.some((u) => u.startsWith('https://blupal.net/')), JSON.stringify(opens));
+  ok('and does NOT hand its own window over', r.page.url().startsWith('http://127.0.0.1:'), r.page.url());
+  const pending = await r.page.evaluate(() => { try { return JSON.parse(localStorage.getItem('pz_pay_pending') || 'null'); } catch (e) { return null; } });
+  /* THE ORDER OF EVENTS, checked where it can be seen: the note that says what
+     is being bought is on disk before the player is sent anywhere. A navigation
+     kills every variable in the frame, so a note written afterwards is a note
+     that is never written at all. */
+  ok('and what is being bought was written down BEFORE they were sent',
+     !!pending && pending.intentId === 'int-1' && pending.name === 'بلیط سبز',
+     pending ? pending.intentId + '/' + pending.name : 'nothing stored');
+  await r.ctx.close();
+}
+{
+  /* A blocked popup, or a webview that swallows it. Not being able to pay at
+     all would be worse than coming back through Chrome, so the old navigation
+     is still there underneath. */
+  const r = await open();
+  await installed(r, true);
+  await r.page.evaluate(() => { (0, eval)('pzPayOrder')({ kind: 'ticket', tier: 'green', qty: 1 }, 'gateway', 'بلیط سبز'); });
+  await r.page.waitForTimeout(1200);
+  ok('and when the browser refuses to open it, the player still gets there',
+     r.wentTo.some((u) => u.startsWith('https://blupal.net/')) || r.page.url().startsWith('https://blupal.net/'),
+     r.wentTo[0] || r.page.url());
+  await r.ctx.close();
+}
+
+/* ── 3. COMING BACK TO A GAME THAT WAS NEVER CLOSED ─────────────────────── */
+/*
+ * The check used to run in exactly one place — 1.8 seconds after boot — which
+ * was written for the only way back there used to be: the app had been
+ * navigated away, so returning meant a fresh start. Now the app stays open
+ * beside the payment page, and returning to it is not a boot at all. Without
+ * this, a player who paid in the other tab comes back to a shop that does not
+ * know it.
+ */
+{
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await ctx.addInitScript(() => {
+    localStorage.setItem('pz_tok', 't'); localStorage.setItem('pz_rtok', 'r');
+    localStorage.setItem('pz_usr', JSON.stringify({ id: 'u1', username: 'ehsan', displayName: 'احسان', level: 5, xp: 900, wallet: 0, coins: 100, hearts: 4 }));
+    for (const k of ['leaderboard', 'missions', 'shop', 'wheel']) localStorage.setItem('pq_tut_' + k, '1');
+    try { sessionStorage.setItem('pz_push_asked_visit', '1'); } catch (e) {}
+    localStorage.setItem('pz_pay_pending', JSON.stringify({ intentId: 'int-9', name: 'بلیط سبز', amount: 25000, at: Date.now() }));
   });
-  await page.waitForTimeout(900);
-  ok('the button actually sends the player to the gateway',
-     wentTo.some((u) => u.startsWith('https://blupal.net/pay/')) || page.url().startsWith('https://blupal.net/'),
-     wentTo[0] || page.url());
+  /* The transfer has not landed yet — and then, while the game sits there, it
+     does. Nothing about the page changes in between. */
+  let paidNow = false;
+  const verifies = [];
+  await ctx.route('**/v1/**', (route) => {
+    const u = route.request().url();
+    let body = { ok: true, data: {} };
+    if (/\/payments\/intents\/int-9\/verify/.test(u)) {
+      verifies.push(Date.now());
+      body = { ok: true, data: paidNow ? { id: 'int-9', status: 'paid', paid: true } : { id: 'int-9', status: 'pending', paid: false, reason: 'status_pending' } };
+    }
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+  });
+  const page = await ctx.newPage();
+  await page.goto(`http://127.0.0.1:${PORT}/`, { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(9000);          /* the boot check runs and finds nothing */
+  const atBoot = verifies.length;
+  ok('the boot check still runs', atBoot >= 1, atBoot + ' call(s)');
+  ok('and an unfinished transfer is kept', await page.evaluate(() => !!localStorage.getItem('pz_pay_pending')));
+
+  paidNow = true;
+  await page.evaluate(() => { window.dispatchEvent(new Event('focus')); });
+  await page.waitForTimeout(2500);
+  ok('returning to the game asks again, without a reload', verifies.length > atBoot,
+     atBoot + ' → ' + verifies.length);
+  ok('and the ticket is delivered on the spot',
+     await page.evaluate(() => localStorage.getItem('pz_pay_pending')) === null,
+     String(await page.evaluate(() => localStorage.getItem('pz_pay_pending'))));
   await ctx.close();
 }
 
-/* ── 3. backing out costs nothing ───────────────────────────────────────── */
+/* ── 3b. a return is not a reason to hammer the server ──────────────────── */
 {
-  const { ctx, page } = await open();
-  await page.evaluate(() => { (0, eval)('pzPayOrder')({ kind: 'ticket', tier: 'green', qty: 1 }, 'gateway', 'بلیط سبز'); });
-  await page.waitForTimeout(500);
-  /* The way out is the ✕ — «بعداً» said the same thing in a button the same
-     size as the one that matters, so it is gone and the cross carries it. */
-  await page.evaluate(() => { const x = document.getElementById('aaaClose'); if (x) x.click(); });
-  await page.waitForTimeout(400);
-  const pending = await page.evaluate(() => localStorage.getItem('pz_pay_pending'));
-  ok('changing your mind leaves no half-finished payment behind', pending === null, String(pending));
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await ctx.addInitScript(() => {
+    localStorage.setItem('pz_tok', 't'); localStorage.setItem('pz_rtok', 'r');
+    localStorage.setItem('pz_usr', JSON.stringify({ id: 'u1', username: 'ehsan', displayName: 'احسان', level: 5, xp: 900, wallet: 0, coins: 100, hearts: 4 }));
+    for (const k of ['leaderboard', 'missions', 'shop', 'wheel']) localStorage.setItem('pq_tut_' + k, '1');
+    try { sessionStorage.setItem('pz_push_asked_visit', '1'); } catch (e) {}
+    localStorage.setItem('pz_pay_pending', JSON.stringify({ intentId: 'int-8', name: 'x', amount: 25000, at: Date.now() }));
+  });
+  const verifies = [];
+  await ctx.route('**/v1/**', (route) => {
+    if (/\/payments\/intents\/int-8\/verify/.test(route.request().url())) verifies.push(1);
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, data: { id: 'int-8', status: 'pending', paid: false, reason: 'status_pending' } }) });
+  });
+  const page = await ctx.newPage();
+  await page.goto(`http://127.0.0.1:${PORT}/`, { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(9000);
+  const before = verifies.length;
+  /* Six taps back and forth in one second is one return, not six. */
+  for (let i = 0; i < 6; i++) { await page.evaluate(() => window.dispatchEvent(new Event('focus'))); }
+  await page.waitForTimeout(1500);
+  ok('flicking between apps does not fire a burst of checks',
+     verifies.length - before <= 3, before + ' → ' + verifies.length);
   await ctx.close();
 }
 
@@ -202,161 +304,8 @@ async function open(opts = {}) {
   await ctx.close();
 }
 
-/* ── 9. A WAY OUT, AND A PRICE YOU CAN READ ─────────────────────────────── */
-{
-  const { ctx, page } = await open();
-  await page.evaluate(() => { (0, eval)('pzPayOrder')({ kind: 'ticket', tier: 'green', qty: 1 }, 'gateway', 'بلیط سبز'); });
-  await page.waitForTimeout(500);
-
-  ok('the gateway sheet has a way out', await page.evaluate(() => {
-    const x = document.getElementById('aaaClose');
-    return !!x && x.offsetParent !== null;
-  }));
-  ok('and it is red, not another quiet ghost button', await page.evaluate(() => {
-    const x = document.getElementById('aaaClose');
-    const bg = getComputedStyle(x).backgroundImage + getComputedStyle(x).backgroundColor;
-    return /229|E5484D|rgb\(2/.test(bg) || /gradient/.test(bg);
-  }), await page.evaluate(() => getComputedStyle(document.getElementById('aaaClose')).backgroundImage.slice(0, 60)));
-
-  const amt = await page.evaluate(() => {
-    const el = document.querySelector('.aaa-amount b');
-    if (!el) return null;
-    return { text: el.textContent, size: Math.round(parseFloat(getComputedStyle(el).fontSize)) };
-  });
-  ok('the amount is spelled out, not buried in a sentence', !!amt && /۲۵٬۰۰۰/.test(amt.text), amt ? amt.text : 'no amount element');
-  ok('and it is big enough to actually read', !!amt && amt.size >= 20, amt ? amt.size + 'px' : '—');
-
-  const hand = await page.evaluate(() => ({
-    text: (document.getElementById('aaaModal') || {}).innerText || '',
-    primaryBg: getComputedStyle(document.getElementById('aaaPrimary')).backgroundImage,
-    secondaryBg: getComputedStyle(document.getElementById('aaaSecondary')).backgroundImage
-  }));
-  ok('the hand-off names the gateway too', /پرداخت امن با بلو پال/.test(hand.text));
-  /* «لوگو بلوپال بزرگ به جای عکس کارت، بالای نوشتهٔ کارت به کارت» — the player
-     is about to be handed to somebody else with real money, so the thing at the
-     top of the card is WHO, not a generic 💳. */
-  const mark = await page.evaluate(() => {
-    const ic = document.getElementById('aaaIcon');
-    const img = ic && ic.querySelector('img');
-    const r = ic ? ic.getBoundingClientRect() : null;
-    return { paylogo: !!ic && ic.classList.contains('has-paylogo'), hasImg: !!img,
-             src: img ? String(img.getAttribute('src')).slice(0, 24) : '', size: r ? Math.round(r.width) : 0,
-             emoji: ic ? ic.textContent.trim() : '' };
-  });
-  ok('the gateway mark takes the icon slot, not a 💳', mark.paylogo && mark.emoji !== '💳', JSON.stringify(mark).slice(0, 90));
-  ok('and it is big, not a strip of text', mark.size >= 70, mark.size + 'px');
-  ok('drawn from the uploaded artwork', mark.hasImg && mark.src.startsWith('data:image/'), mark.src);
-  const xshape = await page.evaluate(() => getComputedStyle(document.getElementById('aaaClose')).borderRadius);
-  ok('the ✕ is a square, not a circle', !/50%/.test(xshape) && parseFloat(xshape) < 17, xshape);
-  ok('its «go» button is green', /63, 208, 122|rgb\(63/.test(hand.primaryBg), hand.primaryBg.slice(0, 44));
-
-  /* ONE BUTTON, THE WHOLE ROW. «دکمه بعدا حذف بشه و دکمه پرداخت بزرگ بشه و جای
-     اونم بگیره.» The ✕ in the corner already offers «later», and offering it
-     twice put an equal-sized button next to the only one that matters. */
-  const solo = await page.evaluate(() => {
-    const p = document.getElementById('aaaPrimary'), sec = document.getElementById('aaaSecondary');
-    const row = document.getElementById('aaaActions');
-    const pr = p.getBoundingClientRect(), rr = row.getBoundingClientRect();
-    return { secShown: sec.offsetParent !== null, secText: sec.textContent.trim(),
-             w: Math.round(pr.width), row: Math.round(rr.width),
-             size: Math.round(parseFloat(getComputedStyle(p).fontSize)),
-             x: document.getElementById('aaaClose').offsetParent !== null };
-  });
-  ok('«بعداً» is gone from the hand-off sheet', !solo.secShown, solo.secText || '(hidden)');
-  ok('and the payment button takes the whole row', solo.w >= solo.row - 2, solo.w + ' of ' + solo.row);
-  ok('at full size, not the cramped two-up size', solo.size >= 15, solo.size + 'px');
-  ok('the ✕ is still there, so «later» is still possible', solo.x, String(solo.x));
-
-  /* THE GATEWAY THAT IS COMING. «یه دونه هم باید درگاه شاپرک باشه که جلوش
-     بنویسیم (بزودی).» Named on the same sheet as the one that works, so a
-     player waiting for شاپرک can see it is on the way — and deliberately not a
-     button, because a row that looks pressable and does nothing is worse than
-     no row at all. */
-  const soon = await page.evaluate(() => {
-    const el = document.querySelector('#aaaModal .aaa-soon');
-    if (!el) return null;
-    const cs = getComputedStyle(el);
-    return { text: el.innerText.replace(/\n/g, ' ').trim(),
-             tag: el.tagName, clickable: !!el.closest('button') || el.tagName === 'BUTTON',
-             onclick: !!el.onclick, cursor: cs.cursor, muted: Number(cs.opacity) < 1 };
-  });
-  ok('شاپرک is named on the payment sheet', !!soon && /شاپرک/.test(soon.text), soon ? soon.text : '(missing)');
-  ok('and it says «بزودی» beside it', !!soon && /بزودی/.test(soon.text), soon ? soon.text : '—');
-  ok('it is not a button, because there is nothing behind it',
-     !!soon && !soon.clickable && !soon.onclick && soon.cursor !== 'pointer',
-     soon ? soon.tag + ' cursor:' + soon.cursor : '—');
-  ok('and it is dimmer than the gateway that works', !!soon && soon.muted, soon ? String(soon.muted) : '—');
-  ok('بلو پال is still the one on offer', /بلو پال/.test(hand.text), hand.text.replace(/\n/g, ' ').slice(0, 40));
-
-  /* Leaving by the X must not leave a half-open payment behind. */
-  await page.evaluate(() => document.getElementById('aaaClose').click());
-  await page.waitForTimeout(300);
-  ok('closing it leaves no pending payment behind',
-     await page.evaluate(() => localStorage.getItem('pz_pay_pending')) === null);
-  ok('and the sheet is gone', await page.evaluate(() => {
-    const m = document.getElementById('aaaModal');
-    return !m || !m.classList.contains('show');
-  }));
-  await ctx.close();
-}
-
-/* ── 10. the purchase sheet, when the vault could pay ───────────────────── */
-{
-  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
-  await ctx.addInitScript(() => {
-    localStorage.setItem('pz_tok', 't'); localStorage.setItem('pz_rtok', 'r');
-    localStorage.setItem('pz_usr', JSON.stringify({ id: 'u1', username: 'e', displayName: 'ا', level: 5, xp: 9, wallet: 0, coins: 1, hearts: 4 }));
-    for (const k of ['leaderboard', 'missions', 'shop', 'wheel']) localStorage.setItem('pq_tut_' + k, '1');
-    try { sessionStorage.setItem('pz_push_asked_visit', '1'); } catch (e) {}
-  });
-  await ctx.route('**/v1/**', (route) => {
-    const url = route.request().url();
-    let body = { ok: true, data: {} };
-    if (url.includes('/orders/quote')) {
-      body = { ok: true, data: { order: {}, amount: 25000, currency: 'cash', label: 'بلیط سبز', vaultBalance: 90000, canPayFromVault: true, canPayByGateway: true } };
-    } else if (url.includes('/payments/gateway')) {
-      /* The mark is uploaded in the panel and served from here, so the sheet
-         has to ask for it — a logo baked into the client would need a build
-         every time the gateway changed its own branding. */
-      body = { ok: true, data: { cardToCard: true, mode: 'live', live: true, logo: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=', label: 'پرداخت امن با بلو پال' } };
-    }
-    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
-  });
-  const page = await ctx.newPage();
-  await page.goto(`http://127.0.0.1:${PORT}/`, { waitUntil: 'domcontentloaded' });
-  await page.waitForTimeout(5400);
-
-  await page.evaluate(() => { window.pzBuyOrder({ kind: 'ticket', tier: 'green', qty: 1 }, 'بلیط سبز'); });
-  await page.waitForTimeout(600);
-  const txt = await page.evaluate(() => (document.getElementById('aaaModal') || {}).innerText || '');
-  /* BOTH buttons here spend money — «پرداخت از صندوق» and «درگاه پرداخت» — so
-     without the X there was no way to simply change your mind. */
-  ok('the purchase sheet has a way out even when both buttons spend money',
-     await page.evaluate(() => { const x = document.getElementById('aaaClose'); return !!x && x.offsetParent !== null; }),
-     txt.split('\n').filter(Boolean).slice(0, 4).join(' | '));
-  ok('and the price is its own line there too', /۲۵٬۰۰۰/.test(txt));
-
-  /* WHICH BUTTON IS THE GATEWAY depends on whether the صندوق can cover it, so
-     the green belongs to the action and has to follow it between slots. Here
-     the vault CAN pay, so the gateway is the secondary. */
-  const green = await page.evaluate(() => {
-    const g = (el) => el ? getComputedStyle(el).backgroundImage : '';
-    return {
-      secondary: document.getElementById('aaaSecondary').textContent.trim(),
-      secondaryBg: g(document.getElementById('aaaSecondary')),
-      primary: document.getElementById('aaaPrimary').textContent.trim(),
-      primaryBg: g(document.getElementById('aaaPrimary'))
-    };
-  });
-  ok('the gateway button is the green one', /درگاه/.test(green.secondary) && /63, 208, 122|rgb\(63/.test(green.secondaryBg),
-     green.secondary + ' → ' + green.secondaryBg.slice(0, 44));
-  ok('and paying from the صندوق is not dressed as the gateway',
-     !/63, 208, 122/.test(green.primaryBg), green.primary);
-  ok('the sheet says who is taking the money', /پرداخت امن با بلو پال/.test(txt), txt.replace(/\n/g, ' | ').slice(0, 70));
-  ok('and shows the mark the panel uploaded, not one baked into the game',
-     await page.evaluate(() => { const i = document.querySelector('.aaa-payby img'); return !!i && i.getAttribute('src').startsWith('data:image/'); }));
-  await ctx.close();
-}
+/* The sheet itself — the doors, the balance, the one green button — is driven
+   in browser-paysheet.mjs, which is where it now lives. */
 
 await browser.close(); server.close();
 console.log(`[browser-gatewaypay] ${pass} passed, ${fail} failed`);

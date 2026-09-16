@@ -503,26 +503,54 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
    screen and a grey one on the next is the same button wearing two faces. */
 .aaa-actions .btn.is-pay{background:linear-gradient(180deg,#3FD07A,#1E7A45)!important;color:#06240f!important}
 .aaa-actions .btn.is-pay::after{background:linear-gradient(180deg,rgba(255,255,255,.20),transparent 42%)}
-/* The gateway's own mark, above the buttons. Kept small and quiet: it is there
-   to say WHO is taking the money, not to advertise. */
-.aaa-payby{display:flex;align-items:center;justify-content:center;gap:7px;margin:2px 0 9px;
-  font-size:12px;font-weight:800;color:#CFE9D8}
-.aaa-payby img{height:20px;width:auto;max-width:92px;object-fit:contain;border-radius:4px}
-.aaa-payby .mark{display:inline-grid;place-items:center;height:20px;padding:0 8px;border-radius:6px;
-  background:linear-gradient(180deg,#3FD07A,#1E7A45);color:#06240f;font-weight:900;font-size:11px}
-/* A GATEWAY THAT IS NOT OPEN YET, SAID SO PLAINLY.
-   «یه دونه هم باید درگاه شاپرک باشه که جلوش بنویسیم (بزودی) تا همه بفهمن که اون
-    پرداخت هم به‌زودی میاد.» It is deliberately NOT a button: a row that looks
-   pressable and does nothing is worse than no row at all. Muted, dashed, and
-   carrying its own «بزودی» — a promise, not an option. */
-.aaa-soon{display:flex;align-items:center;justify-content:center;gap:7px;margin:0 auto 10px;
-  padding:6px 10px;border:1.5px dashed rgba(255,255,255,.20);border-radius:12px;
-  width:fit-content;max-width:100%;opacity:.72;cursor:default;user-select:none}
-.aaa-soon .mark{display:inline-grid;place-items:center;height:20px;padding:0 8px;border-radius:6px;
-  background:rgba(255,255,255,.12);color:#EAE3D2;font-weight:900;font-size:11px}
-.aaa-soon .lbl{font-size:12px;font-weight:800;color:var(--muted)}
-.aaa-soon .soon{font-size:10.5px;font-weight:900;padding:2px 7px;border-radius:999px;
-  background:rgba(255,210,31,.16);color:var(--bolt,#FFD21F);border:1px solid rgba(255,210,31,.34)}
+/* ONE SHEET, EVERY DOOR ON IT.
+   «مودال پرداخت باید یکی باشه: وقتی می‌زنی روی دکمهٔ خرید، روش‌های پرداخت
+    بیاد… و با یه دکمهٔ پرداخت با رنگ سبز، یکی رو کاربر انتخاب می‌کنه و پرداخت
+    می‌کنه.»
+   It used to be two sheets — choose a door, then a second card to confirm the
+   door — and the second one said nothing the first had not. Now the doors are
+   rows on the one sheet and the green button at the bottom is the whole
+   decision. A row carries three things and no more: who takes the money, what
+   it costs the player to use it, and how long it takes. */
+.pm-list{display:flex;flex-direction:column;gap:8px;margin:10px 0 4px;text-align:right}
+.pm{display:flex;align-items:center;gap:10px;width:100%;padding:11px 12px;border-radius:15px;
+  border:2px solid rgba(255,255,255,.14);background:rgba(255,255,255,.05);
+  font-family:inherit;color:inherit;cursor:pointer;text-align:right}
+.pm:active{transform:scale(.985)}
+.pm.on{border-color:var(--bolt,#FFD21F);background:rgba(255,210,31,.11)}
+/* A DOOR THAT IS SHUT LOOKS SHUT.
+   Dashed and muted and not pressable — a row that looks like a button and does
+   nothing when tapped is worse than no row at all. This is both «بزودی» and a
+   صندوق that cannot cover the bill: in each case the reason is written on the
+   row itself, so nobody has to guess why tapping did nothing. */
+.pm.off{cursor:default;opacity:.66;border-style:dashed;border-color:rgba(255,255,255,.18);
+  background:rgba(255,255,255,.03)}
+.pm.off:active{transform:none}
+.pm-dot{width:19px;height:19px;border-radius:50%;flex:0 0 auto;position:relative;
+  border:2px solid rgba(255,255,255,.34)}
+.pm.on .pm-dot{border-color:var(--bolt,#FFD21F)}
+.pm.on .pm-dot::after{content:'';position:absolute;inset:3px;border-radius:50%;background:var(--bolt,#FFD21F)}
+.pm.off .pm-dot{border-style:dashed}
+.pm-body{flex:1;min-width:0}
+.pm-name{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:900;line-height:1.5}
+.pm-note{display:block;font-size:11px;font-weight:700;color:var(--muted);line-height:1.7;
+  overflow-wrap:anywhere}
+/* The صندوق's balance is the one number on this sheet that decides whether a
+   door is open at all, so it is said in the colour of its own answer. */
+.pm-note.ok{color:#5CFFA8}.pm-note.bad{color:#FF8F82}
+.pm-mark{display:inline-grid;place-items:center;height:19px;padding:0 7px;border-radius:6px;
+  background:rgba(255,255,255,.13);color:#EAE3D2;font-weight:900;font-size:10.5px;flex:0 0 auto}
+.pm-mark img{height:19px;width:auto;max-width:76px;object-fit:contain;border-radius:4px;display:block}
+.pm-mark.bp{background:linear-gradient(180deg,#3FD07A,#1E7A45);color:#06240f}
+.pm-mark.pay{background:transparent;padding:0}
+.pm-when{flex:0 0 auto;font-size:10.5px;font-weight:900;padding:3px 8px;border-radius:999px;
+  background:rgba(255,255,255,.09);color:#CFE9D8;white-space:nowrap}
+.pm-soon{flex:0 0 auto;font-size:10.5px;font-weight:900;padding:3px 8px;border-radius:999px;
+  background:rgba(255,210,31,.16);color:var(--bolt,#FFD21F);border:1px solid rgba(255,210,31,.34);
+  white-space:nowrap}
+/* On a cramped screen the timing badge gives way — but «بزودی» never does:
+   it is the whole reason that row is on the sheet. */
+@media(max-width:360px){.pm-when{display:none}}
 /* THE GATEWAY'S MARK IN THE ICON SLOT. On the card-to-card sheet the player is
    about to be handed to somebody else with real money, so the thing at the top
    of the card is WHO — not a generic 💳. The tile's yellow ground and bob are
@@ -22492,17 +22520,13 @@ renderWalletSecurity=function(c){
     '<div class="wallet-card"><h3>امنیت مالی</h3><p>تمام تراکنش‌ها در دفترکلِ غیرقابل‌تغییر ثبت می‌شوند؛ هیچ مبلغی در دستگاه شما نگهداری نمی‌شود و هر عملیات با IP و دستگاه ثبت (Audit) می‌شود.</p></div>';
 };
 
-/* ---- Buying something: choose how to pay, then pay ----
+/* ---- Buying something: one sheet, every way to pay, one green button ----
    There is no wallet to top up, so a purchase names its own funding. The sheet
-   is shown BEFORE anything is charged; both buttons post the same order and
-   differ only in `method`. */
+   is shown BEFORE anything is charged, and every door on it posts the same
+   order — they differ only in `method`. */
 submitTopup=async function(){ toast('شارژ حذف شده است'); };
-/* WHO IS TAKING THE MONEY. «عکس بالاش لوگو بلوپال باشه و بنویسه پرداخت امن با
-   بلو پال.» The artwork lives in one constant so it can be dropped in without
-   hunting through the payment code, and until it is there the name is shown as
-   a plain mark rather than a broken image — the sentence is the part that has
-   to be true, and it is true either way. */
-/* The mark comes from the SERVER, uploaded in the panel — it is somebody else's
+/* WHO IS TAKING THE MONEY. «عکس بالاش لوگو بلوپال باشه.»
+   The mark comes from the SERVER, uploaded in the panel — it is somebody else's
    brand, it changes without asking us, and baking it into this file would mean
    a new build every time it did. Fetched once and kept; a game that cannot
    reach it still shows the name, because the sentence is the part that has to
@@ -22515,21 +22539,6 @@ async function pzLoadPayBrand(){
     _pzPayBrand=(r&&r.ok&&r.data)?r.data:{};
   }catch(e){ _pzPayBrand={}; }
   return _pzPayBrand;
-}
-function pzPayByMark(){
-  const b=_pzPayBrand||{};
-  const label=b.label||'پرداخت امن با بلو پال';
-  const art=b.logo
-    ? '<img src="'+b.logo+'" alt="" onerror="this.replaceWith(Object.assign(document.createElement(\'span\'),{className:\'mark\',textContent:\'بلو پال\'}))">'
-    : '<span class="mark">بلو پال</span>';
-  return '<div class="aaa-payby">'+art+'<span>'+esc0(label)+'</span></div>';
-}
-/* The gateway that is coming, named on the same sheet as the one that works, so
-   a player who is waiting for شاپرک can see that it is on the way rather than
-   assuming it will never be here. Not a button — there is nothing behind it. */
-function pzSoonMark(){
-  return '<div class="aaa-soon"><span class="mark">شاپرک</span>'+
-         '<span class="lbl">درگاه شاپرک</span><span class="soon">بزودی</span></div>';
 }
 /* `look` is optional and every older call site omits it: what the buyer is
    looking at, so the sheet can show the thing itself rather than a credit card.
@@ -22548,39 +22557,106 @@ window.pzBuyOrder=async function(order,label,look){
   /* Coin-priced items have no funding choice to make. */
   if(d.currency==='coins') return pzPayOrder(order,'vault',name);
 
+  return pzPaySheet(d,order,name,look);
+};
+
+/* WHICH DOORS EXIST, AND WHICH OF THEM ARE OPEN.
+ *
+ * «صندوق جایزه با نمایش موجودی صندوق — در صورت کم بودن موجودی از قیمت فاکتور،
+ *  عدد موجودی قرمز، در غیر این صورت سبز. آنی. کارت به کارت، درگاه امن بلوپال،
+ *  ۵ دقیقه. درگاه شاپرک (بزودی)، آنی. تتر (بزودی)، بعد از تأیید شبکه.»
+ *
+ * The two that are not open yet are listed anyway, and say so. A player waiting
+ * for شاپرک can see that it is coming instead of concluding it never will —
+ * which is the whole reason they were asked for. They are not pressable: a row
+ * that looks like a button and does nothing is worse than no row at all.
+ */
+function pzPayMethods(d){
+  const b=_pzPayBrand||{};
+  const bal=fa(d.vaultBalance)+' تومان';
+  return [
+    { id:'vault', mark:'🏆',
+      name:'صندوق جایزه', when:'آنی',
+      /* The balance IS the answer to «can I use this door», so it is said in
+         the colour of that answer rather than in a sentence underneath. */
+      note:(d.canPayFromVault?'موجودی: '+bal:'موجودی کافی نیست — '+bal),
+      noteClass:(d.canPayFromVault?'ok':'bad'),
+      open:!!d.canPayFromVault },
+    { id:'gateway', logo:b.logo||'', mark:'بلو پال', markClass:'bp',
+      name:'درگاه امن بلو پال', when:'حدود ۵ دقیقه',
+      note:'کارت به کارت از اپ بانکی خودت؛ بعد از تأیید واریز، خریدت فعال می‌شود.',
+      open:!!d.canPayByGateway,
+      /* A gateway that is switched off in the panel is a shut door, not a
+         missing one — and the row says which of the two it is. */
+      shut:(d.canPayByGateway?'':'موقتاً در دسترس نیست') },
+    { id:'shaparak', mark:'شاپرک', name:'درگاه شاپرک', when:'آنی',
+      note:'پرداخت با کارت بانکی، مثل هر فروشگاه دیگری.', soon:true },
+    { id:'usdt', mark:'₮', name:'تتر (USDT)', when:'بعد از تأیید شبکه',
+      note:'برای پرداخت از کیف‌پول ارز دیجیتال.', soon:true }
+  ];
+}
+
+let _pzPaySel='';
+function pzPayRowHtml(m){
+  const on=(m.id===_pzPaySel), usable=!m.soon&&m.open;
+  const mark=m.logo
+    ? '<span class="pm-mark pay"><img src="'+m.logo+'" alt="" onerror="this.parentNode.className=\'pm-mark bp\';this.parentNode.textContent=\'بلو پال\'"></span>'
+    : '<span class="pm-mark'+(m.markClass?' '+m.markClass:'')+'">'+esc0(m.mark||'')+'</span>';
+  const note=m.soon?m.note:(m.shut?m.shut:m.note);
+  const cls=m.soon?'bad':(m.noteClass||(m.shut?'bad':''));
+  return '<button type="button" class="pm'+(on?' on':'')+(usable?'':' off')+'"'+
+    (usable?' onclick="pzPayPick(\''+m.id+'\')"':' aria-disabled="true"')+'>'+
+    '<span class="pm-dot"></span>'+
+    '<span class="pm-body"><span class="pm-name">'+mark+esc0(m.name)+'</span>'+
+      (note?'<span class="pm-note'+(cls?' '+cls:'')+'">'+esc0(note)+'</span>':'')+'</span>'+
+    (m.soon?'<span class="pm-soon">بزودی</span>':'')+
+    '<span class="pm-when">'+esc0(m.when||'')+'</span>'+
+    '</button>';
+}
+window.pzPayPick=function(id){
+  _pzPaySel=id;
+  /* Only the rows are redrawn. Rebuilding the sheet would take the amount and
+     the artwork down and put them back for a change that is neither. */
+  const box=document.getElementById('pmList');
+  if(box&&_pzPayLast) box.innerHTML=pzPayMethods(_pzPayLast).map(pzPayRowHtml).join('');
+  const btn=document.getElementById('aaaPrimary');
+  if(btn) btn.disabled=!id;
+};
+let _pzPayLast=null;
+
+/* THE SHEET. One card: what is being bought, what it costs, every way to pay
+   for it, and a single green button. */
+function pzPaySheet(d,order,name,look){
+  _pzPayLast=d;
+  const ms=pzPayMethods(d);
+  /* Opened on the door the player can actually walk through — the صندوق when
+     it can cover the bill, otherwise the gateway. Nothing is pre-selected when
+     neither is open, and then the button has nothing to do and says so. */
+  const first=ms.find(m=>!m.soon&&m.open);
+  _pzPaySel=first?first.id:'';
+  const lk=look||{};
   return new Promise((resolve)=>{
-    const vaultLine=d.canPayFromVault
-      ? 'موجودی صندوق: <b>'+fa(d.vaultBalance)+' تومان</b>'
-      : '<span style="color:var(--bad)">موجودی صندوق کافی نیست ('+fa(d.vaultBalance)+' تومان)</span>';
-    const lk=look||{};
     showAaaModal({
-      icon:lk.icon||'💳',
-      /* A picture when the item has one. showAaaModal falls back to `icon` by
-         itself if the file will not load, so a broken image is the emoji and
-         not an empty circle. */
-      art:lk.art||undefined,
+      icon:lk.icon||'💳', art:lk.art||undefined,
       accent:(lk.color&&pzAlpha(lk.color,.45))||undefined,
       title:name,
-      /* The price first and on its own. It used to be one clause in a line of
-         explanation, which is not where anybody looks for what they are about
-         to be charged. */
-      sub:'<div style="text-align:center;line-height:2.1"><span class="aaa-amount"><b>'+fa(d.amount)+'</b><span>تومان</span></span><br>'+vaultLine+
-          (d.canPayByGateway?pzPayByMark():'')+
-          '<br><span style="color:var(--muted);font-size:12px">روش پرداخت را انتخاب کن</span></div>',
-      /* When the صندوق could pay, BOTH buttons used to be a way to spend money
-         and there was no way to simply leave. */
+      sub:'<div style="text-align:center"><span class="aaa-amount"><b>'+fa(d.amount)+'</b><span>تومان</span></span></div>'+
+          '<div class="pm-list" id="pmList">'+ms.map(pzPayRowHtml).join('')+'</div>'+
+          (first?'':'<div class="pm-note bad" style="text-align:center;margin-top:6px">هیچ روش پرداختی در دسترس نیست. کمی بعد دوباره تلاش کن.</div>'),
       closable:true,
-      /* Green marks the gateway, whichever slot it lands in. */
-      primaryPay: !d.canPayFromVault,
-      secondaryPay: !!d.canPayFromVault,
-      primaryText: d.canPayFromVault?'پرداخت از صندوق جایزه':'درگاه پرداخت',
-      secondaryText: d.canPayFromVault?'درگاه پرداخت':'انصراف',
-      onPrimary:async()=>{ closeAaaModal(false); resolve(await pzPayOrder(order, d.canPayFromVault?'vault':'gateway', name)); },
-      onSecondary:async()=>{ closeAaaModal(false); if(!d.canPayFromVault) return resolve(false); resolve(await pzPayOrder(order,'gateway',name)); },
+      primaryPay:true, primaryWide:true,
+      primaryText:'پرداخت', secondaryText:'',
+      onPrimary:async()=>{
+        const m=_pzPaySel; if(!m) return;
+        closeAaaModal(false);
+        resolve(await pzPayOrder(order,m==='vault'?'vault':'gateway',name));
+      },
       onDismiss:()=>{ resolve(false); }
     });
+    /* After the sheet is drawn: with no open door there is nothing to press. */
+    const btn=document.getElementById('aaaPrimary'); if(btn) btn.disabled=!_pzPaySel;
   });
-};
+}
 
 async function pzPayOrder(order,method,name){
   const key='ord_'+Date.now()+'_'+Math.random().toString(36).slice(2,8);
@@ -22605,7 +22681,7 @@ async function pzPayOrder(order,method,name){
      nothing, polled eight times and told every paying player «تأیید نشد».
      Settlement is still only ever decided server-side. */
   const payUrl=String(r.data.paymentUrl||'');
-  if(/^https?:\/\//i.test(payUrl)) return pzGatewayHandoff(r.data,payUrl,name);
+  if(/^https?:\/\//i.test(payUrl)){ pzGatewayGo(r.data,payUrl,name); return false; }
 
   /* This one had NO buttons whatsoever — if the settle call hung, the player
      was sealed inside it. */
@@ -22654,40 +22730,47 @@ function pzPaymentDelivered(name){
   try{ pzShopReturnAfterBuy(); }catch(e){}
 }
 
-/* The handoff is a BUTTON, not an automatic redirect: an in-app browser can
-   swallow a scripted navigation, and a player about to be sent to their bank
-   should be the one who decides to go. Backing out costs nothing — the order
-   is still open and the shop will offer it again. */
-async function pzGatewayHandoff(d,url,name){
+/* LEAVING TO PAY — AND STILL HAVING A GAME TO COME BACK TO.
+ *
+ * «وقتی برگشت به سایت پذیرنده رو می‌زنی یه کروم جدید باز می‌شه و از اول ورود
+ *  می‌کنه و کد و تلفن می‌خواد. وقتی بازی رو تو هوم‌اسکرین می‌کنی و پرداخت
+ *  می‌کنی، دوباره از کروم باز می‌شه.»
+ *
+ * This used to be `location.href = url`, which points the app's OWN window at
+ * the gateway. On a home-screen install that address is outside the app's
+ * scope, so Android hands the whole window to Chrome and the installed app —
+ * with the session in it — is gone. Whatever the gateway redirects to
+ * afterwards therefore lands in a browser, and to a browser this is a visitor
+ * it has never seen: no token, so the login screen, so «کد و تلفن».
+ *
+ * So when the game is installed, the gateway is opened BESIDE it. The app keeps
+ * running, keeps its session, and what the player returns to is the game they
+ * left. If the browser refuses to open it — a blocked popup, an in-app webview
+ * that swallows it — the old navigation is still there as the fallback, because
+ * not being able to pay at all is worse than coming back through Chrome.
+ *
+ * The other half of that report is NOT in this file: the address the gateway
+ * returns to is configured in BluPal's own panel, and `prizequiz.ir` and
+ * `www.prizequiz.ir` are two different origins with two different stores. A
+ * return to the wrong spelling is a different browser as far as the session is
+ * concerned. That one is fixed in nginx, not here.
+ */
+let _pzLeftToPay=false;
+function pzGatewayGo(d,url,name){
+  /* Written down BEFORE going anywhere: the navigation kills every variable in
+     this frame, and what was being bought has to survive it. */
   pzPayRemember(d.intentId,name,d.amount);
-  /* Loaded HERE as well as where the price is fetched. This sheet is reachable
-     without going through the shop's own flow, and the mark arriving only on
-     one of the two routes meant the gateway's logo was sometimes replaced by
-     the plain fallback for no reason the player could see. */
-  await pzLoadPayBrand();
-  return new Promise((resolve)=>{
-    showAaaModal({
-      /* The mark is the icon here, so the small «پرداخت امن با بلو پال» line
-         below would be saying the same thing twice. */
-      payLogo:((_pzPayBrand&&_pzPayBrand.logo)||true), title:'پرداخت کارت به کارت',
-      /* «در مودال رفتن به درگاه امن مبلغ رو بصورت واضح بنویسه» — this is the
-         last screen before the player leaves to move real money, so the figure
-         they are about to transfer is the largest thing on it. */
-      sub:'<div style="text-align:center;line-height:2.1"><span class="aaa-amount"><b>'+fa(d.amount)+'</b><span>تومان</span></span><br>'+
-          '<span style="color:#CFE9D8;font-size:12px;font-weight:800">پرداخت امن با بلو پال</span></div>'+
-          pzSoonMark()+
-          '<div style="text-align:center"><span style="color:var(--muted);font-size:12px">به صفحهٔ امن پرداخت می‌روی و بعد از واریز به بازی برمی‌گردی.</span></div>',
-      /* One action, the whole width. «بعداً» said exactly what the ✕ in the
-         corner already says, and it said it in a button the same size as the
-         one that matters — so the way out is the cross, and the payment button
-         takes the row. Backing out still forgets the order: see onDismiss. */
-      closable:true, primaryPay:true, primaryWide:true,
-      primaryText:'رفتن به صفحهٔ پرداخت', secondaryText:'',
-      onPrimary:()=>{ closeAaaModal(false); try{ location.href=url; }catch(e){ try{ window.open(url,'_blank'); }catch(e2){} } resolve(false); },
-      /* Leaving by the X is «بعداً», not a half-open payment left behind. */
-      onDismiss:()=>{ pzPayForget(); resolve(false); }
-    });
-  });
+  _pzLeftToPay=true;
+  let opened=null;
+  if(pzIsInstalled()){
+    try{ opened=window.open(url,'_blank','noopener'); }catch(e){ opened=null; }
+  }
+  if(opened){
+    toast('صفحهٔ پرداخت باز شد. بعد از واریز به بازی برگرد.');
+    return true;
+  }
+  try{ location.href=url; }catch(e){ try{ window.open(url,'_blank'); }catch(e2){} }
+  return false;
 }
 
 /* Back from the gateway. The server goes and ASKS the gateway — nothing in
@@ -22717,6 +22800,36 @@ async function pzResumeGatewayPayment(announce){
   return false;
 }
 
+
+/* COMING BACK TO A GAME THAT WAS NEVER CLOSED.
+ *
+ * The check above ran in exactly one place: 1.8 seconds after the game booted.
+ * That was written for the only way back there used to be — the app had been
+ * navigated away to the gateway, so returning meant a fresh boot. Now the app
+ * stays open beside the payment page, and returning to it is not a boot at all:
+ * nothing asked, nothing delivered, a player looking at a shop that does not
+ * know they have paid.
+ *
+ * So every return to the foreground asks too. Only when there is something to
+ * ask about, and not more than once every few seconds — a tab switch is not a
+ * reason to hit the server.
+ *
+ * Only the FIRST return after leaving says anything out loud. After that it
+ * checks quietly: a transfer that is genuinely still on its way would otherwise
+ * repeat «هنوز تأیید نشده» every time the player glanced at the game. Success
+ * is announced either way, because that one is worth interrupting for. */
+let _pzResumeAt=0;
+function pzResumeOnReturn(){
+  if(!_tok||!pzPayPending()) return;
+  const now=Date.now(); if(now-_pzResumeAt<4000) return;
+  _pzResumeAt=now;
+  const tell=_pzLeftToPay; _pzLeftToPay=false;
+  try{ pzResumeGatewayPayment(tell); }catch(e){}
+}
+try{
+  document.addEventListener('visibilitychange',()=>{ if(!document.hidden) pzResumeOnReturn(); });
+  window.addEventListener('focus',pzResumeOnReturn);
+}catch(e){}
 
 /* What was actually handed over, as the server reported it — not a re-reading
    of what the item advertised. */
