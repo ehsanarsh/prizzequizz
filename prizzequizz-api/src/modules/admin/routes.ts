@@ -7,7 +7,7 @@ import { db } from '../../repositories/memory.js';
 import { id } from '../../utils/id.js';
 import { featureFlags, patchFeatureFlag, themes, upsertTheme } from '../../services/adminStores.js';
 import { getAdminAnalytics } from '../../services/analyticsService.js';
-import { getAdminUserOverview, resetUserStats, searchAdminUsers, setUserTickets, updateUserFields, updateUserRole, updateUserStatus } from '../../services/adminUserService.js';
+import { getAdminUserOverview, resetUserStats, searchAdminUsers, setUserTickets, updateUserFields, updateUserRole, updateUserStatus, UsernameTakenError } from '../../services/adminUserService.js';
 import { getMatch, claimTimeout, forfeitMatch } from '../../services/matchEngine.js';
 import { activeMatchState } from '../../services/matchStateStore.js';
 import { createGiftCode, listGiftCodes, redeemGiftCode } from '../../services/giftCodeService.js';
@@ -582,7 +582,15 @@ export function registerAdminRoutes(router: Router, base: string): void {
   router.add('PATCH', `${base}/admin/users/:id`, async (ctx) => {
     if (!requireAdmin(ctx)) return;
     const b = (ctx.body ?? {}) as any;
-    const updated = await updateUserFields(ctx.params.id!, { displayName: b.displayName, username: b.username, xp: b.xp, level: b.level, weeklyScore: b.weeklyScore, coins: b.coins, hearts: b.hearts });
+    let updated;
+    try {
+      updated = await updateUserFields(ctx.params.id!, { displayName: b.displayName, username: b.username, xp: b.xp, level: b.level, weeklyScore: b.weeklyScore, coins: b.coins, hearts: b.hearts });
+    } catch (e) {
+      /* A name somebody else already has is the operator's mistake to see, not
+         a 500 to puzzle over. */
+      if (e instanceof UsernameTakenError) return error(ctx.res, 409, e.code, e.message);
+      throw e;
+    }
     if (!updated) return error(ctx.res, 404, 'USER_NOT_FOUND', 'User not found.');
     audit(ctx.userId, 'USER_FIELDS_UPDATED', 'user', updated.id, b);
     if (updated) { const u = await repositories.users.findById(updated.id); if (u) await leaderboards.updateUser(u); }

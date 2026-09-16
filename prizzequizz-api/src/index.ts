@@ -3,6 +3,7 @@ import { createApiServer } from './app.js';
 import { loadPersistedConfig } from './services/configService.js';
 import { startScheduler } from './services/scheduledNotificationService.js';
 import { ensureOwnerSeed, refreshTokenCache } from './services/adminAccountService.js';
+import { ensureUsernameIndex } from './services/usernameService.js';
 
 /* A BACKGROUND TIMER MUST NOT BE ABLE TO KILL THE GAME.
  *
@@ -41,6 +42,17 @@ loadPersistedConfig()
     startScheduler();   // deliver admin-scheduled notifications at their set times
     // Seed the owner admin account + warm the token cache so account logins work.
     ensureOwnerSeed().then(() => refreshTokenCache()).catch(() => { /* first boot / no DB */ });
+    /* The unique index that makes two players with the same name impossible
+       rather than unlikely. Best-effort and never fatal: a database that already
+       holds the duplicates cannot take the index, and refusing to start over a
+       name would take the whole game down. It says which names are in the way. */
+    ensureUsernameIndex()
+      .then((r) => {
+        if (r.blockedBy.length) {
+          console.warn('[PrizzeQuizz API] duplicate usernames block the unique index — rename one of each pair: ' + r.blockedBy.join(' ; '));
+        }
+      })
+      .catch(() => { /* no DB yet */ });
     server.listen(appConfig.port, () => {
       console.log(`[PrizzeQuizz API] listening on http://localhost:${appConfig.port}${appConfig.basePath}`);
     });

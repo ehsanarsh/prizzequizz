@@ -1,4 +1,11 @@
 import { repositories } from '../repositories/index.js';
+import { cleanUsername, usernameTaken } from './usernameService.js';
+
+/** Thrown when a rename would give two accounts the same name. */
+export class UsernameTakenError extends Error {
+  readonly code = 'USERNAME_TAKEN';
+  constructor() { super('این نام کاربری قبلاً گرفته شده است'); }
+}
 import { avatarUrlsFor } from './avatarService.js';
 import { inviteCountsFor } from './referralService.js';
 import type { User, UserStatus } from '../types/domain.js';
@@ -107,7 +114,14 @@ export async function updateUserFields(userId: string, fields: Partial<{ display
   const user = await repositories.users.findById(userId);
   if (!user) return null;
   if (typeof fields.displayName === 'string' && fields.displayName.trim()) user.displayName = fields.displayName.trim();
-  if (typeof fields.username === 'string' && fields.username.trim()) user.username = fields.username.trim();
+  /* The same rule as the player's own screen. An operator renaming somebody
+     from the panel is the other door onto the same table, and a door without
+     the check is the reason to have written it in one place. */
+  if (typeof fields.username === 'string' && cleanUsername(fields.username)) {
+    const wanted = cleanUsername(fields.username);
+    if (await usernameTaken(wanted, user.id)) throw new UsernameTakenError();
+    user.username = wanted;
+  }
   if (Number.isFinite(fields.xp as number)) user.xp = Math.max(0, Math.round(fields.xp as number));
   if (Number.isFinite(fields.level as number)) user.level = Math.max(1, Math.round(fields.level as number));
   if (Number.isFinite(fields.weeklyScore as number)) user.weeklyScore = Math.max(0, Math.round(fields.weeklyScore as number));

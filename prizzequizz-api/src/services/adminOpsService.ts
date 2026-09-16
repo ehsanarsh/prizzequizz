@@ -133,7 +133,7 @@ export async function suspiciousUsers(): Promise<any[]> {
 // ---------------------------------------------------------------------------
 // RESET tools — destructive, per-area, atomic, audited by the caller.
 // ---------------------------------------------------------------------------
-export const RESET_AREAS = ['wallet', 'tickets', 'lifelines', 'xp', 'cup', 'level', 'league', 'missions', 'stats', 'matchHistory', 'transactions', 'leaderboard', 'notifications', 'season', 'full'] as const;
+export const RESET_AREAS = ['wallet', 'tickets', 'lifelines', 'xp', 'cup', 'level', 'league', 'missions', 'stats', 'matchHistory', 'transactions', 'accounting', 'leaderboard', 'notifications', 'season', 'full'] as const;
 export type ResetArea = typeof RESET_AREAS[number];
 
 /* ---------------------------------------------------------------------------
@@ -167,37 +167,127 @@ export interface SeasonResetPlan {
   usersWithReferralTickets: number;
 }
 
-export async function resetArea(area: ResetArea): Promise<{ area: string; affected: number }> {
+/* THE LEDGER IS APPEND-ONLY, AND STAYS THAT WAY.
+ *
+ * `wallet_ledger` carries a BEFORE UPDATE OR DELETE trigger that raises
+ * «wallet_ledger rows are immutable». That is the right guarantee for a game
+ * moving real money — and it is exactly why every reset of the prize vault
+ * failed with that sentence and did nothing at all.
+ *
+ * An operator typing RESET into a red box is not the application rewriting
+ * history; it is the one moment the guard is meant to give way. So it is lifted
+ * DELIBERATELY, for the length of one transaction, and put back — rather than
+ * sidestepped with TRUNCATE, which would empty the table just as well while
+ * leaving the next reader to wonder why the trigger never fired. DDL is
+ * transactional in Postgres, so a failure anywhere in here rolls the trigger
+ * back into place along with the rows. */
+async function wipeLedger(pool: NonNullable<ReturnType<typeof pg>>): Promise<number> {
+  const c = await pool.connect();
+  try {
+    await c.query('BEGIN');
+    await c.query('ALTER TABLE wallet_ledger DISABLE TRIGGER trg_wallet_ledger_immutable');
+    const r = await c.query('DELETE FROM wallet_ledger');
+    await c.query('ALTER TABLE wallet_ledger ENABLE TRIGGER trg_wallet_ledger_immutable');
+    await c.query('COMMIT');
+    return r.rowCount ?? 0;
+  } catch (e) {
+    await c.query('ROLLBACK').catch(() => {});
+    logger.error('reset_ledger_failed', { message: e instanceof Error ? e.message : 'unknown' });
+    throw e;
+  } finally {
+    c.release();
+  }
+}
+
+/* WHAT HOLDS A REFERENCE TO WHAT.
+ *
+ * «update or delete on table "transactions" violates foreign key constraint
+ *  "payment_intents_transaction_id_fkey"» — a reset that names one table and
+ * forgets the rows pointing at it does not half-work, it fails outright and
+ * clears nothing. Each list is «delete these first, then the table itself»,
+ * written out rather than left to CASCADE: a cascade that reaches somewhere
+ * nobody expected is how a reset of the match history quietly takes the
+ * questions with it. */
+const DEPENDENTS: Record<string, string[]> = {
+  /* Every table with a REFERENCES matches(id). */
+  matches: ['answers', 'rewards', 'match_events', 'game_sessions', 'integrity_signals',
+            'reward_holds', 'match_players'],
+  /* payment_intents.transaction_id REFERENCES transactions(id). */
+  transactions: ['payment_intents']
+};
+
+export async function resetArea(area: ResetArea): Promise<{ area: string; affected: number; failed: string[] }> {
   const pool = pg();
   let affected = 0;
   const run = async (sql: string, args: unknown[] = []) => { if (pool) { const r = await pool.query(sql, args); affected += r.rowCount ?? 0; } };
-  const areas: ResetArea[] = area === 'full' ? ['wallet', 'tickets', 'lifelines', 'xp', 'cup', 'level', 'stats', 'matchHistory', 'transactions', 'leaderboard', 'notifications', 'missions', 'league'] : [area];
+  /* Clear the things that point at a table before the table itself. A missing
+     dependent table is not a failure — a server that never ran that migration
+     simply has nothing there to clear. */
+  const clear = async (table: string) => {
+    for (const dep of DEPENDENTS[table] ?? []) {
+      try { await run(`DELETE FROM ${dep}`); } catch { /* table not on this server */ }
+    }
+    await run(`DELETE FROM ${table}`);
+  };
+  const areas: ResetArea[] = area === 'full' ? ['wallet', 'tickets', 'lifelines', 'xp', 'cup', 'level', 'stats', 'matchHistory', 'transactions', 'accounting', 'leaderboard', 'notifications', 'missions', 'league'] : [area];
 
+  /* ONE AREA FAILING MUST NOT TAKE THE REST WITH IT — AND MUST NOT BE HIDDEN.
+     «ریست کامل» runs thirteen areas; the first refusal used to throw and the
+     other twelve never ran, so a single missing table on one server meant the
+     whole button did nothing. Each area is attempted on its own now and what
+     went wrong is carried back by name. Silence is the one thing not on offer:
+     if nothing at all could be done, this still throws, because a reset that
+     reports success having cleared nothing is how these shipped broken. */
+  const failed: string[] = [];
   for (const a of areas) {
+   try {
     switch (a) {
       case 'wallet':
         // Hard reset: clear the ledger + accounts + mirror. (Explicit admin RESET
         // — intended for beta/testing; irreversible.)
-        await run(`DELETE FROM wallet_ledger`); await run(`DELETE FROM wallet_accounts`); await run(`UPDATE users SET wallet_balance=0`);
+        if (pool) affected += await wipeLedger(pool);
+        await run(`DELETE FROM wallet_accounts`); await run(`UPDATE users SET wallet_balance=0`);
         await run(`DELETE FROM withdraw_requests`);
         break;
       case 'tickets': await run(`UPDATE users SET tickets='{}'::jsonb`); break;
       case 'lifelines': await run(`UPDATE users SET lifelines='{}'::jsonb`); break;
       case 'season': await runSeasonReset(run); break;
       case 'xp': await run(`UPDATE users SET xp=0`); break;
-      case 'cup': await run(`UPDATE users SET weekly_score=0, weekly_week=''`); break;
+      case 'cup':
+        await run(`UPDATE users SET weekly_score=0`);
+        /* `weekly_week` is added at RUNTIME by matchEngine, not by a migration,
+           so a server where no match has been played yet does not have the
+           column — and one statement naming both columns then fails, taking the
+           score reset with it. Two statements: the score always, the week when
+           there is a week. A reset does not create columns. */
+        try { await run(`UPDATE users SET weekly_week=''`); } catch { /* column not here yet */ }
+        break;
       case 'level': await run(`UPDATE users SET level=1`); break;
       case 'stats': await run(`DELETE FROM answers`); break;
-      case 'matchHistory': await run(`DELETE FROM match_players`); await run(`DELETE FROM matches`); break;
-      case 'transactions': await run(`DELETE FROM transactions`); break;
+      case 'matchHistory': await clear('matches'); break;
+      case 'transactions': await clear('transactions'); break;
+      /* «انگار شرکت از صفر شروع می‌شه» — the company's own books, which are not
+         any player's money: what was spent, what the house took, and the price
+         put on each machine. Nothing here touches a wallet. */
+      case 'accounting':
+        for (const t of ['company_expenses', 'shop_purchases', 'house_revenue']) {
+          try { await run(`DELETE FROM ${t}`); } catch { /* not on this server */ }
+        }
+        try { await run(`UPDATE monitor_servers SET hourly_cost=0`); } catch { /* no monitor table */ }
+        break;
       case 'leaderboard': await resetLeaderboards(); break;
       case 'notifications': await run(`DELETE FROM notifications`); break;
       case 'missions': await run(`DROP TABLE IF EXISTS user_missions`); break;
       case 'league': /* leagues are config-defined; nothing persisted yet */ break;
     }
+   } catch (e) {
+     failed.push(`${a}: ${e instanceof Error ? e.message : 'unknown'}`);
+     logger.error('reset_area_failed', { area: a, message: e instanceof Error ? e.message : 'unknown' });
+   }
   }
   if (!pool) logger.warn('reset_area_memory_noop', { area });
-  return { area, affected };
+  if (failed.length && affected === 0) throw new Error(failed.join(' | '));
+  return { area, affected, failed };
 }
 
 /* The referral tickets, per owner, straight from the referral ledger.
@@ -214,8 +304,11 @@ const REFERRAL_EARNED_SQL = `
 
 async function runSeasonReset(run: (sql: string, args?: unknown[]) => Promise<void>): Promise<void> {
   const { REFERRAL_REWARD_TIER, REFERRAL_REWARD_COUNT } = await import('./referralService.js');
-  /* The prize vaults, and everything that could still draw on them. */
-  await run(`DELETE FROM wallet_ledger`);
+  /* The prize vaults, and everything that could still draw on them. The ledger
+     goes through wipeLedger for the reason written there: it refuses a plain
+     DELETE, and a season reset that cannot clear the ledger is not one. */
+  const pool = pg();
+  if (pool) await wipeLedger(pool);
   await run(`DELETE FROM wallet_accounts`);
   await run(`UPDATE users SET wallet_balance=0`);
   await run(`DELETE FROM withdraw_requests`);

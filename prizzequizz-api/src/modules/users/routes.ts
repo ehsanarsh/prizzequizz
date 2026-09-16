@@ -1,6 +1,7 @@
 import type { Router } from '../../http/router.js';
 import { error, json } from '../../http/response.js';
 import { repositories } from '../../repositories/index.js';
+import { cleanUsername, usernameTaken } from '../../services/usernameService.js';
 import { inventoryFor } from '../../services/lifelineService.js';
 import { AvatarError, AVATAR_MAX_BYTES, avatarUrlFor, getAvatar, removeAvatar, saveAvatar } from '../../services/avatarService.js';
 import { buildUserStats } from '../../services/userStatsService.js';
@@ -86,7 +87,18 @@ export function registerUserRoutes(router: Router, base: string): void {
        that fills the account in, and after this line it is filled in. */
     const wasNew = isUnregistered(user);
     if (typeof body.displayName === 'string' && body.displayName.trim()) user.displayName = body.displayName.trim().slice(0, 120);
-    if (typeof body.username === 'string' && body.username.trim()) user.username = body.username.trim().slice(0, 64);
+    /* ONE NAME, ONE PLAYER — decided here, not left to the column.
+       The UNIQUE constraint on `username` compares byte for byte, so «nazi» and
+       «Nazi» are two different names to Postgres and the same name to everybody
+       else. That is how two of them got in. The check below folds case, spacing,
+       the zero-width joiner and the Arabic letterforms before comparing. */
+    if (typeof body.username === 'string' && cleanUsername(body.username)) {
+      const wanted = cleanUsername(body.username);
+      if (await usernameTaken(wanted, user.id)) {
+        return error(ctx.res, 409, 'USERNAME_TAKEN', 'این نام کاربری قبلاً گرفته شده است');
+      }
+      user.username = wanted;
+    }
     /* Gender is optional and reversible. Anything that is not one of the three
      * answers clears it rather than being stored — a typo must not become a
      * value the online list then filters on. */
