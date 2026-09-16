@@ -9,6 +9,7 @@ import { notifications } from '../../services/notificationService.js';
 import { repositories } from '../../repositories/index.js';
 import { logger } from '../../services/logger.js';
 import { playerLevelSqlExpr } from '../../services/scoringConfig.js';
+import { listChat } from '../../services/friendChatService.js';
 
 /* A MESSAGE HAS TO REACH THE PHONE.
  *
@@ -239,19 +240,13 @@ export function registerFriendRoutes(router: Router, base: string): void {
   });
 
   // Chat: fetch the conversation with a friend (marks their messages read).
+  /* The conversation's END, not its beginning — see friendChatService, which
+     is where that query lives now so that something can test it. */
   router.add('GET', `${base}/friends/:userId/messages`, async (ctx) => {
-    const me = ctx.userId; if (!me) return json(ctx.res, 200, { messages: [] });
-    const other = ctx.params.userId!;
+    const me = ctx.userId; if (!me) return json(ctx.res, 200, { messages: [], readThrough: null });
     try {
-      const after = ctx.query.get('after');
-      const params: any[] = [me, other];
-      let where = `((sender_id=$1 AND recipient_id=$2) OR (sender_id=$2 AND recipient_id=$1))`;
-      if (after) { params.push(after); where += ` AND created_at > $3`; }
-      const { rows } = await pool().query(`SELECT id, sender_id, body, created_at FROM friend_messages WHERE ${where} ORDER BY created_at ASC LIMIT 200`, params);
-      // Mark the friend's messages to me as read.
-      await pool().query(`UPDATE friend_messages SET read_at=now() WHERE recipient_id=$1 AND sender_id=$2 AND read_at IS NULL`, [me, other]);
-      json(ctx.res, 200, { messages: rows.map((r) => ({ id: r.id, mine: String(r.sender_id) === String(me), body: r.body, at: r.created_at?.toISOString?.() ?? r.created_at })) });
-    } catch { json(ctx.res, 200, { messages: [] }); }
+      json(ctx.res, 200, await listChat(me, ctx.params.userId!, ctx.query.get('after')));
+    } catch { json(ctx.res, 200, { messages: [], readThrough: null }); }
   });
 
   // Chat: send a message to a friend (must be accepted friends).

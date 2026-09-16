@@ -110,7 +110,7 @@ async function check(name: string, fn: () => unknown): Promise<void> {
   await check('a live code quotes a price', async () => {
     await saveDiscountCode({ code: 'TSTLIVE', kind: 'percent', value: 20 });
     const q = await quoteDiscount({ code: 'tst live', userId: U1, amount: 125000 });
-    assert.equal(q.ok, true, q.message);
+    assert.equal(q.ok, true, String(q.message));
     assert.equal(q.amountOff, 25000);
     assert.equal(q.finalAmount, 100000);
   });
@@ -119,7 +119,7 @@ async function check(name: string, fn: () => unknown): Promise<void> {
     const q = await quoteDiscount({ code: 'TSTNOPE', userId: U1, amount: 125000 });
     assert.equal(q.ok, false);
     assert.equal(q.finalAmount, 125000, 'the price must not move on a refusal');
-    assert.ok(/معتبر/.test(String(q.message)), q.message);
+    assert.ok(/معتبر/.test(String(q.message)), String(q.message));
   });
 
   await check('a switched-off code is refused', async () => {
@@ -146,7 +146,7 @@ async function check(name: string, fn: () => unknown): Promise<void> {
     assert.equal(small.ok, false); assert.equal(small.reason, 'BELOW_MIN');
     assert.ok(/۱۰۰٬۰۰۰/.test(String(small.message)), 'it must say what the minimum IS: ' + small.message);
     const big = await quoteDiscount({ code: 'TSTMIN', userId: U1, amount: 120000 });
-    assert.equal(big.ok, true, big.message);
+    assert.equal(big.ok, true, String(big.message));
   });
 
   /* ── SPENDING IT ──────────────────────────────────────────────────────── */
@@ -162,7 +162,7 @@ async function check(name: string, fn: () => unknown): Promise<void> {
     const r = await redeemDiscount({ code: 'TSTONCE', userId: U1, amount: 125000, ref: 'ord-1' });
     assert.equal(r.amountOff, 10000);
     const after = await quoteDiscount({ code: 'TSTONCE', userId: U2, amount: 125000 });
-    assert.equal(after.ok, false); assert.equal(after.reason, 'EXHAUSTED', after.message);
+    assert.equal(after.ok, false); assert.equal(after.reason, 'EXHAUSTED', String(after.message));
   });
 
   await check('the same order redeeming twice is not discounted twice', async () => {
