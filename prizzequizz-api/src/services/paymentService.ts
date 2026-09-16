@@ -21,6 +21,7 @@ import { WALLET_LIMITS, WalletError, postEntry } from './walletLedgerService.js'
 import { recordMoney } from './missionService.js';
 import { getPaymentSettings, pickActiveGateway, blupalSwitchedOn } from './paymentGatewayService.js';
 import { fulfil, isGatewayPayable, parseOrder, quote, type PurchaseOrder } from './purchaseOrderService.js';
+import { quoteDiscount, redeemDiscount } from './discountService.js';
 import { blupalConfigured, blupalMode, createInvoice as createBlupalInvoice, verifyPaid as verifyBlupalPaid } from './blupalService.js';
 
 export interface PaymentDiagnostics {
@@ -61,11 +62,26 @@ function signatureValid(intent: PaymentIntent, sig: string, status: 'paid' | 'fa
  *
  * The old deposit limits still guard the amount, because they are also a sane
  * bound on what a single purchase may cost. */
-export async function createPaymentIntent(input: { userId: string; amount?: number; callbackUrl?: string; idempotencyKey?: string; order?: PurchaseOrder }): Promise<PaymentIntent> {
+export async function createPaymentIntent(input: { userId: string; amount?: number; callbackUrl?: string; idempotencyKey?: string; order?: PurchaseOrder; discountCode?: string }): Promise<PaymentIntent> {
   if (!input.order) throw new WalletError('DEPOSIT_REMOVED', 'شارژ کیف پول حذف شده است؛ پرداخت باید برای یک خرید مشخص باشد.');
   const q = await quote(input.order);
   if (!isGatewayPayable(q)) throw new WalletError('ORDER_NOT_PAYABLE', 'این مورد از درگاه قابل پرداخت نیست.');
-  const amount = q.amount;
+  /* A CODE IS CHECKED HERE AND SPENT LATER.
+   *
+   * The invoice has to be opened for the discounted figure — that is the amount
+   * the player will actually transfer — so the code is PRICED now. It is not
+   * CONSUMED now: this intent may never be paid, and opening ten invoices would
+   * otherwise burn ten uses of a single-use code without a rial moving. The use
+   * is taken where the goods are handed over.
+   *
+   * What that leaves open, said plainly: somebody could open several invoices
+   * on one single-use code and pay them all, and only the first settlement will
+   * find a use left. The others still deliver, because refusing goods somebody
+   * has already transferred money for is the worse wrong — and each one costs
+   * the abuser a real card-to-card payment, so the exposure is bounded and
+   * lands in the log rather than in silence. */
+  const d = input.discountCode ? await quoteDiscount({ code: input.discountCode, userId: input.userId, amount: q.amount }) : null;
+  const amount = Math.max(0, q.amount - (d?.ok ? d.amountOff : 0));
   if (!Number.isFinite(amount) || amount < 1 || amount > WALLET_LIMITS.maxDeposit) throw new WalletError('PAYMENT_AMOUNT_INVALID', 'مبلغ پرداخت نامعتبر است.');
   const settings = await getPaymentSettings();
   // Pick the highest-priority enabled gateway (auto-switch handled at retry).
@@ -122,8 +138,8 @@ export async function createPaymentIntent(input: { userId: string; amount?: numb
      * may arrive minutes later on a different process with no memory of the
      * request that started it. */
     metadata: blupal
-      ? { sandbox: blupal.mode !== 'live', gatewayType: 'blupal', blupalInvoiceId: blupal.invoiceId, blupalFinalRial: blupal.finalRial, blupalCard: blupal.card, order: input.order, orderLabel: q.label }
-      : { sandbox: gateway ? gateway.sandbox : provider() === 'sandbox', gatewayId: gateway?.id, gatewayName: gateway?.name, gatewayType: gateway?.type, order: input.order, orderLabel: q.label },
+      ? { sandbox: blupal.mode !== 'live', gatewayType: 'blupal', blupalInvoiceId: blupal.invoiceId, blupalFinalRial: blupal.finalRial, blupalCard: blupal.card, order: input.order, orderLabel: q.label, listPrice: q.amount, discountCode: (d?.ok ? d.code : ''), discount: (d?.ok ? d.amountOff : 0) }
+      : { sandbox: gateway ? gateway.sandbox : provider() === 'sandbox', gatewayId: gateway?.id, gatewayName: gateway?.name, gatewayType: gateway?.type, order: input.order, orderLabel: q.label, listPrice: q.amount, discountCode: (d?.ok ? d.code : ''), discount: (d?.ok ? d.amountOff : 0) },
     createdAt: now,
     updatedAt: now
   };
@@ -160,6 +176,19 @@ export async function settlePaymentIntent(intentId: string, sig: string, status:
    * a purchase be laundered into a withdrawable prize, which is exactly what
    * removing top-ups is meant to prevent. So nothing is posted to the ledger:
    * the goods are simply handed over. */
+  /* The code is spent HERE, where the money has actually arrived — see the note
+   * in createPaymentIntent. A code that has died in the meantime does not stop
+   * the delivery: the player already transferred the discounted figure, and
+   * taking the goods back for a code that expired while they were at the bank
+   * would be keeping their money. It is logged instead, so an operator can see
+   * a code that went past its limit rather than only wondering. */
+  const code = String((intent.metadata as any)?.discountCode ?? '');
+  if (code) {
+    const r = await redeemDiscount({ code, userId: intent.userId, amount: Number((intent.metadata as any)?.listPrice ?? intent.amount), ref: `intent:${intent.id}` }).catch(() => ({ amountOff: 0, codeId: null, duplicate: false }));
+    if (!r.amountOff) {
+      logger.warn('discount_settled_without_redemption', { intentId: intent.id, userId: intent.userId, code, hint: 'the code was priced at intent time but could not be consumed at settlement — it was delivered anyway' });
+    }
+  }
   const order = parseOrder((intent.metadata as any)?.order);
   if (order) {
     try {

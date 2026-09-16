@@ -145,6 +145,42 @@ const B = 'dddddddd-0000-4000-8000-00000000000b';
     assert.equal(page.readThrough, null, 'and it was reported as seen');
   });
 
+  /* ── REPLIES ──────────────────────────────────────────────────────────── */
+
+  await check('a reply carries what it answers, with it', async () => {
+    /* Carried WITH the reply rather than looked up when it is drawn: if the
+       original scrolls off the page the screen holds, or is deleted, the quote
+       must still read as it did. Looking it up later leaves an answer hanging
+       under nothing. */
+    await pool.query(`DELETE FROM friend_messages WHERE sender_id = ANY($1::uuid[])`, [[A, B]]);
+    const first = await pool.query(
+      `INSERT INTO friend_messages(sender_id, recipient_id, body) VALUES ($1,$2,'سؤال اول') RETURNING id`, [B, A]);
+    await pool.query(
+      `INSERT INTO friend_messages(sender_id, recipient_id, body, reply_to) VALUES ($1,$2,'جواب',$3)`,
+      [A, B, first.rows[0].id]);
+    const page = await listChat(A, B);
+    const answer = page.messages.find((m) => m.body === 'جواب')!;
+    assert.ok(answer.replyTo, 'the reply came back with nothing attached');
+    assert.equal(answer.replyTo!.body, 'سؤال اول');
+    assert.equal(answer.replyTo!.mine, false, 'the quoted message was marked as mine');
+  });
+
+  await check('a quote survives the message it quotes being deleted', async () => {
+    const page0 = await listChat(A, B);
+    const quoted = page0.messages.find((m) => m.body === 'سؤال اول')!;
+    await pool.query(`DELETE FROM friend_messages WHERE id=$1`, [quoted.id]);
+    const page = await listChat(A, B);
+    const answer = page.messages.find((m) => m.body === 'جواب');
+    assert.ok(answer, 'the reply went with it');
+  });
+
+  await check('and an ordinary message carries nothing', async () => {
+    await pool.query(`INSERT INTO friend_messages(sender_id, recipient_id, body) VALUES ($1,$2,'ساده')`, [A, B]);
+    const page = await listChat(A, B);
+    const plain = page.messages.find((m) => m.body === 'ساده')!;
+    assert.equal(plain.replyTo, null);
+  });
+
   await wipe();
   console.log(`[friendChat] ${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

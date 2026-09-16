@@ -17,6 +17,19 @@ import { getPgPool } from '../database/postgres.js';
 
 function pool() { return getPgPool(); }
 
+/* THE COLUMN A REPLY NEEDS.
+ * Added at runtime rather than by a migration: the server is deployed as a
+ * built `dist/` and migrations do not travel with it, so a schema change that
+ * only exists in a migration file is a schema change that never happens. */
+let _replyReady = false;
+export async function ensureReplyColumn(): Promise<void> {
+  if (_replyReady) return;
+  try {
+    await pool().query(`ALTER TABLE friend_messages ADD COLUMN IF NOT EXISTS reply_to uuid`);
+    _replyReady = true;
+  } catch { /* an older server without the column still serves chats, without quotes */ }
+}
+
 /** How many of the most recent messages a chat screen is given at once. */
 export const CHAT_PAGE = 200;
 
@@ -26,6 +39,13 @@ export interface ChatMessage {
   body: string;
   at: string | null;
   readAt: string | null;
+  /* WHAT THIS ONE ANSWERS.
+   * The quoted text is carried WITH the reply rather than looked up by id when
+   * it is drawn. A reply is a reply to what was said — if the original is
+   * deleted, or scrolled past the page the screen holds, the quote must still
+   * read as it did when the reply was written. Looking it up later would leave
+   * an answer hanging under nothing. */
+  replyTo?: { id: string; mine: boolean; body: string } | null;
 }
 
 export interface ChatPage {
@@ -60,17 +80,21 @@ const iso = (v: any): string | null => (typeof v === 'string' ? v : (v?.toISOStr
  * that is what «seen» means: it happened when they were put on the screen.
  */
 export async function listChat(me: string, other: string, after?: string | null): Promise<ChatPage> {
+  await ensureReplyColumn();
   const params: any[] = [me, other];
   let where = `((sender_id=$1 AND recipient_id=$2) OR (sender_id=$2 AND recipient_id=$1))`;
   if (after) { params.push(after); where += ` AND created_at > $3`; }
   /* Newest first to take the right end, then put back in reading order. */
   const { rows } = await pool().query(
-    `SELECT id, sender_id, body, at, read_at FROM (
-       SELECT id, sender_id, body, created_at, read_at, ${AT} AS at FROM friend_messages
+    `SELECT t.id, t.sender_id, t.body, t.at, t.read_at,
+            r.id AS r_id, r.sender_id AS r_sender, r.body AS r_body
+       FROM (
+       SELECT id, sender_id, body, created_at, read_at, reply_to, ${AT} AS at FROM friend_messages
         WHERE ${where}
         ORDER BY created_at DESC
         LIMIT ${CHAT_PAGE}
-     ) t ORDER BY created_at ASC`, params);
+     ) t LEFT JOIN friend_messages r ON r.id = t.reply_to
+      ORDER BY t.created_at ASC`, params);
 
   const seen = await pool().query(
     `SELECT ${AT} AS t FROM friend_messages
@@ -89,7 +113,8 @@ export async function listChat(me: string, other: string, after?: string | null)
   return {
     messages: rows.map((r) => ({
       id: String(r.id), mine: String(r.sender_id) === String(me),
-      body: r.body, at: iso(r.at), readAt: iso(r.read_at)
+      body: r.body, at: iso(r.at), readAt: iso(r.read_at),
+      replyTo: r.r_id ? { id: String(r.r_id), mine: String(r.r_sender) === String(me), body: String(r.r_body ?? '') } : null
     })),
     readThrough: iso(seen.rows[0]?.t)
   };

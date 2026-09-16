@@ -33,10 +33,11 @@ const FRIEND = 'ffffffff-0000-4000-8000-00000000000f';
 let seq = 0;
 const stamp = () => { seq++; return '2026-09-16T10:' + String(10 + Math.floor(seq / 60)).padStart(2, '0') + ':' + String(seq % 60).padStart(2, '0') + '.123456Z'; };
 const store = [];
-const say = (mine, body) => { store.push({ id: 'm' + store.length, mine, body, at: stamp(), readAt: null }); };
+const say = (mine, body, replyTo) => { store.push({ id: 'm' + store.length, mine, body, at: stamp(), readAt: null, replyTo: replyTo || null }); };
 for (let i = 0; i < 6; i++) say(i % 2 === 0, 'پیام ' + i);
 let readThrough = null;
 const asked = [];
+const sent = [];
 
 const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 await ctx.addInitScript(() => {
@@ -58,8 +59,11 @@ await ctx.route('**/v1/**', (route) => {
   }
   if (/\/friends\/[^/]+\/messages$/.test(p)) {
     let b = {}; try { b = JSON.parse(route.request().postData() || '{}'); } catch (e) {}
-    say(true, String(b.body || ''));
-    return send({ id: 'x', mine: true, body: b.body, at: store[store.length - 1].at });
+    sent.push(b);
+    /* The server answers with the quote attached, resolved from the id. */
+    const q = b.replyTo ? store.find((m) => m.id === b.replyTo) : null;
+    say(true, String(b.body || ''), q ? { id: q.id, mine: q.mine, body: q.body } : null);
+    return send({ id: store[store.length - 1].id, mine: true, body: b.body, at: store[store.length - 1].at });
   }
   if (p === '/friends') {
     return send({ friends: [{ id: FRIEND, username: 'sara', displayName: 'سارا', online: true, unread: 0 }] });
@@ -198,6 +202,77 @@ console.log('the chat:');
   const before = asked.length;
   await page.waitForTimeout(2200);
   ok('closing the chat stops the polling', asked.length === before, before + ' → ' + asked.length);
+}
+
+/* ── REPLYING ───────────────────────────────────────────────────────────── */
+/*
+ * «ریپلای هم بذار برای پیام‌ها.»
+ *
+ * A tap on a bubble answers it. What is checked is that the reply names the
+ * message it answers when it is SENT, and that the quote it comes back with is
+ * drawn inside the reply — a reply whose quote has to be looked up when it is
+ * drawn goes blank the moment the original scrolls off the page.
+ */
+console.log('replying:');
+{
+  await page.evaluate((fid) => (0, eval)('openFriendChat')(fid), FRIEND);
+  await page.waitForTimeout(1200);
+
+  /* Answer the other person's first message. */
+  const target = store.find((m) => !m.mine);
+  await page.evaluate((id) => (0, eval)('frReplyTo')(id), target.id);
+  await page.waitForTimeout(250);
+
+  const bar = await page.evaluate(() => {
+    const el = document.querySelector('.chat-view .chat-reply');
+    return el ? { text: el.innerText.replace(/\s+/g, ' ').trim(), x: !!el.querySelector('.x') } : null;
+  });
+  ok('tapping a message shows what is being answered', !!bar && /پاسخ به/.test(bar.text), bar ? bar.text : '(no bar)');
+  ok('with its words in the bar', !!bar && bar.text.includes(target.body), bar ? bar.text : '—');
+  ok('and a way out of it', !!bar && bar.x);
+
+  const before = sent.length;
+  await page.evaluate(() => {
+    document.getElementById('chatInput').value = 'جواب من';
+    (0, eval)('sendChatMsg')();
+  });
+  await page.waitForTimeout(1400);
+  const msg = sent[before];
+  ok('sending names the message it answers', msg && msg.replyTo === target.id, JSON.stringify(msg));
+  ok('and the bar clears once it is gone',
+     await page.evaluate(() => !document.querySelector('.chat-view .chat-reply')));
+
+  const quoted = await page.evaluate(() => {
+    const els = [...document.querySelectorAll('#chatBody .msg')];
+    const last = els[els.length - 1];
+    const q = last.querySelector('.msg-q');
+    return { text: last.innerText.replace(/\s+/g, ' ').trim(), quote: q ? q.textContent.trim() : '' };
+  });
+  ok('and the reply is drawn WITH the quote on it', quoted.quote === target.body, quoted.quote || '(no quote)');
+  ok('above the answer itself', /جواب من/.test(quoted.text), quoted.text.slice(0, 50));
+}
+{
+  /* Changing your mind must leave an ordinary message, not a reply to whatever
+     was last tapped. */
+  const target = store.find((m) => !m.mine);
+  await page.evaluate((id) => (0, eval)('frReplyTo')(id), target.id);
+  await page.waitForTimeout(200);
+  await page.evaluate(() => (0, eval)('frReplyCancel')());
+  await page.waitForTimeout(200);
+  ok('cancelling takes the bar away',
+     await page.evaluate(() => !document.querySelector('.chat-view .chat-reply')));
+  const before = sent.length;
+  await page.evaluate(() => {
+    document.getElementById('chatInput').value = 'بدون ریپلای';
+    (0, eval)('sendChatMsg')();
+  });
+  await page.waitForTimeout(1400);
+  ok('and the next message answers nothing', sent[before] && !sent[before].replyTo, JSON.stringify(sent[before]));
+  const plain = await page.evaluate(() => {
+    const els = [...document.querySelectorAll('#chatBody .msg')];
+    return !els[els.length - 1].querySelector('.msg-q');
+  });
+  ok('so it is drawn without a quote', plain);
 }
 
 ok('the page threw nothing', errs.length === 0, errs.join(' | ').slice(0, 160));

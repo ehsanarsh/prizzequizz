@@ -56,6 +56,12 @@ export interface PurchaseInput {
    * THIS order. Grant the goods and charge nothing; the صندوق must not move,
    * because the player did not pay from it. */
   paidExternally?: boolean;
+  /* Toman already taken off this order by a discount code. Applied to a CASH
+   * price only: a discount code is about money, and coins are not money — «۲۰٪
+   * off» on a coin price would be giving away play, not cutting a price.
+   * The figure is the SERVER'S, computed and consumed in discountService; this
+   * is only where it lands. */
+  discount?: number;
 }
 
 /* The idempotency key is honoured OUTSIDE the purchase itself, by the same
@@ -100,7 +106,12 @@ async function runPurchase(input: PurchaseInput): Promise<PurchaseResult> {
   const user = await repositories.users.findById(userId);
   if (!user) throw new ShopError('USER_NOT_FOUND', 'کاربر پیدا نشد.');
 
-  const price = Math.max(0, Math.floor(item.price)) * qty;
+  const full = Math.max(0, Math.floor(item.price)) * qty;
+  /* Never below zero: a code worth more than the basket makes the order free,
+     it does not make the shop owe the player money. */
+  const price = item.currency === 'cash'
+    ? Math.max(0, full - Math.max(0, Math.floor(Number(input.discount) || 0)))
+    : full;
   const value = Math.max(0, Math.floor(item.effectValue)) * qty;
 
   /* Pay first: a granted item nobody was charged for is the worse failure.
@@ -114,7 +125,8 @@ async function runPurchase(input: PurchaseInput): Promise<PurchaseResult> {
       if (Number(acct.available) < price) throw new ShopError('INSUFFICIENT_FUNDS', 'موجودی کیف پولت کافی نیست.');
       await postEntry({
         userId, entryType: 'shop_purchase', kind: 'debit', amount: price,
-        idempotencyKey: 'shop:' + key, description: 'خرید از فروشگاه: ' + item.name,
+        idempotencyKey: 'shop:' + key,
+        description: 'خرید از فروشگاه: ' + item.name + (price < full ? ' (با تخفیف)' : ''),
         /* WHAT WAS SOLD, not just that something was. «فروش آیتم‌ها در فروشگاه
          * به غیر از بلیط مسابقات» — the company's earnings count shop sales but
          * not ticket sales, and both come through here, so the accounting has
@@ -122,7 +134,11 @@ async function runPurchase(input: PurchaseInput): Promise<PurchaseResult> {
          * can say which: the catalogue can be re-categorised or the item
          * deleted, and a sale that happened last month must not change its
          * meaning because somebody edited the shop today. */
-        metadata: { itemId: item.id, category: item.category, name: item.name, qty }
+        /* The list price and what was taken off are BOTH on the row: the
+         * accounting has to be able to say how much was given away as well as
+         * how much came in, and a row carrying only the net can never be asked
+         * that question afterwards. */
+        metadata: { itemId: item.id, category: item.category, name: item.name, qty, listPrice: full, discount: full - price }
       });
     } else {
       /* ASKING AND TAKING ARE ONE STEP. Reading the balance, comparing it and

@@ -14,6 +14,7 @@ import { GiftError, redeemGiftCode } from '../../services/giftCodeService.js';
 import { recordAdmin } from '../../services/adminAuditService.js';
 import { id } from '../../utils/id.js';
 import { parseOrder, quote, payFromVault, isGatewayPayable, asOrderError } from '../../services/purchaseOrderService.js';
+import { quoteDiscount } from '../../services/discountService.js';
 import { payoutOptions, issuedCodeFor, getPartner } from '../../services/payoutPartnerService.js';
 import { sendWithdrawOtp, OtpError, otpRequired } from '../../services/withdrawOtpService.js';
 import { bodyObject, optionalString, requiredNumber, requiredString } from '../../utils/validation.js';
@@ -115,11 +116,26 @@ export function registerWalletRoutes(router: Router, base: string): void {
       const q = await quote(order);
       const acct = await getAccount(uid).catch(() => ({ available: 0 } as any));
       const vault = Number(acct.available) || 0;
+      /* PRICING A CODE IS NOT SPENDING IT. This runs on every keystroke in the
+       * discount box, so it must be free to call — `quoteDiscount` looks, it
+       * does not consume. What comes back is the server's figure; the client
+       * never computes a price. */
+      const code = optionalString(bodyObject(ctx.body), 'discountCode') ?? '';
+      const d = (code && q.currency === 'cash') ? await quoteDiscount({ code, userId: uid, amount: q.amount }) : null;
+      const off = d?.ok ? d.amountOff : 0;
+      const due = Math.max(0, q.amount - off);
       json(ctx.res, 200, {
-        order: q.order, amount: q.amount, currency: q.currency, label: q.label,
+        order: q.order, amount: due, currency: q.currency, label: q.label,
+        /* The list price stays on the answer so the sheet can show what was
+         * struck through — «۱۲۵٬۰۰۰» crossed out beside «۱۰۰٬۰۰۰» is the whole
+         * point of typing a code. */
+        listPrice: q.amount,
+        discount: off,
+        discountCode: d?.ok ? d.code : '',
+        discountError: (code && !d?.ok) ? (d?.message ?? 'این کد معتبر نیست.') : '',
         vaultBalance: vault,
         /* What the sheet should offer. A coin-priced item has neither. */
-        canPayFromVault: q.currency === 'coins' ? true : vault >= q.amount,
+        canPayFromVault: q.currency === 'coins' ? true : vault >= due,
         canPayByGateway: isGatewayPayable(q)
       });
     } catch (e) {
@@ -139,14 +155,15 @@ export function registerWalletRoutes(router: Router, base: string): void {
     const idem = `order:${uid}:${optionalString(body, 'idempotencyKey') ?? id()}`;
     const meta = reqMeta(ctx);
     try {
+      const discountCode = optionalString(body, 'discountCode') ?? '';
       if (method === 'gateway') {
-        const intent = await createPaymentIntent({ userId: uid, order, callbackUrl: optionalString(body, 'callbackUrl'), idempotencyKey: optionalString(body, 'idempotencyKey') });
+        const intent = await createPaymentIntent({ userId: uid, order, callbackUrl: optionalString(body, 'callbackUrl'), idempotencyKey: optionalString(body, 'idempotencyKey'), discountCode });
         await auditLog({ userId: uid, action: 'order_gateway_started', api: 'POST /orders/pay', ...meta, request: { order }, response: { intentId: intent.id, amount: intent.amount } });
         return json(ctx.res, 201, { method, intentId: intent.id, amount: intent.amount, status: intent.status, paymentUrl: intent.paymentUrl });
       }
-      const r = await payFromVault(uid, order, idem);
-      await auditLog({ userId: uid, action: 'order_paid_from_vault', api: 'POST /orders/pay', ...meta, request: { order }, response: { amount: r.quote.amount, duplicate: r.duplicate } });
-      json(ctx.res, 200, { method, amount: r.quote.amount, label: r.quote.label, granted: r.granted, duplicate: r.duplicate, balance: r.balance });
+      const r = await payFromVault(uid, order, idem, discountCode);
+      await auditLog({ userId: uid, action: 'order_paid_from_vault', api: 'POST /orders/pay', ...meta, request: { order, discountCode }, response: { amount: r.quote.amount, discount: r.discount ?? 0, duplicate: r.duplicate } });
+      json(ctx.res, 200, { method, amount: Math.max(0, r.quote.amount - (r.discount ?? 0)), listPrice: r.quote.amount, discount: r.discount ?? 0, label: r.quote.label, granted: r.granted, duplicate: r.duplicate, balance: r.balance });
     } catch (e) {
       await auditLog({ userId: uid, action: 'order_failed', api: 'POST /orders/pay', ...meta, request: { order, method }, error: e instanceof Error ? e.message : 'unknown' });
       const oe = asOrderError(e);

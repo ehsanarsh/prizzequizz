@@ -548,6 +548,20 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
 .pm-soon{flex:0 0 auto;font-size:10.5px;font-weight:900;padding:3px 8px;border-radius:999px;
   background:rgba(255,210,31,.16);color:var(--bolt,#FFD21F);border:1px solid rgba(255,210,31,.34);
   white-space:nowrap}
+/* THE DISCOUNT BOX. Under the doors, because it changes the PRICE and not the
+   way it is paid — and a player who has no code should be able to ignore it
+   entirely, which is why it is one quiet line rather than a section. */
+.pm-disc{display:flex;gap:7px;margin:9px 0 2px}
+.pm-disc input{flex:1;min-width:0;background:rgba(255,255,255,.06);border:2px solid rgba(255,255,255,.16);
+  border-radius:13px;padding:10px 12px;color:inherit;font-family:inherit;font-size:13px;font-weight:800}
+.pm-disc input:focus{outline:none;border-color:var(--bolt,#FFD21F)}
+.pm-disc.on input{border-color:#3FD07A;background:rgba(63,208,122,.10)}
+.pm-disc .btn{flex:0 0 auto;padding:10px 14px;font-size:13px;border-radius:13px}
+/* What the price WAS, struck through beside what it is now: a discounted number
+   on its own is one the player has to take on trust. */
+.pm-was{display:block;font-size:13px;font-weight:800;color:var(--muted);text-decoration:line-through;
+  margin-bottom:-2px}
+.pm-off{font-size:11.5px;font-weight:900;color:#5CFFA8;margin-top:2px}
 /* On a cramped screen the timing badge gives way — but «بزودی» never does:
    it is the whole reason that row is on the sheet. */
 @media(max-width:360px){.pm-when{display:none}}
@@ -2663,6 +2677,26 @@ input,textarea,select,[contenteditable="true"],.pz-selectable,.pz-selectable *{
    enough not to compete with the words, clear enough to answer «did they read
    it». Never on theirs; telling somebody they read their own message is noise. */
 .msg-seen{margin-inline-start:5px;font-size:10px;opacity:.85;vertical-align:-1px}
+/* THE QUOTE INSIDE A REPLY. A strip above the words, in the bubble's own
+   colours so it reads as part of the message rather than a card stuck on it —
+   and one line only: the reply is what the player came to read. */
+.msg-q{display:block;font-size:11px;font-weight:800;line-height:1.55;opacity:.8;
+  padding:4px 8px;margin-bottom:5px;border-radius:9px;
+  border-inline-start:3px solid rgba(0,0,0,.45);background:rgba(0,0,0,.10);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.msg.them .msg-q{background:rgba(0,0,0,.07)}
+/* A bubble answers when it is tapped, so it has to look tappable. */
+.msg{cursor:pointer}
+.msg.failed{cursor:default}
+/* WHAT IS BEING ANSWERED, above the composer. It sits between the messages and
+   the box because that is where the eye goes on the way to typing. */
+.chat-reply{display:flex;align-items:center;gap:8px;padding:8px 12px;
+  border-top:2px solid #000;background:var(--ink-3)}
+.chat-reply .ttl{font-size:10px;font-weight:900;color:var(--bolt);flex:0 0 auto}
+.chat-reply .txt{flex:1;min-width:0;font-size:11.5px;font-weight:700;color:var(--muted);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chat-reply .x{flex:0 0 auto;width:26px;height:26px;border-radius:9px;border:2px solid #000;
+  background:var(--ink-2);color:var(--paper);font-family:inherit;font-weight:900;cursor:pointer}
 /* A message that did not get through — «ارسال نشد» with the way to try again
    on the bubble itself, rather than a toast that has already gone. */
 .msg.failed{opacity:.72;border-color:var(--bad);box-shadow:0 3px 0 #000,0 0 0 2px rgba(255,90,90,.25)}
@@ -14809,7 +14843,9 @@ async function frLoadMessages(id,incremental){
     /* «تا کجا خوانده» — one timestamp covering the whole history, so a message
        sent an hour ago and read just now gets its tick without being re-sent. */
     f.readThrough=r.data.readThrough||f.readThrough||'';
-    const rows=r.data.messages.map(m=>[m.mine?'me':'them', frMsgHTML(m.body), frTime(m.at), m.at||'']);
+    /* id and quote ride with the row: a reply is written against the message a
+       finger landed on, and drawn with what that message SAID. */
+    const rows=r.data.messages.map(m=>[m.mine?'me':'them', frMsgHTML(m.body), frTime(m.at), m.at||'', m.id||'', m.replyTo||null, m.body||'']);
     if(since&&Array.isArray(f.m)) f.m=f.m.concat(rows);
     else f.m=rows;
     const last=f.m[f.m.length-1];
@@ -14821,6 +14857,51 @@ async function frLoadMessages(id,incremental){
     try{ const n=FRIENDS_DATA.reduce((s,x)=>s+(Number(x.unread)||0),0)+(_frLoadedOnce?FRIEND_REQUESTS.length:PZ_REQ_COUNT);
          badges.friends=n; saveBadges(); renderBadges(); frRenderTabBadges(); }catch(e){}
   }
+}
+/* REPLYING TO A MESSAGE.
+ *
+ * «ریپلای هم بذار برای پیام‌ها.»
+ *
+ * Tapping a bubble answers it. Not a swipe: a swipe inside a list that already
+ * scrolls is a gesture that fights the scrolling, and on a chat this size it
+ * would be triggered by accident more often than on purpose.
+ *
+ * What is quoted is what that message SAID, carried with the reply — not a
+ * lookup by id when it is drawn. A reply must still read as an answer after the
+ * message it answers has scrolled past the page the screen holds, or been
+ * deleted; a quote that resolves later leaves an answer hanging under nothing.
+ */
+let _frReply=null;
+function frQuoteText(t){
+  const one=String(t||'').replace(/\s+/g,' ').trim();
+  return one.length>90?(one.slice(0,90)+'…'):one;
+}
+function frQuoteHTML(q){
+  if(!q||!q.body) return '';
+  return '<span class="msg-q'+(q.mine?' mine':'')+'">'+frEsc(frQuoteText(q.body))+'</span>';
+}
+window.frReplyTo=function(mid){
+  const f=FRIENDS_DATA.find(x=>x.id===frActiveChat); if(!f) return;
+  const row=(f.m||[]).find(m=>m[4]===mid); if(!row) return;
+  _frReply={id:mid,mine:row[0]==='me',body:row[6]||''};
+  frPaintReplyBar();
+  const i=document.getElementById('chatInput'); if(i) i.focus();
+};
+window.frReplyCancel=function(){ _frReply=null; frPaintReplyBar(); };
+/* The bar above the composer: what is being answered, and the way out of it. */
+function frPaintReplyBar(){
+  const view=document.querySelector('.chat-view'); if(!view) return;
+  const send=view.querySelector('.chat-send'); if(!send) return;
+  let bar=view.querySelector('.chat-reply');
+  if(!_frReply){ if(bar) bar.remove(); return; }
+  if(!bar){
+    bar=document.createElement('div');
+    bar.className='chat-reply';
+    send.parentNode.insertBefore(bar,send);
+  }
+  bar.innerHTML='<span class="ttl">'+(_frReply.mine?'پاسخ به پیام خودت':'پاسخ به پیام او')+'</span>'+
+    '<span class="txt">'+frEsc(frQuoteText(_frReply.body))+'</span>'+
+    '<button type="button" class="x" onclick="frReplyCancel()" aria-label="بی‌خیال">✕</button>';
 }
 /* Update ONLY the message list — never the input — so typing is never disturbed. */
 function renderChatMessages(id){
@@ -14847,7 +14928,8 @@ function renderChatMessages(id){
      Only on MY OWN messages — a tick on somebody else's is telling them what
      they already know — and only up to the point they have actually read. */
   const seenTo=String(f.readThrough||'');
-  b.innerHTML=f.m.map(m=>'<div class="msg '+m[0]+'">'+m[1]+'<small>'+m[2]+
+  b.innerHTML=f.m.map(m=>'<div class="msg '+m[0]+'"'+(m[4]?' data-mid="'+frEsc(m[4])+'" onclick="frReplyTo(\''+frEsc(jsStr(m[4]))+'\')"':'')+'>'+
+      frQuoteHTML(m[5])+m[1]+'<small>'+m[2]+
       ((m[0]==='me'&&seenTo&&m[3]&&String(m[3])<=seenTo)?'<span class="msg-seen" title="دیده شد">👁</span>':'')+
       '</small></div>').join('')
     +failed.map(x=>'<div class="msg me failed" data-fid="'+frEsc(x.id)+'">'+x.html+
@@ -14882,7 +14964,9 @@ function frRetryMsg(fid){
   const item=f.failed[i];
   f.failed.splice(i,1);
   renderChatMessages(frActiveChat);
-  frSendBody(f.id,item.text);
+  /* A retry answers what the first attempt answered, not whatever is in the
+     bar now — which may be nothing, or something else entirely. */
+  frSendBody(f.id,item.text,item.reply||null);
 }
 function frDropMsg(fid){
   const f=FRIENDS_DATA.find(x=>x.id===frActiveChat); if(!f) return;
@@ -14957,7 +15041,7 @@ function renderAddFriend(c,q){
      card shows the code, filled in when it arrives rather than guessed. */
   frPaintRefCode();
 }
-async function openFriendChat(id){frActiveChat=id;frActiveTab='chats';document.querySelectorAll('#frTabs .fr-tab').forEach(b=>b.classList.toggle('active',b.dataset.tab==='chats'));const f=FRIENDS_DATA.find(x=>x.id===id);if(f)f.unread=0;renderFriendsHub();await frLoadMessages(id);if(frActiveChat===id)renderChatView(id);frStartChatPoll(id);try{pzAskPushForChat();}catch(e){}}
+async function openFriendChat(id){_frReply=null;frActiveChat=id;frActiveTab='chats';document.querySelectorAll('#frTabs .fr-tab').forEach(b=>b.classList.toggle('active',b.dataset.tab==='chats'));const f=FRIENDS_DATA.find(x=>x.id===id);if(f)f.unread=0;renderFriendsHub();await frLoadMessages(id);if(frActiveChat===id)renderChatView(id);frStartChatPoll(id);try{pzAskPushForChat();}catch(e){}}
 function renderChatView(id){
   const c=document.getElementById('friendsContent'),f=FRIENDS_DATA.find(x=>x.id===id);if(!c||!f)return;
   /* The avatar used to be dropped in as f.a — but an avatar is a URL, so the
@@ -14983,20 +15067,25 @@ async function sendChatMsg(){
   frSendBody(id,txt);
 }
 /* One send, wherever it came from — the composer or a retry. */
-async function frSendBody(id,txt){
+async function frSendBody(id,txt,replyTo){
   const f=FRIENDS_DATA.find(x=>x.id===id); if(!f||!txt) return;
+  /* Taken NOW, before anything can be awaited: the bar is cleared the moment
+     the message leaves, and a reply that read the bar afterwards would answer
+     whatever the player had picked in the meantime. */
+  const q=(replyTo!==undefined)?replyTo:_frReply;
+  _frReply=null; frPaintReplyBar();
   /* On screen at once. */
-  f.m.push(['me',frMsgHTML(txt),'الان']);
+  f.m.push(['me',frMsgHTML(txt),'الان','','',q?{mine:q.mine,body:q.body}:null,txt]);
   f.last=txt;
   renderChatMessages(id);
   let ok=false;
-  try{ const r=await pzApi('POST','/friends/'+id+'/messages',{body:txt}); ok=!!(r&&r.ok!==false); }
+  try{ const r=await pzApi('POST','/friends/'+id+'/messages',{body:txt,replyTo:(q&&q.id)||''}); ok=!!(r&&r.ok!==false); }
   catch(e){ ok=false; }
   if(!ok){
     /* Kept, not lost. The reload below is about to replace f.m with what the
        server has, which will not include this one. */
     f.failed=(f.failed||[]);
-    f.failed.push({id:'fm'+Date.now()+Math.floor(Math.random()*1000),text:txt,html:frMsgHTML(txt)});
+    f.failed.push({id:'fm'+Date.now()+Math.floor(Math.random()*1000),text:txt,html:frMsgHTML(txt),reply:q||null});
   }
   await frLoadMessages(id);
   /* The cursor stays in the box because sendChatMsg put it there before this
@@ -22794,6 +22883,73 @@ function pzPayMethods(d){
   ];
 }
 
+/* THE PRICE, WITH WHAT IT WAS BEFORE THE CODE.
+   A discounted price shown on its own is a number the player has to take on
+   trust. Struck through beside it, the code has visibly done something — which
+   is the entire reason for typing one. */
+function pzPriceHtml(d){
+  const off=Number(d.discount||0);
+  if(off>0&&Number(d.listPrice||0)>0){
+    return '<span class="pm-was">'+fa(d.listPrice)+'</span>'+
+           '<span class="aaa-amount"><b>'+fa(d.amount)+'</b><span>تومان</span></span>'+
+           '<div class="pm-off">'+fa(off)+' تومان تخفیف'+(d.discountCode?' · '+esc0(d.discountCode):'')+'</div>';
+  }
+  return '<span class="aaa-amount"><b>'+fa(d.amount)+'</b><span>تومان</span></span>';
+}
+/* «و کد تخفیف هم باید باشه.» The box, and nothing else: what the code is worth
+   is never worked out here. The server prices it and this shows the answer. */
+function pzDiscountHtml(){
+  const on=!!(_pzPayLast&&Number(_pzPayLast.discount||0)>0);
+  return '<div class="pm-disc'+(on?' on':'')+'">'+
+    '<input id="pmCode" placeholder="کد تخفیف داری؟" autocomplete="off" spellcheck="false" dir="ltr" value="'+esc0(_pzPayCode||'')+'" onkeydown="if(event.key===\'Enter\'){event.preventDefault();pzApplyCode();}">'+
+    '<button type="button" class="btn" id="pmCodeBtn" onclick="pzApplyCode()">'+(on?'برداشتن':'اعمال')+'</button>'+
+    '</div><div class="pm-note bad" id="pmCodeErr" style="text-align:center"></div>';
+}
+let _pzPayCode='', _pzPayOrder=null, _pzPayBusy=false;
+window.pzApplyCode=async function(){
+  if(_pzPayBusy) return;
+  const box=document.getElementById('pmCode'), err=document.getElementById('pmCodeErr');
+  if(!box||!_pzPayOrder) return;
+  /* Already applied → the button takes it off again, which is the only other
+     thing a player wants from it. */
+  const clearing=!!(_pzPayLast&&Number(_pzPayLast.discount||0)>0);
+  const code=clearing?'':String(box.value||'').trim();
+  if(!clearing&&!code){ if(err)err.textContent='کد را بنویس.'; return; }
+  _pzPayBusy=true;
+  const btn=document.getElementById('pmCodeBtn'); if(btn){btn.disabled=true;btn.textContent='…';}
+  try{
+    const q=await pzApi('POST','/orders/quote',{order:_pzPayOrder,discountCode:code});
+    if(q&&q.ok&&q.data){
+      _pzPayCode=code;
+      _pzPayLast=q.data;
+      pzPaintPrice();
+      if(err) err.textContent=String(q.data.discountError||'');
+    } else if(err){ err.textContent='قیمت‌گذاری نشد؛ دوباره تلاش کن.'; }
+  }catch(e){ if(err) err.textContent='قیمت‌گذاری نشد؛ دوباره تلاش کن.'; }
+  _pzPayBusy=false;
+  if(btn) btn.disabled=false;
+};
+/* Only the price, the rows and the box — never the whole sheet. Rebuilding it
+   would take the artwork down and put it back for a change that is neither, and
+   would throw away whatever the player had typed. */
+function pzPaintPrice(){
+  const d=_pzPayLast; if(!d) return;
+  const p=document.getElementById('pmPrice'); if(p) p.innerHTML=pzPriceHtml(d);
+  const ms=pzPayMethods(d);
+  /* A discount can open a door that was shut: a صندوق that could not cover the
+     list price may well cover what is left. */
+  if(!ms.some(m=>m.id===_pzPaySel&&!m.soon&&m.open)){
+    const first=ms.find(m=>!m.soon&&m.open); _pzPaySel=first?first.id:'';
+  }
+  const box=document.getElementById('pmList'); if(box) box.innerHTML=ms.map(pzPayRowHtml).join('');
+  const btn=document.getElementById('aaaPrimary'); if(btn) btn.disabled=!_pzPaySel;
+  const cb=document.getElementById('pmCodeBtn');
+  if(cb) cb.textContent=(Number(d.discount||0)>0)?'برداشتن':'اعمال';
+  const inp=document.getElementById('pmCode');
+  if(inp&&Number(d.discount||0)<=0&&!_pzPayCode) inp.value='';
+  const wrap=document.querySelector('.pm-disc');
+  if(wrap) wrap.classList.toggle('on',Number(d.discount||0)>0);
+}
 let _pzPaySel='';
 function pzPayRowHtml(m){
   const on=(m.id===_pzPaySel), usable=!m.soon&&m.open;
@@ -22825,7 +22981,7 @@ let _pzPayLast=null;
 /* THE SHEET. One card: what is being bought, what it costs, every way to pay
    for it, and a single green button. */
 function pzPaySheet(d,order,name,look){
-  _pzPayLast=d;
+  _pzPayLast=d; _pzPayOrder=order; _pzPayCode='';
   const ms=pzPayMethods(d);
   /* Opened on the door the player can actually walk through — the صندوق when
      it can cover the bill, otherwise the gateway. Nothing is pre-selected when
@@ -22838,8 +22994,9 @@ function pzPaySheet(d,order,name,look){
       icon:lk.icon||'💳', art:lk.art||undefined,
       accent:(lk.color&&pzAlpha(lk.color,.45))||undefined,
       title:name,
-      sub:'<div style="text-align:center"><span class="aaa-amount"><b>'+fa(d.amount)+'</b><span>تومان</span></span></div>'+
+      sub:'<div style="text-align:center" id="pmPrice">'+pzPriceHtml(d)+'</div>'+
           '<div class="pm-list" id="pmList">'+ms.map(pzPayRowHtml).join('')+'</div>'+
+          pzDiscountHtml()+
           (first?'':'<div class="pm-note bad" style="text-align:center;margin-top:6px">هیچ روش پرداختی در دسترس نیست. کمی بعد دوباره تلاش کن.</div>'),
       closable:true,
       primaryPay:true, primaryWide:true,
@@ -22847,7 +23004,9 @@ function pzPaySheet(d,order,name,look){
       onPrimary:async()=>{
         const m=_pzPaySel; if(!m) return;
         closeAaaModal(false);
-        resolve(await pzPayOrder(order,m==='vault'?'vault':'gateway',name));
+        /* The code goes with the payment, and the SERVER prices it again there:
+           what was quoted a minute ago is not what decides. */
+        resolve(await pzPayOrder(order,m==='vault'?'vault':'gateway',name,_pzPayCode));
       },
       onDismiss:()=>{ resolve(false); }
     });
@@ -22856,9 +23015,9 @@ function pzPaySheet(d,order,name,look){
   });
 }
 
-async function pzPayOrder(order,method,name){
+async function pzPayOrder(order,method,name,discountCode){
   const key='ord_'+Date.now()+'_'+Math.random().toString(36).slice(2,8);
-  const r=await pzApi('POST','/orders/pay',{order,method,idempotencyKey:key});
+  const r=await pzApi('POST','/orders/pay',{order,method,idempotencyKey:key,discountCode:discountCode||''});
   if(!r||!r.ok||!r.data){ toast((r&&r.error&&r.error.message)||'پرداخت انجام نشد'); return false; }
 
   if(method==='vault'){

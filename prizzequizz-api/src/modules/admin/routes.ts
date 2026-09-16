@@ -9,6 +9,7 @@ import { featureFlags, patchFeatureFlag, themes, upsertTheme } from '../../servi
 import { getAdminAnalytics } from '../../services/analyticsService.js';
 import { getAdminUserOverview, resetUserStats, searchAdminUsers, setUserTickets, updateUserFields, updateUserRole, updateUserStatus, UsernameTakenError } from '../../services/adminUserService.js';
 import { adminUserTable } from '../../services/adminUserTable.js';
+import { listDiscountCodes, saveDiscountCode, deleteDiscountCode, DiscountError } from '../../services/discountService.js';
 import { getMatch, claimTimeout, forfeitMatch } from '../../services/matchEngine.js';
 import { activeMatchState } from '../../services/matchStateStore.js';
 import { createGiftCode, listGiftCodes, redeemGiftCode } from '../../services/giftCodeService.js';
@@ -555,6 +556,42 @@ export function registerAdminRoutes(router: Router, base: string): void {
   /* The users SCREEN: every column the panel shows, ordered and paged by the
      database over every row. The list above stays as it is — the places that
      only want «find me this person» still get a plain array from it. */
+  /* ---- Discount codes ----------------------------------------------------
+   * The panel never sees a price and never computes one: it writes the RULE
+   * (percent or amount, ceiling, window, limits) and the server decides what
+   * any given order comes to. */
+  router.add('GET', `${base}/admin/discounts`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    json(ctx.res, 200, { rows: await listDiscountCodes() });
+  });
+
+  router.add('POST', `${base}/admin/discounts`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    const b = (ctx.body ?? {}) as any;
+    try {
+      const saved = await saveDiscountCode({
+        id: b.id, code: String(b.code ?? ''), kind: b.kind === 'amount' ? 'amount' : 'percent',
+        value: Number(b.value) || 0, minAmount: Number(b.minAmount) || 0, maxDiscount: Number(b.maxDiscount) || 0,
+        startsAt: Number(b.startsAt) || 0, expiresAt: Number(b.expiresAt) || 0,
+        usageLimit: Number(b.usageLimit) || 0, perUserLimit: Number(b.perUserLimit ?? 1) || 0,
+        enabled: b.enabled !== false, note: String(b.note ?? '')
+      });
+      audit(ctx.userId, 'DISCOUNT_SAVED', 'discount', saved.id, { code: saved.code, kind: saved.kind, value: saved.value });
+      json(ctx.res, 200, saved);
+    } catch (e) {
+      if (e instanceof DiscountError) return error(ctx.res, 422, e.code, e.message);
+      throw e;
+    }
+  });
+
+  router.add('DELETE', `${base}/admin/discounts/:id`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    const gone = await deleteDiscountCode(ctx.params.id!);
+    if (!gone) return error(ctx.res, 404, 'DISCOUNT_NOT_FOUND', 'این کد پیدا نشد.');
+    audit(ctx.userId, 'DISCOUNT_DELETED', 'discount', ctx.params.id, {});
+    json(ctx.res, 200, { deleted: true });
+  });
+
   router.add('GET', `${base}/admin/users/table`, async (ctx) => {
     if (!requireAdmin(ctx)) return;
     json(ctx.res, 200, await adminUserTable({

@@ -46,12 +46,22 @@ async function open(o = {}) {
     try { sessionStorage.setItem('pz_push_asked_visit', '1'); } catch (e) {}
   });
   const paid = [];
+  const quoted = [];
   await ctx.route('**/v1/**', (route) => {
     const u = route.request().url();
     let body = { ok: true, data: {} };
     if (u.includes('/orders/quote')) {
-      body = { ok: true, data: { amount: PRICE, currency: 'cash', label: 'بلیط سبز',
-        vaultBalance: vault, canPayFromVault: vault >= PRICE, canPayByGateway: gatewayOn } };
+      let b = {}; try { b = JSON.parse(route.request().postData() || '{}'); } catch (e) {}
+      const code = String(b.discountCode || '').trim().toUpperCase();
+      quoted.push(code);
+      /* The server's own shape: it prices the code and hands back BOTH figures.
+         The sheet never works a price out for itself. */
+      const off = code === 'EID20' ? Math.floor(PRICE * 0.2) : 0;
+      const bad = code && !off ? 'این کد معتبر نیست.' : '';
+      const due = PRICE - off;
+      body = { ok: true, data: { amount: due, listPrice: PRICE, discount: off,
+        discountCode: off ? 'Eid20' : '', discountError: bad, currency: 'cash', label: 'بلیط سبز',
+        vaultBalance: vault, canPayFromVault: vault >= due, canPayByGateway: gatewayOn } };
     } else if (u.includes('/orders/pay')) {
       let b = {}; try { b = JSON.parse(route.request().postData() || '{}'); } catch (e) {}
       paid.push(b);
@@ -69,7 +79,7 @@ async function open(o = {}) {
   page.on('pageerror', (e) => console.log('  page error: ' + String(e).slice(0, 140)));
   await page.goto(`http://127.0.0.1:${PORT}/`, { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(5400);
-  return { ctx, page, paid, wentTo };
+  return { ctx, page, paid, quoted, wentTo };
 }
 
 const buy = async (page) => {
@@ -254,7 +264,93 @@ console.log('the payment sheet:');
   await ctx.close();
 }
 
-/* ── 7. BACKING OUT ─────────────────────────────────────────────────────── */
+/* ── 7. THE DISCOUNT CODE ───────────────────────────────────────────────── */
+/*
+ * «و کد تخفیف هم باید باشه.»
+ *
+ * The rule the sheet must never break: it does not work out a price. It sends
+ * the code and shows what comes back. So what is checked is what it SENDS and
+ * what it then DISPLAYS — never that it computed 20% correctly, because it must
+ * not be computing anything.
+ */
+console.log('the discount code:');
+{
+  const { ctx, page, paid, quoted } = await open();
+  await buy(page);
+  ok('there is somewhere to type a code', await page.evaluate(() => !!document.getElementById('pmCode')));
+
+  const type = async (code) => {
+    await page.evaluate((c) => { document.getElementById('pmCode').value = c; }, code);
+    await page.evaluate(() => document.getElementById('pmCodeBtn').click());
+    await page.waitForTimeout(600);
+  };
+  const shown = () => page.evaluate(() => {
+    const p = document.getElementById('pmPrice');
+    return { text: p ? p.innerText.replace(/\s+/g, ' ').trim() : '',
+             was: !!document.querySelector('#pmPrice .pm-was'),
+             err: (document.getElementById('pmCodeErr') || {}).textContent || '' };
+  });
+
+  await type('eid20');
+  ok('applying a code asks the SERVER what it is worth',
+     quoted.includes('EID20'), JSON.stringify(quoted));
+  const s1 = await shown();
+  ok('the new price is shown', /۱۰۰٬۰۰۰/.test(s1.text), s1.text);
+  ok('and the old one beside it, struck through — otherwise there is nothing to see',
+     s1.was && /۱۲۵٬۰۰۰/.test(s1.text), s1.text);
+  ok('with what was saved said in words', /۲۵٬۰۰۰ تومان تخفیف/.test(s1.text), s1.text);
+  ok('and no error while it is working', !s1.err, s1.err);
+
+  /* The صندوق row has to re-read the NEW price — a balance that could not cover
+     the full amount may well cover what is left. */
+  const row = await page.evaluate(() => {
+    const el = [...document.querySelectorAll('#pmList .pm')][0];
+    return { text: el.innerText.replace(/\s+/g, ' ').trim(), on: el.classList.contains('on') };
+  });
+  ok('the doors are re-read against the discounted price', row.on, row.text.slice(0, 40));
+
+  await payNow(page);
+  ok('and paying sends the code, so the server prices it again',
+     paid.length === 1 && String(paid[0].discountCode).toUpperCase() === 'EID20', JSON.stringify(paid));
+  await ctx.close();
+}
+{
+  const { ctx, page, quoted } = await open();
+  await buy(page);
+  await page.evaluate(() => { document.getElementById('pmCode').value = 'nope'; });
+  await page.evaluate(() => document.getElementById('pmCodeBtn').click());
+  await page.waitForTimeout(600);
+  const s = await page.evaluate(() => ({
+    err: (document.getElementById('pmCodeErr') || {}).textContent || '',
+    text: (document.getElementById('pmPrice') || {}).innerText || '',
+    was: !!document.querySelector('#pmPrice .pm-was')
+  }));
+  ok('a code that is not real says so', /معتبر/.test(s.err), s.err);
+  ok('and the price does not move', !s.was && /۱۲۵٬۰۰۰/.test(s.text), s.text.replace(/\s+/g, ' '));
+  await ctx.close();
+}
+{
+  /* A code applied by mistake has to be removable, or the player closes the
+     sheet and starts again — which is where purchases get abandoned. */
+  const { ctx, page, quoted } = await open();
+  await buy(page);
+  await page.evaluate(() => { document.getElementById('pmCode').value = 'eid20'; });
+  await page.evaluate(() => document.getElementById('pmCodeBtn').click());
+  await page.waitForTimeout(600);
+  const label = await page.evaluate(() => document.getElementById('pmCodeBtn').textContent.trim());
+  ok('once applied, the button offers to take it off', /برداشتن/.test(label), label);
+  await page.evaluate(() => document.getElementById('pmCodeBtn').click());
+  await page.waitForTimeout(600);
+  const s = await page.evaluate(() => ({
+    text: (document.getElementById('pmPrice') || {}).innerText || '',
+    was: !!document.querySelector('#pmPrice .pm-was')
+  }));
+  ok('and taking it off puts the price back', !s.was && /۱۲۵٬۰۰۰/.test(s.text), s.text.replace(/\s+/g, ' '));
+  ok('by asking the server for a price with no code', quoted[quoted.length - 1] === '', JSON.stringify(quoted));
+  await ctx.close();
+}
+
+/* ── 8. BACKING OUT ─────────────────────────────────────────────────────── */
 {
   const { ctx, page, paid } = await open();
   await buy(page);

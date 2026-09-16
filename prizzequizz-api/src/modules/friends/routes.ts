@@ -9,7 +9,7 @@ import { notifications } from '../../services/notificationService.js';
 import { repositories } from '../../repositories/index.js';
 import { logger } from '../../services/logger.js';
 import { playerLevelSqlExpr } from '../../services/scoringConfig.js';
-import { listChat } from '../../services/friendChatService.js';
+import { listChat, ensureReplyColumn } from '../../services/friendChatService.js';
 
 /* A MESSAGE HAS TO REACH THE PHONE.
  *
@@ -258,8 +258,27 @@ export function registerFriendRoutes(router: Router, base: string): void {
     try {
       const fr = await pool().query(`SELECT 1 FROM friendships WHERE status='accepted' AND ((requester_id=$1 AND addressee_id=$2) OR (requester_id=$2 AND addressee_id=$1)) LIMIT 1`, [me, other]);
       if (!fr.rows[0]) return error(ctx.res, 403, 'NOT_FRIENDS', 'فقط با دوستان می‌تونی چت کنی');
-      const { rows } = await pool().query(`INSERT INTO friend_messages(sender_id, recipient_id, body) VALUES($1,$2,$3) RETURNING id, created_at`, [me, other, text]);
-      json(ctx.res, 201, { id: rows[0].id, mine: true, body: text, at: rows[0].created_at?.toISOString?.() ?? rows[0].created_at });
+      /* WHAT IT ANSWERS, checked against THIS conversation.
+       * An id that belongs to somebody else's chat would quote a stranger's
+       * message into this one, so it is only accepted when it is a message
+       * these two exchanged. Anything else is simply dropped and the message is
+       * sent as an ordinary one — a reply that quietly loses its quote is
+       * better than a refused message. */
+      await ensureReplyColumn();
+      const wants = String((ctx.body as any)?.replyTo ?? '').trim();
+      let replyTo: string | null = null;
+      if (wants) {
+        const okRow = await pool().query(
+          `SELECT id FROM friend_messages
+            WHERE id = $1::uuid
+              AND ((sender_id=$2 AND recipient_id=$3) OR (sender_id=$3 AND recipient_id=$2))
+            LIMIT 1`, [wants, me, other]).catch(() => ({ rows: [] as any[] }));
+        replyTo = okRow.rows[0]?.id ?? null;
+      }
+      const { rows } = await pool().query(
+        `INSERT INTO friend_messages(sender_id, recipient_id, body, reply_to) VALUES($1,$2,$3,$4) RETURNING id, created_at`,
+        [me, other, text, replyTo]);
+      json(ctx.res, 201, { id: rows[0].id, mine: true, body: text, replyTo, at: rows[0].created_at?.toISOString?.() ?? rows[0].created_at });
       /* AFTER the reply, and never awaited: the person typing should not wait
        * on a push service, and a push that fails must not lose the message
        * that is already saved. */

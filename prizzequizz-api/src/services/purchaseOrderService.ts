@@ -25,6 +25,7 @@ import { isValidTier, ticketName, grantTickets } from './ticketService.js';
 import { getTicketPrices } from './economyConfig.js';
 import { getItem, rewardsOf, rewardLabel } from './shopService.js';
 import { purchase as shopPurchase } from './shopPurchaseService.js';
+import { redeemDiscount, releaseDiscount } from './discountService.js';
 import { postEntry, getAccount, WalletError } from './walletLedgerService.js';
 import { recordPurchase } from './missionService.js';
 import { claimFulfilment, settleFulfilment, abandonFulfilment, _resetFulfilmentGuard } from './fulfilmentGuard.js';
@@ -147,7 +148,19 @@ export const _resetFulfilled = _resetFulfilmentGuard;
 /* ---------------------------------------------------------------------------
  * Paying from the صندوق جایزه.
  * ------------------------------------------------------------------------- */
-export async function payFromVault(userId: string, order: PurchaseOrder, idempotencyKey: string): Promise<{ quote: OrderQuote; granted: Fulfilment['granted']; duplicate: boolean; balance: number }> {
+/* PAYING FROM THE صندوق, WITH A CODE IF THERE IS ONE.
+ *
+ * The code is SPENT FIRST and the charge is made for what is left. That order
+ * matters: a player whose صندوق holds exactly the discounted price must be able
+ * to pay, and charging the full price first would refuse them for not having
+ * money they were never going to be asked for.
+ *
+ * `redeemDiscount` is keyed on this order's own reference, so a retry of the
+ * same payment gets the same discount rather than a second one — and if the
+ * charge then fails, the use is handed back, because a single-use code burned
+ * on a purchase that never happened is the player's loss, not ours.
+ */
+export async function payFromVault(userId: string, order: PurchaseOrder, idempotencyKey: string, discountCode?: string): Promise<{ quote: OrderQuote; granted: Fulfilment['granted']; duplicate: boolean; balance: number; discount?: number }> {
   const q = await quote(order);
   if (q.currency === 'coins') {
     /* Coin-priced items never touched the صندوق; the shop debits coins itself. */
@@ -155,34 +168,56 @@ export async function payFromVault(userId: string, order: PurchaseOrder, idempot
     const acct = await getAccount(userId).catch(() => ({ available: 0 } as any));
     return { quote: q, granted: r.granted ?? [], duplicate: !!r.duplicate, balance: Number(acct.available) || 0 };
   }
-  if (q.amount > 0) {
+  const off = discountCode
+    ? (await redeemDiscount({ code: discountCode, userId, amount: q.amount, ref: idempotencyKey })).amountOff
+    : 0;
+  const due = Math.max(0, q.amount - off);
+  const giveBack = async () => { if (off > 0) await releaseDiscount(idempotencyKey).catch(() => {}); };
+
+  if (due > 0) {
     const acct = await getAccount(userId).catch(() => ({ available: 0 } as any));
-    if (Number(acct.available) < q.amount) {
+    if (Number(acct.available) < due) {
+      await giveBack();
       throw new OrderError('INSUFFICIENT_VAULT', 'موجودی صندوق جایزه‌ات کافی نیست. می‌تونی از درگاه پرداخت کنی.');
     }
   }
   if (order.kind === 'ticket') {
+    /* A CODE CAN MAKE AN ORDER FREE, AND FREE IS NOT A PAYMENT.
+     * The ledger refuses an entry of zero — rightly, a row that moves nothing is
+     * not a transaction — so there is simply nothing to post. The goods are
+     * handed over on the fulfilment claim alone, which is idempotent on its own
+     * reference, so a retried free order still delivers exactly once. */
+    if (due === 0) {
+      const f = await fulfil(userId, order, 'vault:' + idempotencyKey);
+      const acct = await getAccount(userId).catch(() => ({ available: 0 } as any));
+      return { quote: q, granted: f.granted, duplicate: f.duplicate, balance: Number(acct.available) || 0, discount: off };
+    }
     const posted = await postEntry({
-      userId, entryType: 'ticket_purchase', kind: 'debit', amount: q.amount,
-      idempotencyKey, refType: 'ticket', refId: order.tier!, description: `خرید ${q.label}`
+      userId, entryType: 'ticket_purchase', kind: 'debit', amount: due,
+      idempotencyKey, refType: 'ticket', refId: order.tier!,
+      description: `خرید ${q.label}` + (off > 0 ? ' (با تخفیف)' : ''),
+      metadata: { listPrice: q.amount, discount: off }
     });
-    if (posted.duplicate) return { quote: q, granted: [], duplicate: true, balance: posted.account.available };
+    if (posted.duplicate) return { quote: q, granted: [], duplicate: true, balance: posted.account.available, discount: off };
     try {
       const f = await fulfil(userId, order, 'vault:' + idempotencyKey);
-      return { quote: q, granted: f.granted, duplicate: f.duplicate, balance: posted.account.available };
+      return { quote: q, granted: f.granted, duplicate: f.duplicate, balance: posted.account.available, discount: off };
     } catch (e) {
       await postEntry({
-        userId, entryType: 'refund', kind: 'credit', amount: q.amount,
+        userId, entryType: 'refund', kind: 'credit', amount: due,
         idempotencyKey: `order_refund:${posted.entry.id}`, refType: 'ticket', refId: order.tier!,
         description: 'برگشت وجه: صدور بلیت ناموفق بود'
       });
+      await giveBack();
       throw e;
     }
   }
   /* Shop items priced in Toman: the shop's own path debits the صندوق. */
-  const r = await shopPurchase({ userId, itemId: order.itemId!, qty: order.qty, idempotencyKey });
-  const acct = await getAccount(userId).catch(() => ({ available: 0 } as any));
-  return { quote: q, granted: r.granted ?? [], duplicate: !!r.duplicate, balance: Number(acct.available) || 0 };
+  try {
+    const r = await shopPurchase({ userId, itemId: order.itemId!, qty: order.qty, idempotencyKey, discount: off });
+    const acct = await getAccount(userId).catch(() => ({ available: 0 } as any));
+    return { quote: q, granted: r.granted ?? [], duplicate: !!r.duplicate, balance: Number(acct.available) || 0, discount: off };
+  } catch (e) { await giveBack(); throw e; }
 }
 
 /** Turn a WalletError from the ledger into the same shape callers expect. */

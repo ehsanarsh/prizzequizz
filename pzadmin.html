@@ -273,7 +273,7 @@ function groupMembers(g){ return (TAB_GROUPS[g]?TAB_GROUPS[g].tabs:[]).filter(t=
 const NAV=[
   ['اصلی',[['dashboard','📊','داشبورد'],['g_money','💰','مالی و حسابداری'],['users','👤','کاربران'],['matches','🎮','مسابقات'],['duel','⚔️','دوئل'],['lastsurvivor','🏆','آخرین بازمانده'],['support','🎧','پشتیبانی']]],
   ['محتوا',[['g_qhub','❓','سوالات'],['categories','🏷️','موضوعات'],['g_chars','🎭','کاراکترها'],['lifelines','🧩','کمک‌ها'],['rewards','🎡','گردونه و جایزه روزانه'],['recordmode','🏅','ثبت رکورد'],['onboarding','👋','خوش‌آمدگویی']]],
-  ['اقتصاد',[['wallet','🏆','صندوق جایزه'],['g_payout','💸','دریافت جایزه'],['tickets','🎫','بلیط‌ها'],['shop','🛒','فروشگاه'],['chatpacks','💬','پک‌های چت'],['giftcodes','🎁','کدهای هدیه'],['payments','🏦','درگاه پرداخت']]],
+  ['اقتصاد',[['wallet','🏆','صندوق جایزه'],['g_payout','💸','دریافت جایزه'],['tickets','🎫','بلیط‌ها'],['shop','🛒','فروشگاه'],['chatpacks','💬','پک‌های چت'],['giftcodes','🎁','کدهای هدیه'],['discounts','🏷️','کد تخفیف'],['payments','🏦','درگاه پرداخت']]],
   ['بالانس بازی (Data-Driven)',[['g_balance','⚖️','بالانس بازی'],['leagues','🛡️','لیگ‌ها'],['missions2','🎯','مأموریت‌ها']]],
   ['رشد و تعامل',[['leaderboard','📈','لیدربرد'],['campaign','🎁','کمپین کاربر جدید'],['events','📅','رویدادها'],['banners','🖼️','بنرها'],['notifications','🔔','اعلان‌ها'],['g_sms','📱','پنل پیامکی']]],
   ['سیستم',[['monitoring','🖥️','مانیتورینگ سرور'],['g_security','🛡️','امنیت و ضدتقلب'],['g_audit','📑','گزارش و لاگ'],['reset','♻️','ابزار ریست'],['accounts','🔐','حساب‌ها و دسترسی'],['backup','💾','پشتیبان‌گیری'],['general','⚙️','تنظیمات عمومی'],['rawcfg','🧩','ویرایش خام Config']]]
@@ -502,7 +502,7 @@ async function render(){
   try{
     if(CUR==='accounts')return renderAccounts();
     if(CONFIG_PAGES[CUR]){ await renderConfigSection(CONFIG_PAGES[CUR][0],CONFIG_PAGES[CUR][1]); groupBar(); if(tracked)void badgeLoad(); return; }
-    const fn={dashboard:renderDashboard,finance:renderFinance,accounting:renderAccounting,expenses:renderExpenses,backup:renderBackup,users:renderUsers,matches:renderMatches,support:renderSupport,questions:renderQuestions,leagues:renderLeagues,qreports:renderQReports,aistudio:renderAiStudio,pipeline:renderPipeline,categories:renderCategories,wallet:renderWallet,withdrawals:renderWithdrawals,payoutpartners:renderPayoutPartners,withdrawotp:renderWithdrawOtp,smsgroups:renderSmsGroups,rewardholds:renderRewardHolds,tickets:renderTickets,giftcodes:renderGiftCodes,shop:renderShopAdmin,chatpacks:renderChatPacks,characters:renderCharacters,charboxes:renderCharBoxes,lifelines:renderLifelines,rewards:renderRewards,missions2:renderMissions2,recordmode:renderRecordMode,onboarding:renderOnboarding,lastsurvivor:renderLastSurvivor,duel:renderDuel,sms:renderSms,payments:renderPayments,leaderboard:renderLeaderboard,banners:renderBanners,notifications:renderNotifications,anticheat:renderAntiCheat,suspicious:renderSuspicious,reports:renderReports,logs:renderLogs,reset:renderReset,roles:renderRoles,rawcfg:renderRawCfg,monitoring:renderMonitoring}[CUR];
+    const fn={dashboard:renderDashboard,finance:renderFinance,accounting:renderAccounting,expenses:renderExpenses,backup:renderBackup,users:renderUsers,matches:renderMatches,support:renderSupport,questions:renderQuestions,leagues:renderLeagues,qreports:renderQReports,aistudio:renderAiStudio,pipeline:renderPipeline,categories:renderCategories,wallet:renderWallet,withdrawals:renderWithdrawals,payoutpartners:renderPayoutPartners,withdrawotp:renderWithdrawOtp,smsgroups:renderSmsGroups,rewardholds:renderRewardHolds,tickets:renderTickets,giftcodes:renderGiftCodes,discounts:renderDiscounts,shop:renderShopAdmin,chatpacks:renderChatPacks,characters:renderCharacters,charboxes:renderCharBoxes,lifelines:renderLifelines,rewards:renderRewards,missions2:renderMissions2,recordmode:renderRecordMode,onboarding:renderOnboarding,lastsurvivor:renderLastSurvivor,duel:renderDuel,sms:renderSms,payments:renderPayments,leaderboard:renderLeaderboard,banners:renderBanners,notifications:renderNotifications,anticheat:renderAntiCheat,suspicious:renderSuspicious,reports:renderReports,logs:renderLogs,reset:renderReset,roles:renderRoles,rawcfg:renderRawCfg,monitoring:renderMonitoring}[CUR];
     if(fn){ await fn(); groupBar(); if(tracked)void badgeLoad(); return; }
     /* No renderer for this tab. Six nav entries were in this state, and
        clicking one silently left the PREVIOUS screen's content on display —
@@ -1010,6 +1010,145 @@ async function renderFinance(){
         '<div style="font-size:13px;line-height:2.1;margin-top:6px">موجودی سیستم = واریزها('+money(f.totalDeposits)+') − جایزهٔ پرداخت‌شده('+money(f.totalWithdrawnPaid)+') − موجودی کاربران('+money(f.usersWalletBalance)+') = <b style="color:var(--gold);font-size:16px">'+money(f.systemBalance)+'</b></div>'+
       '</div>'+
     '</div>';
+}
+
+/* ================= DISCOUNT CODES =================
+ * «و کد تخفیف هم باید باشه.»
+ *
+ * This screen writes the RULE, never a price. Percent or a fixed amount, a
+ * ceiling, a window, how many times in total and how many times each. What any
+ * particular order then comes to is the server's to work out — a discount
+ * arrived at in a browser is a price arrived at by the person paying it.
+ *
+ * Not the same thing as a gift code, which pays a reward INTO a wallet. These
+ * reduce an invoice that has not been paid yet, and the two share nothing
+ * except looking alike from the outside.
+ */
+const DC_KINDS={percent:'درصدی',amount:'مبلغ ثابت'};
+function dcDate(ms){
+  const n=Number(ms)||0; if(!n) return '—';
+  try{ return new Date(n).toLocaleDateString('fa-IR')+' '+new Date(n).toLocaleTimeString('fa-IR',{hour:'2-digit',minute:'2-digit'}); }
+  catch(e){ return '—'; }
+}
+/* An <input type="datetime-local"> speaks the browser's local time; the server
+   counts in epoch milliseconds. Converting in one place stops a code that
+   «expires at midnight» expiring at half past three. */
+function dcToMs(v){ if(!v) return 0; const t=new Date(v).getTime(); return isNaN(t)?0:t; }
+function dcToLocal(ms){
+  const n=Number(ms)||0; if(!n) return '';
+  const d=new Date(n-d0()); return d.toISOString().slice(0,16);
+}
+function d0(){ return new Date().getTimezoneOffset()*60000; }
+function dcState(c){
+  const now=Date.now();
+  if(!c.enabled) return ['خاموش','bad'];
+  if(c.startsAt>0&&now<c.startsAt) return ['هنوز شروع نشده','pend'];
+  if(c.expiresAt>0&&now>c.expiresAt) return ['منقضی','bad'];
+  if(c.usageLimit>0&&c.usedCount>=c.usageLimit) return ['ظرفیت تمام','bad'];
+  return ['فعال','ok'];
+}
+function dcWorth(c){
+  return c.kind==='amount'
+    ? fa(c.value)+' تومان'
+    : fa(c.value)+'٪'+(c.maxDiscount>0?' تا سقف '+fa(c.maxDiscount)+' ت':'');
+}
+async function renderDiscounts(){
+  let rows=[];
+  try{ const r=await api('GET','/admin/discounts'); rows=(r&&r.rows)||[]; }
+  catch(e){ toast(e.message,'bad'); }
+  window._DCROWS=rows;
+  $('#main').innerHTML=head('کد تخفیف','کدهایی که از مبلغ فاکتور کم می‌کنند — نه کد هدیه، که جایزه به کیف پول می‌ریزد')+
+    '<div class="toolbar"><button class="btn pri" onclick="dcEdit(\'\')">＋ کد تازه</button>'+
+      '<span class="note" style="margin:0 8px;align-self:center">'+fa(rows.length)+' کد</span></div>'+
+    '<div class="tbl-wrap"><table><thead><tr>'+
+      ['کد','تخفیف','حداقل خرید','بازه','مصرف','هر کاربر','وضعیت','عملیات'].map(c=>'<th>'+c+'</th>').join('')+
+    '</tr></thead><tbody>'+(rows.length?rows.map(c=>{
+      const st=dcState(c);
+      return '<tr>'+
+        '<td><b class="mono" dir="ltr">'+esc(c.code)+'</b>'+(c.note?'<div class="note" style="margin:0;font-size:11px">'+esc(c.note)+'</div>':'')+'</td>'+
+        '<td><b style="color:var(--gold)">'+dcWorth(c)+'</b></td>'+
+        '<td>'+(c.minAmount>0?fa(c.minAmount)+' ت':'—')+'</td>'+
+        '<td class="note" style="margin:0;font-size:11px">'+dcDate(c.startsAt)+' تا '+dcDate(c.expiresAt)+'</td>'+
+        '<td>'+fa(c.usedCount)+(c.usageLimit>0?' / '+fa(c.usageLimit):' / ∞')+'</td>'+
+        '<td>'+(c.perUserLimit>0?fa(c.perUserLimit):'∞')+'</td>'+
+        '<td><span class="pill '+st[1]+'">'+st[0]+'</span></td>'+
+        '<td><button class="btn sm info" onclick="dcEdit(\''+c.id+'\')">ویرایش</button> '+
+          '<button class="btn sm bad" onclick="dcDelete(\''+c.id+'\',\''+jsq(c.code)+'\')">حذف</button></td>'+
+      '</tr>';
+    }).join(''):'<tr><td colspan="8" class="empty">هنوز کدی نساخته‌ای</td></tr>')+'</tbody></table></div>';
+}
+function dcEdit(id){
+  const c=(window._DCROWS||[]).find(x=>x.id===id)||{kind:'percent',value:0,minAmount:0,maxDiscount:0,startsAt:0,expiresAt:0,usageLimit:0,perUserLimit:1,enabled:true,note:'',code:''};
+  const bg=modal(id?('ویرایش «'+esc(c.code)+'»'):'کد تخفیف تازه',
+    '<div class="field"><label>کد — همانی که بازیکن تایپ می‌کند</label><input id="dc_code" dir="ltr" placeholder="EID1404" value="'+esc(c.code)+'"'+(id?' disabled':'')+'>'+
+      '<span class="cfg-help">بزرگی و کوچکی حروف، فاصله و خط تیره مهم نیست — «EID1404» و «eid-1404» یک کدند.</span></div>'+
+    '<div class="g2">'+
+      '<div class="field"><label>نوع</label><select id="dc_kind" onchange="dcKindSync()">'+
+        Object.keys(DC_KINDS).map(k=>'<option value="'+k+'"'+(c.kind===k?' selected':'')+'>'+DC_KINDS[k]+'</option>').join('')+'</select></div>'+
+      '<div class="field"><label id="dc_vlabel">مقدار</label><input type="number" id="dc_value" min="1" value="'+(c.value||'')+'"></div>'+
+    '</div>'+
+    '<div class="g2">'+
+      '<div class="field" id="dc_caprow"><label>سقف تخفیف (تومان)</label><input type="number" id="dc_cap" min="0" value="'+(c.maxDiscount||0)+'">'+
+        '<span class="cfg-help">۰ یعنی بی‌سقف. روی تخفیف درصدی، این چیزی است که «۵۰٪ تا ۲۰ هزار» را ممکن می‌کند.</span></div>'+
+      '<div class="field"><label>حداقل مبلغ خرید (تومان)</label><input type="number" id="dc_min" min="0" value="'+(c.minAmount||0)+'"></div>'+
+    '</div>'+
+    '<div class="g2">'+
+      '<div class="field"><label>شروع</label><input type="datetime-local" id="dc_from" value="'+dcToLocal(c.startsAt)+'"></div>'+
+      '<div class="field"><label>پایان</label><input type="datetime-local" id="dc_to" value="'+dcToLocal(c.expiresAt)+'"></div>'+
+    '</div>'+
+    '<div class="g2">'+
+      '<div class="field"><label>ظرفیت کل</label><input type="number" id="dc_cap_all" min="0" value="'+(c.usageLimit||0)+'">'+
+        '<span class="cfg-help">۰ یعنی بی‌نهایت.</span></div>'+
+      '<div class="field"><label>هر کاربر چند بار</label><input type="number" id="dc_per" min="0" value="'+(c.perUserLimit==null?1:c.perUserLimit)+'">'+
+        '<span class="cfg-help">۰ یعنی بی‌نهایت. معمولاً ۱.</span></div>'+
+    '</div>'+
+    '<div class="field"><label>یادداشت (فقط برای خودت)</label><input id="dc_note" value="'+esc(c.note||'')+'" placeholder="کمپین عید"></div>'+
+    '<div class="cfg-row"><label>فعال</label><input type="checkbox" id="dc_on" '+(c.enabled!==false?'checked':'')+'></div>'+
+    '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">'+
+      '<button class="btn" onclick="this.closest(\'.modal-bg\').remove()">بی‌خیال</button>'+
+      '<button class="btn pri" onclick="dcSave(\''+(id||'')+'\')">ذخیره</button></div>');
+  dcKindSync();
+  return bg;
+}
+/* A ceiling only means something on a percentage — on a fixed amount it is the
+   amount itself, and a field that cannot change anything is a field that
+   invites somebody to wonder why it did nothing. */
+function dcKindSync(){
+  const k=$('#dc_kind'), lab=$('#dc_vlabel'), cap=$('#dc_caprow');
+  if(!k) return;
+  const pct=(k.value==='percent');
+  if(lab) lab.textContent=pct?'درصد (۱ تا ۱۰۰)':'مبلغ تخفیف (تومان)';
+  if(cap) cap.style.display=pct?'':'none';
+}
+async function dcSave(id){
+  const code=($('#dc_code')?$('#dc_code').value:'').trim();
+  const kind=$('#dc_kind').value==='amount'?'amount':'percent';
+  const value=Number($('#dc_value').value||0);
+  if(!code){ toast('کد را بنویس','bad'); return; }
+  if(!value){ toast('مقدار تخفیف را بنویس','bad'); return; }
+  if(kind==='percent'&&value>100){ toast('درصد نمی‌تواند بیشتر از ۱۰۰ باشد','bad'); return; }
+  const from=dcToMs($('#dc_from').value), to=dcToMs($('#dc_to').value);
+  if(from&&to&&to<=from){ toast('پایان باید بعد از شروع باشد','bad'); return; }
+  try{
+    await api('POST','/admin/discounts',{
+      id:id||undefined, code, kind, value,
+      maxDiscount:Number($('#dc_cap')?$('#dc_cap').value:0)||0,
+      minAmount:Number($('#dc_min').value||0)||0,
+      startsAt:from, expiresAt:to,
+      usageLimit:Number($('#dc_cap_all').value||0)||0,
+      perUserLimit:Number($('#dc_per').value||0)||0,
+      enabled:!!$('#dc_on').checked, note:$('#dc_note').value||''
+    });
+    toast('ذخیره شد','ok');
+    document.querySelectorAll('.modal-bg').forEach(m=>m.remove());
+    render();
+  }catch(e){ toast(e.message,'bad'); }
+}
+function dcDelete(id,code){
+  if(!confirm('کد «'+code+'» حذف شود؟ کسانی که قبلاً استفاده کرده‌اند دست‌نخورده می‌مانند.')) return;
+  api('DELETE','/admin/discounts/'+encodeURIComponent(id))
+    .then(()=>{ toast('حذف شد','ok'); render(); })
+    .catch(e=>toast(e.message,'bad'));
 }
 
 /* ================= USERS ================= */
