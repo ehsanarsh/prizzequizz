@@ -72,6 +72,36 @@ export interface ChatPage {
 const AT = `to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`;
 const iso = (v: any): string | null => (typeof v === 'string' ? v : (v?.toISOString?.() ?? (v ?? null)));
 
+/* SENDING ONE — INCLUDING WHAT IT ANSWERS.
+ *
+ * Out of the route for the same reason as the read above: the browser tests
+ * stub the API, so a guard written inline in a handler is a guard nothing can
+ * test. And this one matters — without it an id from a DIFFERENT conversation
+ * would quote a stranger's message into this one.
+ *
+ * An id that does not belong here is dropped and the message goes as an
+ * ordinary one. A reply that quietly loses its quote is better than a message
+ * that refuses to send.
+ */
+export async function sendChat(me: string, other: string, body: string, replyTo?: string | null): Promise<{ id: string; at: string | null; replyTo: string | null }> {
+  await ensureReplyColumn();
+  const wants = String(replyTo ?? '').trim();
+  let quoted: string | null = null;
+  if (wants) {
+    const r = await pool().query(
+      `SELECT id FROM friend_messages
+        WHERE id = $1::uuid
+          AND ((sender_id=$2 AND recipient_id=$3) OR (sender_id=$3 AND recipient_id=$2))
+        LIMIT 1`, [wants, me, other]).catch(() => ({ rows: [] as any[] }));
+    quoted = r.rows[0]?.id ?? null;
+  }
+  const { rows } = await pool().query(
+    `INSERT INTO friend_messages(sender_id, recipient_id, body, reply_to)
+     VALUES($1,$2,$3,$4) RETURNING id, ${AT} AS at`,
+    [me, other, body, quoted]);
+  return { id: String(rows[0].id), at: iso(rows[0].at), replyTo: quoted };
+}
+
 /**
  * The END of the conversation, in reading order — plus how far the other side
  * has read. `after` narrows it to what has arrived since, for polling.

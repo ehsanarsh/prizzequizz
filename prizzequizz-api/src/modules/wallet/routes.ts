@@ -13,7 +13,7 @@ import { TicketError, consumeTicket, purchaseTicket, refundTicket } from '../../
 import { GiftError, redeemGiftCode } from '../../services/giftCodeService.js';
 import { recordAdmin } from '../../services/adminAuditService.js';
 import { id } from '../../utils/id.js';
-import { parseOrder, quote, payFromVault, isGatewayPayable, asOrderError } from '../../services/purchaseOrderService.js';
+import { parseOrder, quote, payFromVault, isGatewayPayable, quoteForSheet, asOrderError } from '../../services/purchaseOrderService.js';
 import { quoteDiscount } from '../../services/discountService.js';
 import { payoutOptions, issuedCodeFor, getPartner } from '../../services/payoutPartnerService.js';
 import { sendWithdrawOtp, OtpError, otpRequired } from '../../services/withdrawOtpService.js';
@@ -113,31 +113,12 @@ export function registerWalletRoutes(router: Router, base: string): void {
     const order = parseOrder(bodyObject(ctx.body).order ?? ctx.body);
     if (!order) return error(ctx.res, 400, 'ORDER_INVALID', 'سفارش نامعتبر است.');
     try {
-      const q = await quote(order);
       const acct = await getAccount(uid).catch(() => ({ available: 0 } as any));
-      const vault = Number(acct.available) || 0;
-      /* PRICING A CODE IS NOT SPENDING IT. This runs on every keystroke in the
-       * discount box, so it must be free to call — `quoteDiscount` looks, it
-       * does not consume. What comes back is the server's figure; the client
-       * never computes a price. */
-      const code = optionalString(bodyObject(ctx.body), 'discountCode') ?? '';
-      const d = (code && q.currency === 'cash') ? await quoteDiscount({ code, userId: uid, amount: q.amount }) : null;
-      const off = d?.ok ? d.amountOff : 0;
-      const due = Math.max(0, q.amount - off);
-      json(ctx.res, 200, {
-        order: q.order, amount: due, currency: q.currency, label: q.label,
-        /* The list price stays on the answer so the sheet can show what was
-         * struck through — «۱۲۵٬۰۰۰» crossed out beside «۱۰۰٬۰۰۰» is the whole
-         * point of typing a code. */
-        listPrice: q.amount,
-        discount: off,
-        discountCode: d?.ok ? d.code : '',
-        discountError: (code && !d?.ok) ? (d?.message ?? 'این کد معتبر نیست.') : '',
-        vaultBalance: vault,
-        /* What the sheet should offer. A coin-priced item has neither. */
-        canPayFromVault: q.currency === 'coins' ? true : vault >= due,
-        canPayByGateway: isGatewayPayable(q)
-      });
+      json(ctx.res, 200, await quoteForSheet({
+        userId: uid, order,
+        code: optionalString(bodyObject(ctx.body), 'discountCode') ?? '',
+        vaultBalance: Number(acct.available) || 0
+      }));
     } catch (e) {
       const oe = asOrderError(e);
       if (oe) return error(ctx.res, 400, oe.code, oe.message);

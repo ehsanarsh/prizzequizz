@@ -22905,7 +22905,13 @@ function pzDiscountHtml(){
     '<button type="button" class="btn" id="pmCodeBtn" onclick="pzApplyCode()">'+(on?'برداشتن':'اعمال')+'</button>'+
     '</div><div class="pm-note bad" id="pmCodeErr" style="text-align:center"></div>';
 }
-let _pzPayCode='', _pzPayOrder=null, _pzPayBusy=false;
+/* DID THE PLAYER CHOOSE, OR DID THE SHEET?
+   It matters when a code changes the price: a صندوق that was shut may open, and
+   the sheet should move onto it — that is the door that costs nothing to walk
+   through. But if the player deliberately picked the gateway, moving them off
+   it is overriding a decision they made. So the sheet only re-decides what it
+   decided itself. */
+let _pzPayCode='', _pzPayOrder=null, _pzPayBusy=false, _pzPayPicked=false;
 window.pzApplyCode=async function(){
   if(_pzPayBusy) return;
   const box=document.getElementById('pmCode'), err=document.getElementById('pmCodeErr');
@@ -22936,9 +22942,10 @@ function pzPaintPrice(){
   const d=_pzPayLast; if(!d) return;
   const p=document.getElementById('pmPrice'); if(p) p.innerHTML=pzPriceHtml(d);
   const ms=pzPayMethods(d);
-  /* A discount can open a door that was shut: a صندوق that could not cover the
-     list price may well cover what is left. */
-  if(!ms.some(m=>m.id===_pzPaySel&&!m.soon&&m.open)){
+  /* A discount can open a door that was shut. Re-decide when the current choice
+     has closed, or when it was never the player's to begin with. */
+  const still=ms.some(m=>m.id===_pzPaySel&&!m.soon&&m.open);
+  if(!still||!_pzPayPicked){
     const first=ms.find(m=>!m.soon&&m.open); _pzPaySel=first?first.id:'';
   }
   const box=document.getElementById('pmList'); if(box) box.innerHTML=ms.map(pzPayRowHtml).join('');
@@ -22968,7 +22975,7 @@ function pzPayRowHtml(m){
     '</button>';
 }
 window.pzPayPick=function(id){
-  _pzPaySel=id;
+  _pzPaySel=id; _pzPayPicked=true;
   /* Only the rows are redrawn. Rebuilding the sheet would take the amount and
      the artwork down and put them back for a change that is neither. */
   const box=document.getElementById('pmList');
@@ -22981,7 +22988,7 @@ let _pzPayLast=null;
 /* THE SHEET. One card: what is being bought, what it costs, every way to pay
    for it, and a single green button. */
 function pzPaySheet(d,order,name,look){
-  _pzPayLast=d; _pzPayOrder=order; _pzPayCode='';
+  _pzPayLast=d; _pzPayOrder=order; _pzPayCode=''; _pzPayPicked=false;
   const ms=pzPayMethods(d);
   /* Opened on the door the player can actually walk through — the صندوق when
      it can cover the bill, otherwise the gateway. Nothing is pre-selected when

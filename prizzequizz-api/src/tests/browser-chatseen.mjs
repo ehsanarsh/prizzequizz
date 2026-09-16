@@ -218,9 +218,17 @@ console.log('replying:');
   await page.evaluate((fid) => (0, eval)('openFriendChat')(fid), FRIEND);
   await page.waitForTimeout(1200);
 
-  /* Answer the other person's first message. */
+  /* TAPPED, not called. Calling frReplyTo directly proves the function works
+     and says nothing about whether a finger on a bubble ever reaches it — which
+     is the only way a player will ever use this. */
   const target = store.find((m) => !m.mine);
-  await page.evaluate((id) => (0, eval)('frReplyTo')(id), target.id);
+  const tapped = await page.evaluate((id) => {
+    const el = [...document.querySelectorAll('#chatBody .msg')].find((x) => x.dataset.mid === id);
+    if (!el) return false;
+    el.click();
+    return true;
+  }, target.id);
+  ok('the bubble itself is what answers when it is tapped', tapped, 'no bubble carried its id');
   await page.waitForTimeout(250);
 
   const bar = await page.evaluate(() => {

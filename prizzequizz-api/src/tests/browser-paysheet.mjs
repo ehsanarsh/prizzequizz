@@ -301,13 +301,61 @@ console.log('the discount code:');
   ok('with what was saved said in words', /۲۵٬۰۰۰ تومان تخفیف/.test(s1.text), s1.text);
   ok('and no error while it is working', !s1.err, s1.err);
 
-  /* The صندوق row has to re-read the NEW price — a balance that could not cover
-     the full amount may well cover what is left. */
-  const row = await page.evaluate(() => {
+  await payNow(page);
+  ok('and paying sends the code, so the server prices it again',
+     paid.length === 1 && String(paid[0].discountCode).toUpperCase() === 'EID20', JSON.stringify(paid));
+  await ctx.close();
+}
+{
+  /* THE DOOR A CODE OPENS.
+     A صندوق holding less than the list price but more than what is left after
+     the discount. Judged against the old price the row stays shut and the
+     player is sent to the gateway for money they do not need to spend — so the
+     rows must be re-read when the price changes. */
+  const { ctx, page } = await open({ vault: PRICE - 10000 });
+  await buy(page);
+  const shut = await page.evaluate(() => {
     const el = [...document.querySelectorAll('#pmList .pm')][0];
-    return { text: el.innerText.replace(/\s+/g, ' ').trim(), on: el.classList.contains('on') };
+    return { off: el.classList.contains('off'), on: el.classList.contains('on') };
   });
-  ok('the doors are re-read against the discounted price', row.on, row.text.slice(0, 40));
+  ok('a صندوق short of the full price starts shut', shut.off && !shut.on, JSON.stringify(shut));
+
+  await page.evaluate(() => { document.getElementById('pmCode').value = 'eid20'; });
+  await page.evaluate(() => document.getElementById('pmCodeBtn').click());
+  await page.waitForTimeout(700);
+  const open2 = await page.evaluate(() => {
+    const el = [...document.querySelectorAll('#pmList .pm')][0];
+    return { off: el.classList.contains('off'), on: el.classList.contains('on'),
+             btn: !document.getElementById('aaaPrimary').disabled };
+  });
+  ok('and the discount opens it', !open2.off, JSON.stringify(open2));
+  ok('the sheet moves the choice onto the door that is now open', open2.on, JSON.stringify(open2));
+  ok('and the pay button comes alive with it', open2.btn, String(open2.btn));
+  await ctx.close();
+}
+{
+  /* THE OTHER HALF. The sheet may re-decide what IT decided; it may not
+     overrule the player. Somebody who deliberately chose the gateway and then
+     typed a code must still be on the gateway. */
+  const { ctx, page, paid } = await open({ vault: PRICE - 10000 });
+  await buy(page);
+  await pick(page, 'بلو پال');
+  await page.evaluate(() => { document.getElementById('pmCode').value = 'eid20'; });
+  await page.evaluate(() => document.getElementById('pmCodeBtn').click());
+  await page.waitForTimeout(700);
+  const r = await rows(page);
+  ok('a door the player chose themselves is not taken away by a discount',
+     r[1].on && !r[0].on, JSON.stringify(r.map((x) => x.on)));
+  await payNow(page);
+  ok('and paying goes through the door they chose', paid[0] && paid[0].method === 'gateway', JSON.stringify(paid));
+  await ctx.close();
+}
+{
+  const { ctx, page, paid, quoted } = await open();
+  await buy(page);
+  await page.evaluate(() => { document.getElementById('pmCode').value = 'eid20'; });
+  await page.evaluate(() => document.getElementById('pmCodeBtn').click());
+  await page.waitForTimeout(700);
 
   await payNow(page);
   ok('and paying sends the code, so the server prices it again',

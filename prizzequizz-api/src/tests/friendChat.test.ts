@@ -15,7 +15,7 @@
  * Run: DATABASE_URL=postgres://postgres@localhost:55432/pztest npx tsx src/tests/friendChat.test.ts
  */
 import assert from 'node:assert/strict';
-import { listChat, CHAT_PAGE } from '../services/friendChatService.js';
+import { listChat, sendChat, CHAT_PAGE } from '../services/friendChatService.js';
 
 let pass = 0, fail = 0;
 async function check(name: string, fn: () => unknown): Promise<void> {
@@ -179,6 +179,33 @@ const B = 'dddddddd-0000-4000-8000-00000000000b';
     const page = await listChat(A, B);
     const plain = page.messages.find((m) => m.body === 'ساده')!;
     assert.equal(plain.replyTo, null);
+  });
+
+  await check('a reply can only quote a message from THIS conversation', async () => {
+    /* Without the check, an id from somebody else's chat would quote a
+       stranger's words into this one — and the quote travels with the reply, so
+       it would stay there. */
+    const C = 'dddddddd-0000-4000-8000-00000000000c';
+    await pool.query(`DELETE FROM users WHERE id=$1`, [C]).catch(() => {});
+    await pool.query(`INSERT INTO users(id, phone, username, display_name) VALUES ($1,'09121110003','chat-c','ج')`, [C]);
+    const elsewhere = await pool.query(
+      `INSERT INTO friend_messages(sender_id, recipient_id, body) VALUES ($1,$2,'راز') RETURNING id`, [B, C]);
+
+    const sent = await sendChat(A, B, 'تلاش', String(elsewhere.rows[0].id));
+    assert.equal(sent.replyTo, null, 'a message from another chat was quoted into this one');
+
+    const page = await listChat(A, B);
+    const mine = page.messages.find((m) => m.body === 'تلاش')!;
+    assert.ok(mine, 'the message was refused instead of being sent plain');
+    assert.equal(mine.replyTo, null);
+    await pool.query(`DELETE FROM friend_messages WHERE sender_id=$1 OR recipient_id=$1`, [C]);
+    await pool.query(`DELETE FROM users WHERE id=$1`, [C]);
+  });
+
+  await check('and it CAN quote one from this conversation', async () => {
+    const first = await sendChat(B, A, 'سؤال');
+    const answer = await sendChat(A, B, 'پاسخ', first.id);
+    assert.equal(answer.replyTo, first.id, 'a message from this very chat was refused');
   });
 
   await wipe();

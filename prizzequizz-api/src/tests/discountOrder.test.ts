@@ -9,7 +9,7 @@
  */
 import assert from 'node:assert/strict';
 import { saveDiscountCode, quoteDiscount } from '../services/discountService.js';
-import { payFromVault, quote } from '../services/purchaseOrderService.js';
+import { payFromVault, quote, quoteForSheet } from '../services/purchaseOrderService.js';
 import { postEntry, getAccount } from '../services/walletLedgerService.js';
 import { repositories } from '../repositories/index.js';
 import { id } from '../utils/id.js';
@@ -43,6 +43,17 @@ const TICKET = { kind: 'ticket' as const, tier: 'green', qty: 1 };
 (async () => {
   const price = (await quote(TICKET)).amount;
   assert.ok(price > 0, 'a green ticket has no price to discount');
+
+  /* THE CODES THIS FILE MAKES, FROM SCRATCH EACH TIME.
+   * Saving a code again does NOT reset how many times it has been used — and it
+   * must not: editing a campaign is not erasing its history. So a second run of
+   * this file would find its own single-use codes already spent by the first,
+   * and «the capacity is full» would look like a bug in the thing under test.
+   * A test that passes once and then rots is worse than no test. */
+  const { getPgPool } = await import('../database/postgres.js');
+  const pool = getPgPool();
+  await pool.query(`DELETE FROM discount_redemptions WHERE code_id IN (SELECT id FROM discount_codes WHERE folded LIKE 'ORD%' OR folded LIKE 'SHEET%')`).catch(() => {});
+  await pool.query(`DELETE FROM discount_codes WHERE folded LIKE 'ORD%' OR folded LIKE 'SHEET%'`).catch(() => {});
 
   await check('a percentage really comes off what the صندوق is charged', async () => {
     await saveDiscountCode({ code: 'ORD20', kind: 'percent', value: 20, usageLimit: 0, perUserLimit: 0 });
@@ -130,6 +141,51 @@ const TICKET = { kind: 'ticket' as const, tier: 'green', qty: 1 };
     const rich = await player(price);
     const q = await quoteDiscount({ code: 'ORDBACK', userId: rich, amount: price });
     assert.equal(q.ok, true, 'the code stayed burnt on an order that never happened: ' + String(q.message));
+  });
+
+  /* ── WHAT THE PAYMENT SHEET IS TOLD ───────────────────────────────────── */
+  /* This lived inline in the route, where nothing could reach it: the browser
+     tests stub the API, so every line of it could be broken without a test
+     noticing. That is why it is a function now. */
+
+  await check('the sheet is given BOTH figures, so it can show what was struck out', async () => {
+    await saveDiscountCode({ code: 'SHEET20', kind: 'percent', value: 20, usageLimit: 0, perUserLimit: 0 });
+    const uid = await player(price * 5);
+    const r = await quoteForSheet({ userId: uid, order: TICKET, code: 'sheet20', vaultBalance: price * 5 });
+    assert.equal(r.listPrice, price, 'the price before the code is missing');
+    assert.equal(r.discount, Math.floor(price * 0.2));
+    assert.equal(r.amount, price - Math.floor(price * 0.2), 'the amount is not what will be charged');
+    assert.ok(r.discountCode, 'the code it accepted is not named back');
+  });
+
+  await check('with no code, there is no discount and no complaint', async () => {
+    const uid = await player(price);
+    const r = await quoteForSheet({ userId: uid, order: TICKET, vaultBalance: price });
+    assert.equal(r.discount, 0);
+    assert.equal(r.amount, r.listPrice);
+    assert.equal(r.discountError, '', 'it complained about a code nobody typed');
+  });
+
+  await check('a code that is refused says WHY, in words', async () => {
+    /* Without this the player retypes the same thing and concludes the shop is
+       broken — which is the same outcome as having no discount codes at all. */
+    const uid = await player(price);
+    const r = await quoteForSheet({ userId: uid, order: TICKET, code: 'NOT-A-CODE', vaultBalance: price });
+    assert.equal(r.discount, 0);
+    assert.ok(r.discountError && /معتبر/.test(r.discountError), 'no reason given: ' + r.discountError);
+    assert.equal(r.amount, r.listPrice, 'the price moved on a refused code');
+  });
+
+  await check('a صندوق that covers only the DISCOUNTED price is offered', async () => {
+    /* The door a code opens. Judged against the list price, this player would be
+       told to use the gateway for money they do not need to spend. */
+    await saveDiscountCode({ code: 'SHEETHALF', kind: 'percent', value: 50, usageLimit: 0, perUserLimit: 0 });
+    const half = price - Math.floor(price * 0.5);
+    const uid = await player(half);
+    const without = await quoteForSheet({ userId: uid, order: TICKET, vaultBalance: half });
+    assert.equal(without.canPayFromVault, false, 'it offered the صندوق for the full price');
+    const withCode = await quoteForSheet({ userId: uid, order: TICKET, code: 'SHEETHALF', vaultBalance: half });
+    assert.equal(withCode.canPayFromVault, true, 'the code opened the صندوق and the sheet did not notice');
   });
 
   console.log(`[discountOrder] ${pass} passed, ${fail} failed`);

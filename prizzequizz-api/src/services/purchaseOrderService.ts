@@ -25,7 +25,7 @@ import { isValidTier, ticketName, grantTickets } from './ticketService.js';
 import { getTicketPrices } from './economyConfig.js';
 import { getItem, rewardsOf, rewardLabel } from './shopService.js';
 import { purchase as shopPurchase } from './shopPurchaseService.js';
-import { redeemDiscount, releaseDiscount } from './discountService.js';
+import { redeemDiscount, releaseDiscount, quoteDiscount } from './discountService.js';
 import { postEntry, getAccount, WalletError } from './walletLedgerService.js';
 import { recordPurchase } from './missionService.js';
 import { claimFulfilment, settleFulfilment, abandonFulfilment, _resetFulfilmentGuard } from './fulfilmentGuard.js';
@@ -91,6 +91,56 @@ export async function quote(order: PurchaseOrder): Promise<OrderQuote> {
     amount: unit * order.qty,
     currency: item.currency === 'coins' ? 'coins' : 'cash',
     label: item.name + (order.qty > 1 ? ` ×${order.qty}` : '')
+  };
+}
+
+/* WHAT THE PAYMENT SHEET IS TOLD.
+ *
+ * This was written inline in the route, and a route is a place nothing can
+ * reach: the browser tests stub the API, so every line of it could be broken
+ * without a single test noticing. It is here because here it can be tested.
+ *
+ * Note what it returns: `amount` is what will be CHARGED and `listPrice` is
+ * what it was before the code. The sheet needs both — a discounted price shown
+ * on its own is a number the player has to take on trust — and neither is the
+ * browser's to work out. */
+export interface OrderSheet {
+  order: PurchaseOrder;
+  amount: number;
+  listPrice: number;
+  currency: 'cash' | 'coins';
+  label: string;
+  discount: number;
+  discountCode: string;
+  discountError: string;
+  vaultBalance: number;
+  canPayFromVault: boolean;
+  canPayByGateway: boolean;
+}
+
+export async function quoteForSheet(input: { userId: string; order: PurchaseOrder; code?: string; vaultBalance: number }): Promise<OrderSheet> {
+  const q = await quote(input.order);
+  const code = String(input.code ?? '').trim();
+  /* Pricing a code is not spending it: this runs on every press of the button,
+     so it has to be free to call. A coin price has nothing to discount. */
+  const d = (code && q.currency === 'cash')
+    ? await quoteDiscount({ code, userId: input.userId, amount: q.amount })
+    : null;
+  const discount = d?.ok ? d.amountOff : 0;
+  const amount = Math.max(0, q.amount - discount);
+  const vault = Math.max(0, Number(input.vaultBalance) || 0);
+  return {
+    order: q.order, amount, listPrice: q.amount, currency: q.currency, label: q.label,
+    discount, discountCode: d?.ok ? d.code! : '',
+    /* A code that was typed and refused has to say why, or the player retypes
+       the same thing and concludes the shop is broken. */
+    discountError: (code && !d?.ok) ? (d?.message ?? 'این کد معتبر نیست.') : '',
+    vaultBalance: vault,
+    /* Judged against what will be CHARGED. A صندوق that cannot cover the list
+       price may well cover what is left after a code — refusing it would hide a
+       door the player can walk through. */
+    canPayFromVault: q.currency === 'coins' ? true : vault >= amount,
+    canPayByGateway: isGatewayPayable(q)
   };
 }
 
