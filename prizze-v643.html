@@ -7469,8 +7469,25 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
 #home .pz-header .pzh-lvl{width:31px;height:31px;bottom:-9px;left:-9px}
 #home .pz-header .pzh-nameline{padding-top:0;padding-bottom:0}
 #home .pz-header .pzh-xpbar{height:19px;margin-top:2px}
-#home .pz-header .pzh-pill{padding:2px 9px}
 #home .pz-header .pzh-wallets{padding-bottom:0}
+/* THE MONEY, BIG ENOUGH TO READ — IN A HEADER THAT DOES NOT MOVE.
+   «اندازهٔ مبلغ صندوق جایزه رو بزرگ کن با آیکون کیف، طوری که کامل خوانا بشه، و
+    اندازهٔ بلیط‌ها رو هم بزرگ‌تر کن، بدون اینکه هدر ذره‌ای بزرگ‌تر بشه.»
+   The row is 24px today, and what sets it is the money pill's 16px icon — not
+   the digits, which were 11.5px in a box with room to spare. So every pill is
+   PINNED to that same 24px and the numbers grow inside the box they already
+   occupy. Pinned rather than left to the content: a height that follows the
+   text is a height that grows the header the first time somebody's balance
+   gains a digit, and «ذره‌ای» leaves no room for that. */
+#home .pz-header .pzh-pill{height:24px;padding:0 9px;box-sizing:border-box}
+#home .pz-header .pzh-pill b{font-size:15px;line-height:1}
+/* The صندوق is the one number on this row that is money, so it is the largest.
+   The tighter tracking is what keeps ۱٬۲۵۰٬۰۰۰ on one line at this size. */
+#home .pz-header .p-money b{font-size:16.5px;letter-spacing:-.2px}
+#home .pz-header .pzh-tickets .pzh-pill b{font-size:15.5px}
+/* The ticket's own picture grows with its number — a 14px chip under a 15.5px
+   figure reads as a caption rather than a ticket. Still inside the 24px. */
+#home .pz-header .pzh-tickets img{height:16px}
 #home .weekly-progress-line{margin-bottom:4px!important;padding-top:0!important;padding-bottom:2px!important}
 /* The track was 76px for content that ends at 62: the marker runs 5→57 (face
  * 30 + its caption 21) and the bar's bottom edge is at 62. 64 leaves the two
