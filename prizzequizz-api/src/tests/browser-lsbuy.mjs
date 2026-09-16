@@ -118,6 +118,23 @@ console.log('the in-match help shop:');
   ok('with the three helps this mode can honour', c.length === 3, JSON.stringify(c.map((x) => x.text)));
   ok('and NOT the one that adds seconds to a room-wide clock',
      !c.some((x) => /زمان/.test(x.text)), JSON.stringify(c.map((x) => x.text)));
+  /* A help the admin adds tomorrow has to appear. It used to need its key in a
+     hand-written map of three icons, so anything new was silently unsellable
+     here with nothing on screen to explain why. */
+  await page.evaluate(() => {
+    (0, eval)('pzLL').catalog = (0, eval)('pzLL').catalog.concat([
+      { key: 'pskip', label: 'رد کردن سؤال', price: 4000, enabled: true, sellable: true, seconds: 0 }]);
+  });
+  await page.evaluate(() => (0, eval)('lsRepaintBuy')());
+  await page.waitForTimeout(200);
+  const c2 = await cells(page);
+  const fresh = c2.find((x) => /رد کردن سؤال/.test(x.text));
+  ok('a help the admin adds later is sold here too', !!fresh, JSON.stringify(c2.map((x) => x.text)));
+  /* And it is sold looking like a thing to buy. Without a fallback mark the
+     cell renders the word «undefined» where its picture belongs — a help that
+     is on sale and looks broken is barely better than one that is missing. */
+  ok('and it gets a mark of its own rather than the word «undefined»',
+     !!fresh && !/undefined/.test(fresh.text) && /\S/.test(fresh.text), fresh ? fresh.text : '—');
 
   const head = await page.evaluate(() => (document.querySelector('#lsBuy .ls-buy-h') || {}).innerText || '');
   ok('it names the صندوق as where the money comes from', /صندوق جایزه/.test(head), head.replace(/\s+/g, ' '));
@@ -260,15 +277,28 @@ console.log('حق دو انتخاب:');
   ok('and the help is still armed for the next wrong answer',
      await page.evaluate(() => (0, eval)('pzSecondArmed')) === true);
 
-  const again = await page.evaluate(() => {
+  /* ONCE PER ROUND, THROUGH THE CODE THAT DECIDES IT.
+     Setting `pzSecondUsedRound` by hand and then checking it is checking the
+     test's own assignment. Here the FIRST wrong pick is what must set it, and
+     the round is then asked two questions: does a second wrong pick lock, and
+     can the player arm the help all over again without the round ending. The
+     second one is the expensive half — arming again spends another help. */
+  const round = await page.evaluate(() => {
     const host = document.getElementById('dAnswers'); host.innerHTML = '';
-    (0, eval)('pzSecondArmed = true; pzSecondUsedRound = true;');   /* already used this round */
+    (0, eval)('pzSecondArmed = true; pzSecondUsedRound = false;');
     (0, eval)('buildAnswers')('dAnswers', { a: ['الف', 'ب', 'ج', 'د'], c: 0 }, () => {});
     const btns = [...host.querySelectorAll('.ans')];
-    btns[2].click();
-    return { locked: (0, eval)('qLocked') };
+    btns[2].click();                                   /* wrong — the help fires */
+    const afterFirst = { locked: (0, eval)('qLocked'), used: (0, eval)('pzSecondUsedRound') };
+    btns[3].click();                                   /* wrong again */
+    return { afterFirst, locked: (0, eval)('qLocked'), used: (0, eval)('pzSecondUsedRound') };
   });
-  ok('a second wrong answer in the same round does lock', again.locked, JSON.stringify(again));
+  ok('the first wrong pick is what marks the round as having used it',
+     round.afterFirst.used === true && round.afterFirst.locked === false, JSON.stringify(round.afterFirst));
+  ok('a second wrong answer in the same round does lock', round.locked, JSON.stringify(round));
+  /* And the mark has to survive, because it is what stops the help being armed
+     a second time in the same round — which would spend another one. */
+  ok('and the round stays marked, so it cannot be armed again', round.used === true, String(round.used));
   await ctx.close();
 }
 

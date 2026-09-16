@@ -9785,14 +9785,19 @@ function lsDashHtml(snap,compact){
 function lsBuyDefs(){
   /* The catalogue the admin edits, minus the ones this mode cannot honour: Last
      Survivor runs on one clock shared by the whole room, so a help that adds
-     seconds to your own timer does nothing here and is not offered. */
+     seconds to your own timer does nothing here and is not offered.
+     THAT is the rule — and it is the only one. This used to also require the
+     key to be in a hand-written map of three icons, which made the rule above
+     dead code (no key with `seconds` was in the map anyway) and, worse, meant a
+     help the admin added tomorrow would be silently unsellable here with
+     nothing to explain why. An unknown help gets a plain mark and is sold. */
   const icon={p5050:'✂️',psecond:'🔁',pstats:'📊'};
   const short={p5050:'۵۰:۵۰',psecond:'انتخاب دوم',pstats:'درصد بقیه'};
   const seen={'5050':'p5050',second:'psecond',stats:'pstats'};
   return (((typeof pzLL!=='undefined'&&pzLL.catalog)||[])
-    .filter(d=>d&&d.enabled&&d.sellable&&Number(d.price)>0&&!(Number(d.seconds)>0)&&icon[d.key]))
-    .map(d=>({key:d.key,price:Number(d.price)||0,icon:icon[d.key],label:short[d.key]||d.label||d.key,
-              type:Object.keys(seen).find(t=>seen[t]===d.key)||''}));
+    .filter(d=>d&&d.enabled&&d.sellable&&Number(d.price)>0&&!(Number(d.seconds)>0)))
+    .map(d=>({key:d.key,price:Number(d.price)||0,icon:icon[d.key]||'🎁',label:short[d.key]||d.label||d.key,
+              type:Object.keys(seen).find(t=>seen[t]===d.key)||d.key}));
 }
 function lsBuyHtml(snap){
   const me=snap&&snap.me;

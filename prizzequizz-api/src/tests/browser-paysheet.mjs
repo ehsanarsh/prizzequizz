@@ -230,12 +230,27 @@ console.log('the payment sheet:');
   await buy(page);
   const st = await page.evaluate(() => {
     const p = document.getElementById('aaaPrimary');
-    return { disabled: p.disabled, text: (document.getElementById('aaaModal') || {}).innerText || '' };
+    const rows = [...document.querySelectorAll('#pmList .pm')];
+    const gw = rows.find((el) => /بلو پال/.test(el.innerText));
+    return { disabled: p.disabled,
+             gateway: gw ? gw.innerText.replace(/\s+/g, ' ').trim() : '(no gateway row)',
+             text: (document.getElementById('aaaModal') || {}).innerText || '' };
   });
-  ok('a gateway switched off says so on its own row', /در دسترس نیست/.test(st.text), st.text.replace(/\s+/g, ' ').slice(0, 80));
+  /* Read off the GATEWAY'S OWN ROW, not the whole sheet: «هیچ روش پرداختی در
+     دسترس نیست» is on the sheet too, and matching that instead made this pass
+     however the row itself read. */
+  ok('a gateway switched off says so on its own row', /در دسترس نیست/.test(st.gateway), st.gateway.slice(0, 80));
+  ok('and the sheet says plainly that there is no way to pay',
+     /هیچ روش پرداختی/.test(st.text), st.text.replace(/\s+/g, ' ').slice(0, 70));
   ok('nothing is lit, so the button cannot be pressed', st.disabled, String(st.disabled));
   await payNow(page);
   ok('and pressing it anyway buys nothing', paid.length === 0, JSON.stringify(paid));
+  /* The disabled button is the first guard. This is the second one, reached on
+     purpose: if anything ever re-enables that button — a stale render, a
+     future edit — pressing it must still not buy something nobody chose. */
+  await page.evaluate(() => { const b = document.getElementById('aaaPrimary'); b.disabled = false; b.click(); });
+  await page.waitForTimeout(700);
+  ok('and it still buys nothing even with the button forced live', paid.length === 0, JSON.stringify(paid));
   await ctx.close();
 }
 
