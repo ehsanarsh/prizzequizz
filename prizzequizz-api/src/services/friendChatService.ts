@@ -77,8 +77,11 @@ export async function listChat(me: string, other: string, after?: string | null)
       WHERE sender_id=$1 AND recipient_id=$2 AND read_at IS NOT NULL
       ORDER BY created_at DESC LIMIT 1`, [me, other]);
 
-  /* AFTER the rows have been read, so this call's own answer still shows what
-   * the other side had seen a moment ago rather than what it has just been told. */
+  /* Marking THEIR messages read and asking how far MY messages have been read
+   * touch disjoint rows — one is `recipient_id = me`, the other `sender_id = me`
+   * — so the order of these two is free. (It is written here after the read
+   * because that is the order it happens in, not because anything depends on
+   * it; an earlier comment claimed it did, and a mutation proved otherwise.) */
   await pool().query(
     `UPDATE friend_messages SET read_at=now()
       WHERE recipient_id=$1 AND sender_id=$2 AND read_at IS NULL`, [me, other]);

@@ -68,7 +68,9 @@ async function show(money, tks) {
       moneyFont: fs_(mb), moneyText: mb ? mb.textContent : '',
       moneyClipped: mb ? mb.scrollWidth > mb.clientWidth + 1 : null,
       ticketFont: fs_(tkb), ticketCount: document.querySelectorAll('#hdrTickets .pzh-pill').length,
-      iconThere: !!icon, iconH: icon ? Math.round(icon.getBoundingClientRect().height) : 0
+      iconThere: !!icon, iconH: icon ? Math.round(icon.getBoundingClientRect().height) : 0,
+      moneyPillText: (document.querySelector('#home .p-money') || {}).innerText || '',
+      unitFont: fs_(document.querySelector('#home .p-money small.unit')) || 0
     };
   });
 }
@@ -83,6 +85,11 @@ ok('and it is the largest number on the row — it is the one that is money',
 ok('the ticket figures grew too', small.ticketFont >= 14, small.ticketFont + 'px');
 ok('the wallet icon is still beside the money', small.iconThere && small.iconH >= 12,
    small.iconThere ? small.iconH + 'px' : 'missing');
+/* «بعد از عدد کیف پول تومان نوشته بشه» — a figure with no unit is a figure the
+   reader has to guess the meaning of, and this is the one that is money. */
+ok('and the unit is written after it', /تومان/.test(small.moneyPillText), small.moneyPillText);
+ok('said more quietly than the figure itself, so it does not compete',
+   small.unitFont > 0 && small.unitFont < small.moneyFont, small.unitFont + ' vs ' + small.moneyFont);
 
 /* ── 2. AND THE HEADER DOES NOT MOVE ────────────────────────────────────── */
 /* Not «is it 180px» — that is a number copied from one run. What matters is
