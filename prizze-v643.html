@@ -6026,6 +6026,32 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
          green so it reads as money coming to you rather than money on the
          table. */
       .ls-dash-mini .c.mine b{color:#4BE38C}
+      /* BUYING A HELP WITHOUT LEAVING THE MATCH.
+         «اگه کسی داخل بازی شده باشه و یادش رفته از فروشگاه کمکی بخره، بتونه از
+          اون‌جا راحت و با کمترین معطلی بخره — ولی فقط از طریق موجودی صندوق
+          جایزه.» A round is on a clock: there is no time to leave for a
+          card-to-card transfer, so the only door here is the one that settles
+          instantly. Three cells on one line, under the board. */
+      .ls-buy{padding:0 14px 12px}
+      .ls-buy-h{display:flex;align-items:baseline;justify-content:space-between;gap:8px;
+        margin-bottom:7px;font-size:11px;font-weight:900;color:var(--paper)}
+      .ls-buy-h span{font-size:10.5px;font-weight:800;color:#4BE38C}
+      .ls-buy-h span.low{color:#FF8F82}
+      .ls-buy-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+      .ls-buy-c{background:var(--ink-2);border:var(--stroke);border-radius:14px;box-shadow:var(--hard-sm);
+        padding:9px 4px;text-align:center;font-family:inherit;color:inherit;cursor:pointer}
+      .ls-buy-c:active{transform:scale(.97)}
+      .ls-buy-c i{display:block;font-size:17px;font-style:normal;line-height:1.5}
+      .ls-buy-c b{display:block;font-size:10.5px;font-weight:900;color:var(--paper);line-height:1.6}
+      .ls-buy-c span{display:block;font-size:10px;font-weight:800;color:var(--bolt);line-height:1.7}
+      /* A cell that cannot be bought says WHY on itself, and stops looking like
+         a button — «استفاده شده» on something that is merely expensive reads as
+         the game having taken it. */
+      .ls-buy-c.off{cursor:default;opacity:.62;border-style:dashed}
+      .ls-buy-c.off:active{transform:none}
+      .ls-buy-c.off span{color:var(--muted)}
+      .ls-buy-c.poor span{color:#FF8F82}
+      .ls-buy-c.have span{color:#4BE38C}
       .ls-stat.mine{grid-column:span 3;background:linear-gradient(135deg,#0f2a1a,var(--ink-2));border-color:#33D97C}
       .ls-stat.mine b{color:#4BE38C;font-size:22px}
       .ls-stat{background:var(--ink-2);border:var(--stroke);border-radius:16px;padding:12px 8px;text-align:center;box-shadow:var(--hard-sm)}
@@ -9719,7 +9745,91 @@ function lsDashHtml(snap,compact){
                 : `<div class="c mine"><b id="lsMyShare">${lsShareText(snap,mine)}</b><span>سهم تو (ت)</span></div>`)+
       `</div>`;
   }
-  return `<div class="ls-top" style="padding-bottom:0"><div class="ls-ttl" style="text-align:center;width:100%"><h1>داشبورد مسابقه</h1><p>مرحله ${lsFa(r.round)} از ${lsFa(r.totalRounds)} · <span id="lsTimer">${lsTimer(snap)}</span></p></div></div><div class="ls-dash" id="lsDashGrid">${lsDashCells(snap)}</div>`;
+  return `<div class="ls-top" style="padding-bottom:0"><div class="ls-ttl" style="text-align:center;width:100%"><h1>داشبورد مسابقه</h1><p>مرحله ${lsFa(r.round)} از ${lsFa(r.totalRounds)} · <span id="lsTimer">${lsTimer(snap)}</span></p></div></div><div class="ls-dash" id="lsDashGrid">${lsDashCells(snap)}</div>`+lsBuyHtml(snap);
+}
+
+/* THE HELP SHOP, INSIDE THE MATCH.
+ *
+ * «در قسمت داشبورد مسابقه در آخرین بازمانده گزینهٔ خرید آیتم کمکی بذار، ولی
+ *  فقط از طریق موجودی صندوق جایزه قابل خرید باشه — یعنی اگه کسی داخل بازی شده
+ *  باشه و یادش رفته از فروشگاه کمکی بخره، بتونه از اون‌جا راحت و با کمترین
+ *  معطلی بخره. ولی قانون همونه: یک بار استفاده از هرکدام در هر بازی.»
+ *
+ * Only the صندوق, and that is not a restriction added here — it is the only
+ * door that can settle inside a round. A card-to-card transfer takes minutes;
+ * the round takes seconds. `POST /lifelines/:key/buy` debits the wallet ledger
+ * and nothing else, so the gateway is not on this path at all.
+ *
+ * And because each help may be used only ONCE per match, owning one is owning
+ * enough: a cell for a help already in the player's hands, or already spent
+ * this match, is not a cell to sell — it says which of the two it is instead of
+ * taking money for something that cannot be used.
+ */
+function lsBuyDefs(){
+  /* The catalogue the admin edits, minus the ones this mode cannot honour: Last
+     Survivor runs on one clock shared by the whole room, so a help that adds
+     seconds to your own timer does nothing here and is not offered. */
+  const icon={p5050:'✂️',psecond:'🔁',pstats:'📊'};
+  const short={p5050:'۵۰:۵۰',psecond:'انتخاب دوم',pstats:'درصد بقیه'};
+  const seen={'5050':'p5050',second:'psecond',stats:'pstats'};
+  return (((typeof pzLL!=='undefined'&&pzLL.catalog)||[])
+    .filter(d=>d&&d.enabled&&d.sellable&&Number(d.price)>0&&!(Number(d.seconds)>0)&&icon[d.key]))
+    .map(d=>({key:d.key,price:Number(d.price)||0,icon:icon[d.key],label:short[d.key]||d.label||d.key,
+              type:Object.keys(seen).find(t=>seen[t]===d.key)||''}));
+}
+function lsBuyHtml(snap){
+  const me=snap&&snap.me;
+  /* Nothing to buy once you are out of the match, or watching one. */
+  if(!me||me.status!=='alive')return '';
+  const defs=lsBuyDefs();
+  if(!defs.length)return '';
+  const bal=Number(typeof wallet!=='undefined'?wallet:0)||0;
+  const cheapest=Math.min.apply(null,defs.map(d=>d.price));
+  return '<div class="ls-buy" id="lsBuy">'+
+    '<div class="ls-buy-h"><span style="color:var(--paper)">کمکی لازم داری؟</span>'+
+    '<span class="'+(bal<cheapest?'low':'')+'">صندوق جایزه: '+lsFa(bal)+' ت</span></div>'+
+    '<div class="ls-buy-row">'+defs.map(d=>lsBuyCell(d,bal)).join('')+'</div></div>';
+}
+function lsBuyCell(d,bal){
+  const own=Math.max(0,Number(((typeof pzLL!=='undefined'&&pzLL.inv)||{})[d.key]||0));
+  const used=!!lsPuUsed[d.type];
+  let cls='', note='', open=true;
+  if(used){ cls=' off'; note='در این مسابقه استفاده شد'; open=false; }
+  else if(own>0){ cls=' off have'; note='داری — همین کافی است'; open=false; }
+  else if(bal<d.price){ cls=' off poor'; note=lsFa(d.price)+' ت'; open=false; }
+  else { note=lsFa(d.price)+' ت'; }
+  return '<button type="button" class="ls-buy-c'+cls+'"'+
+    (open?' onclick="lsBuyPower(\''+d.key+'\')"':' aria-disabled="true"')+'>'+
+    '<i>'+d.icon+'</i><b>'+d.label+'</b><span>'+note+'</span></button>';
+}
+/* One cell, one purchase. The price and the debit are the server's — the
+   browser sends a key and an idempotency stamp and nothing else. */
+let _lsBuying=false;
+async function lsBuyPower(key){
+  if(_lsBuying)return; _lsBuying=true;
+  try{
+    const r=await pzApi('POST','/lifelines/'+encodeURIComponent(key)+'/buy',
+      {qty:1,idempotencyKey:'lsll_'+key+'_'+Date.now()+'_'+Math.random().toString(36).slice(2,8)});
+    if(!r||!r.ok){ toast((r&&r.error&&r.error.message)||'خرید انجام نشد',2600); return; }
+    const d=r.data||{};
+    if(d.inventory&&typeof pzLL!=='undefined'){ pzLL.inv=d.inventory; powerups=pzLL.inv; }
+    /* The balance the SERVER reports after the debit, not this side's guess. */
+    if(typeof d.balance==='number'){ wallet=d.balance; try{updateWalletUI();}catch(e){} }
+    toast('خریدی شد ✅ — حالا می‌تونی استفاده کنی');
+    try{sfx('correct');vib([15,10]);}catch(e){}
+    lsRepaintBuy();
+    try{lsBindPowerups();}catch(e){}
+    try{renderPowerups();}catch(e){}
+  }catch(e){ toast('خرید انجام نشد',2600); }
+  finally{ _lsBuying=false; }
+}
+/* Only the strip is redrawn. Rebuilding the board would take the prize figures
+   down and put them back for a change that is neither. */
+function lsRepaintBuy(){
+  const box=document.getElementById('lsBuy'); if(!box||!lsSnap)return;
+  const fresh=lsBuyHtml(lsSnap);
+  if(!fresh){ box.remove(); return; }
+  box.outerHTML=fresh;
 }
 
 /* The key this round's option order is remembered under. Per room AND per
@@ -13115,6 +13225,49 @@ function pzLoadLifelines(){ try{ pzLLRefresh(); }catch(e){} }
    is wrong it grants one more pick, then disarms. Reset per question. */
 let pzSecondArmed=false,pzSecondUsedRound=false;
 /* immediate=true → کلیک بلافاصله resolve می‌کند (سوال سرعتی)؛ در غیر این صورت انتخاب تا پایان تایم قابل تغییر است */
+/* «حق دو انتخاب» — IN THE ONE PLACE EVERY SCREEN PASSES THROUGH.
+ *
+ * «انتخاب دوم کار نمی‌کنه.»
+ *
+ * It was a wrapper around `answerDuel`, and answerDuel is one of the ways a
+ * question gets answered:
+ *
+ *     دوئل            answerDuel   ← wrapped, worked
+ *     آرنا            answerArena  ← not wrapped
+ *     همه یا هیچ      answerWTA    ← not wrapped
+ *
+ * So on two screens the player spent the help, was told «فعال شد», answered
+ * wrong and was locked out anyway. Not «it did nothing» — it was CONSUMED and
+ * did nothing, which is the same as taking it. (آخرین بازمانده has its own
+ * server-driven retry and was never part of this.)
+ *
+ * `buildAnswers` is what every one of those screens builds its options with, so
+ * this is the one place that sees every first pick. It also runs BEFORE the box
+ * is locked, which removes the old wrapper's other half: it used to lock the
+ * board, stop the clock, and then undo both — and «restart the timer with at
+ * least six seconds» was a guess standing in for time the player never lost.
+ * Nothing is stopped now, so nothing has to be put back.
+ *
+ * A pick made by the clock running out is not a pick: those paths call the
+ * answer functions directly and never reach here, so a timeout still ends the
+ * round instead of silently eating the help.
+ */
+function pzSecondCatch(box,sel){
+  if(!pzSecondArmed||pzSecondUsedRound)return false;
+  if(sel===curCorrect)return false;             /* right first time — keep it for later */
+  pzSecondUsedRound=true; pzSecondArmed=false;
+  /* The stock was already debited by the server when the help was armed, and
+     `usePower` wrote back what it said was left. The old wrapper subtracted one
+     MORE from the local copy here, so the counter fell by two for one use. */
+  const btns=[...box.querySelectorAll('.ans')];
+  const b=btns[sel];
+  if(b){ b.classList.add('dim','pz-removed'); b.disabled=true; b.classList.remove('selected'); }
+  if(curSel===sel)curSel=-1;
+  try{renderPowerups();}catch(e){}
+  toast('❌ اشتباه بود — یک انتخاب دیگر داری',1800);
+  try{sfx('select');vib([15,10,15]);}catch(e){}
+  return true;
+}
 function buildAnswers(boxId,qd,onPick,immediate){
   curBox=boxId;curCorrect=qd.c;qLocked=false;curSel=-1;statsShown=false;
   const box=document.getElementById(boxId);box.innerHTML='';
@@ -13122,6 +13275,8 @@ function buildAnswers(boxId,qd,onPick,immediate){
     b.innerHTML='<span class="k">'+keysFA[i]+'</span><span class="dash">—</span><span class="atxt">'+txt+'</span>';
     b.onclick=()=>{ if(qLocked||b.disabled)return;
       if(immediate){onPick(i);return;}
+      /* Before anything is locked: see pzSecondCatch. */
+      if(pzSecondCatch(box,i))return;
       // ثبت نهایی پاسخ — دیگر قابل تغییر نیست (بدون نمایش درست/غلط)
       curSel=i;qLocked=true;sfx('select');vib([25]);
       const all=[...box.querySelectorAll('.ans')];
@@ -22206,35 +22361,6 @@ function pzEnterRematch(newMid){
 }
 /* ======= END ======= */
 
-
-/* Second Chance wrapper (outermost answerDuel): on the FIRST wrong answer of a
-   round, if armed, give ONE more pick instead of locking/submitting. */
-const _pzSecondPrevAnswer=answerDuel;
-answerDuel=function(sel,correct){
-  if(!dAnswered && pzSecondArmed && !pzSecondUsedRound && sel!==correct){
-    pzSecondUsedRound=true; pzSecondArmed=false;
-    powerups.psecond=Math.max(0,(powerups.psecond||0)-1); try{renderPowerups();}catch(_){}
-    /* buildAnswers already LOCKED the box + disabled every button on the first
-       click, so we must UN-lock it: re-enable the remaining options (keep the
-       wrong pick + any 50/50-removed gone) and resume the clock so it can't hang. */
-    const box=document.getElementById(curBox);
-    const btns=box?[...box.querySelectorAll('.ans')]:[];
-    qLocked=false; curSel=-1;
-    btns.forEach((b,i)=>{
-      b.classList.remove('selected','locked-in','judging');
-      if(i===sel){ b.classList.add('dim','pz-removed'); b.disabled=true; }
-      else if(b.classList.contains('dim')||b.classList.contains('pz-removed')){ b.disabled=true; }
-      else { b.disabled=false; }
-    });
-    const sid=(document.querySelector('.screen.active')||{}).id;
-    if(sid==='duel'){ clearInterval(dTimer); dTimeLeft=Math.max(dTimeLeft||0,6); if(typeof runDuelTimer==='function')runDuelTimer(); }
-    else if(sid==='q-screen'){ clearInterval(timer); timeLeft=Math.max(timeLeft||0,6); if(typeof runArenaTimer==='function')runArenaTimer(); }
-    else if(sid==='wta'){ clearInterval(wtaTimer); wtaTimeLeft=Math.max(wtaTimeLeft||0,6); if(typeof runWtaTimer==='function')runWtaTimer(); }
-    toast('❌ اشتباه بود — یک انتخاب دیگر داری',1800); sfx('select'); vib([15,10,15]);
-    return;   /* don't lock/submit — wait for the next pick */
-  }
-  return _pzSecondPrevAnswer.apply(this,arguments);
-};
 
 /* Exit (✕) during a REAL duel = forfeit: close the room so the server tells the
    opponent (server:opponent_left → they win), record our loss locally, and make
