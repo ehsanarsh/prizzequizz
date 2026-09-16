@@ -733,7 +733,10 @@ function run(): void {
     for (const [id, state] of [['uq', 'U_Q'], ['qsearch', 'Q_SEARCH'], ['acq', 'AC_Q']] as const) {
       const box = new RegExp('id="' + id + '"');
       assert.ok(box.test(script), 'the search box is gone: ' + id);
-      const wired = new RegExp("liveSearch\\(\\{[\\s\\S]{0,200}?input:'#" + id + "'[\\s\\S]{0,400}?set:\\(v\\)=>\\{" + state + "=v;\\}");
+      /* The setter has to put the typed text into THIS box's state; what else
+         it does with it is that screen's business — the users list also sends
+         the reader back to the first page, which is not a reason to fail. */
+      const wired = new RegExp("liveSearch\\(\\{[\\s\\S]{0,200}?input:'#" + id + "'[\\s\\S]{0,400}?set:\\(v\\)=>\\{" + state + "=v;");
       assert.ok(wired.test(script), 'this box is not wired to liveSearch: ' + id);
     }
   });

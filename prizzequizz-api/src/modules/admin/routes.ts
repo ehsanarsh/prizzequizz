@@ -8,6 +8,7 @@ import { id } from '../../utils/id.js';
 import { featureFlags, patchFeatureFlag, themes, upsertTheme } from '../../services/adminStores.js';
 import { getAdminAnalytics } from '../../services/analyticsService.js';
 import { getAdminUserOverview, resetUserStats, searchAdminUsers, setUserTickets, updateUserFields, updateUserRole, updateUserStatus, UsernameTakenError } from '../../services/adminUserService.js';
+import { adminUserTable } from '../../services/adminUserTable.js';
 import { getMatch, claimTimeout, forfeitMatch } from '../../services/matchEngine.js';
 import { activeMatchState } from '../../services/matchStateStore.js';
 import { createGiftCode, listGiftCodes, redeemGiftCode } from '../../services/giftCodeService.js';
@@ -549,6 +550,22 @@ export function registerAdminRoutes(router: Router, base: string): void {
   router.add('GET', `${base}/admin/users`, async (ctx) => {
     if (!requireAdmin(ctx)) return;
     json(ctx.res, 200, await searchAdminUsers(ctx.query.get('q') ?? '', Number(ctx.query.get('limit') ?? 100)));
+  });
+
+  /* The users SCREEN: every column the panel shows, ordered and paged by the
+     database over every row. The list above stays as it is — the places that
+     only want «find me this person» still get a plain array from it. */
+  router.add('GET', `${base}/admin/users/table`, async (ctx) => {
+    if (!requireAdmin(ctx)) return;
+    json(ctx.res, 200, await adminUserTable({
+      query: ctx.query.get('q') ?? '',
+      sort: ctx.query.get('sort') ?? 'recent',
+      dir: (ctx.query.get('dir') === 'asc' ? 'asc' : 'desc'),
+      tier: ctx.query.get('tier') ?? '',
+      topic: ctx.query.get('topic') ?? '',
+      limit: Number(ctx.query.get('limit') ?? 100),
+      offset: Number(ctx.query.get('offset') ?? 0)
+    }));
   });
 
   router.add('GET', `${base}/admin/users/:id/overview`, async (ctx) => {

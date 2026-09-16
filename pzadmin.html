@@ -54,6 +54,13 @@ th,td{padding:8px 7px;text-align:right;border-bottom:1px solid var(--line);white
 th{color:var(--muted);font-weight:700;font-size:11px;position:sticky;top:0;background:var(--panel)}
 tbody tr:hover{background:var(--panel2)}
 .tbl-wrap{overflow:auto;border-radius:10px;border:1.5px solid var(--line);max-height:62vh}
+/* A column you can sort by has to LOOK like one, and the one in force has to
+   say which way it is pointing — otherwise the operator clicks and cannot
+   tell whether anything happened. */
+th.th-s{cursor:pointer;user-select:none}th.th-s:hover{color:#e8ecff}
+th.th-s.on{color:var(--gold)}th.th-s .ar{font-size:9px;opacity:.85}
+td.num{font-variant-numeric:tabular-nums}
+td.zero{color:var(--muted)}
 .mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px}
 .pill{display:inline-block;padding:2px 8px;border-radius:100px;font-size:10px;font-weight:800;border:1.5px solid #000}
 .pill.pend{background:#3a3320;color:#ffd67a}.pill.ok{background:#0f3323;color:#5cffa8}.pill.bad{background:#3a1512;color:#ff8f82}.pill.info{background:#0e2c3d;color:#8fd6ff}
@@ -1014,12 +1021,115 @@ async function saveOnlineCfg(){
     toast('ذخیره شد','ok'); render();
   }catch(e){ toast(e.message,'bad'); }
 }
+/* THE USERS SCREEN.
+ *
+ * «باید تعداد بلیط‌های کاربر رو ببینم که هر کدوم از کاربرا چنتا داره… بتونم
+ *  sort کنم طبق کیف پول، طبق بلیط سبز و آبی و قرمز، طبق بیشترین خرید، طبق
+ *  تعداد برد و باخت، و هر موضوع کیا خوب زدن.»
+ *
+ * Every one of those orderings is decided by the DATABASE, over every account,
+ * before the page is cut. That distinction is the whole screen: «the hundred
+ * most recent accounts, arranged by wallet» and «the hundred richest accounts»
+ * are different lists with almost nobody in common, and only the second one is
+ * the question being asked. So a header click is a new request, not a reshuffle
+ * of what happens to be on screen.
+ */
+let U_SORT='recent', U_DIR='desc', U_TIER='green', U_TOPIC='', U_OFF=0;
+const U_LIM=100;
+let U_PAGE={rows:[],total:0,tiers:['green','blue','red']};
+const U_TIER_FA={green:'سبز',blue:'آبی',red:'قرمز',bronze:'برنز',silver:'نقره',gold:'طلا'};
+const U_TIER_COLOR={green:'#5cffa8',blue:'#8fd6ff',red:'#ff8f82',bronze:'#d7a06a',silver:'#cfd6e6',gold:'#ffd67a'};
+
+function uQs(q){
+  return '/admin/users/table?q='+encodeURIComponent(String(q==null?U_Q:q).trim())+
+    '&sort='+encodeURIComponent(U_SORT)+'&dir='+U_DIR+
+    '&tier='+encodeURIComponent(U_TIER)+'&topic='+encodeURIComponent(U_TOPIC)+
+    '&limit='+U_LIM+'&offset='+U_OFF;
+}
+async function uFetch(q){
+  const r=await api('GET',uQs(q));
+  /* An older server that does not have this route yet still has to give an
+     operator their users list, so the plain list stands in for it. */
+  const rows=(r&&r.rows)?r.rows:(Array.isArray(r)?r:[]);
+  U_PAGE={rows:rows,total:Number(r&&r.total!=null?r.total:rows.length),
+          tiers:(r&&Array.isArray(r.tiers)&&r.tiers.length)?r.tiers:['green','blue','red']};
+  window._UALL=rows;
+  return rows;
+}
+/* A new ordering starts at the top of the list: staying on page four of the
+   old order shows a stretch of the middle of the new one, which looks like the
+   sort did nothing. */
+async function uSort(key,tier){
+  if(tier){ if(U_SORT==='ticket'&&U_TIER===tier){U_DIR=(U_DIR==='desc'?'asc':'desc');} else {U_SORT='ticket';U_TIER=tier;U_DIR='desc';} }
+  else if(U_SORT===key){ U_DIR=(U_DIR==='desc'?'asc':'desc'); }
+  else { U_SORT=key; U_DIR=(key==='username'?'asc':'desc'); }
+  U_OFF=0; await uReload();
+}
+async function uTopicPick(v){ U_TOPIC=String(v||''); if(!U_TOPIC&&U_SORT==='topic')U_SORT='recent'; else if(U_TOPIC)U_SORT='topic',U_DIR='desc'; U_OFF=0; await uReload(); }
+async function uPage(delta){
+  const next=U_OFF+delta*U_LIM;
+  if(next<0||next>=Math.max(1,U_PAGE.total)) return;
+  U_OFF=next; await uReload();
+}
+async function uReload(){
+  const box=$('#urows'); if(box) box.innerHTML='<tr><td colspan="20" class="empty">…</td></tr>';
+  try{ await uFetch(); }catch(e){ toast(e.message,'bad'); }
+  uPaintHead(); uPaintRows(); uPaintPager();
+}
+
+/* WHICH TICKET COLUMNS TO SHOW.
+   The three match colours are always there, because «چند تا بلیط سبز دارد» is a
+   question with an answer even when it is zero. Any other tier the game has
+   appears only once somebody on this page actually holds one, so the table does
+   not carry three empty columns for tiers this operator never sells. */
+function uTiers(){
+  const base=['green','blue','red'];
+  const extra=(U_PAGE.tiers||[]).filter(t=>base.indexOf(t)<0&&
+    (U_PAGE.rows||[]).some(r=>Number((r.tickets||{})[t]||0)>0));
+  return base.concat(extra);
+}
+function uTh(key,label,title){
+  const on=(U_SORT===key);
+  return '<th class="th-s'+(on?' on':'')+'" onclick="uSort(\''+key+'\')"'+(title?' title="'+esc(title)+'"':'')+'>'+
+    label+(on?' <span class="ar">'+(U_DIR==='desc'?'▼':'▲')+'</span>':'')+'</th>';
+}
+function uThTier(t){
+  const on=(U_SORT==='ticket'&&U_TIER===t);
+  return '<th class="th-s'+(on?' on':'')+'" onclick="uSort(\'ticket\',\''+t+'\')" title="'+
+    esc('مرتب‌سازی بر اساس بلیط '+(U_TIER_FA[t]||t))+'" style="color:'+(on?'var(--gold)':(U_TIER_COLOR[t]||'inherit'))+'">'+
+    esc(U_TIER_FA[t]||t)+(on?' <span class="ar">'+(U_DIR==='desc'?'▼':'▲')+'</span>':'')+'</th>';
+}
+function uPaintHead(){
+  const h=$('#uhead'); if(!h) return;
+  h.innerHTML='<th style="width:34px"><input type="checkbox" id="uselall" onclick="uSelAll(this.checked)"></th>'+
+    uTh('username','کاربر')+
+    uTiers().map(uThTier).join('')+
+    uTh('tickets','جمع بلیط')+
+    uTh('wallet','صندوق جایزه')+
+    uTh('spent','خرید','مجموع پولی که این کاربر پرداخت کرده — سکه پول نیست و شمرده نمی‌شود')+
+    uTh('played','بازی')+uTh('wins','برد')+uTh('losses','باخت')+
+    uTh('winRate','٪ برد')+
+    (U_TOPIC?uTh('topic','٪ '+esc(U_TOPIC),'درصد پاسخ درست همین کاربر در موضوع «'+U_TOPIC+'»'):'')+
+    uTh('invited','دعوت‌شده')+
+    uTh('level','سطح/XP')+uTh('xp','XP')+uTh('coins','سکه')+
+    '<th>وضعیت</th><th>عملیات</th>';
+}
+function uColCount(){ return 15+uTiers().length+(U_TOPIC?1:0); }
+function uPaintPager(){
+  const el=$('#upager'); if(!el) return;
+  const total=Number(U_PAGE.total||0);
+  if(!total){ el.innerHTML=''; return; }
+  const from=U_OFF+1, to=Math.min(U_OFF+(U_PAGE.rows||[]).length,total);
+  el.innerHTML='<button class="btn sm" '+(U_OFF<=0?'disabled':'')+' onclick="uPage(-1)">قبلی</button>'+
+    '<span class="note" style="margin:0 10px">'+fa(from)+'–'+fa(to)+' از '+fa(total)+' کاربر</span>'+
+    '<button class="btn sm" '+((U_OFF+U_LIM)>=total?'disabled':'')+' onclick="uPage(1)">بعدی</button>';
+}
 async function renderUsers(){
-  const rows=await api('GET','/admin/users?q='+encodeURIComponent(U_Q)+'&limit=200');
-  const list=(rows.rows||rows||[]);
-  window._UALL=list;
+  await uFetch(U_Q).catch(()=>{ U_PAGE={rows:[],total:0,tiers:['green','blue','red']}; window._UALL=[]; });
   const oc=await api('GET','/admin/online-config').catch(()=>null);
-  $('#main').innerHTML=head('مدیریت کاربران','جستجو، ویرایش، بن، بلیط، پیام، ریست + عملیاتِ گروهی')+
+  const cats=(CFG&&Array.isArray(CFG.categories)?CFG.categories:[]).slice()
+    .sort((a,b)=>(Number(a.order)||99)-(Number(b.order)||99)).filter(c=>c&&c.name);
+  $('#main').innerHTML=head('مدیریت کاربران','هر ستون قابل مرتب‌سازی است — مرتب‌سازی روی همهٔ کاربران انجام می‌شود، نه فقط این صفحه')+
     (oc?'<div class="card" style="margin-bottom:12px"><b>افراد آنلاین (صفحهٔ اصلی)</b>'+
       '<div class="note">اولین بازکردنِ صفحه همیشه رایگان است؛ هزینه فقط برای دکمهٔ «نمایش افراد دیگر» گرفته می‌شود.</div>'+
       '<div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-top:8px">'+
@@ -1027,22 +1137,27 @@ async function renderUsers(){
         '<label>هزینهٔ هر رفرش (سکه)<input type="number" id="oc_cost" min="0" max="1000" value="'+(oc.refreshCost||0)+'" style="width:110px"></label>'+
         '<label>رفرش رایگان روزانه<input type="number" id="oc_free" min="0" max="100" value="'+(oc.freeRefreshesPerDay||0)+'" style="width:110px"></label>'+
         '<button class="btn pri" onclick="saveOnlineCfg()">ذخیره</button></div></div>':'')+
-    '<div class="toolbar"><input id="uq" placeholder="جستجو با نام، یوزرنیم، شناسه یا شمارهٔ موبایل…" value="'+esc(U_Q)+'">'+
+    '<div class="toolbar"><input id="uq" placeholder="جستجو با نام، یوزرنیم، شناسه یا شمارهٔ موبایل…" value="'+esc(U_Q)+'" style="min-width:240px">'+
+      '<label style="margin:0">مهارت در موضوع'+
+        '<select id="utopic" onchange="uTopicPick(this.value)" style="min-width:160px">'+
+          '<option value="">— بدون موضوع —</option>'+
+          cats.map(c=>'<option value="'+esc(c.name)+'"'+(U_TOPIC===c.name?' selected':'')+'>'+esc((c.icon?c.icon+' ':'')+c.name)+'</option>').join('')+
+        '</select></label>'+
       '<span class="note" id="uqnote" style="margin:0 8px;align-self:center"></span></div>'+
+    (U_TOPIC?'<div class="note" style="margin:-6px 0 10px">ستون «٪ '+esc(U_TOPIC)+'» درصد پاسخ‌های درستِ هر کاربر در همین موضوع است؛ کسی که در این موضوع سؤالی جواب نداده صفر می‌ماند.</div>':'')+
     '<div id="ubulk"></div>'+
-    '<div class="tbl-wrap"><table><thead><tr><th style="width:34px"><input type="checkbox" id="uselall" onclick="uSelAll(this.checked)"></th>'+
-      ['کاربر','دعوت‌شده','سطح/XP','کاپ','صندوق جایزه','وضعیت','عملیات'].map(c=>'<th>'+c+'</th>').join('')+'</tr></thead><tbody id="urows"></tbody></table></div>';
+    '<div class="tbl-wrap"><table><thead><tr id="uhead"></tr></thead><tbody id="urows"></tbody></table></div>'+
+    '<div id="upager" style="margin-top:10px;display:flex;align-items:center"></div>';
+  uPaintHead();
   uPaintRows();
+  uPaintPager();
   uBulkBar();
   /* The input is built once and then left alone — every keystroke repaints
      `#urows` only, so nothing under the caret is ever replaced. */
   liveSearch({
-    input:'#uq', set:(v)=>{U_Q=v;}, paint:uPaintRows,
-    got:(rows)=>{ window._UALL=rows; },
-    fetch:async(q)=>{
-      const r=await api('GET','/admin/users?q='+encodeURIComponent(String(q||'').trim())+'&limit=200');
-      return (r.rows||r||[]);
-    }
+    input:'#uq', set:(v)=>{U_Q=v;U_OFF=0;}, paint:uPaintRows,
+    got:()=>{ uPaintHead(); uPaintPager(); },
+    fetch:async(q)=>uFetch(q)
   });
   const i=$('#uq'); if(i&&U_Q){i.focus();i.setSelectionRange(i.value.length,i.value.length);}
 }
@@ -1069,9 +1184,17 @@ function uPaintRows(){
   const box=$('#urows'); if(!box) return;
   const q=String(U_Q||'').trim();
   const all=window._UALL||[];
+  /* The instant filter runs over the page already on screen so the list reacts
+     to a keystroke; the server's answer replaces it a moment later. Both use the
+     same rule, so the two never disagree while one is catching up. */
   const list=all.filter(u=>uMatches(u,q));
   const note=$('#uqnote');
   if(note) note.textContent=q?(list.length?(fa(list.length)+' کاربر'):'چیزی پیدا نشد'):'';
+  const tiers=uTiers();
+  /* A zero written out in full in every cell turns the table into a wall of
+     digits with nothing standing out. The dash keeps the eye on the numbers
+     that are actually there. */
+  const n=(v)=>Number(v||0)>0?('<td class="num">'+fa(Number(v))+'</td>'):'<td class="num zero">—</td>';
   box.innerHTML=(list.length?list.map(u=>'<tr>'+
     '<td><input type="checkbox" class="usel" value="'+u.id+'" '+(_USEL.has(u.id)?'checked':'')+' onclick="uSelOne(\''+u.id+'\',this.checked)"></td>'+
     '<td><div style="display:flex;align-items:center;gap:8px">'+uAvatarHtml(u)+
@@ -1080,13 +1203,24 @@ function uPaintRows(){
           '<span class="mono">'+String(u.id).slice(0,8)+'</span>'+
           (u.phone?' · <span class="mono">'+esc(u.phone)+'</span>':'')+
         '</div></div>'+newTag('users',u.createdAt)+'</div></td>'+
+    tiers.map(t=>{
+      const v=Number((u.tickets||{})[t]||0);
+      return v?'<td class="num"><b style="color:'+(U_TIER_COLOR[t]||'inherit')+'">'+fa(v)+'</b></td>':'<td class="num zero">—</td>';
+    }).join('')+
+    n(u.ticketTotal)+
+    '<td class="num">'+(Number(u.wallet||0)?'<b style="color:var(--ok)">'+fa(u.wallet)+'</b>':'<span class="zero">—</span>')+'</td>'+
+    '<td class="num">'+(Number(u.spent||0)?'<b style="color:var(--gold)">'+fa(u.spent)+'</b>':'<span class="zero">—</span>')+'</td>'+
+    n(u.played)+n(u.wins)+n(u.losses)+
+    '<td class="num">'+(Number(u.played||0)?fa(Number(u.winRate||0))+'٪':'<span class="zero">—</span>')+'</td>'+
+    (U_TOPIC?'<td class="num">'+(Number(u.topicTotal||0)
+        ?'<b>'+fa(Number(u.topicRate||0))+'٪</b> <span class="note" style="display:inline;margin:0;font-size:10px">('+fa(Number(u.topicCorrect||0))+'/'+fa(Number(u.topicTotal))+')</span>'
+        :'<span class="zero">—</span>')+'</td>':'')+
     '<td>'+uInvitesHtml(u)+'</td>'+
-    '<td>'+fa(u.level)+' / '+fa(u.xp)+'</td><td>'+fa(u.weeklyScore)+'</td>'+
-    '<td><b style="color:var(--ok)">'+fa(u.wallet)+'</b></td>'+
+    '<td class="num">'+fa(u.level)+'</td>'+n(u.xp)+n(u.coins)+
     '<td><span class="pill '+(u.status==='banned'?'bad':u.status==='limited'?'pend':'ok')+'">'+(u.status||'active')+'</span></td>'+
     '<td><button class="btn sm info" onclick="userDetail(\''+u.id+'\')">مدیریت</button> '+
       '<button class="btn sm bad" onclick="askDeleteUser(\''+u.id+'\',\''+jsq(u.username||'')+'\')">حذف</button></td></tr>').join('')
-    :'<tr><td colspan="8" class="empty">'+(q?'کاربری با این مشخصات پیدا نشد':'کاربری نیست')+'</td></tr>');
+    :'<tr><td colspan="'+uColCount()+'" class="empty">'+(q?'کاربری با این مشخصات پیدا نشد':'کاربری نیست')+'</td></tr>');
 }
 /* THE PICTURE THE PLAYER ACTUALLY PUT THERE.
    A row of usernames says nothing about who these people are; the avatar is the
