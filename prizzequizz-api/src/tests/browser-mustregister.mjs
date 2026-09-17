@@ -133,6 +133,39 @@ for (const [label, who] of [['no display name', NO_DISPLAY_NAME], ['no username'
   await ctx.close();
 }
 
+/* ── 3c. A THIN ANSWER FROM THE SERVER MUST NOT STRAND ANYBODY ──────────── */
+console.log('\nwhen the server hands back less than it used to:');
+{
+  /* `_usr` is replaced wholesale in five places, GET /users/me among them. An
+     older server, a partial response, a shape that changes next year — any of
+     them can leave it without a displayName. Reading that absence as «never
+     registered» would bounce a paying player onto a sign-up form for an account
+     they finished months ago, which is far worse than the hole being closed.
+     The game's own placeholders are proof; a blank is not. */
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+  await ctx.addInitScript((u) => {
+    localStorage.setItem('pz_tok', 't'); localStorage.setItem('pz_rtok', 'r');
+    localStorage.setItem('pz_usr', JSON.stringify(u));
+    for (const k of ['leaderboard', 'missions', 'shop', 'wheel']) localStorage.setItem('pq_tut_' + k, '1');
+    try { sessionStorage.setItem('pz_push_asked_visit', '1'); } catch (e) {}
+  }, NAMED);
+  /* Everything answers with an empty object — exactly what a stubbed or thinner
+     /users/me does, and what several other suites in this folder already do. */
+  await ctx.route('**/v1/**', (route) => {
+    const u = route.request().url();
+    const d = u.includes('/auth/refresh') ? { accessToken: 't2', refreshToken: 'r2' } : {};
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, data: d }) });
+  });
+  const page = await ctx.newPage();
+  await page.goto(`http://127.0.0.1:${PORT}/`, { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(5600);
+  const thin = await page.evaluate(() => JSON.stringify((0, eval)('_usr')));
+  ok('the session really was thinned out', thin === '{}' || !/displayName/.test(thin), thin.slice(0, 60));
+  const landed = await goTo(page, 'home');
+  ok('and a real player is still let into the game', landed === 'home', landed);
+  await ctx.close();
+}
+
 /* ── 4. NOBODY LOGGED IN AT ALL IS NOT BOUNCED EITHER ───────────────────── */
 console.log('\nwith no session at all:');
 {

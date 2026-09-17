@@ -267,6 +267,46 @@ const OTHER = 'تاریخ';
 
   /* ── AND WHAT NOBODY ASKED FOR ────────────────────────────────────────── */
 
+  /* ── HALF-OPEN DOORS ──────────────────────────────────────────────────
+     An account exists from the moment the SMS code is verified — BEFORE a name
+     is ever asked for — so anyone who gets a code and closes the app leaves a
+     row behind for ever. Ten of them were sitting in the live list among real
+     players, indistinguishable, all called «بازیکن جدید». The list has to say
+     which is which; nothing here deletes anybody. */
+  await check('an account that never chose a name is marked as unfinished', async () => {
+    const G1 = '00000000-0000-4000-8000-0000000000f1';
+    await pool.query(
+      `INSERT INTO users(id, phone, username, display_name, wallet_balance, coins, tickets)
+       VALUES ($1,'09121999001','user_1789659165304','بازیکن جدید',0,350,'{}'::jsonb)`, [G1]);
+    const r = await adminUserTable({ query: 'user_1789659165304' });
+    assert.equal(r.rows.length, 1, 'the row itself should still be findable');
+    assert.equal(r.rows[0]!.unfinished, true, 'a placeholder account is not a player');
+    await pool.query(`DELETE FROM users WHERE id=$1`, [G1]);
+  });
+
+  await check('and half a name is still unfinished', async () => {
+    /* The two fields are written in one call, and a username clash returns 409
+       with neither stored — so a retry that lands one and not the other is a
+       real shape, not a hypothetical one. */
+    const G2 = '00000000-0000-4000-8000-0000000000f2';
+    const G3 = '00000000-0000-4000-8000-0000000000f3';
+    await pool.query(
+      `INSERT INTO users(id, phone, username, display_name, wallet_balance, coins, tickets)
+       VALUES ($1,'09121999002','ghost_named','بازیکن جدید',0,0,'{}'::jsonb),
+              ($2,'09121999003','user_1789659165999','احسان رستمی',0,0,'{}'::jsonb)`, [G2, G3]);
+    const a = await adminUserTable({ query: 'ghost_named' });
+    assert.equal(a.rows[0]!.unfinished, true, 'no display name is unfinished');
+    const b = await adminUserTable({ query: 'user_1789659165999' });
+    assert.equal(b.rows[0]!.unfinished, true, 'no username is unfinished');
+    await pool.query(`DELETE FROM users WHERE id = ANY($1)`, [[G2, G3]]);
+  });
+
+  await check('a player who finished is not marked', async () => {
+    const r = await adminUserTable({ query: 'tbl-a' });
+    assert.equal(r.rows.length, 1);
+    assert.equal(r.rows[0]!.unfinished, false, 'a real account must not be labelled a ghost');
+  });
+
   await check('a sort key from the request cannot become SQL', async () => {
     const r = await T({ sort: "wallet'; DROP TABLE users--" });
     assert.equal(r.sort, 'recent', 'an unknown key must fall back, not be used');

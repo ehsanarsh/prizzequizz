@@ -1305,6 +1305,10 @@ async function renderUsers(){
           '<option value="">— بدون موضوع —</option>'+
           cats.map(c=>'<option value="'+esc(c.name)+'"'+(U_TOPIC===c.name?' selected':'')+'>'+esc((c.icon?c.icon+' ':'')+c.name)+'</option>').join('')+
         '</select></label>'+
+      '<label style="margin:0">نمایش'+
+        '<select id="ushow" onchange="uShowPick(this.value)" style="min-width:150px">'+
+          ['all','done','unfinished'].map(k=>'<option value="'+k+'"'+(U_SHOW===k?' selected':'')+'>'+U_SHOW_LABEL[k]+'</option>').join('')+
+        '</select></label>'+
       '<span class="note" id="uqnote" style="margin:0 8px;align-self:center"></span></div>'+
     (U_TOPIC?'<div class="note" style="margin:-6px 0 10px">ستون «٪ '+esc(U_TOPIC)+'» درصد پاسخ‌های درستِ هر کاربر در همین موضوع است؛ کسی که در این موضوع سؤالی جواب نداده صفر می‌ماند.</div>':'')+
     '<div id="ubulk"></div>'+
@@ -1323,6 +1327,21 @@ async function renderUsers(){
   });
   const i=$('#uq'); if(i&&U_Q){i.focus();i.setSelectionRange(i.value.length,i.value.length);}
 }
+/* WHO IS SHOWN — «همه», «ثبت‌نام کامل», «ثبت‌نام ناتمام».
+   An account exists from the moment the SMS code is verified, BEFORE a name is
+   ever asked for, so anybody who gets a code and closes the app leaves a row
+   behind for ever. Ten of them were sitting in the live list among real
+   players, indistinguishable, all called «بازیکن جدید» — which is what made the
+   list look broken. They are not deleted here: a row is somebody's phone number
+   and their history, and throwing those away is not a side effect of a filter. */
+const U_SHOW_LABEL={all:'همه',done:'ثبت‌نام کامل',unfinished:'ثبت‌نام ناتمام'};
+let U_SHOW='all';
+function uShows(u){
+  if(U_SHOW==='done') return !u.unfinished;
+  if(U_SHOW==='unfinished') return !!u.unfinished;
+  return true;
+}
+function uShowPick(v){ U_SHOW=U_SHOW_LABEL[v]?v:'all'; uPaintRows(); uPaintPager(); }
 /* WHAT MATCHES, WITHOUT ASKING THE SERVER.
    The same rule the server uses, so the instant answer and the one that
    arrives a moment later agree with each other rather than flickering between
@@ -1349,9 +1368,14 @@ function uPaintRows(){
   /* The instant filter runs over the page already on screen so the list reacts
      to a keystroke; the server's answer replaces it a moment later. Both use the
      same rule, so the two never disagree while one is catching up. */
-  const list=all.filter(u=>uMatches(u,q));
+  const list=all.filter(u=>uMatches(u,q)&&uShows(u));
   const note=$('#uqnote');
-  if(note) note.textContent=q?(list.length?(fa(list.length)+' کاربر'):'چیزی پیدا نشد'):'';
+  /* The count of half-open doors is worth saying out loud even when nothing is
+     filtered — it is the number an operator would otherwise have to work out by
+     reading «بازیکن جدید» down a column. */
+  const ghosts=all.filter(u=>u.unfinished).length;
+  const ghostNote=ghosts?(' · '+fa(ghosts)+' ثبت‌نام ناتمام'):'';
+  if(note) note.textContent=(q?(list.length?(fa(list.length)+' کاربر'):'چیزی پیدا نشد'):(U_SHOW==='all'?'':fa(list.length)+' کاربر'))+ghostNote;
   const tiers=uTiers();
   /* A zero written out in full in every cell turns the table into a wall of
      digits with nothing standing out. The dash keeps the eye on the numbers
@@ -1364,7 +1388,7 @@ function uPaintRows(){
         '<div class="note" style="margin:0;display:block;font-size:11px">'+
           '<span class="mono">'+String(u.id).slice(0,8)+'</span>'+
           (u.phone?' · <span class="mono">'+esc(u.phone)+'</span>':'')+
-        '</div></div>'+newTag('users',u.createdAt)+'</div></td>'+
+        '</div></div>'+(u.unfinished?'<span class="pill pend" title="کد پیامکی را تأیید کرده ولی فرم ثبت‌نام را پر نکرده">ثبت‌نام ناتمام</span>':'')+newTag('users',u.createdAt)+'</div></td>'+
     tiers.map(t=>{
       const v=Number((u.tickets||{})[t]||0);
       return v?'<td class="num"><b style="color:'+(U_TIER_COLOR[t]||'inherit')+'">'+fa(v)+'</b></td>':'<td class="num zero">—</td>';

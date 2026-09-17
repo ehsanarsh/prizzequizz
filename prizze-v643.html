@@ -11353,10 +11353,33 @@ let _pzRegNagAt=0;
    screen without a name lands on the registration form instead — whatever
    called it, whether it exists today or gets written next month. Once the name
    is there this is inert, and with no session at all it never fires. */
+/* POSITIVE EVIDENCE, NEVER AN ABSENCE.
+   `_pzNeedsRegister()` treats a missing name as «not registered», which is the
+   right reading at the splash — that object comes straight from the login
+   response and has every field. It is the WRONG reading here. `_usr` is
+   replaced wholesale in five places (GET /users/me among them), and anything
+   that hands back a thinner object — an older server, a partial response, a
+   shape that changes next year — would make this bounce a paying player onto a
+   sign-up form for an account they finished months ago. Stranding a real player
+   is far worse than the hole this closes.
+   So the gate fires only on the game's OWN placeholders, which are proof. A
+   blank is not proof of anything and is left alone. */
+function _pzUnregistered(){
+  if(!_usr) return false;
+  /* Both tests below need something POSITIVE to match, so a blank object — the
+     shape a thinner /users/me leaves behind — falls through to false on its
+     own. An explicit «if both are empty, assume nothing» line stood here and
+     was removed: a mutation deleting it changed no answer, which is the proof
+     that it was decoration rather than a guard. */
+  const dn=String(_usr.displayName||'').trim();
+  const un=String(_usr.username||'').trim();
+  if(dn==='بازیکن جدید') return true;
+  return /^user_\d+$/.test(un);
+}
 function _pzGateRegister(id){
   if(!_tok||!_usr) return id;
   if(PZ_PREREG_SCREENS.indexOf(id)>=0) return id;
-  if(!_pzNeedsRegister()) return id;
+  if(!_pzUnregistered()) return id;
   /* Said, but not said five times — a bounce with no explanation reads as the
      app being broken, and a toast per redirect reads the same way. */
   const now=Date.now();
@@ -13967,7 +13990,41 @@ function testAppearanceModal(){showAaaModal({icon:'✨',title:'ظاهر فعلی
 function exportSettings(){const data=JSON.stringify({settings:appSettings,exportedAt:new Date().toISOString()},null,2);const blob=new Blob([data],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='prizze-quiz-settings.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);toast('فایل تنظیمات آماده شد 📦');}
 function clearGuideCache(){try{['pq_league_guide_seen'].forEach(k=>localStorage.removeItem(k));}catch(e){}toast('کش راهنماها پاک شد 🧹');}
 function resetAllSettings(){showAaaModal({icon:'🔄',title:'بازنشانی تنظیمات؟',sub:'همه گزینه‌ها به حالت پیش‌فرض برمی‌گردند. پیشرفت بازی و صندوق جایزه پاک نمی‌شود.',primaryText:'بازنشانی',secondaryText:'انصراف',primaryClass:'btn-red',onPrimary:()=>{window.appSettings={...DEFAULT_SETTINGS};saveSettings();closeAaaModal(false);renderSettingDetail('data');toast('تنظیمات بازنشانی شد ✅');},onSecondary:()=>closeAaaModal(false)});}
-function confirmLogout(){showAaaModal({icon:'🚪',title:'خروج از حساب؟',sub:'از این دستگاه خارج می‌شی. اطلاعات پروتوتایپ و تنظیمات ذخیره‌شده باقی می‌مانند.',primaryText:'خروج',secondaryText:'انصراف',primaryClass:'btn-red',onPrimary:()=>{closeAaaModal(false);toast('با موفقیت خارج شدی');setTimeout(()=>go('login'),450);},onSecondary:()=>closeAaaModal(false)});}
+/* LEAVING MEANS LEAVING.
+ *
+ * «وقتی خروج زدم و برنامه رو بستم و دوباره باز کردم بازم رفت تو حساب، انگار
+ *  اصلاً از حسابم خارج نشده بودم.»
+ *
+ * Because it had not. «خروج» showed the login screen and did NOTHING else: the
+ * access token, the refresh token and the cached user all stayed exactly where
+ * they were, so the next splash found a whole session and walked straight back
+ * in. The login screen was scenery.
+ *
+ * That is not only a nuisance, it is the opposite of what the row promises.
+ * «خروج امن از این دستگاه» on a device that is still signed in — and still
+ * holds a refresh token the SERVER still honours — is a lie told to somebody
+ * about to hand their phone to someone else.
+ *
+ * So: the server is told first, while the token to revoke is still in hand, and
+ * the device is cleared whether or not that call gets through. A phone with no
+ * signal must still be able to log out of itself; what it must not do is keep
+ * the keys. */
+async function pzDoLogout(){
+  let rtok=''; try{ rtok=localStorage.getItem('pz_rtok')||''; }catch(e){}
+  /* Best-effort and FIRST: a device that has merely forgotten its token has not
+     logged out, it has lost its keys — the session lives on until it expires. */
+  if(rtok){ try{ await pzApi('POST','/auth/logout',{refreshToken:rtok},false); }catch(e){} }
+  _tok=null; _usr=null; _rid=null; _otpPhone='';
+  try{ wallet=0; updateWalletUI(); }catch(e){}
+  /* Only the three keys that ARE the session. «اطلاعات و تنظیمات ذخیره‌شده باقی
+     می‌مانند» is what the modal promises, and a logout that also wiped somebody's
+     saved cards and sound settings would be keeping a different promise. */
+  for(const k of ['pz_tok','pz_rtok','pz_usr']){ try{ localStorage.removeItem(k); }catch(e){} }
+  try{ pzOtpStopListening(); }catch(e){}
+  try{ otpStopTimer(); }catch(e){}
+  go('login');
+}
+function confirmLogout(){showAaaModal({icon:'🚪',title:'خروج از حساب؟',sub:'از این دستگاه خارج می‌شی. اطلاعات پروتوتایپ و تنظیمات ذخیره‌شده باقی می‌مانند.',primaryText:'خروج',secondaryText:'انصراف',primaryClass:'btn-red',onPrimary:()=>{closeAaaModal(false);toast('با موفقیت خارج شدی');setTimeout(()=>{ pzDoLogout(); },450);},onSecondary:()=>closeAaaModal(false)});}
 loadSettings();applySettings();renderSettingsSummary();
 
 /* ============ SHOP ============ */

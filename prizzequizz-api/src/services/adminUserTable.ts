@@ -28,6 +28,14 @@ export function ticketTiers(): string[] {
   try { return Object.keys(getTicketPrices() ?? {}); } catch { return ['green', 'blue', 'red']; }
 }
 
+/* THE ONE RULE, so the SQL and the in-memory fallback cannot drift apart and
+   report different people as unfinished on two different servers. */
+export function unfinishedOf(displayName: unknown, username: unknown): boolean {
+  const dn = String(displayName ?? '').trim();
+  const un = String(username ?? '').trim();
+  return dn === '' || dn === 'بازیکن جدید' || /^user_[0-9]+$/.test(un);
+}
+
 export interface AdminUserRow extends AdminUserListItem {
   /** When the account was opened — the list marks the ones that are new. */
   createdAt?: number;
@@ -40,6 +48,14 @@ export interface AdminUserRow extends AdminUserListItem {
   losses: number;
   /** Percent, 0-100. Zero games is 0, not «undefined disguised as bad». */
   winRate: number;
+  /* A SIGN-UP THAT NEVER FINISHED IS NOT A PLAYER.
+     An account exists from the moment the SMS code is verified — BEFORE a name
+     is ever asked for — so anyone who gets a code and closes the app leaves a
+     row behind for ever. Ten of them were sitting in the live list among real
+     players, indistinguishable, called «بازیکن جدید». They are not a mistake
+     and they are not people: they are half-open doors, and the list should say
+     so rather than making an operator work it out from the name. */
+  unfinished: boolean;
   /** Only filled when a topic was asked for. */
   topicTotal?: number;
   topicCorrect?: number;
@@ -148,6 +164,8 @@ export async function adminUserTable(input: UserTableQuery = {}): Promise<UserTa
            COALESCE(sp.spent,0) AS spent,
            COALESCE(rf.invited,0) AS invited,
            COALESCE(rf.rewarded,0) AS invites_rewarded,
+           (coalesce(u.display_name,'') = '' OR u.display_name = 'بازیکن جدید'
+            OR u.username ~ '^user_[0-9]+$') AS unfinished,
            ${topicCols}
       FROM users u
       LEFT JOIN (SELECT user_id, count(*)::int AS played FROM match_players GROUP BY user_id) mp ON mp.user_id = u.id
@@ -212,6 +230,7 @@ function shape(r: any, tiers: string[], topic: string): AdminUserRow {
     wallet: Number(r.wallet_balance ?? 0), coins: Number(r.coins ?? 0), hearts: Number(r.hearts ?? 0),
     invited: Number(r.invited ?? 0), invitesRewarded: Number(r.invites_rewarded ?? 0),
     createdAt: r.created_at ? new Date(r.created_at).getTime() : 0,
+    unfinished: r.unfinished === undefined ? unfinishedOf(r.display_name, r.username) : !!r.unfinished,
     tickets, ticketTotal: Number(r.ticket_total ?? 0),
     spent: Number(r.spent ?? 0),
     played: Number(r.played ?? 0), wins: Number(r.wins ?? 0), losses: Number(r.losses ?? 0),
@@ -236,7 +255,8 @@ async function memoryTable(o: any): Promise<UserTablePage> {
     const t: Record<string, number> = {};
     for (const k of o.tiers) t[k] = Number((tickets as any)[k] ?? 0) || 0;
     rows.push({ ...u, tickets: t, ticketTotal: Object.values(t).reduce((a, b) => a + b, 0),
-      spent: 0, played: 0, wins: 0, losses: 0, winRate: 0 } as AdminUserRow);
+      spent: 0, played: 0, wins: 0, losses: 0, winRate: 0,
+      unfinished: unfinishedOf(u.displayName, u.username) } as AdminUserRow);
   }
   const key = o.sort as string;
   const pick = (r: AdminUserRow): number | string => {
