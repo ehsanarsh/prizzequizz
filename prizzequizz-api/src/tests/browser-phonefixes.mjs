@@ -324,13 +324,24 @@ async function makePage(routes = true) {
     (0, eval)("pzBuyOrder({kind:'ticket',tier:'green',qty:1},'بلیط سبز')");
     await new Promise((r) => setTimeout(r, 400));
     const b = document.getElementById('aaaPrimary');
-    const label = b ? b.textContent : '(no sheet)';
+    const rows = [...document.querySelectorAll('#pmList .pm')];
+    const sheet = { label: b ? b.textContent.trim() : '(no sheet)', doors: rows.length,
+      lit: rows.filter((x) => x.classList.contains('on')).map((x) => x.innerText.replace(/\s+/g, ' ').trim().slice(0, 20)) };
     if (b) b.click();
     await new Promise((r) => setTimeout(r, 2100));
-    return label;
+    return sheet;
   });
-  const payLabel = await buy();
-  ok('the purchase really went through the payment sheet', /صندوق|درگاه/.test(payLabel), payLabel);
+  const sheet = await buy();
+  /* THE SHEET IS ONE SHEET NOW, AND THE BUTTON IS ONE WORD.
+     This used to read the button's label and expect it to NAME the method —
+     «پرداخت از صندوق», «رفتن به درگاه». That was the old two-step sheet. The
+     player asked for one: «یه دکمهٔ پرداخت با رنگ سبز» with the doors as rows
+     above it. So the proof that the purchase went through the sheet is the
+     sheet — four doors, exactly one of them lit — and not the wording of a
+     button that no longer carries it. */
+  ok('the purchase really went through the payment sheet', sheet.doors === 4, sheet.doors + ' doors');
+  ok('with exactly one way to pay chosen', sheet.lit.length === 1, sheet.lit.join(' | '));
+  ok('and one green button that just says pay', sheet.label === 'پرداخت', sheet.label);
   const afterBuy = await page.evaluate(() => ({
     screen: (document.querySelector('.screen.active') || {}).id, remembered: (0, eval)('_pzShopReturn')
   }));

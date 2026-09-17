@@ -896,11 +896,44 @@ async function eliminateMe(page) {
     const txt = document.body.innerText || '';
     /* The whole document, not just what is on screen: every screen's markup is
        in the page, and one missed label is the one the player finds. */
-    const html = document.documentElement.innerHTML;
-    return { old: (html.match(/کیف پول/g) || []).length, neu: (html.match(/صندوق جایزه/g) || []).length, seen: /کیف پول/.test(txt) };
+    /* LABELS, NOT THE SOURCE.
+       This used to count occurrences in innerHTML — which includes every CSS
+       and script comment, so quoting the player's own words in a comment
+       explaining the fix made the test report that the wallet was still called
+       a wallet. Stripping comments with a regex was worse: one `/*` inside a
+       string swallowed whole sections of the page and the test then found
+       nothing at all, wherever you put it.
+       So: every text node and every attribute a player can read, with <script>
+       and <style> skipped entirely. Hidden screens are included — they are in
+       the DOM — because one missed label is the one the player finds. */
+    const labels = [];
+    const walk = (n) => {
+      if (n.nodeType === 3) { labels.push(n.nodeValue || ''); return; }
+      if (n.nodeType !== 1) return;
+      const tag = n.tagName.toLowerCase();
+      if (tag === 'script' || tag === 'style') return;
+      for (const a of ['title', 'placeholder', 'alt', 'aria-label', 'value', 'label', 'data-label']) {
+        const v = n.getAttribute && n.getAttribute(a);
+        if (v) labels.push(v);
+      }
+      for (const c of n.childNodes) walk(c);
+    };
+    walk(document.documentElement);
+    const html = labels.join('\n');
+    return { old: (html.match(/کیف پول/g) || []).length, neu: (html.match(/صندوق جایزه/g) || []).length,
+      scanned: html.length, seen: /کیف پول/.test(txt) };
   });
   ok('nothing is called a wallet any more', words.old === 0, String(words.old));
-  ok('and the prize box is named all over', words.neu > 10, String(words.neu));
+  /* THE GUARD AGAINST A VACUOUS PASS, WHICH IS WHAT THIS IS FOR.
+     «nothing is called a wallet» passes beautifully when the scan finds
+     nothing at all — and an earlier attempt to skip source comments with a
+     regex did exactly that, swallowing whole sections of the page at the first
+     `/*` inside a string. So: the scan must have read a real amount of text,
+     and the new name must be in it. The threshold used to be «more than ten»
+     against innerHTML, which counted every mention inside the scripts; on the
+     labels a player actually reads there are six. */
+  ok('the scan actually read the page', words.scanned > 2000, words.scanned + ' characters');
+  ok('and the prize box is named all over', words.neu >= 5, String(words.neu));
   ok('nothing on screen says the old word', words.seen === false, String(words.seen));
   ok('no script errors', errs.length === 0, errs.join(' | '));
   await ctx.close();

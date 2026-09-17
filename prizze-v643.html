@@ -7583,15 +7583,34 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
    text is a height that grows the header the first time somebody's balance
    gains a digit, and «ذره‌ای» leaves no room for that. */
 #home .pz-header .pzh-pill{height:24px;padding:0 9px;box-sizing:border-box}
+/* EXCEPT THE LEAGUE TICKET, WHICH IS NOT ONE OF THE ROW.
+   Pinning EVERY pill to 24px pinned that one too — and it is deliberately the
+   tallest thing on the row, a 26px piece of ticket artwork in a chip of its
+   own, for the handful of players who hold one. This rule out-specifies the
+   chip's own padding, so it squashed it flat to the height of a coin counter
+   and there was nothing left to notice. It keeps its own height, said here so
+   the two rules are read together rather than found apart. */
+#home .pz-header .pzh-pill.p-league{height:32px;padding:1px 10px}
+/* NO LINE-HEIGHT HERE, AND THAT IS DELIBERATE.
+   These numbers all reported `scrollHeight > height`, which looked like nine
+   clipped labels; it is just `line-height:1` giving a box exactly one em tall
+   while Persian glyphs draw a little above and below. Nothing is cut — the
+   line box still sits inside the 24px pill and nothing above it clips. The
+   fix belonged in how that was MEASURED, not in loosening the metrics of a row
+   that must not grow «ذره‌ای». Setting them back to 1 changes nothing that any
+   test can see, which is how it was established that they were not needed. */
 #home .pz-header .pzh-pill b{font-size:15px;line-height:1}
 /* The صندوق is the one number on this row that is money, so it is the largest.
    The tighter tracking is what keeps ۱٬۲۵۰٬۰۰۰ on one line at this size. */
 #home .pz-header .p-money b{font-size:16.5px;letter-spacing:-.2px}
-/* «بعد از عدد کیف پول تومان نوشته بشه» — the unit, said quietly. A number on
-   this row with no unit is a number the reader has to guess the meaning of;
-   said as loudly as the figure it would compete with it. */
+/* «بعد از عدد صندوق جایزه تومان نوشته بشه» — the unit, said quietly. A number
+   on this row with no unit is a number the reader has to guess the meaning of;
+   said as loudly as the figure, it would compete with it. */
 #home .pz-header .p-money small.unit{font-size:9.5px;font-weight:800;color:#C9A94A;margin-inline-start:2px}
 #home .pz-header .pzh-tickets .pzh-pill b{font-size:15.5px}
+/* The league chip's number is a TICKET's number and sits among them, so it
+   matches its neighbours rather than the money beside them. */
+#home .pz-header .pzh-pill.p-league b{font-size:15.5px}
 /* The ticket's own picture grows with its number — a 14px chip under a 15.5px
    figure reads as a caption rather than a ticket. Still inside the 24px. */
 #home .pz-header .pzh-tickets img{height:16px}

@@ -78,7 +78,14 @@ await page.waitForTimeout(600);
 const m = await page.evaluate(() => {
   const hd = document.querySelector('.pz-header');
   const lg = document.querySelector('.pzh-pill.p-league');
-  const normal = document.querySelector('.pzh-pill:not(.p-league)');
+  /* A TICKET'S NEIGHBOUR IS A TICKET.
+     This used to be the first pill that is not the league one — which is the
+     صندوق, the money pill, and money is now deliberately the largest number on
+     the row («اندازهٔ مبلغ صندوق جایزه رو بزرگ کن»). Comparing a ticket against
+     money made the test fail for a difference that was asked for. The chip is
+     compared with the tickets it stands among. */
+  const normal = document.querySelector('.pzh-tickets .pzh-pill:not(.p-league)')
+    || document.querySelector('.pzh-pill:not(.p-league)');
   const num = lg && lg.querySelector('b');
   const img = lg && lg.querySelector('img.pz-lgtk');
   const nb = normal && normal.querySelector('b');
