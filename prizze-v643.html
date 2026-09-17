@@ -15566,11 +15566,14 @@ async function pzLoadBlocked(force){
   return PZ_BLOCKED;
 }
 function pzIsBlocked(id){ return PZ_BLOCKED.some(b=>String(b.id)===String(id)); }
-/* WHO I AM, from something that survives a thin answer.
-   `_usr` is replaced wholesale by whatever /users/me returns, and a response
-   without an `id` leaves the app not knowing who it is — which is how «بلاک
-   کردن» ended up being offered on the player's OWN profile. The copy written
-   at login is the fallback, because that one always had the whole record. */
+/* WHO I AM, with a second place to look.
+   pzHydrateAll no longer overwrites `_usr` with a thin /users/me answer, so in
+   a live session the first line is the one that answers. The fallback is for
+   the sessions that were already saved BEFORE that fix shipped, and for the
+   five other places that still do `_usr=r.data`: the copy in localStorage was
+   written at login, when the record was whole. An empty string is returned
+   when neither knows, and every caller treats that as «don't offer the
+   button» rather than as an id — see the `userId&&` guards. */
 function pzMyId(){
   const live=(_usr&&_usr.id)||'';
   if(live) return String(live);
@@ -18919,18 +18922,29 @@ async function pzHydrateAll(){
   try{
     const r=await pzApi('GET','/users/me');
     if(r&&r.ok&&r.data){
-      /* MERGED, NOT REPLACED — and the stored copy with it.
-         This took whatever /users/me returned and made it the whole of `_usr`.
-         A thinner answer — an older server, a partial response, a shape that
-         changes — therefore DELETED the fields it did not mention, including
-         `id`, and then wrote that over the copy in localStorage so it did not
-         come back on the next load either. The app ended up not knowing who it
-         was: «بلاک کردن» was offered on the player's own profile, because the
-         id it compared against was gone.
-         A field the server did not send is a field the server did not mention,
-         not a field it cleared. */
-      const u=Object.assign({},_usr||{},r.data); _usr=u;
-      try{ localStorage.setItem('pz_usr',JSON.stringify(u)); }catch(e){}
+      /* WHAT THE SERVER DID NOT MENTION, IT DID NOT DELETE.
+         This used to do `_usr=r.data`, so an answer that carried only `avatar`
+         and `character` — which is exactly what a thinner or older /users/me
+         sends — wiped out the id, the name, everything. And then it was saved
+         over localStorage, so it did not come back on the next load either:
+         the app stopped knowing who it was, and «بلاک کردن» was offered on the
+         player's OWN profile, because the id it compares against was gone.
+         Two separate things, kept separate:
+           — `u` stays the RAW answer, and every line below still renders from
+             it. The screen shows what the server just said and nothing else,
+             so re-applying a remembered balance or a stale name cannot happen.
+           — `_usr` (and the copy that survives a reload) is MERGED, so the
+             fields the answer was silent about are still there afterwards.
+         Merging the stored copy alone was not enough: pzApplyMyAvatar and
+         pzApplyMyCharacter both write `_usr` straight back to localStorage a
+         few lines down, which put the thinned-out object right back.
+         Those two are also why the save below cannot be caught by a test —
+         they re-save the same object seconds later, so deleting this line
+         changes nothing today. It stays anyway: «who I am survives a reload»
+         should not be a side effect of the function that paints the photo. */
+      const u=r.data;
+      _usr=Object.assign({},_usr||{},u);
+      try{ localStorage.setItem('pz_usr',JSON.stringify(_usr)); }catch(e){}
       /* THE BALANCES. /users/me has always returned them and the client has
          always thrown them away, so anything the server credited — a wheel
          prize, a daily reward, a shop purchase — never reached the header.

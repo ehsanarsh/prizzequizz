@@ -17,6 +17,13 @@ import { addBlacklist, removeBlacklist } from '../services/smsService.js';
 import { getPgPool } from '../database/postgres.js';
 import { id } from '../utils/id.js';
 
+if (!process.env.DATABASE_URL) {
+  /* Loudly, not quietly. The export reads the users table directly — against the memory driver there is nothing to read and nothing to be wrong about. */
+  console.log('  — skipped: this needs Postgres');
+  console.log('[phoneExport] 0 passed, 0 failed');
+  process.exit(0);
+}
+
 let pass = 0, fail = 0;
 async function check(name: string, fn: () => unknown): Promise<void> {
   try { await fn(); pass++; console.log('  ✔ ' + name); }

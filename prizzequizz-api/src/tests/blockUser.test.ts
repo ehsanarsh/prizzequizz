@@ -14,6 +14,13 @@ import { blockUser, unblockUser, blockedBetween, iBlocked, listBlocked, blockedA
 import { getPgPool } from '../database/postgres.js';
 import { id } from '../utils/id.js';
 
+if (!process.env.DATABASE_URL) {
+  /* Loudly, not quietly. A block is a row two people depend on; exercising it only against the in-memory map would prove nothing about the table that actually holds it. */
+  console.log('  — skipped: this needs Postgres');
+  console.log('[blockUser] 0 passed, 0 failed');
+  process.exit(0);
+}
+
 let pass = 0, fail = 0;
 async function check(name: string, fn: () => unknown): Promise<void> {
   try { await fn(); pass++; console.log('  ✔ ' + name); }
@@ -23,12 +30,18 @@ async function check(name: string, fn: () => unknown): Promise<void> {
 (async () => {
   const pool = getPgPool();
   _resetBlocks();
-  let seq = 940000000;
+  /* THE ROWS THIS MAKES ARE CLEANED UP, and the numbers do not collide with a
+     previous run's. A fixed base ran straight into `users_phone_key` the second
+     time this file was run, which reads as a failure of the code under test and
+     is nothing of the sort. */
+  const made: string[] = [];
   const mk = async (tag: string): Promise<string> => {
     const uid = id();
+    made.push(uid);
     await pool.query(
       `INSERT INTO users(id, phone, username, display_name, wallet_balance, coins, tickets)
-       VALUES ($1,$2,$3,$4,0,0,'{}'::jsonb)`, [uid, '09' + String(seq++), tag + '_' + uid.slice(0, 6), tag]);
+       VALUES ($1,$2,$3,$4,0,0,'{}'::jsonb)`,
+      [uid, '09' + String(Math.floor(Math.random() * 1e9)).padStart(9, '0'), 'blk_' + uid.slice(0, 10), tag]);
     return uid;
   };
   const A = await mk('alef'), B = await mk('be'), C = await mk('jim');
@@ -113,7 +126,8 @@ async function check(name: string, fn: () => unknown): Promise<void> {
     assert.equal(set.has(E), true, 'a block by somebody else was invisible to them');
   });
 
-  await pool.query(`DELETE FROM user_blocks WHERE blocker_id = ANY($1) OR blocked_id = ANY($1)`, [[A, B, C]]);
+  await pool.query(`DELETE FROM user_blocks WHERE blocker_id = ANY($1) OR blocked_id = ANY($1)`, [made]);
+  await pool.query(`DELETE FROM users WHERE id = ANY($1)`, [made]);
   console.log(`[blockUser] ${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error(e); process.exit(1); });

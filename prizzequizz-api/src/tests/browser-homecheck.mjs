@@ -29,6 +29,16 @@ await ctx.addInitScript(() => {
   localStorage.setItem('pz_tok', 'test-token');
   localStorage.setItem('pz_rtok', 'test-rtoken');
   localStorage.setItem('pz_usr', JSON.stringify({ id: 'u1', username: 'ehsan', displayName: 'احسان', level: 3, xp: 120, wallet: 0, coins: 360, hearts: 5, weeklyScore: 92 }));
+  /* THE PUSH ASK, SILENCED — it is a modal, and a modal blurs and SCALES the
+     whole viewport (.phone.modal-open .viewport { transform: scale(.985) }).
+     Every box measured below then comes back 1.5% short, which reads exactly
+     like «the card is squashed» without anything being wrong with the card.
+     This line is in every other browser suite here; homecheck got away without
+     it only because a bug used to send this session to the LOGIN screen, where
+     the ask is suppressed. The moment the bug was fixed the real behaviour —
+     land on a real screen, ask once per visit — arrived, and five assertions
+     failed for a reason that has nothing to do with the home screen. */
+  try { sessionStorage.setItem('pz_push_asked_visit', '1'); } catch (e) {}
 });
 await ctx.route('**/v1/**', (route) => {
   const p = new URL(route.request().url()).pathname.replace(/^.*\/v1/, '');

@@ -33,6 +33,11 @@ async function makePage() {
   await ctx.addInitScript(() => {
     localStorage.setItem('pz_tok', 't'); localStorage.setItem('pz_rtok', 'r');
     localStorage.setItem('pz_usr', JSON.stringify({ id: 'me', username: 'ehsan', displayName: 'احسان', level: 3, coins: 50, hearts: 5 }));
+    /* The push ask is a MODAL, and a modal scales the whole viewport down by
+       1.5% (.phone.modal-open .viewport). Every measurement below would come
+       back short for a reason that has nothing to do with what is measured.
+       Suppressed the way every other suite here does it. */
+    try { sessionStorage.setItem('pz_push_asked_visit', '1'); } catch (e) {}
   });
   await ctx.route('**/v1/**', (route) => {
     const p = new URL(route.request().url()).pathname.replace(/^.*\/v1/, '');
@@ -447,6 +452,9 @@ const room = (over = {}) => {
   await ctx.addInitScript(() => {
     localStorage.setItem('pz_tok', 't'); localStorage.setItem('pz_rtok', 'r');
     localStorage.setItem('pz_usr', JSON.stringify({ id: 'me', username: 'ehsan', displayName: 'احسان', level: 3 }));
+    /* Same reason as above: the push ask is a modal, and a modal scales the
+       viewport. */
+    try { sessionStorage.setItem('pz_push_asked_visit', '1'); } catch (e) {}
   });
   await ctx.route('**/v1/**', (route) => {
     const p = new URL(route.request().url()).pathname.replace(/^.*\/v1/, '');
@@ -566,6 +574,9 @@ const room = (over = {}) => {
   await ctx.addInitScript(() => {
     localStorage.setItem('pz_tok', 't'); localStorage.setItem('pz_rtok', 'r');
     localStorage.setItem('pz_usr', JSON.stringify({ id: 'me', username: 'ehsan', displayName: 'احسان', level: 3 }));
+    /* Same reason as above: the push ask is a modal, and a modal scales the
+       viewport. */
+    try { sessionStorage.setItem('pz_push_asked_visit', '1'); } catch (e) {}
   });
   let failSend = true;
   await ctx.route('**/v1/**', (route) => {

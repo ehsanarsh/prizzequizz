@@ -187,13 +187,16 @@ console.log('\nafter a thin answer from the server:');
     localStorage.setItem('pz_usr', JSON.stringify(u));
     for (const k of ['leaderboard', 'missions', 'shop', 'wheel']) localStorage.setItem('pq_tut_' + k, '1');
     try { sessionStorage.setItem('pz_push_asked_visit', '1'); } catch (e) {}
-  }, { ...NAMED, id: 'u-42' });
+  }, { ...NAMED, id: 'u-42', level: 3 });
   await ctx.route('**/v1/**', (route) => {
     const u = route.request().url();
     /* What a real thin /users/me looks like: the fields it does carry, and
-       nothing of the identity. */
+       nothing of the identity. `level` is in there on purpose — it is a field
+       BOTH sides have, and the remembered one is out of date. Merging is not
+       «keep the old copy»: the server is still the authority on everything it
+       actually mentions, and only silence is treated as silence. */
     const d = u.includes('/auth/refresh') ? { accessToken: 't2', refreshToken: 'r2' }
-      : u.includes('/users/me') ? { avatar: null, character: null } : {};
+      : u.includes('/users/me') ? { avatar: null, character: null, level: 9 } : {};
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, data: d }) });
   });
   const page = await ctx.newPage();
@@ -205,9 +208,22 @@ console.log('\nafter a thin answer from the server:');
   ok('and the name did not vanish with it', await page.evaluate(() => ((0, eval)('_usr') || {}).username) === 'ehsan',
     JSON.stringify(await page.evaluate(() => (0, eval)('_usr'))));
   ok('what the server DID send is still applied', await page.evaluate(() => 'avatar' in ((0, eval)('_usr') || {})));
+  /* The other direction, and the one that keeps «merge» from quietly becoming
+     «ignore the server»: a field the answer DID carry overwrites the
+     remembered one, even when the remembered one is not empty. */
+  ok('and a field it did mention wins over the old value',
+     await page.evaluate(() => ((0, eval)('_usr') || {}).level) === 9,
+     String(await page.evaluate(() => ((0, eval)('_usr') || {}).level)));
   /* And it survives the next load, which is the half that made this permanent. */
   const stored = await page.evaluate(() => localStorage.getItem('pz_usr'));
   ok('the remembered copy was not overwritten with the thin one', /u-42/.test(String(stored)), String(stored).slice(0, 80));
+  ok('and the newer value is what is remembered', /"level":9/.test(String(stored)), String(stored).slice(0, 90));
+  /* THE SECOND PLACE pzMyId LOOKS. Sessions saved by the build BEFORE this fix
+     still have whatever the old code wrote, and five other places in the file
+     still assign `_usr` from a response wholesale. If `_usr` ever comes up
+     without an id again, the copy on disk answers instead of nothing. */
+  ok('and if the live copy is lost entirely, the saved one still answers',
+     await page.evaluate(() => { (0, eval)('_usr=null'); return (0, eval)('pzMyId()'); }) === 'u-42');
   await ctx.close();
 }
 
