@@ -5,6 +5,7 @@ import { assignSupportTicket, createSupportTicket, getSupportTicket, listSupport
 import type { SupportTicketPriority, SupportTicketStatus } from '../../types/domain.js';
 import { listMacros, createMacro, updateMacro, deleteMacro, MacroError } from '../../services/supportMacroService.js';
 import { bodyObject, optionalString, requiredString } from '../../utils/validation.js';
+import { markSupportRead, supportReadAt } from '../../services/supportSeenService.js';
 
 export function registerSupportRoutes(router: Router, base: string): void {
   router.add('GET', `${base}/support/tickets`, async (ctx) => {
@@ -29,7 +30,9 @@ export function registerSupportRoutes(router: Router, base: string): void {
   router.add('GET', `${base}/support/tickets/:id`, async (ctx) => {
     const result = await getSupportTicket(ctx.params.id!);
     if (!result || result.ticket.userId !== (ctx.userId ?? 'u1')) return error(ctx.res, 404, 'TICKET_NOT_FOUND', 'Support ticket not found.');
-    json(ctx.res, 200, result);
+    /* «برای کاربر مهمه که پشتیبان سین کرده یا نه» — one way only. Opening your
+       own ticket marks nothing; it is support's reading that is worth saying. */
+    json(ctx.res, 200, { ...result, supportReadAt: await supportReadAt(ctx.params.id!) });
   });
 
   // A user sends a follow-up message (chat) on their own ticket.
@@ -87,6 +90,10 @@ export function registerSupportRoutes(router: Router, base: string): void {
     if (!requireAdmin(ctx)) return;
     const result = await getSupportTicket(ctx.params.id!);
     if (!result) return error(ctx.res, 404, 'TICKET_NOT_FOUND', 'Support ticket not found.');
+    /* Support opening the ticket IS the reading. Not awaited into the answer:
+       the desk should not wait on a bookkeeping write to see the conversation,
+       and a mark that fails to save costs an eye, not a message. */
+    void markSupportRead(ctx.params.id!);
     json(ctx.res, 200, result);
   });
 

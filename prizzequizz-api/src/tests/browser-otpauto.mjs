@@ -143,6 +143,28 @@ console.log('the code screen:');
   ok('half a code is not sent anywhere', verified.length === before, JSON.stringify(verified.slice(before)));
   ok('but what there was of it is kept on screen',
      (await boxes(page)).join('') === '77', JSON.stringify(await boxes(page)));
+
+  /* AND NOT ONE DIGIT EITHER. Typing into the last box is what asks for the
+     submit, so the guard has to be reached with the OTHER boxes empty — the
+     path above stops earlier and never tests the guard at all. */
+  await page.evaluate(() => {
+    document.querySelectorAll('#otpBoxes input').forEach((b) => { b.value = ''; });
+    const last = [...document.querySelectorAll('#otpBoxes input')].pop();
+    last.value = '9';
+    last.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  /* `realVerifyOtp` has a length check of its own, so «nothing was sent» is true
+     either way and says nothing about THIS guard. What it must also not do is
+     START a submit: without the guard every digit typed would call the verify
+     and put «کد را کامل وارد کن» on screen for somebody who is still typing.
+     Sampled INSIDE the submit's own delay — the flag clears after it, and
+     reading afterwards would find `false` however the guard behaves. */
+  await page.waitForTimeout(60);
+  const began = await page.evaluate(() => (0, eval)('_pzOtpSubmitting'));
+  await page.waitForTimeout(700);
+  ok('a single digit in the last box submits nothing', verified.length === before,
+     JSON.stringify(verified.slice(before)));
+  ok('and does not even begin one', began === false, String(began));
   await ctx.close();
 }
 

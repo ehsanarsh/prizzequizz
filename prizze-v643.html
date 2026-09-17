@@ -14745,8 +14745,17 @@ async function renderSupportChat(c){
     '<div class="sup-chat-send"><input class="input" id="supportChatInput" placeholder="پاسخت رو بنویس..." onkeydown="if(event.key===\'Enter\')sendSupportMsg()"><button class="btn btn-primary" onclick="sendSupportMsg()">➤</button></div></div>';
   try{
     const r=await pzApi('GET','/support/tickets/'+_supOpenId);const data=(r&&r.ok!==false)?(r.data||r):null;const msgs=data?(data.messages||[]):[];
+    /* «برای کاربر مهمه که پشتیبان سین کرده یا نه» — one timestamp, and the eye
+       goes on YOUR messages up to it. Never on support's own: telling somebody
+       they read their own reply is noise. */
+    const seenTo=String((data&&data.supportReadAt)||'');
     const b=document.getElementById('supportChatBody');
-    if(b)b.innerHTML=msgs.length?msgs.map(m=>'<div class="sup-msg '+(m.senderRole==='user'?'me':'agent')+'">'+frEsc(m.body)+'<small>'+supTime(m.createdAt)+'</small></div>').join(''):'<div class="sup-empty">هنوز پیامی نیست.</div>';
+    if(b)b.innerHTML=msgs.length?msgs.map(m=>{
+      const mine=(m.senderRole==='user');
+      const seen=(mine&&seenTo&&m.createdAt&&String(m.createdAt)<=seenTo);
+      return '<div class="sup-msg '+(mine?'me':'agent')+'">'+frEsc(m.body)+
+        '<small>'+supTime(m.createdAt)+(seen?'<span class="msg-seen" title="پشتیبانی خواند">👁</span>':'')+'</small></div>';
+    }).join(''):'<div class="sup-empty">هنوز پیامی نیست.</div>';
     if(b)b.scrollTop=b.scrollHeight;
   }catch(e){}
   setTimeout(()=>{const i=document.getElementById('supportChatInput');if(i)i.focus();},60);
