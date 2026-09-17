@@ -20,7 +20,7 @@
  * Run: npx tsx src/tests/smsGuard.test.ts
  */
 import assert from 'node:assert/strict';
-import { missingFor, niazpardazBase, NIAZPARDAZ_BASE, SMS_DEFAULT_CONFIG, type SmsConfig } from '../services/smsService.js';
+import { missingFor, niazpardazBase, effectiveBase, NIAZPARDAZ_BASE, SMS_DEFAULT_CONFIG, type SmsConfig } from '../services/smsService.js';
 
 let pass = 0, fail = 0;
 /* AWAITED, because one of these is async.
@@ -65,34 +65,62 @@ await check('the sandbox provider needs nothing, because it sends nothing', () =
   assert.deepEqual(missingFor(cfg({ provider: 'sandbox' })), []);
 });
 
-/* ── AND IT GOES TO THE RIGHT COMPANY ────────────────────────────────────
-   «یکی از دلایلی که آی‌پی بلاک شده بود NotValidTemplateFound بوده است.»
-   That is the answer of an API that was never asked a niazpardaz question. The
-   panel's «آدرس سفارشی (Generic)» box is for the generic provider, but it was
-   used as the base for niazpardaz too — so a URL left behind from trying
-   another provider silently sent every niazpardaz call to somebody else's
-   service, which refuses them, which blocks the IP. */
+/* ── AND IT GOES WHERE THE OPERATOR CAN SEE IT GOING ─────────────────────
+   «یکی از دلایلی که آی‌پی بلاک شده بود NotValidTemplateFound بوده است.» That is
+   the answer of an API that was never asked a niazpardaz question — one call
+   going to somebody else's service because a URL was left in the shared
+   «آدرس سفارشی» box from trying another provider.
 
-await check('a leftover Generic URL does not redirect niazpardaz', () => {
-  const stray = cfg({ provider: 'niazpardaz', apiKey: 'k', sender: '3000', genericUrl: 'https://ippanel.com/api/select' });
-  assert.equal(niazpardazBase(stray), NIAZPARDAZ_BASE, 'niazpardaz traffic went to another provider');
+   The first attempt at this refused any host that was not niazpardaz.ir, and it
+   broke a real case on the first run: the withdrawal-code tests point this at a
+   LOCAL STUB SERVER, and so would any staging or mirror setup. A deliberate
+   override and a leftover look exactly alike from here. So the override stands,
+   and what is checked is that it is never invisible. */
+
+await check('a custom address is honoured, whoever it belongs to', () => {
+  /* Refusing this is what broke withdrawOtp: a stub on 127.0.0.1 is the only
+     way to test an SMS path without sending real messages. */
+  const stub = 'http://127.0.0.1:41547';
+  assert.equal(niazpardazBase(cfg({ provider: 'niazpardaz', apiKey: 'k', sender: '3000', genericUrl: stub })), stub);
 });
 
-await check('nor does a box with something that is not a URL in it', () => {
-  for (const junk of ['ippanel', '   ', 'http://', 'select']) {
-    assert.equal(niazpardazBase(cfg({ provider: 'niazpardaz', apiKey: 'k', sender: '3000', genericUrl: junk })),
-      NIAZPARDAZ_BASE, 'accepted junk as a base: ' + JSON.stringify(junk));
-  }
-});
-
-await check('but a real niazpardaz address is still honoured', () => {
-  /* A staging or mirror host of theirs is a legitimate reason to set this. */
-  const own = 'https://login.niazpardaz.ir/api/v3/RestWebApi';
-  assert.equal(niazpardazBase(cfg({ provider: 'niazpardaz', apiKey: 'k', sender: '3000', genericUrl: own })), own);
-});
-
-await check('and an empty box means the default, not an empty base', () => {
+await check('an empty box means the default, not an empty base', () => {
   assert.equal(niazpardazBase(cfg({ provider: 'niazpardaz', apiKey: 'k', sender: '3000', genericUrl: '' })), NIAZPARDAZ_BASE);
+  assert.equal(niazpardazBase(cfg({ provider: 'niazpardaz', apiKey: 'k', sender: '3000', genericUrl: '   ' })), NIAZPARDAZ_BASE);
+});
+
+await check('an override is REPORTED, which is the whole defence', () => {
+  const stray = cfg({ provider: 'niazpardaz', apiKey: 'k', sender: '3000', genericUrl: 'https://ippanel.com/api/select' });
+  const e = effectiveBase(stray);
+  assert.equal(e.overridden, true, 'a redirected provider must not look normal');
+  assert.equal(e.url, 'https://ippanel.com/api/select', 'and the operator is told exactly where it goes');
+});
+
+await check('and an untouched provider is not flagged for nothing', () => {
+  const plain = cfg({ provider: 'niazpardaz', apiKey: 'k', sender: '3000', genericUrl: '' });
+  assert.equal(effectiveBase(plain).overridden, false);
+  assert.equal(effectiveBase(plain).url, NIAZPARDAZ_BASE);
+});
+
+await check('a provider that IGNORES the box still says the box is filled', () => {
+  /* kavenegar has a fixed endpoint, so a URL sitting there changes nothing and
+     explains nothing — which is exactly how it survives to confuse the next
+     person looking for why messages stopped. */
+  const k = cfg({ provider: 'kavenegar', apiKey: 'k', sender: '3000', genericUrl: 'https://ippanel.com/api/select' });
+  assert.equal(effectiveBase(k).overridden, true);
+  /* AND THE OTHER HALF, without which «always true» passes just as well — this
+     line is here because a mutation returning a constant survived the one
+     above. A warning that is always on is a warning nobody reads. */
+  const clean = cfg({ provider: 'kavenegar', apiKey: 'k', sender: '3000', genericUrl: '' });
+  assert.equal(effectiveBase(clean).overridden, false, 'an untouched provider must not be flagged');
+  const melli = cfg({ provider: 'melipayamak', apiKey: 'u', secret: 'p', sender: '3000', genericUrl: '' });
+  assert.equal(effectiveBase(melli).overridden, false);
+});
+
+await check('and the generic provider is not flagged for using its own field', () => {
+  const g = cfg({ provider: 'generic', apiKey: 'u', secret: 'p', genericUrl: 'https://example.test/sms' });
+  assert.equal(effectiveBase(g).overridden, false, 'the box belongs to this provider');
+  assert.equal(effectiveBase(g).url, 'https://example.test/sms');
 });
 
 /* ── AND THE REQUEST REALLY IS NOT SENT ──────────────────────────────────

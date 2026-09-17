@@ -5900,6 +5900,24 @@ async function smsDoSend(){
     SMS_SUB='log'; renderSms();
   }catch(e){ toast(e.message,'bad'); if(go){ go.disabled=false; go.textContent='✉️ ارسال'; } }
 }
+/* WHERE THE MESSAGES ARE REALLY GOING.
+   «آدرس سفارشی (Generic)» is one box shared by every provider, so a URL left in
+   it from trying another service silently becomes the base for THIS one — every
+   call goes to somebody else's API, which answers «NotValidTemplateFound», and
+   نیازپرداز blocks the IP of whoever keeps sending it nonsense. There is no way
+   to tell a deliberate override from a leftover by looking at the value, and no
+   need to: the operator knows instantly, once somebody shows them. */
+function smsEndpointNote(c){
+  const e=(c&&c.endpoint)||null;
+  if(!e||!e.overridden) return '';
+  const known=(c.provider==='kavenegar'||c.provider==='melipayamak');
+  return '<div class="note" style="border-color:#F1B211;line-height:2">⚠️ <b>آدرس سفارشی پر است.</b><br>'+
+    (known
+      ? 'سرویس‌دهندهٔ «'+esc(SMS_PROVIDERS[c.provider]||c.provider)+'» آدرس ثابت خودش را دارد و این فیلد را نادیده می‌گیرد — ولی اگر یادگاری از امتحان‌کردن سرویس‌دهندهٔ دیگری است، خالی‌اش کن تا بعداً کسی را گمراه نکند.'
+      : 'همهٔ درخواست‌ها به جای آدرس پیش‌فرض به این نشانی می‌روند: <b class="mono" dir="ltr">'+esc(e.url)+'</b>'+
+        '<br>اگر این را عمداً نگذاشته‌ای، <b>خالی‌اش کن</b>. درخواستی که به سرویس‌دهندهٔ اشتباه برود رد می‌شود و آی‌پی سرور را مسدود می‌کند.')+
+    '</div>';
+}
 /* WHAT THIS PROVIDER STILL NEEDS BEFORE ANYTHING CAN BE SENT.
    «برخی از ریکوئست‌ها بدون پسورد سمت شرکت ارسال شده‌اند… در صورت ارسال ریکوئست
     اشتباه، آی‌پی مسدود می‌گردد.» A half-filled provider used to be saved without
@@ -5960,6 +5978,7 @@ async function smsRenderConfig(b){
        with the messages going out looking perfectly normal. Now it says so. */
     smsWebOtpNote(c)+
     smsMissingNote(c)+
+    smsEndpointNote(c)+
     '</div>'+
     '<button class="btn pri" onclick="smsSaveConfig()">💾 ذخیرهٔ تنظیمات</button>'+
     '<div class="card" style="margin-top:14px"><h3>✉️ ارسال پیامک آزمایشی</h3><div class="grid g2"><div class="field"><label>شماره مقصد</label><input id="sm_testTo" dir="ltr" placeholder="09xxxxxxxxx"></div><div class="field"><label>متن</label><input id="sm_testBody" value="پیام آزمایشی پرایز کوییز ✅"></div></div><button class="btn" onclick="smsTest()">ارسال آزمایشی</button></div>';

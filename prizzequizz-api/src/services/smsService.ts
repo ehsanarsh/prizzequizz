@@ -100,11 +100,11 @@ export function smsIsLive(c: SmsConfig): boolean {
 }
 
 // Never leak secrets wholesale to the panel — mask them.
-export function maskConfig(c: SmsConfig): SmsConfig & { apiKeySet: boolean; secretSet: boolean; webOtp: WebOtpStatus; missing: string[] } {
+export function maskConfig(c: SmsConfig): SmsConfig & { apiKeySet: boolean; secretSet: boolean; webOtp: WebOtpStatus; missing: string[]; endpoint: { url: string; overridden: boolean } } {
   /* `webOtp` is not a setting — it is a server-side FACT the panel has no other
      way of learning, and the difference between the login code typing itself in
      and the player typing it by hand. */
-  return { ...c, apiKey: c.apiKey ? '••••' + c.apiKey.slice(-4) : '', secret: c.secret ? '••••' : '', apiKeySet: !!c.apiKey, secretSet: !!c.secret, webOtp: webOtpStatus(), missing: missingFor(c) };
+  return { ...c, apiKey: c.apiKey ? '••••' + c.apiKey.slice(-4) : '', secret: c.secret ? '••••' : '', apiKeySet: !!c.apiKey, secretSet: !!c.secret, webOtp: webOtpStatus(), missing: missingFor(c), endpoint: effectiveBase(c) };
 }
 
 // ---- templates ----
@@ -283,19 +283,36 @@ const NIAZ_ACCOUNT_ERRORS: Record<number, string> = {
   [-7]: 'کلید API نامعتبر است.'
 };
 
-/* THE «آدرس سفارشی (Generic)» FIELD IS FOR THE GENERIC PROVIDER.
-   It was used as the base for niazpardaz too, so a URL left in that box from
-   trying another provider silently redirected EVERY niazpardaz call to
-   somebody else's API — which is one way to send requests that come back
-   «NotValidTemplateFound» and get an IP blocked. It is honoured only when it
-   really is a niazpardaz address; anything else is ignored rather than obeyed. */
+/* THE «آدرس سفارشی (Generic)» FIELD IS SHARED BY EVERY PROVIDER, AND THAT IS
+ * THE TRAP.
+ *
+ * A URL left in that box from trying another provider silently becomes the base
+ * for niazpardaz too — every call goes to somebody else's API, which answers
+ * things like «NotValidTemplateFound», and نیازپرداز blocks the IP of whoever
+ * keeps sending it nonsense.
+ *
+ * The first attempt at this refused any host that was not niazpardaz.ir. That
+ * broke a legitimate and necessary case immediately: the withdrawal-code tests
+ * point this at a local stub server, and so would any staging or mirror setup.
+ * There is no way to tell a deliberate override from a leftover by looking at
+ * the value — but the OPERATOR can tell instantly, if anybody shows them. So
+ * the override is honoured, and `effectiveBase` puts it where they will see it.
+ */
 export function niazpardazBase(cfg: SmsConfig): string {
   const custom = String(cfg.genericUrl ?? '').trim();
-  if (custom) {
-    try { if (/(^|\.)niazpardaz\.ir$/i.test(new URL(custom).hostname)) return custom; } catch { /* not a URL at all */ }
-    logger.warn('sms_generic_url_ignored', { provider: cfg.provider, custom });
+  return custom || NIAZPARDAZ_BASE;
+}
+/** Where messages are REALLY going — the one fact that makes a leftover URL
+ *  obvious instead of invisible. */
+export function effectiveBase(cfg: SmsConfig): { url: string; overridden: boolean } {
+  const custom = String(cfg.genericUrl ?? '').trim();
+  if (cfg.provider === 'niazpardaz') return { url: niazpardazBase(cfg), overridden: !!custom };
+  if (cfg.provider === 'generic' || cfg.provider === 'farazsms') {
+    return { url: custom || 'https://ippanel.com/api/select', overridden: false };
   }
-  return NIAZPARDAZ_BASE;
+  /* kavenegar and melipayamak have fixed endpoints and ignore the box entirely,
+     so a value sitting in it there is pure confusion and is named as such. */
+  return { url: '', overridden: !!custom };
 }
 async function niazpardazPost(cfg: SmsConfig, endpoint: string, payload: unknown, timeoutMs = 20_000): Promise<any> {
   const base = niazpardazBase(cfg).replace(/\/+$/, '');
