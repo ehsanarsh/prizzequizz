@@ -5564,6 +5564,9 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
             <input class="input mono" inputmode="numeric" style="width:60px;height:66px;text-align:center;font-size:26px;font-weight:800">
             <input class="input mono" inputmode="numeric" style="width:60px;height:66px;text-align:center;font-size:26px;font-weight:800">
           </div>
+          <!-- Hidden until the code asks: a browser that cannot read the
+               clipboard would otherwise show a button that never works. -->
+          <button class="btn btn-ghost" id="otpPasteBtn" style="margin-top:14px;display:none" onclick="pzOtpPaste()">📋 چسباندن کد از پیامک</button>
           <p style="color:var(--muted);font-size:13px;margin-top:22px" id="otpTimerLine">اعتبار کد تا <b style="color:var(--gold)" id="otpTimer">—</b></p>
           <button class="btn btn-ghost" id="otpResend" style="margin-top:10px;display:none" onclick="realResendOtp()">ارسال دوبارهٔ کد</button>
           <p id="otpHint" style="color:var(--muted2);font-size:11px;margin-top:12px"></p>
@@ -11716,8 +11719,20 @@ const otpInputs=document.querySelectorAll('#otpBoxes input');
    A box with maxlength=1 that receives four characters at once — which is what
    an autofill or a paste delivers — keeps the first and drops the rest. So a
    value longer than one digit is spread across the boxes instead. */
+/* WHICH DIGITS ARE THE CODE.
+   The autofill hands over the code and nothing else, but a PASTE is whatever
+   the player copied — often the whole message. «کد ورود شما: 1234» has one run
+   of four digits in it and that is the answer; taking the first four digits of
+   everything would be right by luck rather than by reading. So a run of exactly
+   the right length wins, and only if there is none do we fall back to the first
+   digits we can find. */
+function pzOtpPick(text){
+  const n=otpInputs.length;
+  const runs=pzToLatinDigits(String(text||'')).match(/\d+/g)||[];
+  return runs.find(r=>r.length===n)||runs.join('').slice(0,n);
+}
 function pzOtpSpread(text){
-  const digits=pzToLatinDigits(String(text||'')).replace(/\D+/g,'').slice(0,otpInputs.length);
+  const digits=pzOtpPick(text);
   if(!digits) return 0;
   otpInputs.forEach((b,i)=>{ b.value=digits[i]||''; });
   const next=Math.min(digits.length,otpInputs.length-1);
@@ -11772,6 +11787,7 @@ function pzOtpListen(){
     _pzOtpAbort=new AbortController();
     navigator.credentials.get({otp:{transport:['sms']},signal:_pzOtpAbort.signal})
       .then((c)=>{
+        _pzOtpAbort=null;
         if(!c||!c.code) return;
         /* Fill first, decide second: even a code that does not fill every box
            belongs on screen, where the player can see it and finish it. */
@@ -11781,10 +11797,66 @@ function pzOtpListen(){
       /* An abort or a refusal is ordinary and silent. Anything else is a bug in
          the lines above, and swallowing it is how «I pressed Allow and nothing
          happened» becomes impossible to explain. */
-      .catch((e)=>{ if(e&&e.name!=='AbortError'&&e.name!=='NotAllowedError') console.warn('otp-autofill',e&&e.message); });
+      .catch((e)=>{
+        /* Cleared so the listener can be armed again. Leaving it set is how a
+           request the browser cancelled turns into a page that is no longer
+           waiting for anything and does not know it. */
+        _pzOtpAbort=null;
+        if(e&&e.name!=='AbortError'&&e.name!=='NotAllowedError') console.warn('otp-autofill',e&&e.message);
+      });
   }catch(e){}
 }
+/* ARMED AGAIN ON THE WAY BACK.
+   Reading the message means leaving the app, and a request the browser dropped
+   while we were away would never be renewed — the player returns to a screen
+   that looks like it is waiting and is not. Only while the code screen is the
+   one on show, and only when nothing is already listening. */
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState!=='visible') return;
+  if(_pzOtpAbort) return;
+  const scr=document.getElementById('otp');
+  if(!scr||!scr.classList.contains('active')) return;
+  try{ pzOtpListen(); }catch(e){}
+});
 function pzOtpStopListening(){ try{ if(_pzOtpAbort) _pzOtpAbort.abort(); }catch(e){} _pzOtpAbort=null; }
+
+/* THE THIRD ROUTE, AND THE ONLY ONE THAT CANNOT QUIETLY FAIL.
+ *
+ * «کد بازم کپی نمیشه.» The other two both depend on something outside this
+ * file. The keyboard suggestion needs the phone to have recognised the message;
+ * WebOTP needs the SMS to carry `@host #code`, which needs PUBLIC_APP_URL set
+ * on the server — and when it is not, nothing anywhere says so. Both can be
+ * dead while everything looks fine.
+ *
+ * This one needs neither. Android's own SMS notification offers «Copy 1234»;
+ * once the player taps that, the code is on the clipboard, and a tap on this
+ * button is the user gesture the clipboard wants before it will be read. It is
+ * shown only where reading is possible at all, because a button that cannot
+ * work should not be on the screen. */
+function pzOtpCanPaste(){
+  try{ return !!(window.isSecureContext&&navigator.clipboard&&navigator.clipboard.readText); }catch(e){ return false; }
+}
+/* Asked once, when the code is requested. Whether a browser can read the
+   clipboard does not change while the player is looking at four empty boxes,
+   and the button is never taken away again — a second call anywhere else was
+   dead code, which a mutation proved by surviving its removal. */
+function pzOtpPasteSync(){
+  const b=document.getElementById('otpPasteBtn');
+  if(b) b.style.display=pzOtpCanPaste()?'block':'none';
+}
+window.pzOtpPaste=async function(){
+  if(!pzOtpCanPaste()){ toast('مرورگر اجازهٔ خواندن حافظه را نمی‌دهد'); return; }
+  let txt='';
+  /* A refusal is the player's answer, not an error to argue with. */
+  try{ txt=await navigator.clipboard.readText(); }
+  catch(e){ toast('اجازهٔ خواندن حافظه داده نشد'); return; }
+  const n=pzOtpSpread(txt);
+  if(!n){ toast('کدی در حافظه پیدا نشد — اول کد را از پیامک کپی کن'); return; }
+  /* A partial code is still put on screen: the player can see what was found
+     and finish it, which beats being told nothing happened. */
+  if(n>=otpInputs.length) pzOtpAutoSubmit();
+  else toast('فقط '+fa(n)+' رقم در حافظه بود');
+};
 
 /* ============ CHARACTER (init called by go wrapper) ============ */
 
@@ -20429,6 +20501,7 @@ async function pzRequestOtp(phone){
   /* Start listening only now: the wait is for THIS code, and asking earlier
      would leave a listener open across a screen the player may never leave. */
   try{ pzOtpListen(); }catch(e){}
+  try{ pzOtpPasteSync(); }catch(e){}
   otpStartTimer(r.data.ttlSeconds,r.data.resendAfterSeconds);
   const hint=document.getElementById('otpHint');
   /* In test mode nothing is really sent, so saying "کد ارسال شد" would be a
