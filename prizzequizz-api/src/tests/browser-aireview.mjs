@@ -40,7 +40,19 @@ const RUN = {
       explanation: 'کانبرا از ۱۹۱۳ پایتخت است؛ سیدنی بزرگ‌ترین شهر است، نه پایتخت.' },
     { id: 'q2', text: 'بلندترین قلهٔ ایران کدام است؟', category: 'جغرافیا', difficulty: 'easy',
       stage: 'held', quality: 61, approved: false, reason: 'امتیاز کیفیت ۶۱ کمتر از حد ۷۰ است',
-      options: ['دماوند', 'علم‌کوه', 'سبلان', 'زردکوه'], correctIndex: 0 }
+      options: ['دماوند', 'علم‌کوه', 'سبلان', 'زردکوه'], correctIndex: 0 },
+    /* A MODEL WRITES SENTENCES, NOT WORDS. Every option above is one or two
+       words, and a row only has to hold a word to look fine however it is laid
+       out — which is why two mutations of the layout survived this file until
+       this question was added. */
+    { id: 'q3', text: 'کدام گزینه دربارهٔ سازوکار تقسیم جایزه در حالت «آخرین بازمانده» درست است؟',
+      category: 'عمومی', difficulty: 'hard', stage: 'held', quality: 71, approved: false, reason: 'نگه داشته شد',
+      options: [
+        'جایزه پس از حذف هر بازیکن میان بازماندگان تقسیم می‌شود و هر کس بخواهد می‌تواند سهمش را برداشت کند',
+        'تمام جایزه فقط به آخرین نفری می‌رسد که تا پایان دوازده سؤال در بازی مانده باشد',
+        'جایزه در ابتدای مسابقه میان همهٔ شرکت‌کنندگان به‌صورت مساوی تقسیم می‌شود',
+        'هیچ جایزه‌ای تقسیم نمی‌شود مگر آنکه همهٔ بازیکنان تا سؤال آخر ادامه دهند'
+      ], correctIndex: 0 }
   ]
 };
 
@@ -50,7 +62,11 @@ async function open() {
   await ctx.route('**/v1/**', (route) => {
     const u = route.request().url();
     let body = { ok: true, data: {} };
-    if (route.request().method() === 'PATCH' && /\/admin\/questions\/[^/]+$/.test(u)) {
+    /* Enough of the AI studio's own calls that renderAiStudio() will draw. */
+    if (u.includes('/admin/questions/ai/status')) body = { ok: true, data: { configured: true, provider: 'anthropic', models: [], qualityMin: 80, duplicateThreshold: 90 } };
+    else if (u.includes('/admin/questions/ai/models')) body = { ok: true, data: { models: [] } };
+    else if (u.includes('/admin/categories')) body = { ok: true, data: { categories: [{ name: 'فرهنگ و هنر', icon: '🎭' }] } };
+    else if (route.request().method() === 'PATCH' && /\/admin\/questions\/[^/]+$/.test(u)) {
       let b = {}; try { b = JSON.parse(route.request().postData() || '{}'); } catch (e) {}
       patched.push({ id: u.split('/').pop(), body: b });
       /* Refused for q2 on purpose in one case below — see the rollback test. */
@@ -72,14 +88,19 @@ async function open() {
     document.getElementById('login').classList.add('hidden');
     document.getElementById('shell').classList.remove('hidden');
   });
+  /* THE REAL SCREEN, NOT A DIV OF OUR OWN.
+     This used to build its own `#ai_out` inside `#main` — and that is exactly
+     how it missed the thing it existed to check. In the real studio the option
+     rows came out with a ZERO-WIDTH text column: every Persian letter on its
+     own line, each option a 153px vertical ribbon of characters. The markup was
+     correct in isolation and wrong where it lives. */
+  await page.evaluate(async () => { (0, eval)("CUR='aistudio'"); await (0, eval)('renderAiStudio')(); });
+  await page.waitForTimeout(600);
   await page.evaluate((run) => {
-    const host = document.getElementById('main');
-    host.innerHTML = '<div id="ai_out"></div>';
-    document.getElementById('ai_out').innerHTML = (0, eval)('aiRunHtml')(run, false);
-    /* The card's handlers read the remembered run, so it has to be there. */
     (0, eval)('aiSaveRun')(run, true);
+    document.getElementById('ai_out').innerHTML = (0, eval)('aiRunHtml')(run, false);
   }, RUN);
-  await page.waitForTimeout(250);
+  await page.waitForTimeout(350);
   return { ctx, page, patched, errs };
 }
 
@@ -102,7 +123,7 @@ console.log('a generated question:');
 {
   const { ctx, page, errs } = await open();
   const c = await cards(page);
-  ok('every generated question gets a card', c.length === 2, c.length + ' cards');
+  ok('every generated question gets a card', c.length === 3, c.length + ' cards');
   ok('the question itself is on it', /پایتخت استرالیا/.test(c[0].text), c[0].text);
 
   /* THE WHOLE POINT. */
@@ -118,6 +139,32 @@ console.log('a generated question:');
   ok('the radio agrees with the highlight', c[0].opts[1].checked);
 
   ok('the explanation is shown when there is one', /کانبرا از ۱۹۱۳/.test(c[0].why), c[0].why.slice(0, 40));
+
+  /* ── AND IT IS READABLE, WHICH IS NOT THE SAME AS PRESENT ──────────────
+     «نحوهٔ نمایش گزینه‌ها خیلی بزرگه و حروف زیر هم نوشته میشه و اصلا خوانا
+      نیست.» Every assertion above passed while each option was a 153px column
+     of single letters, because «the text is in the DOM» and «the text can be
+     read» are different questions. These ask the second one. */
+  const geoOf = (id) => page.evaluate((qid) => [...document.querySelectorAll('#aiq_' + qid + ' .ai-opt')].map((el) => {
+    const span = el.querySelector('span');
+    const r = el.getBoundingClientRect(), s = span.getBoundingClientRect();
+    const lh = parseFloat(getComputedStyle(span).lineHeight) || 1;
+    return { rowH: Math.round(r.height), textW: Math.round(s.width), lines: Math.round(s.height / lh),
+             /* Text wider than the box it sits in is text running off the card. */
+             spill: Math.round(span.scrollWidth - span.clientWidth) };
+  }), id);
+
+  const geo = await geoOf('q1');
+  ok('the answer text has room to be text', geo.every((g) => g.textW > 80), JSON.stringify(geo.map((g) => g.textW)));
+  ok('a short answer stays on one line', geo.every((g) => g.lines <= 1), JSON.stringify(geo.map((g) => g.lines)));
+  ok('and a row is a row, not a column of letters', geo.every((g) => g.rowH <= 56), JSON.stringify(geo.map((g) => g.rowH)));
+
+  /* A SENTENCE-LENGTH ANSWER, which is what a model actually writes. */
+  const long = await geoOf('q3');
+  ok('a long answer still gets a wide column', long.every((g) => g.textW > 300), JSON.stringify(long.map((g) => g.textW)));
+  ok('it wraps into a few lines, not into a ribbon', long.every((g) => g.lines >= 1 && g.lines <= 4), JSON.stringify(long.map((g) => g.lines)));
+  ok('and nothing spills out of its box', long.every((g) => g.spill <= 1), JSON.stringify(long.map((g) => g.spill)));
+  ok('the row grows with the text, but only so far', long.every((g) => g.rowH <= 110), JSON.stringify(long.map((g) => g.rowH)));
   ok('the difficulty is a control, not a label', c[0].diffVisible && c[0].diff === 'medium', c[0].diff);
   ok('and it starts on what the model chose', c[1].diff === 'easy', c[1].diff);
   ok('nothing threw', errs.length === 0, errs.join(' | '));

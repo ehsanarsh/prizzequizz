@@ -7,6 +7,7 @@
  * what keeps a brand-new feature away from the parts that handle money.
  */
 import type { Router } from '../../http/router.js';
+import { blockedBetween } from '../../services/blockService.js';
 import { error, json } from '../../http/response.js';
 import { repositories } from '../../repositories/index.js';
 import { currentMatchOf } from '../../services/matchEngine.js';
@@ -35,6 +36,12 @@ export function registerInviteRoutes(router: Router, base: string): void {
     /* A person already inside a match is not someone to invite — «فقط
        می‌تونی به افرادی که داخل هیچ مسابقه‌ای نشده‌اند بره». */
     if (currentMatchOf(toUserId)) return error(ctx.res, 409, 'PLAYER_BUSY', 'این بازیکن الان وسط یک مسابقه است');
+      /* BLOCKED IS BLOCKED, AND IT IS SAID THE SAME WAY BOTH WAYS.
+         «ارتباط ممکن نیست» rather than «او تو را بلاک کرده»: telling somebody
+         they have been blocked tells them who did it, which is the one thing a
+         person blocking somebody is usually trying to avoid. The blocker gets
+         the same sentence, so neither answer gives the other away. */
+    if (await blockedBetween(ctx.userId, toUserId)) return error(ctx.res, 403, 'BLOCKED', 'ارتباط با این بازیکن ممکن نیست.');
 
     const me = await repositories.users.findById(ctx.userId);
     const them = await repositories.users.findById(toUserId);
@@ -148,6 +155,8 @@ export function registerInviteRoutes(router: Router, base: string): void {
     const loser = (match.players ?? []).map((p: any) => String(p.userId)).find((uid: string) => uid !== ctx.userId);
     /* A duel against a bot has nobody on the other side to tell. */
     if (!loser) return json(ctx.res, 200, { called: false, reason: 'NO_OPPONENT' });
+    /* «دعوت به بازی» includes this one — winning a duel is not a way back in. */
+    if (await blockedBetween(ctx.userId, loser)) return json(ctx.res, 200, { called: false, reason: 'BLOCKED' });
 
     const me = await repositories.users.findById(ctx.userId);
     const call = await callAfterWin({

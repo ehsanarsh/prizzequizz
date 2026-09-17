@@ -1,4 +1,5 @@
 import type { Router } from '../../http/router.js';
+import { blockedBetween, blockUser, unblockUser, listBlocked, iBlocked, BlockError } from '../../services/blockService.js';
 import { json, error } from '../../http/response.js';
 import { getPgPool } from '../../database/postgres.js';
 import { avatarUrlsFor } from '../../services/avatarService.js';
@@ -187,6 +188,10 @@ export function registerFriendRoutes(router: Router, base: string): void {
       const t = target.rows[0];
       if (!t) return error(ctx.res, 404, 'USER_NOT_FOUND', 'کاربری با این نام پیدا نشد');
       if (String(t.id) === String(me)) return error(ctx.res, 400, 'SELF', 'نمی‌تونی برای خودت درخواست بفرستی');
+      /* A blocked person asking to be friends is the block being worked around,
+         and it is the FIRST thing to refuse — before any friendship row is read
+         or written, so nothing is left half-done behind the refusal. */
+      if (await blockedBetween(me, String(t.id))) return error(ctx.res, 403, 'BLOCKED', 'ارتباط با این بازیکن ممکن نیست.');
       // Existing edge in either direction?
       const ex = await pool().query(
         `SELECT * FROM friendships WHERE (requester_id=$1 AND addressee_id=$2) OR (requester_id=$2 AND addressee_id=$1) LIMIT 1`, [me, t.id]);
@@ -250,6 +255,39 @@ export function registerFriendRoutes(router: Router, base: string): void {
   });
 
   // Chat: send a message to a friend (must be accepted friends).
+  /* ── BLOCKING ──────────────────────────────────────────────────────────
+     «یه بلاک هم بزاریم تا کاربرا بتونن بلاک کنن تا بلاک‌شده نتونه بهشون پیام و
+      دعوت به بازی بفرسته.» The refusing happens at every send site; this is
+     only where the list is kept. */
+  router.add('GET', `${base}/blocks`, async (ctx) => {
+    const me = ctx.userId; if (!me) return error(ctx.res, 401, 'UNAUTHENTICATED', 'ابتدا وارد شو');
+    json(ctx.res, 200, { rows: await listBlocked(me) });
+  });
+
+  router.add('POST', `${base}/blocks/:userId`, async (ctx) => {
+    const me = ctx.userId; if (!me) return error(ctx.res, 401, 'UNAUTHENTICATED', 'ابتدا وارد شو');
+    try {
+      await blockUser(me, ctx.params.userId!, String(((ctx.body ?? {}) as any).reason ?? '').slice(0, 200) || undefined);
+      json(ctx.res, 200, { blocked: true });
+    } catch (e) {
+      if (e instanceof BlockError) return error(ctx.res, 400, e.code, e.message);
+      error(ctx.res, 500, 'BLOCK_FAILED', 'بلاک انجام نشد');
+    }
+  });
+
+  router.add('DELETE', `${base}/blocks/:userId`, async (ctx) => {
+    const me = ctx.userId; if (!me) return error(ctx.res, 401, 'UNAUTHENTICATED', 'ابتدا وارد شو');
+    await unblockUser(me, ctx.params.userId!);
+    json(ctx.res, 200, { blocked: false });
+  });
+
+  /* Only «did I block them» — never «did they block me», which would tell
+     somebody they have been blocked and by whom. */
+  router.add('GET', `${base}/blocks/:userId`, async (ctx) => {
+    const me = ctx.userId; if (!me) return error(ctx.res, 401, 'UNAUTHENTICATED', 'ابتدا وارد شو');
+    json(ctx.res, 200, { blocked: await iBlocked(me, ctx.params.userId!) });
+  });
+
   router.add('POST', `${base}/friends/:userId/messages`, async (ctx) => {
     const me = ctx.userId; if (!me) return error(ctx.res, 401, 'UNAUTHENTICATED', 'ابتدا وارد شو');
     const other = ctx.params.userId!;
@@ -258,6 +296,12 @@ export function registerFriendRoutes(router: Router, base: string): void {
     try {
       const fr = await pool().query(`SELECT 1 FROM friendships WHERE status='accepted' AND ((requester_id=$1 AND addressee_id=$2) OR (requester_id=$2 AND addressee_id=$1)) LIMIT 1`, [me, other]);
       if (!fr.rows[0]) return error(ctx.res, 403, 'NOT_FRIENDS', 'فقط با دوستان می‌تونی چت کنی');
+      /* BLOCKED IS BLOCKED, AND IT IS SAID THE SAME WAY BOTH WAYS.
+         «ارتباط ممکن نیست» rather than «او تو را بلاک کرده»: telling somebody
+         they have been blocked tells them who did it, which is the one thing a
+         person blocking somebody is usually trying to avoid. The blocker gets
+         the same sentence, so neither answer gives the other away. */
+      if (await blockedBetween(me, other)) return error(ctx.res, 403, 'BLOCKED', 'ارتباط با این بازیکن ممکن نیست.');
       /* What it answers is checked against THIS conversation — see sendChat. */
       const sent = await sendChat(me, other, text, String((ctx.body as any)?.replyTo ?? ''));
       json(ctx.res, 201, { id: sent.id, mine: true, body: text, replyTo: sent.replyTo, at: sent.at });

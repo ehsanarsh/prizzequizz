@@ -138,14 +138,29 @@ textarea.json{min-height:300px;font-family:ui-monospace,monospace;font-size:12px
    it; the right one is green and is a radio, because «which one is right» is
    the single most likely thing to be wrong in a model's answer. */
 .ai-qcard{border:2px solid #000;border-radius:14px;background:#14161c;padding:12px 13px;margin-bottom:10px}
-.ai-qtext{font-size:14px;font-weight:800;line-height:1.95;margin-bottom:9px}
-.ai-opts{display:grid;grid-template-columns:1fr 1fr;gap:7px}
-@media(max-width:620px){.ai-opts{grid-template-columns:1fr}}
-.ai-opt{display:flex;align-items:flex-start;gap:8px;padding:8px 10px;border:1.5px solid #2a2f3a;
-  border-radius:11px;background:#0f1116;cursor:pointer;font-size:12.5px;font-weight:700;line-height:1.8}
-.ai-opt input{margin:3px 0 0;accent-color:#2fbf6d;flex:0 0 auto;cursor:pointer}
-.ai-opt b{flex:0 0 auto;opacity:.6;font-weight:900}
-.ai-opt span{flex:1;min-width:0;overflow-wrap:anywhere}
+.ai-qtext{font-size:14px;font-weight:800;line-height:1.9;margin-bottom:9px;max-width:760px}
+/* GRID, NOT FLEX-GROW — AND THIS IS WHY.
+   These were flex rows with the text on `flex:1;min-width:0`, which should take
+   whatever the radio and the number leave. In this panel it computed to width
+   ZERO: a 506px row with a 0px text column, so every Persian letter wrapped
+   onto its own line and each option stood 153px tall as a vertical ribbon of
+   characters. A grid track of `1fr` takes the remaining space and cannot be
+   talked out of it.
+   (The test that covered these cards built its own container and never saw it —
+   it proved the markup was right and said nothing about where it lives.) */
+.ai-opts{display:flex;flex-direction:column;gap:6px;max-width:760px}
+.ai-opt{display:grid;grid-template-columns:auto auto 1fr;align-items:center;gap:9px;
+  padding:7px 11px;border:1.5px solid #2a2f3a;border-radius:10px;background:#0f1116;
+  cursor:pointer;font-size:13px;font-weight:700;line-height:1.75}
+.ai-opt input{margin:0;accent-color:#2fbf6d;cursor:pointer}
+.ai-opt b{opacity:.55;font-weight:900;font-size:12px}
+/* `overflow-wrap` is what keeps a long unbroken answer inside the row. A
+   `min-width:0` stood beside it and was removed: deleting it changed nothing
+   any test could see, because grid items here can already shrink below their
+   min-content. The `1fr` above is likewise not observable while `.ai-opts` is
+   width-capped — it is kept as the plain statement of «the text takes the
+   rest», not because a test holds it. */
+.ai-opt span{overflow-wrap:anywhere}
 /* The right answer says so by colour, not only by a dot — a radio 20 pixels
    wide is not what the eye lands on when four rows look identical. */
 .ai-opt.on{border-color:#2fbf6d;background:rgba(47,191,109,.12);color:#b9ffd8}
@@ -1309,6 +1324,7 @@ async function renderUsers(){
         '<select id="ushow" onchange="uShowPick(this.value)" style="min-width:150px">'+
           ['all','done','unfinished'].map(k=>'<option value="'+k+'"'+(U_SHOW===k?' selected':'')+'>'+U_SHOW_LABEL[k]+'</option>').join('')+
         '</select></label>'+
+      '<button class="btn" onclick="uDownloadPhones()">📥 دانلود شماره‌ها</button>'+
       '<span class="note" id="uqnote" style="margin:0 8px;align-self:center"></span></div>'+
     (U_TOPIC?'<div class="note" style="margin:-6px 0 10px">ستون «٪ '+esc(U_TOPIC)+'» درصد پاسخ‌های درستِ هر کاربر در همین موضوع است؛ کسی که در این موضوع سؤالی جواب نداده صفر می‌ماند.</div>':'')+
     '<div id="ubulk"></div>'+
@@ -1342,6 +1358,56 @@ function uShows(u){
   return true;
 }
 function uShowPick(v){ U_SHOW=U_SHOW_LABEL[v]?v:'all'; uPaintRows(); uPaintPager(); }
+/* THE NUMBERS, TO BE SENT FROM SOMEWHERE ELSE.
+   «شماره همه کاربرام رو دانلود کنم و همون رو تو پنل نیازپرداز بزنم.» The file
+   follows whichever list is on screen — «همه», «ثبت‌نام کامل», «ثبت‌نام ناتمام» —
+   because downloading a different set from the one being looked at is how the
+   wrong people get texted. What was left out is reported before the download,
+   so a short file is never a mystery. */
+async function uDownloadPhones(){
+  const who=U_SHOW==='done'?'registered':(U_SHOW==='unfinished'?'unfinished':'all');
+  let x=null;
+  try{ x=await api('GET','/admin/users/phones?who='+who); }
+  catch(e){ toast(e.message||'دریافت شماره‌ها انجام نشد','bad'); return; }
+  if(!x||!x.phones||!x.phones.length){ toast('شماره‌ای برای دانلود نیست','bad'); return; }
+  const left=[];
+  if(x.skippedBlacklisted) left.push(fa(x.skippedBlacklisted)+' در لیست سیاه');
+  if(x.skippedDuplicate) left.push(fa(x.skippedDuplicate)+' تکراری');
+  if(x.skippedMalformed) left.push(fa(x.skippedMalformed)+' شمارهٔ نامعتبر');
+  if(x.skippedNoPhone) left.push(fa(x.skippedNoPhone)+' بدون شماره');
+  modal('دانلود شماره‌ها',
+    '<div class="card">'+
+      '<div class="cfg-row"><label>در فایل</label><b style="color:var(--ok)">'+fa(x.phones.length)+' شماره</b></div>'+
+      '<div class="cfg-row"><label>از میان</label><b>'+fa(x.total)+' کاربر ('+esc(U_SHOW_LABEL[U_SHOW]||'همه')+')</b></div>'+
+      (left.length?'<div class="note">کنار گذاشته شد: '+esc(left.join('، '))+'</div>':'')+
+      '<div class="note" style="border-color:#F1B211;line-height:2">شماره‌های داخل لیست سیاه عمداً در فایل نیستند — آن‌ها از بازی خواسته‌اند پیامک نگیرند، و فرستادن از پنل دیگری همان کار است با یک واسطه.</div>'+
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">'+
+        '<button class="btn pri" onclick="uSavePhones(\'txt\')">📄 فایل متنی (برای پنل پیامک)</button>'+
+        '<button class="btn" onclick="uSavePhones(\'csv\')">📊 CSV (با نام کاربر)</button>'+
+      '</div>'+
+    '</div>');
+  window._UPHONES=x;
+}
+/* Built here rather than fetched again: the counts the operator just agreed to
+   and the file they get have to be the same list. */
+function uSavePhones(fmt){
+  const x=window._UPHONES; if(!x) return;
+  let body,name,type;
+  if(fmt==='csv'){
+    const q=(v)=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
+    body='\uFEFF'+['phone','username','name'].join(',')+'\n'+
+      x.rows.map(r=>[q(r.phone),q(r.username),q(r.displayName)].join(',')).join('\n')+'\n';
+    name='phones-'+x.who+'.csv'; type='text/csv;charset=utf-8';
+  }else{
+    body=x.phones.join('\n')+'\n';
+    name='phones-'+x.who+'.txt'; type='text/plain;charset=utf-8';
+  }
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([body],{type:type}));
+  a.download=name; document.body.appendChild(a); a.click();
+  setTimeout(()=>{ try{ URL.revokeObjectURL(a.href); a.remove(); }catch(e){} },1000);
+  toast(fa(x.phones.length)+' شماره دانلود شد','ok');
+}
 /* WHAT MATCHES, WITHOUT ASKING THE SERVER.
    The same rule the server uses, so the instant answer and the one that
    arrives a moment later agree with each other rather than flickering between

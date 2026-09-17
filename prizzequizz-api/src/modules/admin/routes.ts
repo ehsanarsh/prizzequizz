@@ -9,6 +9,7 @@ import { featureFlags, patchFeatureFlag, themes, upsertTheme } from '../../servi
 import { getAdminAnalytics } from '../../services/analyticsService.js';
 import { getAdminUserOverview, resetUserStats, searchAdminUsers, setUserTickets, updateUserFields, updateUserRole, updateUserStatus, UsernameTakenError } from '../../services/adminUserService.js';
 import { adminUserTable } from '../../services/adminUserTable.js';
+import { exportUserPhones, phonesAsText, phonesAsCsv, type PhoneWho } from '../../services/phoneExportService.js';
 import { listDiscountCodes, saveDiscountCode, deleteDiscountCode, DiscountError } from '../../services/discountService.js';
 import { getMatch, claimTimeout, forfeitMatch } from '../../services/matchEngine.js';
 import { activeMatchState } from '../../services/matchStateStore.js';
@@ -603,6 +604,29 @@ export function registerAdminRoutes(router: Router, base: string): void {
       limit: Number(ctx.query.get('limit') ?? 100),
       offset: Number(ctx.query.get('offset') ?? 0)
     }));
+  });
+
+  /* THE NUMBERS, TO BE SENT FROM SOMEWHERE ELSE.
+   * «شماره همه کاربرام رو دانلود کنم و همون رو تو پنل نیازپرداز بزنم.»
+   * Blacklisted numbers are left out — somebody who asked the game not to text
+   * them has not agreed to be texted from another panel instead — and the count
+   * of what was dropped comes back with the file so a short list is never a
+   * mystery. Audited, because this is every player's phone number leaving. */
+  router.add('GET', `${base}/admin/users/phones`, async (ctx) => {
+    if (!requireAdmin(ctx, { tab: 'users' })) return;
+    const who = String(ctx.query.get('who') ?? 'all') as PhoneWho;
+    const x = await exportUserPhones(who);
+    audit(ctx.userId, 'USER_PHONES_EXPORTED', 'user', undefined, { who: x.who, count: x.phones.length });
+    const fmt = String(ctx.query.get('format') ?? 'json');
+    if (fmt === 'txt' || fmt === 'csv') {
+      const body = fmt === 'csv' ? phonesAsCsv(x) : phonesAsText(x);
+      ctx.res.statusCode = 200;
+      ctx.res.setHeader('content-type', (fmt === 'csv' ? 'text/csv' : 'text/plain') + '; charset=utf-8');
+      ctx.res.setHeader('content-disposition', `attachment; filename="phones-${x.who}.${fmt}"`);
+      ctx.res.end(body);
+      return;
+    }
+    json(ctx.res, 200, x);
   });
 
   router.add('GET', `${base}/admin/users/:id/overview`, async (ctx) => {
