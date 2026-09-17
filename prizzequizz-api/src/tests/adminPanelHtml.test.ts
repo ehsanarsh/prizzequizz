@@ -59,6 +59,51 @@ function run(): void {
     new Function(script);                 // throws SyntaxError if it does not parse
   });
 
+  /* ── THE AUTOFILL NOTE ─────────────────────────────────────────────────
+     Whether the login code types itself into the game hangs on one server-side
+     environment variable, PUBLIC_APP_URL, that this panel cannot set and could
+     not see. When it was missing the autofill was simply dead — every SMS went
+     out looking normal and no screen anywhere said why. The note is the only
+     place an operator can find that out, so what it SAYS is checked by running
+     the panel's own function, not by matching its source text. */
+  check('the panel says when the code will not fill itself in — and why', () => {
+    const m = /function smsWebOtpNote\(c\)\{[\s\S]*?\n\}/.exec(script);
+    assert.ok(m, 'smsWebOtpNote should be findable in the panel source');
+    const esc = (s: string) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c] as string));
+    const note = new Function('esc', m![0] + '; return smsWebOtpNote;')(esc) as (c: any) => string;
+
+    /* Off: it must be visibly a warning, name the variable an operator has to
+       set, and carry the server's own reason. */
+    const off = note({ webOtp: { on: false, host: '', reason: 'PUBLIC_APP_URL روی سرور تنظیم نشده است.' } });
+    assert.ok(off.includes('PUBLIC_APP_URL'), 'the note must name the variable: ' + off);
+    assert.ok(off.includes('تنظیم نشده'), 'the server reason must reach the screen: ' + off);
+    assert.ok(/E5484D|⚠️/.test(off), 'a dead autofill must read as a problem: ' + off);
+
+    /* On: it says so, with the host, and does not warn. */
+    const on = note({ webOtp: { on: true, host: 'www.prizequiz.ir', reason: 'خط «@www.prizequiz.ir #کد» اضافه می‌شود.' } });
+    assert.ok(on.includes('www.prizequiz.ir'), on);
+    assert.ok(!on.includes('⚠️'), 'a working autofill must not be shown as a warning: ' + on);
+
+    /* An API too old to report it says NOTHING, rather than inventing either
+       answer — a false «فعال است» is worse than silence. */
+    assert.equal(note({}), '');
+    assert.equal(note(null), '');
+  });
+
+  check('and that note is actually rendered on the SMS settings screen', () => {
+    /* A function nothing calls is a function nobody reads.
+       The first version of this asked whether `smsWebOtpNote(c)` appeared
+       ANYWHERE in the panel — and it always does, because that is how the
+       function is DECLARED. Deleting the call from the screen left it passing.
+       So the call is looked for inside smsRenderConfig's own body. */
+    const i = script.indexOf('async function smsRenderConfig(b){');
+    assert.ok(i > 0, 'smsRenderConfig should exist');
+    const rest = script.slice(i + 10);
+    const j = rest.search(/\n(async )?function /);
+    const body = j > 0 ? rest.slice(0, j) : rest;
+    assert.ok(body.includes('smsWebOtpNote('), 'smsRenderConfig must render the note');
+  });
+
   check('the Last Survivor topic list is the admin one, not the picker', () => {
     /* The picker hides what has been taken off the list. If the panel read that
      * endpoint, a hidden topic would vanish from the panel too and could never

@@ -100,8 +100,11 @@ export function smsIsLive(c: SmsConfig): boolean {
 }
 
 // Never leak secrets wholesale to the panel — mask them.
-export function maskConfig(c: SmsConfig): SmsConfig & { apiKeySet: boolean; secretSet: boolean } {
-  return { ...c, apiKey: c.apiKey ? '••••' + c.apiKey.slice(-4) : '', secret: c.secret ? '••••' : '', apiKeySet: !!c.apiKey, secretSet: !!c.secret };
+export function maskConfig(c: SmsConfig): SmsConfig & { apiKeySet: boolean; secretSet: boolean; webOtp: WebOtpStatus } {
+  /* `webOtp` is not a setting — it is a server-side FACT the panel has no other
+     way of learning, and the difference between the login code typing itself in
+     and the player typing it by hand. */
+  return { ...c, apiKey: c.apiKey ? '••••' + c.apiKey.slice(-4) : '', secret: c.secret ? '••••' : '', apiKeySet: !!c.apiKey, secretSet: !!c.secret, webOtp: webOtpStatus() };
 }
 
 // ---- templates ----
@@ -449,21 +452,58 @@ async function recordOtp(recipient: string, purpose: string): Promise<void> {
  * that may cost a second segment.
  */
 const WEBOTP_TEMPLATES = new Set(['login_code', 'signup_code']);
-export function webOtpLine(code: string): string {
+
+/* WHY THE AUTOFILL IS — OR IS NOT — HAPPENING, SAID OUT LOUD.
+ *
+ * `webOtpLine` returning '' is a TOTAL and SILENT failure of the autofill. The
+ * message leaves looking perfectly ordinary, the player reads their code, and
+ * the phone simply never offers to type it. Nothing errors, nothing is logged,
+ * and there is no way at all to tell from the outside that it was ever supposed
+ * to work — «کد بازم کپی نمیشه» and no thread to pull.
+ *
+ * That is the same shape as almost every bug this game has had: not code that
+ * stopped working, code that reported success while doing nothing. So the one
+ * condition it all hangs on — PUBLIC_APP_URL — now says what it is and what it
+ * means, in the place an operator actually looks. */
+export interface WebOtpStatus { on: boolean; host: string; reason: string; }
+export function webOtpStatus(): WebOtpStatus {
   const raw = String(process.env.PUBLIC_APP_URL || '').trim();
-  if (!raw) return '';
+  if (!raw) return { on: false, host: '', reason: 'PUBLIC_APP_URL روی سرور تنظیم نشده است؛ خط شناسایی خودکار به پیامک اضافه نمی‌شود و کد ورود روی گوشی خودکار پر نخواهد شد.' };
   let host = '';
-  try { host = new URL(raw).host; } catch { return ''; }
+  try { host = new URL(raw).host; } catch { return { on: false, host: '', reason: 'PUBLIC_APP_URL نشانی معتبری نیست: ' + raw }; }
   /* localhost is a real origin for a developer and a meaningless line in a real
      SMS, so it is left out rather than sent to somebody's phone. */
-  if (!host || /^localhost(:|$)|^127\./.test(host)) return '';
-  return '\n@' + host + ' #' + code;
+  if (!host || /^localhost(:|$)|^127\./.test(host)) return { on: false, host, reason: 'PUBLIC_APP_URL به ' + host + ' اشاره می‌کند که روی گوشی کاربر معنایی ندارد.' };
+  return { on: true, host, reason: 'خط «@' + host + ' #کد» به کد ورود و ثبت‌نام اضافه می‌شود.' };
 }
+
+/* One rule, one place: the line and the explanation can never disagree. */
+export function webOtpLine(code: string): string {
+  const s = webOtpStatus();
+  return s.on ? '\n@' + s.host + ' #' + code : '';
+}
+
+/* Once per process, because PUBLIC_APP_URL cannot change without a restart and
+   a line per login would be noise rather than a warning. */
+let _warnedNoWebOtp = false;
+/** Returns whether it actually logged — so that "does this ever warn at all"
+ *  is a question a test can ask without having to intercept the logger. */
+export function warnIfNoWebOtp(): boolean {
+  if (_warnedNoWebOtp) return false;
+  const s = webOtpStatus();
+  if (s.on) return false;
+  _warnedNoWebOtp = true;
+  logger.warn('webotp_line_missing', { reason: s.reason, publicAppUrl: process.env.PUBLIC_APP_URL || '(unset)' });
+  return true;
+}
+/** Test seam: forget that the warning has been given. */
+export function _resetWebOtpWarning(): void { _warnedNoWebOtp = false; }
 
 /** Send an OTP code respecting the admin's rate-limit/expiry policy. */
 export async function sendOtp(recipient: string, code: string, purpose = 'login', templateKey = 'login_code'): Promise<{ sent: boolean; reason?: string; log?: SmsLogEntry }> {
   const gate = await otpAllowed(recipient);
   if (!gate.allowed) return { sent: false, reason: gate.reason };
+  if (WEBOTP_TEMPLATES.has(templateKey)) warnIfNoWebOtp();
   const log = await sendTemplate(recipient, templateKey, { code },
     WEBOTP_TEMPLATES.has(templateKey) ? webOtpLine(code) : '');
   const sent = log.status === 'sent' || log.status === 'disabled';

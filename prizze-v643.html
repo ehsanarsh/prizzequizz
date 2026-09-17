@@ -512,7 +512,7 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
    rows on the one sheet and the green button at the bottom is the whole
    decision. A row carries three things and no more: who takes the money, what
    it costs the player to use it, and how long it takes. */
-.pm-list{display:flex;flex-direction:column;gap:8px;margin:10px 0 4px;text-align:right}
+.pm-list{display:flex;flex-direction:column;gap:8px;margin:10px 0 2px;text-align:right}
 .pm{display:flex;align-items:center;gap:9px;width:100%;padding:9px 11px;border-radius:15px;
   border:2px solid rgba(255,255,255,.14);background:rgba(255,255,255,.05);
   font-family:inherit;color:inherit;cursor:pointer;text-align:right}
@@ -557,7 +557,7 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
 /* THE DISCOUNT BOX. Under the doors, because it changes the PRICE and not the
    way it is paid — and a player who has no code should be able to ignore it
    entirely, which is why it is one quiet line rather than a section. */
-.pm-disc{display:flex;gap:7px;margin:9px 0 2px}
+.pm-disc{display:flex;gap:7px;margin:9px 0 0}
 .pm-disc input{flex:1 1 auto;min-width:0;width:auto;background:rgba(255,255,255,.06);
   border:2px solid rgba(255,255,255,.16);border-radius:13px;padding:9px 11px;color:inherit;
   font-family:inherit;font-size:13px;font-weight:800}
@@ -574,15 +574,49 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
 .pm-was{display:block;font-size:13px;font-weight:800;color:var(--muted);text-decoration:line-through;
   margin-bottom:-2px}
 .pm-off{font-size:11.5px;font-weight:900;color:#5CFFA8;margin-top:2px}
-/* HOW LONG EACH DOOR TAKES IS NOT DECORATION.
-   This used to hide the timing badge below 360px — which is most phones — so
-   «آنی», «۲ دقیقه» and «تأیید شبکه» were visible on a laptop and gone on the
-   thing people actually pay with. It is the difference between the doors, so it
-   stays; on a narrow screen it drops onto its own line instead of vanishing. */
-@media(max-width:360px){
-  .pm{flex-wrap:wrap}
-  .pm-body{flex:1 1 100%;order:2}
-  .pm-when,.pm-soon{order:3;margin-inline-start:29px}
+/* HOW LONG EACH DOOR TAKES IS NOT DECORATION — AND NEITHER IS A SHORT ROW.
+   Two wrong answers came before this one. First the timing badge was hidden
+   below 360px, which is most phones, so «آنی», «۲ دقیقه» and «تأیید شبکه» were
+   visible on a laptop and gone on the thing people actually pay with. Then it
+   was dropped onto its own line — and that took every row from 59px to 119px,
+   which is the whole sheet on a long scroll: «بهت گفتم نمیخوام اسکرول بشه.»
+   So the type gets smaller instead. The row keeps its one shape at every width
+   — dot, name, note, badge, all on one line — and every word is still there to
+   be read: «اگه دیدی متن خیلی کوچیک میشه حداقل‌ترین اسکرول رو باید داشته باشه». */
+@media(max-width:365px){
+  .pm{gap:7px;padding:8px 9px}
+  .pm-dot{width:17px;height:17px}
+  .pm-name{font-size:12px;gap:5px}
+  .pm-note{font-size:10.5px}
+  .pm-mark{height:17px;padding:0 6px;font-size:10px}
+  .pm-mark img{height:17px;max-width:62px}
+  .pm-when,.pm-soon{font-size:9.5px;padding:2px 6px}
+}
+@media(max-width:335px){
+  .pm{gap:6px;padding:7px 8px}
+  .pm-name{font-size:11.5px}
+  .pm-note{font-size:10px}
+  .pm-mark{padding:0 5px;font-size:9.5px}
+  .pm-mark img{max-width:54px}
+  .pm-when,.pm-soon{font-size:9px;padding:2px 5px}
+}
+/* A SHORT SCREEN IS ITS OWN PROBLEM, AND NOT THE SAME ONE.
+   At 320×640 the sheet is capped at 86vh — 550px — and what runs out is height,
+   not width. So on a short screen the padding and the price give up a few pixels
+   each, and the card is allowed a little more of the screen, rather than the
+   four doors being pushed below the fold. Every selector here is this sheet's
+   own (`pm…`, `#pmPrice`); the max-height is the shared card's, and raising a
+   cap on a short screen can only ever show more of what was already there. */
+@media(max-height:700px){
+  /* By id, because `.aaa-card`'s own 86vh is written further down the file and
+     would otherwise win on source order alone. */
+  #aaaModal .aaa-card{max-height:92vh}
+  #pmPrice .aaa-amount{margin:0 auto 6px;padding:7px 13px}
+  #pmPrice .aaa-amount b{font-size:22px}
+  .pm-list{gap:6px;margin:6px 0 2px}
+  .pm{padding:7px 9px}
+  .pm-disc{margin:7px 0 2px}
+  .pm-disc input,.pm-disc .btn{padding:8px 11px}
 }
 /* THE GATEWAY'S MARK IN THE ICON SLOT. On the card-to-card sheet the player is
    about to be handed to somebody else with real money, so the thing at the top
@@ -24766,6 +24800,20 @@ async function pzInviteSend(user,mode,extra){
      means a keyboard is up, and that needs no measuring. Either witness is
      enough; --pz-vh is correct either way, so only the class needed help. */
   let typing=false;
+  /* THE FRAME MUST NOT FOLLOW THE ADDRESS BAR.
+     «وقتی اسکرول می‌کنی می‌ری تا آخر، موقع اسکرول کلاً یه لحظه نظم صفحه به هم
+      می‌ریزه.»
+     On Android, scrolling down hides the URL bar and `window.innerHeight` grows
+     by forty-odd pixels mid-gesture. This recomputed --pz-vh on every visual
+     viewport scroll, and --pz-vh is the height of the whole app frame and of
+     several panes inside it — so the layout was being resized under the
+     finger, once per scroll, which is exactly what «نظم صفحه به هم می‌ریزه»
+     looks like.
+     So the frame keeps the TALLEST height this orientation has seen. The URL
+     bar coming and going no longer moves anything; a keyboard, which really
+     does take the space away, still does. The remembered height is forgotten
+     when the phone is turned, because then it is genuinely a different size. */
+  let tallest=0, lastVh=-1, lastKb=-1;
   function apply(){
     try{
       const h=Math.round(vv?vv.height:window.innerHeight);
@@ -24783,9 +24831,14 @@ async function pzInviteSend(user,mode,extra){
          where the status bar used to be.
          So the height is the WINDOW's, and the visual viewport is used for the
          one thing it is right about: how much of it a keyboard has taken. */
-      const vh=(kb>90)?h:Math.max(h,Math.round(window.innerHeight));
-      root.style.setProperty('--pz-vh',vh+'px');
-      root.style.setProperty('--pz-kb',kb+'px');
+      let vh;
+      if(kb>90){ vh=h; }                       /* a keyboard really is in the way */
+      else { tallest=Math.max(tallest,h,Math.round(window.innerHeight)); vh=tallest; }
+      /* Written only when it CHANGED. A style write on an element this high up
+         invalidates layout for the whole page, and doing it on every scroll
+         event is the cost even when the number is identical. */
+      if(vh!==lastVh){ lastVh=vh; root.style.setProperty('--pz-vh',vh+'px'); }
+      if(kb!==lastKb){ lastKb=kb; root.style.setProperty('--pz-kb',kb+'px'); }
       document.body.classList.toggle('pz-kb-open',kb>90||typing);
       /* An input that has just been focused must be the thing you can see. */
       if(kb>90){
@@ -24810,7 +24863,8 @@ async function pzInviteSend(user,mode,extra){
     apply();
   }
   if(vv){ vv.addEventListener('resize',apply); vv.addEventListener('scroll',apply); }
-  window.addEventListener('orientationchange',()=>setTimeout(apply,250));
+  /* Turning the phone IS a new size, so the remembered height is dropped. */
+  window.addEventListener('orientationchange',()=>{ tallest=0; setTimeout(apply,250); });
   window.addEventListener('resize',apply);
   /* focusout arrives BEFORE the focusin of whatever is being moved to, so both
      ends ask again on the next tick rather than trusting the event. */

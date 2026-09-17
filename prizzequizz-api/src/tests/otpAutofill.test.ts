@@ -10,7 +10,7 @@
  * Run: npx tsx src/tests/otpAutofill.test.ts
  */
 import assert from 'node:assert/strict';
-import { webOtpLine } from '../services/smsService.js';
+import { webOtpLine, webOtpStatus, maskConfig, SMS_DEFAULT_CONFIG, warnIfNoWebOtp, _resetWebOtpWarning } from '../services/smsService.js';
 
 let pass = 0, fail = 0;
 function check(name: string, fn: () => void): void {
@@ -64,6 +64,95 @@ check('the code in the line is the code that was sent', () => {
   withUrl('https://www.prizequiz.ir', () => {
     assert.ok(webOtpLine('5309').endsWith('#5309'));
     assert.ok(!webOtpLine('5309').includes('1234'));
+  });
+});
+
+/* ── AND WHY, WHEN IT DOES NOT HAPPEN ───────────────────────────────────── */
+/* The line being absent is invisible from every side: the SMS looks normal, the
+   send succeeds, and the phone just never offers the code. These pin the one
+   thing that makes it diagnosable at all. */
+
+check('a configured origin reports itself switched ON, with the host', () => {
+  withUrl('https://www.prizequiz.ir', () => {
+    const s = webOtpStatus();
+    assert.equal(s.on, true);
+    assert.equal(s.host, 'www.prizequiz.ir');
+    assert.ok(s.reason.includes('www.prizequiz.ir'), s.reason);
+  });
+});
+
+check('an unset PUBLIC_APP_URL says so by name', () => {
+  withUrl('', () => {
+    const s = webOtpStatus();
+    assert.equal(s.on, false);
+    /* By NAME: an operator has to know which knob to turn. «تنظیم نشده» alone
+       would send them looking through the panel for a setting that is not in it. */
+    assert.ok(s.reason.includes('PUBLIC_APP_URL'), s.reason);
+  });
+});
+
+check('a localhost origin says localhost, not "not set"', () => {
+  withUrl('http://localhost:4173', () => {
+    const s = webOtpStatus();
+    assert.equal(s.on, false);
+    assert.ok(s.reason.includes('localhost'), s.reason);
+    assert.ok(!s.reason.includes('تنظیم نشده'), 'wrong diagnosis: ' + s.reason);
+  });
+});
+
+check('and a malformed one says it is malformed, and shows it', () => {
+  withUrl('prizequiz', () => {
+    const s = webOtpStatus();
+    assert.equal(s.on, false);
+    assert.ok(s.reason.includes('prizequiz'), s.reason);
+  });
+});
+
+check('the reason never disagrees with the line', () => {
+  for (const url of ['https://www.prizequiz.ir', 'http://localhost:4173', '', 'prizequiz', 'https://a.b:9']) {
+    withUrl(url, () => {
+      const s = webOtpStatus();
+      const line = webOtpLine('1234');
+      assert.equal(s.on, line !== '', 'status and line disagree for ' + JSON.stringify(url));
+      if (s.on) assert.equal(line, '\n@' + s.host + ' #1234');
+    });
+  }
+});
+
+check('the panel is told, in the config it already asks for', () => {
+  withUrl('https://www.prizequiz.ir', () => {
+    const m = maskConfig(SMS_DEFAULT_CONFIG);
+    assert.equal(m.webOtp.on, true);
+    assert.equal(m.webOtp.host, 'www.prizequiz.ir');
+  });
+  withUrl('', () => {
+    const m = maskConfig(SMS_DEFAULT_CONFIG);
+    assert.equal(m.webOtp.on, false);
+    assert.ok(m.webOtp.reason.includes('PUBLIC_APP_URL'), m.webOtp.reason);
+  });
+});
+
+check('and telling the panel never leaks the api key', () => {
+  withUrl('https://www.prizequiz.ir', () => {
+    const m = maskConfig({ ...SMS_DEFAULT_CONFIG, apiKey: 'SECRETKEY9999', secret: 'shh' });
+    assert.ok(!JSON.stringify(m).includes('SECRETKEY9999'), 'the key travelled to the panel');
+    assert.ok(!JSON.stringify(m).includes('shh'));
+    assert.equal(m.apiKeySet, true);
+  });
+});
+
+check('the server log is told once, not on every login', () => {
+  withUrl('', () => {
+    _resetWebOtpWarning();
+    assert.equal(warnIfNoWebOtp(), true, 'the first OTP with no line must say so');
+    assert.equal(warnIfNoWebOtp(), false, 'and the second must not repeat it');
+  });
+});
+
+check('and not at all when the line is going out', () => {
+  withUrl('https://www.prizequiz.ir', () => {
+    _resetWebOtpWarning();
+    assert.equal(warnIfNoWebOtp(), false);
   });
 });
 

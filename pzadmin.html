@@ -5773,6 +5773,14 @@ async function smsDoSend(){
     SMS_SUB='log'; renderSms();
   }catch(e){ toast(e.message,'bad'); if(go){ go.disabled=false; go.textContent='✉️ ارسال'; } }
 }
+/* One honest line about the autofill, from a fact only the server knows. */
+function smsWebOtpNote(c){
+  const w=(c&&c.webOtp)||null;
+  if(!w) return '';   /* an older API that does not report it — say nothing rather than guess */
+  if(w.on) return '<div class="note" style="border-color:#2FBF6D">✅ پر شدن خودکار کد روی گوشی فعال است — '+esc(w.reason)+'</div>';
+  return '<div class="note" style="border-color:#E5484D;line-height:2">⚠️ <b>کد ورود روی گوشی خودکار پر نمی‌شود.</b><br>'+esc(w.reason)+
+    '<br>این تنظیم در پنل نیست؛ روی سرور به‌عنوان متغیر محیطی <b class="mono" dir="ltr">PUBLIC_APP_URL</b> ست می‌شود و باید دقیقاً همان دامنه‌ای باشد که بازی از آن باز می‌شود.</div>';
+}
 async function smsRenderConfig(b){
   const c=await api('GET','/admin/sms/config');
   window._SMS_CFG=c;   // what the SERVER currently has, not what is on screen
@@ -5804,6 +5812,13 @@ async function smsRenderConfig(b){
     (smsLive(c)
       ? '<div class="note">سرویس زنده است: کد ورود تصادفی ساخته و با پیامک فرستاده می‌شود و هرگز از سمت سرور برگردانده نمی‌شود.</div>'
       : '<div class="note" style="border-color:#F1B211">⚠️ سرویس زنده نیست (غیرفعال یا Sandbox یا ارائه‌دهندهٔ تست). تا وقتی این‌طور است هرکس با کد ثابتِ <b class="mono">'+esc(c.otp.testCode||'1234')+'</b> وارد بازی می‌شود. برای راه‌اندازی واقعی: ارائه‌دهنده = نیازپرداز، وضعیت = فعال، Sandbox = خاموش.</div>')+
+    /* PUR-KARDANE KHODKAR — AND WHY IT IS NOT HAPPENING.
+       The login code types itself into the app only when the SMS ends with a
+       line naming this exact host. That line comes from PUBLIC_APP_URL on the
+       SERVER, which nothing in this panel can set and nothing in this panel used
+       to show — so when it was missing, the autofill was simply dead, silently,
+       with the messages going out looking perfectly normal. Now it says so. */
+    smsWebOtpNote(c)+
     '</div>'+
     '<button class="btn pri" onclick="smsSaveConfig()">💾 ذخیرهٔ تنظیمات</button>'+
     '<div class="card" style="margin-top:14px"><h3>✉️ ارسال پیامک آزمایشی</h3><div class="grid g2"><div class="field"><label>شماره مقصد</label><input id="sm_testTo" dir="ltr" placeholder="09xxxxxxxxx"></div><div class="field"><label>متن</label><input id="sm_testBody" value="پیام آزمایشی پرایز کوییز ✅"></div></div><button class="btn" onclick="smsTest()">ارسال آزمایشی</button></div>';
