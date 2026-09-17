@@ -11337,7 +11337,34 @@ function showScreen(id){
   return true;
 }
 let screenStack=[];
+/* THE SCREENS A PLAYER WITH NO CHOSEN NAME MAY BE ON.
+   Everything from the splash to the character picker is the sign-up itself; the
+   game is everything else. */
+const PZ_PREREG_SCREENS=['splash','login','otp','register','character'];
+let _pzRegNagAt=0;
+/* A NAME IS NOT A STEP, IT IS A CONDITION.
+   Registration used to be enforced in exactly ONE place — an `if` at the end of
+   the splash — and nowhere else. That check is right, and it is not enough: it
+   sends an account with no name to the login screen, and the moment ANYTHING
+   calls go('home') after that, the player is in the game for good, because
+   nothing ever asks again. Four accounts in the live database have played or
+   spent money with «بازیکن جدید» still on them.
+   So the rule lives where the moving happens. Any attempt to leave for a game
+   screen without a name lands on the registration form instead — whatever
+   called it, whether it exists today or gets written next month. Once the name
+   is there this is inert, and with no session at all it never fires. */
+function _pzGateRegister(id){
+  if(!_tok||!_usr) return id;
+  if(PZ_PREREG_SCREENS.indexOf(id)>=0) return id;
+  if(!_pzNeedsRegister()) return id;
+  /* Said, but not said five times — a bounce with no explanation reads as the
+     app being broken, and a toast per redirect reads the same way. */
+  const now=Date.now();
+  if(now-_pzRegNagAt>4000){ _pzRegNagAt=now; try{ toast('اول اسمت رو کامل کن'); }catch(e){} }
+  return 'register';
+}
 function go(id){
+  id=_pzGateRegister(id);
   const cur=document.querySelector('.screen.active');
   const target=document.getElementById(id);
   if(!target || !target.classList.contains('screen')) return;
