@@ -513,7 +513,7 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
    decision. A row carries three things and no more: who takes the money, what
    it costs the player to use it, and how long it takes. */
 .pm-list{display:flex;flex-direction:column;gap:8px;margin:10px 0 4px;text-align:right}
-.pm{display:flex;align-items:center;gap:10px;width:100%;padding:11px 12px;border-radius:15px;
+.pm{display:flex;align-items:center;gap:9px;width:100%;padding:9px 11px;border-radius:15px;
   border:2px solid rgba(255,255,255,.14);background:rgba(255,255,255,.05);
   font-family:inherit;color:inherit;cursor:pointer;text-align:right}
 .pm:active{transform:scale(.985)}
@@ -532,8 +532,14 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
 .pm.on .pm-dot::after{content:'';position:absolute;inset:3px;border-radius:50%;background:var(--bolt,#FFD21F)}
 .pm.off .pm-dot{border-style:dashed}
 .pm-body{flex:1;min-width:0}
-.pm-name{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:900;line-height:1.5}
-.pm-note{display:block;font-size:11px;font-weight:700;color:var(--muted);line-height:1.7;
+/* WRAPS RATHER THAN CLIPS. «همهٔ متن‌های گزینه‌ها هم خونده بشن» — a name cut off
+   by three pixels is a name nobody can read, and «تتر (USDT)» was exactly that. */
+.pm-name{display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0;
+  font-size:13px;font-weight:900;line-height:1.45;overflow-wrap:anywhere}
+/* Two lines at most. The notes used to run to three and each row grew to a
+   hundred and twenty pixels, which is what put the sheet on a scrollbar. */
+.pm-note{display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;
+  overflow:hidden;font-size:11px;font-weight:700;color:var(--muted);line-height:1.6;
   overflow-wrap:anywhere}
 /* The صندوق's balance is the one number on this sheet that decides whether a
    door is open at all, so it is said in the colour of its own answer. */
@@ -552,11 +558,17 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
    way it is paid — and a player who has no code should be able to ignore it
    entirely, which is why it is one quiet line rather than a section. */
 .pm-disc{display:flex;gap:7px;margin:9px 0 2px}
-.pm-disc input{flex:1;min-width:0;background:rgba(255,255,255,.06);border:2px solid rgba(255,255,255,.16);
-  border-radius:13px;padding:10px 12px;color:inherit;font-family:inherit;font-size:13px;font-weight:800}
+.pm-disc input{flex:1 1 auto;min-width:0;width:auto;background:rgba(255,255,255,.06);
+  border:2px solid rgba(255,255,255,.16);border-radius:13px;padding:9px 11px;color:inherit;
+  font-family:inherit;font-size:13px;font-weight:800}
 .pm-disc input:focus{outline:none;border-color:var(--bolt,#FFD21F)}
 .pm-disc.on input{border-color:#3FD07A;background:rgba(63,208,122,.10)}
-.pm-disc .btn{flex:0 0 auto;padding:10px 14px;font-size:13px;border-radius:13px}
+/* `width:auto` IS THE FIX, and it is the whole reason this sheet scrolled
+   sideways. Every .btn in this file is `width:100%`; inside a flex row that
+   makes the button claim the full width of its container AND sit beside the
+   input, so the line came out thirty-five pixels wider than the card — which
+   pushed the card wider than the phone. */
+.pm-disc .btn{flex:0 0 auto;width:auto;padding:9px 13px;font-size:13px;border-radius:13px}
 /* What the price WAS, struck through beside what it is now: a discounted number
    on its own is one the player has to take on trust. */
 .pm-was{display:block;font-size:13px;font-weight:800;color:var(--muted);text-decoration:line-through;
@@ -5498,7 +5510,10 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
           <h1 style="font-size:24px;font-weight:900">کد تأیید</h1>
           <p style="color:var(--muted);margin:8px 0 26px;font-size:14px">کد ۴ رقمی ارسال‌شده به<br><b style="color:var(--text)" dir="ltr" id="otpPhone">—</b> رو وارد کن</p>
           <div style="display:flex;gap:12px;justify-content:center;direction:ltr" id="otpBoxes">
-            <input class="input mono" maxlength="1" inputmode="numeric" style="width:60px;height:66px;text-align:center;font-size:26px;font-weight:800">
+            <!-- `one-time-code` is what makes the phone's own keyboard offer the
+                 code the moment the message lands. It belongs on the FIRST box:
+                 the suggestion arrives whole, and pasting it is handled below. -->
+            <input class="input mono" maxlength="1" inputmode="numeric" autocomplete="one-time-code" style="width:60px;height:66px;text-align:center;font-size:26px;font-weight:800">
             <input class="input mono" maxlength="1" inputmode="numeric" style="width:60px;height:66px;text-align:center;font-size:26px;font-weight:800">
             <input class="input mono" maxlength="1" inputmode="numeric" style="width:60px;height:66px;text-align:center;font-size:26px;font-weight:800">
             <input class="input mono" maxlength="1" inputmode="numeric" style="width:60px;height:66px;text-align:center;font-size:26px;font-weight:800">
@@ -11651,7 +11666,67 @@ function menuBack(fallback){if(openedFromMenu){openedFromMenu=false;go('home');s
 
 /* ============ OTP autofocus ============ */
 const otpInputs=document.querySelectorAll('#otpBoxes input');
-otpInputs.forEach((inp,i)=>inp.addEventListener('input',()=>{if(inp.value&&i<3)otpInputs[i+1].focus();}));
+/* TYPING, PASTING, OR THE PHONE FILLING IT IN.
+   A box with maxlength=1 that receives four characters at once — which is what
+   an autofill or a paste delivers — keeps the first and drops the rest. So a
+   value longer than one digit is spread across the boxes instead. */
+function pzOtpSpread(text){
+  const digits=pzToLatinDigits(String(text||'')).replace(/\D+/g,'').slice(0,otpInputs.length);
+  if(!digits) return 0;
+  otpInputs.forEach((b,i)=>{ b.value=digits[i]||''; });
+  const next=Math.min(digits.length,otpInputs.length-1);
+  otpInputs[next]?.focus();
+  return digits.length;
+}
+otpInputs.forEach((inp,i)=>{
+  inp.addEventListener('input',()=>{
+    if(inp.value.length>1){
+      /* Autofill or paste: the whole code arrived in one box. */
+      if(pzOtpSpread(inp.value)>=otpInputs.length) pzOtpAutoSubmit();
+      return;
+    }
+    if(inp.value&&i<otpInputs.length-1)otpInputs[i+1].focus();
+    /* Typed the last digit — there is nothing else to wait for. */
+    if(inp.value&&i===otpInputs.length-1) pzOtpAutoSubmit();
+  });
+  inp.addEventListener('paste',(ev)=>{
+    const t=(ev.clipboardData||window.clipboardData);
+    if(!t) return;
+    const v=t.getData('text'); if(!/\d/.test(v)) return;
+    ev.preventDefault();
+    if(pzOtpSpread(v)>=otpInputs.length) pzOtpAutoSubmit();
+  });
+});
+/* «وقتی کد میاد خودش کپی کنه بزنه اونجا و ورود رو بزنه اتوماتیک.»
+   Pressing it for them — once, and only when all four boxes are full. Guarded
+   because three different things can complete the code (typing, a paste, the
+   phone's own autofill) and any two of them could fire together. */
+let _pzOtpSubmitting=false;
+function pzOtpAutoSubmit(){
+  if(_pzOtpSubmitting) return;
+  const code=Array.from(otpInputs).map(b=>b.value).join('');
+  if(code.length<otpInputs.length) return;
+  _pzOtpSubmitting=true;
+  setTimeout(()=>{ _pzOtpSubmitting=false; try{ realVerifyOtp(); }catch(e){} },160);
+}
+/* THE CODE, WITHOUT THE PLAYER TOUCHING THE MESSAGE AT ALL.
+   Android hands it straight to the page when the SMS carries the site's name on
+   its last line — the server writes that line. Nothing here asks for permission
+   and nothing reads any other message: the browser matches the domain itself
+   and passes only this one code. Where it is not supported the boxes work
+   exactly as they did. */
+let _pzOtpAbort=null;
+function pzOtpListen(){
+  try{
+    if(!('OTPCredential' in window)) return;
+    pzOtpStopListening();
+    _pzOtpAbort=new AbortController();
+    navigator.credentials.get({otp:{transport:['sms']},signal:_pzOtpAbort.signal})
+      .then((c)=>{ if(c&&c.code&&pzOtpSpread(c.code)>=otpInputs.length) pzOtpAutoSubmit(); })
+      .catch(()=>{});   /* refused, cancelled, or unsupported — the boxes still work */
+  }catch(e){}
+}
+function pzOtpStopListening(){ try{ if(_pzOtpAbort) _pzOtpAbort.abort(); }catch(e){} _pzOtpAbort=null; }
 
 /* ============ CHARACTER (init called by go wrapper) ============ */
 
@@ -20284,6 +20359,9 @@ async function pzRequestOtp(phone){
   const el=document.getElementById('otpPhone'); if(el)el.textContent=otpPrettyPhone(_otpPhone);
   const boxes=document.querySelectorAll('#otpBoxes input');
   boxes.forEach(b=>b.value=''); boxes[0]?.focus();
+  /* Start listening only now: the wait is for THIS code, and asking earlier
+     would leave a listener open across a screen the player may never leave. */
+  try{ pzOtpListen(); }catch(e){}
   otpStartTimer(r.data.ttlSeconds,r.data.resendAfterSeconds);
   const hint=document.getElementById('otpHint');
   /* In test mode nothing is really sent, so saying "کد ارسال شد" would be a
@@ -20317,6 +20395,7 @@ async function realVerifyOtp(){
   if(btn){btn.disabled=true;btn.textContent='بررسی...';}
   const r=await pzApi('POST','/auth/otp/verify',{requestId:_rid,code},false);
   if(btn){btn.disabled=false;btn.textContent='ورود';}
+  try{ pzOtpStopListening(); }catch(e){}
   if(r.ok){
     _tok=r.data.accessToken; _usr=r.data.user;
     localStorage.setItem('pz_tok',_tok);
@@ -22870,16 +22949,16 @@ function pzPayMethods(d){
       noteClass:(d.canPayFromVault?'ok':'bad'),
       open:!!d.canPayFromVault },
     { id:'gateway', logo:b.logo||'', mark:'بلو پال', markClass:'bp',
-      name:'درگاه امن بلو پال', when:'حدود ۵ دقیقه',
-      note:'کارت به کارت از اپ بانکی خودت؛ بعد از تأیید واریز، خریدت فعال می‌شود.',
+      name:'درگاه امن بلو پال', when:'۲ دقیقه',
+      note:'کارت به کارت از اپ بانکی خودت.',
       open:!!d.canPayByGateway,
       /* A gateway that is switched off in the panel is a shut door, not a
          missing one — and the row says which of the two it is. */
       shut:(d.canPayByGateway?'':'موقتاً در دسترس نیست') },
     { id:'shaparak', mark:'شاپرک', name:'درگاه شاپرک', when:'آنی',
-      note:'پرداخت با کارت بانکی، مثل هر فروشگاه دیگری.', soon:true },
-    { id:'usdt', mark:'₮', name:'تتر (USDT)', when:'بعد از تأیید شبکه',
-      note:'برای پرداخت از کیف‌پول ارز دیجیتال.', soon:true }
+      note:'با کارت بانکی.', soon:true },
+    { id:'usdt', mark:'₮', name:'تتر (USDT)', when:'تأیید شبکه',
+      note:'از کیف‌پول ارز دیجیتال.', soon:true }
   ];
 }
 

@@ -383,7 +383,7 @@ export async function sendSms(to: string, body: string, templateKey: string | nu
   return entry;
 }
 
-export async function sendTemplate(to: string, key: string, vars: Record<string, string | number> = {}): Promise<SmsLogEntry> {
+export async function sendTemplate(to: string, key: string, vars: Record<string, string | number> = {}, suffix = ''): Promise<SmsLogEntry> {
   const tpls = await listTemplates();
   /* THE MESSAGE GOES OUT EVEN IF THE ROW IS NOT THERE.
    * A withdrawal code that depends on a database row existing is a payout that
@@ -392,7 +392,10 @@ export async function sendTemplate(to: string, key: string, vars: Record<string,
    * nobody ever defined is an error. */
   const t = tpls.find((x) => x.key === key) ?? SMS_DEFAULT_TEMPLATES.find((x) => x.key === key);
   if (!t) throw new Error('TEMPLATE_NOT_FOUND');
-  return sendSms(to, renderTemplate(t.text, vars), key);
+  /* Appended AFTER the operator's wording, never inside it: the machine-read
+     line has to be the last one in the message, and an operator editing their
+     template must not be able to move or break it by accident. */
+  return sendSms(to, renderTemplate(t.text, vars) + (suffix || ''), key);
 }
 
 export async function resend(logId: string): Promise<SmsLogEntry | null> {
@@ -426,11 +429,43 @@ async function recordOtp(recipient: string, purpose: string): Promise<void> {
   if (pool) { await ensureSchema(pool); await pool.query(`INSERT INTO sms_otp_log(id,recipient,purpose) VALUES($1,$2,$3)`, [id(), recipient, purpose]); }
   else _memOtp.unshift({ recipient, purpose, createdAt: Date.now() });
 }
+/* THE LINE THAT LETS THE PHONE FILL THE CODE IN BY ITSELF.
+ *
+ * «یه کاری کن وقتی کد میاد خودش کپی کنه بزنه اونجا و ورود رو بزنه اتوماتیک.»
+ *
+ * Android will hand a code straight to a page — no permission, no reading of
+ * any other message — but only when the message ends with exactly this shape:
+ *
+ *     @www.example.com #1234
+ *
+ * The domain has to be the one the app is served from, and the browser is what
+ * checks that: a message naming somebody else's domain is never given to us,
+ * and ours is never given to anybody else. It is the last line or it does not
+ * count.
+ *
+ * Only on the codes a player is WAITING for with the app open. A withdrawal
+ * code is typed into a sheet inside the app, where the keyboard's own
+ * suggestion already does the job, and every extra line on an SMS is length
+ * that may cost a second segment.
+ */
+const WEBOTP_TEMPLATES = new Set(['login_code', 'signup_code']);
+export function webOtpLine(code: string): string {
+  const raw = String(process.env.PUBLIC_APP_URL || '').trim();
+  if (!raw) return '';
+  let host = '';
+  try { host = new URL(raw).host; } catch { return ''; }
+  /* localhost is a real origin for a developer and a meaningless line in a real
+     SMS, so it is left out rather than sent to somebody's phone. */
+  if (!host || /^localhost(:|$)|^127\./.test(host)) return '';
+  return '\n@' + host + ' #' + code;
+}
+
 /** Send an OTP code respecting the admin's rate-limit/expiry policy. */
 export async function sendOtp(recipient: string, code: string, purpose = 'login', templateKey = 'login_code'): Promise<{ sent: boolean; reason?: string; log?: SmsLogEntry }> {
   const gate = await otpAllowed(recipient);
   if (!gate.allowed) return { sent: false, reason: gate.reason };
-  const log = await sendTemplate(recipient, templateKey, { code });
+  const log = await sendTemplate(recipient, templateKey, { code },
+    WEBOTP_TEMPLATES.has(templateKey) ? webOtpLine(code) : '');
   const sent = log.status === 'sent' || log.status === 'disabled';
   /* Counted only once a message really went out. Recording first meant a run of
    * provider failures — a wrong sender line, an empty account — locked the

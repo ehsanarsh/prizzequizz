@@ -64,9 +64,9 @@ export function registerAuthRoutes(router: Router, base: string): void {
     json(ctx.res, 200, { ...tokens, user: toDto(user) });
   });
 
-  router.add('POST', `${base}/auth/refresh`, (ctx) => {
+  router.add('POST', `${base}/auth/refresh`, async (ctx) => {
     const token = requiredString(bodyObject(ctx.body), 'refreshToken');
-    const refreshed = refreshSession(token);
+    const refreshed = await refreshSession(token);
     if (!refreshed) {
       recordSecurityEvent({ req: ctx.req, eventType: 'REFRESH_FAILED', severity: 'warn' });
       return error(ctx.res, 401, 'REFRESH_INVALID', 'Invalid refresh token');
@@ -74,9 +74,9 @@ export function registerAuthRoutes(router: Router, base: string): void {
     json(ctx.res, 200, refreshed);
   });
 
-  router.add('POST', `${base}/auth/logout`, (ctx) => {
+  router.add('POST', `${base}/auth/logout`, async (ctx) => {
     const token = requiredString(bodyObject(ctx.body), 'refreshToken');
-    json(ctx.res, 200, { revoked: revokeRefreshToken(token) });
+    json(ctx.res, 200, { revoked: await revokeRefreshToken(token) });
   });
 }
 
