@@ -91,6 +91,34 @@ const KEEP = process.env.ANTHROPIC_API_KEY;
     }
   });
 
+  /* WHAT THE REVIEWER IS GIVEN TO JUDGE WITH.
+     The run used to report a question's TEXT and nothing else — no options, no
+     right answer — and the panel put an «approve» button next to it. A question
+     cannot be judged from its text: «پایتخت استرالیا کجاست؟» is a fine question
+     with four wrong answers underneath it, and this game pays real money on the
+     answer. The options were written to the bank and simply never sent back. */
+  await check('the run reports the four options and which one is right', async () => {
+    serve((b) => stage(b) === 'gen' ? { questions: [q(41)] } : stage(b) === 'fact' ? GOOD_FACT : GOOD_REVIEW);
+    const r = await aiRunBatch({ topic: 'تاریخ', count: 1 });
+    const row = r.questions[0]!;
+    assert.ok(Array.isArray(row.options), 'no options on the reported row');
+    assert.equal(row.options.length, 4, 'a reviewer needs all four');
+    assert.ok(row.options.every((o) => typeof o === 'string' && o.trim() !== ''), JSON.stringify(row.options));
+    assert.ok(Number.isInteger(row.correctIndex) && row.correctIndex >= 0 && row.correctIndex < 4,
+      'correctIndex: ' + row.correctIndex);
+  });
+
+  await check('and they are the ones actually in the bank, not the draft', async () => {
+    /* What the reviewer sees has to be what is stored, or they approve one
+       thing and the game ships another. */
+    serve((b) => stage(b) === 'gen' ? { questions: [q(42)] } : stage(b) === 'fact' ? GOOD_FACT : GOOD_REVIEW);
+    const r = await aiRunBatch({ topic: 'تاریخ', count: 1 });
+    const row = r.questions[0]!;
+    const saved = (await repositories.questions.findById(row.id))!;
+    assert.deepEqual(row.options, saved.options, 'the card would show options the bank does not have');
+    assert.equal(row.correctIndex, saved.correctIndex, 'the card would mark a different answer');
+  });
+
   await check('and each one really went through every stage', async () => {
     serve((b) => stage(b) === 'gen' ? { questions: [q(10)] } : stage(b) === 'fact' ? GOOD_FACT : GOOD_REVIEW);
     const r = await aiRunBatch({ topic: 'تاریخ', count: 1 });

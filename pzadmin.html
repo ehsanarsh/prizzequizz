@@ -133,6 +133,29 @@ textarea.json{min-height:300px;font-family:ui-monospace,monospace;font-size:12px
 }
 .subtabs button{border:1.5px solid var(--line);background:var(--panel2);color:var(--muted);border-radius:8px;padding:6px 11px;font-size:12px;font-weight:700}
 .subtabs button.active{background:var(--gold);color:#1a1400;border-color:#000}
+/* ── A GENERATED QUESTION, LAID OUT TO BE JUDGED ─────────────────────────
+   The four choices are the point of the card, so they are the largest thing on
+   it; the right one is green and is a radio, because «which one is right» is
+   the single most likely thing to be wrong in a model's answer. */
+.ai-qcard{border:2px solid #000;border-radius:14px;background:#14161c;padding:12px 13px;margin-bottom:10px}
+.ai-qtext{font-size:14px;font-weight:800;line-height:1.95;margin-bottom:9px}
+.ai-opts{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+@media(max-width:620px){.ai-opts{grid-template-columns:1fr}}
+.ai-opt{display:flex;align-items:flex-start;gap:8px;padding:8px 10px;border:1.5px solid #2a2f3a;
+  border-radius:11px;background:#0f1116;cursor:pointer;font-size:12.5px;font-weight:700;line-height:1.8}
+.ai-opt input{margin:3px 0 0;accent-color:#2fbf6d;flex:0 0 auto;cursor:pointer}
+.ai-opt b{flex:0 0 auto;opacity:.6;font-weight:900}
+.ai-opt span{flex:1;min-width:0;overflow-wrap:anywhere}
+/* The right answer says so by colour, not only by a dot — a radio 20 pixels
+   wide is not what the eye lands on when four rows look identical. */
+.ai-opt.on{border-color:#2fbf6d;background:rgba(47,191,109,.12);color:#b9ffd8}
+.ai-qfoot{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:10px}
+.ai-qtags{display:flex;gap:5px;flex-wrap:wrap;align-items:center}
+.ai-qacts{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.ai-difflbl{font-size:11px;font-weight:800;color:var(--muted,#8b93a7)}
+.ai-diff{background:#0f1116;color:inherit;border:1.5px solid #2a2f3a;border-radius:10px;
+  padding:6px 8px;font-family:inherit;font-size:12px;font-weight:800;cursor:pointer}
+.ai-diff:focus{outline:none;border-color:#8fd6ff}
 </style>
 </head>
 <body>
@@ -2739,6 +2762,88 @@ function aiFinished(added,err){
         (err||!added)?'bad':'ok');
 }
 
+/* ONE GENERATED QUESTION, WITH EVERYTHING NEEDED TO JUDGE IT.
+ *
+ * «بعد تولید من باید بتونم چهارگزینه رو ببینم و بتونم سطح سوال رو تغییر بدم و
+ *  مدیریت کنم.»
+ *
+ * The run report used to be a list of question TEXTS with an approve button
+ * beside each — and a question cannot be judged from its text. «پایتخت استرالیا
+ * کجاست؟» is a perfectly good question with four wrong answers underneath it,
+ * and this game pays real money on the answer. So the four choices are on the
+ * card, the right one is marked and can be changed, and the difficulty is a
+ * dropdown rather than a label, because the model's guess at «سخت» is a guess.
+ *
+ * Nothing here invents an endpoint: PATCH /admin/questions/:id already changes
+ * exactly the fields it is given and deliberately does NOT touch status, so
+ * editing and approving stay two separate decisions. */
+const AI_DIFF={easy:'آسان',medium:'متوسط',hard:'سخت'};
+function aiQCard(q){
+  const opts=Array.isArray(q.options)?q.options:[];
+  const ci=Number(q.correctIndex)||0;
+  const id=esc(q.id);
+  /* A question saved without four options is a bug upstream, and saying so is
+     better than drawing an empty box that looks like the model's fault. */
+  const body=opts.length===4
+    ? '<div class="ai-opts">'+opts.map((o,i)=>
+        '<label class="ai-opt'+(i===ci?' on':'')+'">'+
+          '<input type="radio" name="aic_'+id+'" value="'+i+'"'+(i===ci?' checked':'')+
+            ' onchange="aiSetCorrect(\''+id+'\','+i+')">'+
+          '<b>'+String.fromCharCode(1776+i+1)+'</b>'+
+          '<span>'+esc(o)+'</span>'+
+        '</label>').join('')+'</div>'
+    : '<div class="note" style="color:var(--bad)">این سؤال چهار گزینه ندارد — با «حذف» پاکش کن.</div>';
+  const why=q.explanation?'<div class="note" style="margin-top:7px;display:block;line-height:1.9">💡 '+esc(q.explanation)+'</div>':'';
+  const diff='<select class="ai-diff" onchange="aiSetDiff(\''+id+'\',this.value,this)">'+
+    Object.keys(AI_DIFF).map(k=>'<option value="'+k+'"'+((q.difficulty||'medium')===k?' selected':'')+'>'+AI_DIFF[k]+'</option>').join('')+
+    '</select>';
+  return '<div class="ai-qcard" id="aiq_'+id+'">'+
+    '<div class="ai-qtext">'+esc(q.text)+'</div>'+
+    body+why+
+    '<div class="ai-qfoot">'+
+      '<span class="ai-qtags">'+
+        (q.approved?'<span class="pill ok">تأیید شد</span>':'<span class="pill pend">'+esc(q.reason||'تأیید نشد')+'</span>')+
+        '<span class="pill info">کیفیت '+fa(q.quality||0)+'</span>'+
+        (q.category?'<span class="pill info">'+esc(q.category)+'</span>':'')+
+      '</span>'+
+      '<span class="ai-qacts"><label class="ai-difflbl">سطح</label>'+diff+
+        (q.approved?'':'<button class="btn sm" onclick="aiOneApprove(\''+id+'\')">تأیید</button>')+
+        '<button class="btn sm danger" onclick="aiOneDelete(\''+id+'\',this)">حذف</button>'+
+      '</span>'+
+    '</div></div>';
+}
+/* THE EDIT IS SAVED, AND IF IT IS NOT, THE SCREEN SAYS SO AND GOES BACK.
+   A dropdown that moves on screen and not in the bank is the worst of both —
+   the operator believes they changed the level and the game does not. */
+async function aiSetDiff(id,val,sel){
+  const v=aiLastRun(); const row=v&&(v.r.questions||[]).find(q=>q.id===id);
+  const was=row?row.difficulty:'';
+  try{
+    await api('PATCH','/admin/questions/'+id,{difficulty:val});
+    if(row){ row.difficulty=val; aiSaveRun(v.r,v.fresh); }
+    toast('سطح شد «'+AI_DIFF[val]+'»','ok');
+  }catch(e){
+    if(sel&&was) sel.value=was;      /* put the screen back to the truth */
+    toast(e.message||'سطح تغییر نکرد','bad');
+  }
+}
+async function aiSetCorrect(id,idx){
+  const v=aiLastRun(); const row=v&&(v.r.questions||[]).find(q=>q.id===id);
+  const was=row?Number(row.correctIndex)||0:0;
+  try{
+    await api('PATCH','/admin/questions/'+id,{correctIndex:idx});
+    if(row){ row.correctIndex=idx; aiSaveRun(v.r,v.fresh); }
+    /* Redrawn so the highlight follows the choice — the radio alone moves the
+       dot and leaves the green row where it was. */
+    const el=document.getElementById('aiq_'+id);
+    if(el&&row) el.outerHTML=aiQCard(row);
+    toast('پاسخ درست عوض شد','ok');
+  }catch(e){
+    const el=document.getElementById('aiq_'+id);
+    if(el&&row){ row.correctIndex=was; el.outerHTML=aiQCard(row); }
+    toast(e.message||'پاسخ درست عوض نشد','bad');
+  }
+}
 function aiRunHtml(r,old){
   const rows=r.questions||[], skipped=r.skipped||[];
   const kept=rows.filter(q=>!q.approved);
@@ -2755,17 +2860,7 @@ function aiRunHtml(r,old){
       '<button class="btn" onclick="aiClearRun()">پاک کردن این گزارش</button>'+
     '</div></div>';
   const list=rows.length?('<div class="card" style="margin-bottom:11px"><h3>سوال‌هایی که ساخته شد</h3>'+
-    rows.map(q=>'<div class="cfg-row" style="align-items:flex-start">'+
-      '<label style="flex:1;white-space:normal;line-height:1.9">'+esc(q.text)+
-        '<div class="note" style="margin:3px 0 0;display:block">'+
-          (q.approved?'<span class="pill ok">تأیید شد</span>':'<span class="pill pend">'+esc(q.reason||'تأیید نشد')+'</span>')+
-          ' <span class="pill info">کیفیت '+fa(q.quality||0)+'</span>'+
-          ' <span class="pill info">'+esc(q.difficulty||'')+'</span>'+
-        '</div></label>'+
-      '<span style="display:flex;gap:6px">'+
-        (q.approved?'':'<button class="btn sm" onclick="aiOneApprove(\''+q.id+'\')">تأیید</button>')+
-        '<button class="btn sm danger" onclick="aiOneDelete(\''+q.id+'\',this)">حذف</button>'+
-      '</span></div>').join('')+'</div>'):'';
+    rows.map(aiQCard).join('')+'</div>'):'';
   const bad=skipped.length?('<div class="card"><h3>نوشته نشد</h3>'+
     skipped.map(x=>'<div class="cfg-row" style="align-items:flex-start"><label style="flex:1;white-space:normal;line-height:1.9">'+esc(x.question)+
       '<div class="note" style="margin:3px 0 0;display:block"><span class="pill bad">'+

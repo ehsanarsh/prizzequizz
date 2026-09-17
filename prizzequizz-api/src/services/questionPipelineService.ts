@@ -475,6 +475,17 @@ export interface BatchSkip { question: string; reason: 'duplicate' | 'malformed'
 export interface BatchRow {
   id: string; text: string; category?: string; difficulty: string;
   stage: string; quality: number; approved: boolean; reason?: string;
+  /* THE FOUR CHOICES, AND WHICH ONE IS RIGHT.
+     These were written to the bank and never sent back, so the run report was a
+     list of question TEXTS with an approve button beside each. There is no way
+     to judge a question from its text alone — «پایتخت استرالیا کجاست؟» is a
+     fine question with four wrong answers underneath it — and this game pays
+     real money on the answer. So whoever approves has to be able to see what
+     they are approving. */
+  options: string[];
+  correctIndex: number;
+  /* Why the right answer is the right one, when the model gave a reason. */
+  explanation?: string;
 }
 export interface BatchOutcome {
   configured: boolean;
@@ -564,7 +575,11 @@ export async function aiRunBatch(input: {
         seen.push(d.question);
         out.questions.push({
           id: q.id, text: d.question, category: q.category, difficulty: q.difficulty,
-          stage: m.stage, quality: m.qualityScore ?? 0, approved, reason: approved ? undefined : holdReason(m)
+          stage: m.stage, quality: m.qualityScore ?? 0, approved, reason: approved ? undefined : holdReason(m),
+          /* From the SAVED question, not from the draft: what the reviewer sees
+             has to be what is in the bank, or they are approving one thing and
+             shipping another. */
+          options: q.options.slice(), correctIndex: q.correctIndex, explanation: d.explanation
         });
       } catch (e) {
         out.skipped.push({ question: d.question.slice(0, 120), reason: 'failed',
