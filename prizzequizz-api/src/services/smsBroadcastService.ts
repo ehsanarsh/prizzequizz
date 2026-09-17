@@ -34,6 +34,18 @@ import { logger } from './logger.js';
 /** The most one run may text. Beyond this it is refused, not trimmed. */
 export const SMS_BROADCAST_MAX = 2000;
 
+/* WHEN TO STOP RATHER THAN KEEP ASKING.
+ *
+ * A refusal that names the credentials, the template, the account or the panel
+ * balance is about the SETTINGS, not about this one recipient — the next four
+ * hundred will fail for exactly the same reason, and with نیازپرداز each of
+ * those failures is another malformed request counting towards an IP ban.
+ * Anything else gets a few goes before the run gives up, because a handful of
+ * unrelated failures in a row is also not a healthy run. */
+const FATAL_SEND = /مسدود|بلاک|block|ناقص|پسورد|رمز|کلید|نامعتبر|اعتبار|template|الگو|غیرفعال|منقضی|تنظیم نشده|unauthor|forbidden|429/i;
+const FAIL_STREAK = 5;
+let consecutive = 0;
+
 export class SmsBroadcastError extends Error {
   constructor(public code: string, message: string) { super(message); this.name = 'SmsBroadcastError'; }
 }
@@ -115,6 +127,10 @@ export async function previewSmsBroadcast(spec: SegmentSpec, text: string): Prom
 export interface SmsBroadcastResult {
   sent: number; failed: number; blocked: number; noPhone: number;
   audience: number; messages: number; duplicate: boolean;
+  /** People the run never got to, because it gave up. */
+  notAttempted: number;
+  /** Why it gave up — the provider's own words, when there are any. */
+  stopped?: string;
 }
 
 export async function sendSmsBroadcast(input: { spec: SegmentSpec; text: string; idempotencyKey: string }): Promise<SmsBroadcastResult> {
@@ -142,25 +158,55 @@ export async function sendSmsBroadcast(input: { spec: SegmentSpec; text: string;
     throw new SmsBroadcastError('SEND_IN_FLIGHT', 'همین ارسال همین حالا در جریان است؛ چند لحظه دیگر وضعیتش را ببین.');
   }
 
-  let sent = 0, failed = 0, blocked = 0;
+  let sent = 0, failed = 0, blocked = 0, notAttempted = 0;
+  let stopped = '';
+  consecutive = 0;                       // a fresh run starts with a clean slate
   try {
     const phones = await phonesOf(userIds);
     const noPhone = userIds.length - phones.size;
-    for (const phone of phones.values()) {
+    const all = [...phones.values()];
+    for (let i = 0; i < all.length; i++) {
+      const phone = all[i]!;
       try {
         const entry = await sendSms(phone, text, null);
-        if (entry.status === 'sent') sent++;
+        if (entry.status === 'sent') { sent++; consecutive = 0; }
         else if (entry.status === 'blocked' || entry.status === 'disabled') blocked++;
-        else failed++;
+        else {
+          failed++;
+          /* ── ONE BAD SETTING MUST NOT BECOME FIVE HUNDRED BAD REQUESTS ──
+             «برخی از ریکوئست‌ها بدون پسورد ارسال شده‌اند… در صورت ارسال ریکوئست
+              اشتباه، آی‌پی مسدود می‌گردد.» That is what happened: a run kept
+             going after the provider had already refused, once per recipient,
+             until the provider stopped accepting anything from this server.
+             Every request after the first refusal was not a message that might
+             work — it was another reason to stay banned.
+             So a run that is clearly not going to work STOPS, and says how far
+             it got. The audience is unchanged and the operator can fix the
+             setting and send again. */
+          const why = String(entry.error ?? '');
+          consecutive++;
+          if (FATAL_SEND.test(why) || consecutive >= FAIL_STREAK) {
+            stopped = why || 'چند ارسال پشت سر هم ناموفق بود';
+            notAttempted = all.length - (i + 1);
+            break;
+          }
+        }
       } catch (e) {
-        failed++;
+        failed++; consecutive++;
         logger.warn('sms_broadcast_recipient_failed', { message: e instanceof Error ? e.message : 'unknown' });
+        if (consecutive >= FAIL_STREAK) {
+          stopped = e instanceof Error ? e.message : 'چند ارسال پشت سر هم ناموفق بود';
+          notAttempted = all.length - (i + 1);
+          break;
+        }
       }
     }
     const result: SmsBroadcastResult = {
       sent, failed, blocked, noPhone, audience: count,
-      messages: sent * smsParts(text), duplicate: false
+      messages: sent * smsParts(text), duplicate: false,
+      notAttempted, ...(stopped ? { stopped } : {})
     };
+    if (stopped) logger.warn('sms_broadcast_stopped', { sent, failed, notAttempted, stopped });
     await settleFulfilment(ref, result);
     logger.info('sms_broadcast', { audience: count, sent, failed, blocked, noPhone, parts: smsParts(text) });
     return result;

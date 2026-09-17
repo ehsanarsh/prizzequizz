@@ -5886,11 +5886,32 @@ async function smsDoSend(){
         (r.blocked?'<div class="cfg-row"><label>مسدود/خاموش</label><b>'+fa(r.blocked)+'</b></div>':'')+
         (r.failed?'<div class="cfg-row"><label>ناموفق</label><b style="color:var(--bad)">'+fa(r.failed)+'</b></div>':'')+
         (r.noPhone?'<div class="cfg-row"><label>بدون شماره</label><b>'+fa(r.noPhone)+'</b></div>':'')+
+        /* A RUN THAT GAVE UP SAYS SO, AND SAYS WHY.
+           «به ۲۰ تاش میفرسته بقیه رو نمیفرسته» — and the old result had no way
+           to express that: the rest were counted as «ناموفق» beside the real
+           failures, and the provider's reason was thrown away. Continuing after
+           a settings error is not resilience, it is what got the IP blocked. */
+        (r.notAttempted?'<div class="cfg-row"><label>اصلاً تلاش نشد</label><b style="color:var(--gold)">'+fa(r.notAttempted)+'</b></div>':'')+
+        (r.stopped?'<div class="note" style="border-color:#E5484D;line-height:2">⚠️ <b>ارسال وسط کار متوقف شد.</b><br>'+esc(r.stopped)+
+          '<br>بقیه فرستاده نشدند — عمداً. هر درخواستِ اشتباهِ دیگر فقط به مسدودشدن آی‌پی اضافه می‌کند. تنظیمات را درست کن و دوباره بفرست.</div>':'')+
         (r.duplicate?'<div class="note">همین ارسال قبلاً انجام شده بود، پس دوباره فرستاده نشد و دوباره هزینه نکرد.</div>':'')+
       '</div>');
     toast((r.duplicate?'قبلاً ارسال شده بود — ':'')+fa(r.sent||0)+' پیامک ارسال شد',(r.sent>0||r.duplicate)?'ok':'bad');
     SMS_SUB='log'; renderSms();
   }catch(e){ toast(e.message,'bad'); if(go){ go.disabled=false; go.textContent='✉️ ارسال'; } }
+}
+/* WHAT THIS PROVIDER STILL NEEDS BEFORE ANYTHING CAN BE SENT.
+   «برخی از ریکوئست‌ها بدون پسورد سمت شرکت ارسال شده‌اند… در صورت ارسال ریکوئست
+    اشتباه، آی‌پی مسدود می‌گردد.» A half-filled provider used to be saved without
+   complaint and then sent anyway, once per recipient, until نیازپرداز stopped
+   accepting anything from this server. The server now refuses to send them; this
+   is where an operator finds out why nothing is going out. */
+function smsMissingNote(c){
+  const m=(c&&c.missing)||[];
+  if(!m.length) return '';
+  return '<div class="note" style="border-color:#E5484D;line-height:2">⛔ <b>تنظیمات ناقص است — هیچ پیامکی ارسال نمی‌شود.</b><br>'+
+    'این فیلدها خالی‌اند: <b>'+m.map(esc).join('، ')+'</b>'+
+    '<br>تا وقتی پر نشوند، درخواستی به سرویس‌دهنده فرستاده نمی‌شود. این عمدی است: هر درخواست ناقص باعث مسدودشدن آی‌پی سرور می‌شود.</div>';
 }
 /* One honest line about the autofill, from a fact only the server knows. */
 function smsWebOtpNote(c){
@@ -5938,6 +5959,7 @@ async function smsRenderConfig(b){
        to show — so when it was missing, the autofill was simply dead, silently,
        with the messages going out looking perfectly normal. Now it says so. */
     smsWebOtpNote(c)+
+    smsMissingNote(c)+
     '</div>'+
     '<button class="btn pri" onclick="smsSaveConfig()">💾 ذخیرهٔ تنظیمات</button>'+
     '<div class="card" style="margin-top:14px"><h3>✉️ ارسال پیامک آزمایشی</h3><div class="grid g2"><div class="field"><label>شماره مقصد</label><input id="sm_testTo" dir="ltr" placeholder="09xxxxxxxxx"></div><div class="field"><label>متن</label><input id="sm_testBody" value="پیام آزمایشی پرایز کوییز ✅"></div></div><button class="btn" onclick="smsTest()">ارسال آزمایشی</button></div>';

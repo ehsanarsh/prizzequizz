@@ -203,6 +203,65 @@ const uniq = () => 'b_' + id();
     assert.equal(plan.audience, 0, 'an empty list resolved to the entire user base');
   });
 
+  /* ── A RUN THAT IS NOT GOING TO WORK STOPS ────────────────────────────
+     نیازپرداز, on why this server was blocked after twenty messages:
+     «برخی از ریکوئست‌ها بدون پسورد سمت شرکت ارسال شده‌اند… در صورت ارسال
+      ریکوئست اشتباه، آی‌پی مسدود می‌گردد.»
+     It was never a rate limit. The run kept sending the SAME malformed request
+     once per recipient until the provider stopped accepting anything from this
+     address — «به ۲۰ تاش میفرسته، بقیه رو نمیفرسته». Every attempt after the
+     first refusal was not a message that might work; it was another reason to
+     stay banned. */
+
+  await check('a settings failure stops the run instead of repeating it', async () => {
+    /* A live provider with no credentials at all: every send is refused
+       locally, which is exactly the shape of a bad setting. */
+    await updateSmsConfig({ enabled: true, sandbox: false, provider: 'melipayamak', apiKey: '', secret: '', sender: '' } as any);
+    const people = [];
+    for (let i = 0; i < 12; i++) people.push(await player());
+    const r = await sendSmsBroadcast({ spec: { userIds: people.map((p) => p.id) } as any, text: 'سلام', idempotencyKey: uniq() });
+
+    assert.equal(r.sent, 0, 'nothing should have gone out');
+    /* THE POINT: it did not try all twelve. */
+    assert.ok(r.failed <= 5, 'it kept going after the settings were clearly wrong: ' + r.failed + ' attempts');
+    assert.ok(r.notAttempted > 0, 'the rest should be reported as never attempted');
+    assert.equal(r.failed + r.notAttempted, 12, `${r.failed} + ${r.notAttempted} should account for everyone`);
+    /* And it says WHY, in the provider's own words — «۱۲ ناموفق» with no reason
+       is the same message whether the key is wrong or the account is empty. */
+    assert.ok(r.stopped && r.stopped.length > 0, 'no reason given for stopping');
+    assert.match(String(r.stopped), /ناقص|رمز/, String(r.stopped));
+  });
+
+  await check('and a healthy run is not cut short by the same rule', async () => {
+    /* The guard must not turn into a reason that ordinary sends stop early. */
+    await updateSmsConfig({ enabled: true, sandbox: true, provider: 'sandbox', sender: '3000' } as any);
+    const people = [];
+    for (let i = 0; i < 12; i++) people.push(await player());
+    const r = await sendSmsBroadcast({ spec: { userIds: people.map((p) => p.id) } as any, text: 'سلام', idempotencyKey: uniq() });
+    assert.equal(r.sent, 12, 'everyone should have been texted');
+    assert.equal(r.notAttempted, 0);
+    assert.equal(r.stopped, undefined, 'a healthy run must not claim it stopped');
+  });
+
+  await check('one blacklisted number does not stop the run for everybody else', async () => {
+    /* A blocked recipient is about THAT person, not about the settings — the
+       run must carry on. Confusing the two would make one opt-out cancel a
+       campaign. */
+    await updateSmsConfig({ enabled: true, sandbox: true, provider: 'sandbox', sender: '3000' } as any);
+    const people = [];
+    for (let i = 0; i < 8; i++) people.push(await player());
+    await addBlacklist(people[0]!.phone, 'test');
+    await addBlacklist(people[3]!.phone, 'test');
+    try {
+      const r = await sendSmsBroadcast({ spec: { userIds: people.map((p) => p.id) } as any, text: 'سلام', idempotencyKey: uniq() });
+      assert.equal(r.blocked, 2, JSON.stringify(r));
+      assert.equal(r.sent, 6, 'the other six should still have been texted');
+      assert.equal(r.notAttempted, 0, 'nothing should have been skipped');
+    } finally {
+      await removeBlacklist(people[0]!.phone); await removeBlacklist(people[3]!.phone);
+    }
+  });
+
   console.log(`[smsBroadcast] ${pass} passed, ${fail} failed`);
   if (fail) process.exit(1);
 })();

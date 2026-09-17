@@ -100,11 +100,11 @@ export function smsIsLive(c: SmsConfig): boolean {
 }
 
 // Never leak secrets wholesale to the panel — mask them.
-export function maskConfig(c: SmsConfig): SmsConfig & { apiKeySet: boolean; secretSet: boolean; webOtp: WebOtpStatus } {
+export function maskConfig(c: SmsConfig): SmsConfig & { apiKeySet: boolean; secretSet: boolean; webOtp: WebOtpStatus; missing: string[] } {
   /* `webOtp` is not a setting — it is a server-side FACT the panel has no other
      way of learning, and the difference between the login code typing itself in
      and the player typing it by hand. */
-  return { ...c, apiKey: c.apiKey ? '••••' + c.apiKey.slice(-4) : '', secret: c.secret ? '••••' : '', apiKeySet: !!c.apiKey, secretSet: !!c.secret, webOtp: webOtpStatus() };
+  return { ...c, apiKey: c.apiKey ? '••••' + c.apiKey.slice(-4) : '', secret: c.secret ? '••••' : '', apiKeySet: !!c.apiKey, secretSet: !!c.secret, webOtp: webOtpStatus(), missing: missingFor(c) };
 }
 
 // ---- templates ----
@@ -283,8 +283,22 @@ const NIAZ_ACCOUNT_ERRORS: Record<number, string> = {
   [-7]: 'کلید API نامعتبر است.'
 };
 
+/* THE «آدرس سفارشی (Generic)» FIELD IS FOR THE GENERIC PROVIDER.
+   It was used as the base for niazpardaz too, so a URL left in that box from
+   trying another provider silently redirected EVERY niazpardaz call to
+   somebody else's API — which is one way to send requests that come back
+   «NotValidTemplateFound» and get an IP blocked. It is honoured only when it
+   really is a niazpardaz address; anything else is ignored rather than obeyed. */
+export function niazpardazBase(cfg: SmsConfig): string {
+  const custom = String(cfg.genericUrl ?? '').trim();
+  if (custom) {
+    try { if (/(^|\.)niazpardaz\.ir$/i.test(new URL(custom).hostname)) return custom; } catch { /* not a URL at all */ }
+    logger.warn('sms_generic_url_ignored', { provider: cfg.provider, custom });
+  }
+  return NIAZPARDAZ_BASE;
+}
 async function niazpardazPost(cfg: SmsConfig, endpoint: string, payload: unknown, timeoutMs = 20_000): Promise<any> {
-  const base = (cfg.genericUrl || NIAZPARDAZ_BASE).replace(/\/+$/, '');
+  const base = niazpardazBase(cfg).replace(/\/+$/, '');
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
@@ -331,13 +345,45 @@ export async function niazpardazAccount(cfgIn?: SmsConfig): Promise<{ credit: nu
   } catch (e) { return { credit: null, senders: [], error: (e as Error).message }; }
 }
 
+/* WHAT EACH PROVIDER MUST HAVE BEFORE ANYTHING LEAVES THIS MACHINE.
+ *
+ * «برخی از ریکوئست‌ها نیز بدون پسورد سمت شرکت ارسال شده‌اند… در صورت ارسال
+ *  ریکوئست اشتباه، آی‌پی مسدود می‌گردد.» — نیازپرداز, on why the server was
+ *  blocked after twenty messages.
+ *
+ * It was not a rate limit. It was MALFORMED requests: the panel will happily
+ * hold a provider with an empty password, and `dispatch` sent them anyway —
+ * `pass: ''` to a provider that requires one, over and over, once per
+ * recipient, until the provider stopped taking anything from this IP at all.
+ * A run of five hundred people turned one bad setting into five hundred bad
+ * requests and an IP ban.
+ *
+ * So the check happens HERE, before the socket is opened. A message that cannot
+ * possibly be accepted is not worth the cost of finding that out from the
+ * provider, and it is certainly not worth the ban. */
+const PROVIDER_NEEDS: Record<string, Array<{ field: keyof SmsConfig; label: string }>> = {
+  niazpardaz:  [{ field: 'apiKey', label: 'کلید API' }, { field: 'sender', label: 'شمارهٔ فرستنده' }],
+  kavenegar:   [{ field: 'apiKey', label: 'کلید API' }, { field: 'sender', label: 'شمارهٔ فرستنده' }],
+  melipayamak: [{ field: 'apiKey', label: 'نام کاربری' }, { field: 'secret', label: 'رمز عبور' }, { field: 'sender', label: 'شمارهٔ فرستنده' }],
+  farazsms:    [{ field: 'apiKey', label: 'نام کاربری' }, { field: 'secret', label: 'رمز عبور' }, { field: 'sender', label: 'شمارهٔ فرستنده' }],
+  generic:     [{ field: 'apiKey', label: 'نام کاربری' }, { field: 'secret', label: 'رمز عبور' }, { field: 'genericUrl', label: 'آدرس سفارشی' }]
+};
+/** What is missing before this config could send anything at all. */
+export function missingFor(cfg: SmsConfig): string[] {
+  const need = PROVIDER_NEEDS[cfg.provider] ?? [];
+  return need.filter((n) => !String(cfg[n.field] ?? '').trim()).map((n) => n.label);
+}
+
 // ---- provider dispatch ----
 async function dispatch(cfg: SmsConfig, to: string, body: string): Promise<{ ok: boolean; ref?: string; cost?: number; error?: string }> {
   if (cfg.sandbox || cfg.provider === 'sandbox') return { ok: true, ref: 'sandbox-' + id().slice(0, 8), cost: 0 };
+  /* NOTHING GOES OUT HALF-FILLED — see PROVIDER_NEEDS above. */
+  const missing = missingFor(cfg);
+  if (missing.length) {
+    return { ok: false, error: 'تنظیمات پیامک ناقص است — ' + missing.join('، ') + ' وارد نشده. تا این پر نشود هیچ پیامکی ارسال نمی‌شود.' };
+  }
   try {
     if (cfg.provider === 'niazpardaz') {
-      if (!cfg.apiKey) return { ok: false, error: 'کلید API نیازپرداز تنظیم نشده است.' };
-      if (!cfg.sender) return { ok: false, error: 'شماره فرستنده تنظیم نشده است.' };
       const res = await niazpardazPost(cfg, '/SendBatchSms', {
         fromNumber: cfg.sender,
         messageContent: body,
