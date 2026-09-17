@@ -160,9 +160,54 @@ console.log('\nwhen the server hands back less than it used to:');
   await page.goto(`http://127.0.0.1:${PORT}/`, { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(5600);
   const thin = await page.evaluate(() => JSON.stringify((0, eval)('_usr')));
-  ok('the session really was thinned out', thin === '{}' || !/displayName/.test(thin), thin.slice(0, 60));
+  /* This used to assert that `_usr` really HAD been thinned out — the state the
+     gate had to survive. pzHydrateAll now merges instead of replacing, so the
+     thinning cannot happen at all any more and the old assertion was left
+     describing a hazard that had been removed rather than one being handled.
+     What is still true, and still worth holding, is that the server sent a
+     thin answer and the player kept their name through it. */
+  ok('a thin answer did not take the name away', /displayName/.test(thin), thin.slice(0, 70));
   const landed = await goTo(page, 'home');
   ok('and a real player is still let into the game', landed === 'home', landed);
+  await ctx.close();
+}
+
+/* ── 3d. A THIN ANSWER MUST NOT ERASE WHO THE PLAYER IS ─────────────────── */
+console.log('\nafter a thin answer from the server:');
+{
+  /* pzHydrateAll took whatever /users/me returned and made it the WHOLE of
+     `_usr`, then wrote that over the copy in localStorage. A response without
+     an `id` therefore deleted the id — and not just for this page load, for
+     every one after it. The app stopped knowing who it was: «بلاک کردن» was
+     offered on the player's own profile, because the id it compares against
+     was gone. A field the server did not send is a field it did not mention. */
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+  await ctx.addInitScript((u) => {
+    localStorage.setItem('pz_tok', 't'); localStorage.setItem('pz_rtok', 'r');
+    localStorage.setItem('pz_usr', JSON.stringify(u));
+    for (const k of ['leaderboard', 'missions', 'shop', 'wheel']) localStorage.setItem('pq_tut_' + k, '1');
+    try { sessionStorage.setItem('pz_push_asked_visit', '1'); } catch (e) {}
+  }, { ...NAMED, id: 'u-42' });
+  await ctx.route('**/v1/**', (route) => {
+    const u = route.request().url();
+    /* What a real thin /users/me looks like: the fields it does carry, and
+       nothing of the identity. */
+    const d = u.includes('/auth/refresh') ? { accessToken: 't2', refreshToken: 'r2' }
+      : u.includes('/users/me') ? { avatar: null, character: null } : {};
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, data: d }) });
+  });
+  const page = await ctx.newPage();
+  await page.goto(`http://127.0.0.1:${PORT}/`, { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(5600);
+
+  ok('the app still knows who it is', await page.evaluate(() => (0, eval)('pzMyId()')) === 'u-42',
+    await page.evaluate(() => (0, eval)('pzMyId()')));
+  ok('and the name did not vanish with it', await page.evaluate(() => ((0, eval)('_usr') || {}).username) === 'ehsan',
+    JSON.stringify(await page.evaluate(() => (0, eval)('_usr'))));
+  ok('what the server DID send is still applied', await page.evaluate(() => 'avatar' in ((0, eval)('_usr') || {})));
+  /* And it survives the next load, which is the half that made this permanent. */
+  const stored = await page.evaluate(() => localStorage.getItem('pz_usr'));
+  ok('the remembered copy was not overwritten with the thin one', /u-42/.test(String(stored)), String(stored).slice(0, 80));
   await ctx.close();
 }
 

@@ -2760,6 +2760,10 @@ input,textarea,select,[contenteditable="true"],.pz-selectable,.pz-selectable *{
   border:2px solid #000;border-radius:999px;padding:7px 14px;background:linear-gradient(180deg,#FFE24A,var(--bolt-2));
   color:#141414;font-family:inherit;font-size:11.5px;font-weight:900;box-shadow:var(--hard-sm);cursor:pointer}
 .chat-view{position:relative}
+.chat-blocked{display:flex;align-items:center;gap:9px;flex-wrap:wrap;padding:12px;border-top:2px solid #000;background:#1b1416;font-size:12.5px;font-weight:800;line-height:1.8}
+.chat-blocked b{color:#FF8F82}
+.chat-blocked span{flex:1;min-width:120px;color:var(--muted);font-weight:700;font-size:11.5px}
+.chat-blocked .btn{width:auto;padding:8px 11px;font-size:12px;border-radius:12px;box-shadow:var(--hard-sm)}
 .chat-send{display:flex;gap:8px;padding:10px;border-top:2px solid #000;background:#111116}.chat-send .input{height:46px;padding:11px 13px}.chat-send .btn{width:58px;border-radius:14px;padding:0}.fr-chipline{display:flex;gap:7px;flex-wrap:wrap;margin:8px 0 12px}.fr-chipline button{border:2px solid #000;background:var(--ink-2);color:var(--paper);border-radius:999px;padding:7px 10px;font-family:inherit;font-size:11px;font-weight:900;box-shadow:var(--hard-sm);cursor:pointer}
 @media(max-width:370px){.fr-tabs{gap:6px}.fr-tab{font-size:10px;padding:9px 2px}.friend-card{align-items:flex-start}.fr-actions{flex-direction:column}.fr-actions .btn{padding:8px 9px}.chat-view{height:calc(var(--pz-vh,100vh) - 132px);min-height:430px}.friend-card .fav{width:44px;height:44px}.fr-hero{padding:13px}}
 
@@ -6959,6 +6963,8 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
       <div class="row" onclick="openSettingDetail('language')"><div class="r-ico">🌐</div><div class="r-txt"><b>زبان</b><span id="setSumLanguage">فارسی</span></div><span class="r-arrow">‹</span></div>
       <div class="row" onclick="openSettingDetail('security')"><div class="r-ico">🔐</div><div class="r-txt"><b>امنیت حساب</b><span id="setSumSecurity">رمز، نشست‌ها و تأیید دو مرحله‌ای</span></div><span class="r-arrow">‹</span></div>
       <div class="row" onclick="openSettingDetail('privacy')"><div class="r-ico">🛡️</div><div class="r-txt"><b>حریم خصوصی</b><span id="setSumPrivacy">نمایش پروفایل و دعوت‌ها</span></div><span class="r-arrow">‹</span></div>
+      <!-- A block nobody can find again is a block nobody can undo. -->
+      <div class="row" onclick="pzOpenBlocked()"><div class="r-ico">🚫</div><div class="r-txt"><b>کاربران بلاک‌شده</b><span id="setSumBlocked">کسانی که نمی‌توانند پیام یا دعوت بفرستند</span></div><span class="r-arrow">‹</span></div>
       <div class="row" onclick="openSettingDetail('data')"><div class="r-ico">🧰</div><div class="r-txt"><b>داده‌ها و راهنماها</b><span id="setSumData">پاک‌سازی کش، خروجی و بازنشانی راهنماها</span></div><span class="r-arrow">‹</span></div>
       <div class="set-group-title">سایر</div>
       <div class="row" onclick="go('support')"><div class="r-ico">💬</div><div class="r-txt"><b>پشتیبانی</b><span>گفتگوی زنده و ارسال تیکت</span></div><span class="r-arrow">‹</span></div>
@@ -11399,7 +11405,7 @@ function go(id){
   if(!target || !target.classList.contains('screen')) return;
   if(cur&&cur.id!==id)screenStack.push(cur.id);
   showScreen(id);
-  if(id==='friends'&&typeof friendsLoad==='function'){try{friendsLoad();}catch(e){}}
+  if(id==='friends'&&typeof friendsLoad==='function'){try{friendsLoad();}catch(e){}try{pzLoadBlocked();}catch(e){}}
   /* THE SHOP ALWAYS OPENS ON THE TICKETS. «همیشه وقتی فروشگاه رو لمس میکنی
      صفحهٔ پیش‌فرض صفحهٔ بلیط‌ها باشه.» It used to keep whichever shelf was last
      looked at, so a player who once opened «تزئینی» met that shelf every time
@@ -14115,8 +14121,14 @@ async function showPlayerProfile(userId,fb){
     sub:'<div class="opp-profile"><div class="opp-loading">در حال دریافت آمار…</div></div>',
     primaryText:userId?'ارسال درخواست دوستی':'بستن',
     secondaryText:userId?'بستن':'',
+    /* REACHABLE FROM WHEREVER THEY WERE MET. A block only in the friends list
+       is no use against somebody met in a match — which is where an unwanted
+       invitation usually comes from. Not offered on your own profile. */
+    tertiaryText:(userId&&String(userId)!==pzMyId())?'🚫 بلاک کردن':'',
+    tertiaryClass:'btn-ghost',
     onPrimary:()=>{ if(userId) pzSendFriendRequest(userId,title); else closeAaaModal(false); },
-    onSecondary:()=>closeAaaModal(false)
+    onSecondary:()=>closeAaaModal(false),
+    onTertiary:()=>{ closeAaaModal(false); pzAskBlock(userId,title); }
   });
   const paint=(html)=>{ if(seq!==_pzProfileSeq) return; const el=document.getElementById('aaaSub'); if(el) el.innerHTML=html; };
   if(!userId){ paint('<div class="opp-profile"><div class="opp-empty"><span class="big">🔒</span>آمار این بازیکن در دسترس نیست.</div></div>'); return; }
@@ -15365,7 +15377,16 @@ function renderChatView(id){
      pzFaceHTML is what every other list already uses. */
   const _head='<div class="fav" onclick="showFriendProfile(\''+f.id+'\')">'+pzFaceHTML({avatar:f.a,character:f.ch})+(f.on?'<span class="on"></span>':'')+'</div>';
   const _st=(f.on?'<span class="fr-live">● آنلاین</span>':frEsc(f.s));
-  c.innerHTML='<div class="chat-view"><div class="chat-head"><button class="iconbtn ib-back" style="width:38px;height:38px;border-radius:12px" onclick="frActiveChat=null;renderFriendsHub()">→</button>'+_head+'<div style="flex:1" onclick="showFriendProfile(\''+f.id+'\')"><b>'+frEsc(f.n)+'</b><span>'+_st+' · @'+frEsc(f.u)+'</span></div><button class="iconbtn" style="width:38px;height:38px;border-radius:12px" onclick="friendMore(\''+f.id+'\')">⋯</button></div><div class="chat-body" id="chatBody"></div><div class="chat-send"><input class="input" id="chatInput" placeholder="پیام بنویس..." onkeydown="if(event.key===\'Enter\')sendChatMsg()"><button class="btn btn-primary" onclick="sendChatMsg()">➤</button></div></div>';
+  c.innerHTML='<div class="chat-view"><div class="chat-head"><button class="iconbtn ib-back" style="width:38px;height:38px;border-radius:12px" onclick="frActiveChat=null;renderFriendsHub()">→</button>'+_head+'<div style="flex:1" onclick="showFriendProfile(\''+f.id+'\')"><b>'+frEsc(f.n)+'</b><span>'+_st+' · @'+frEsc(f.u)+'</span></div><button class="iconbtn" style="width:38px;height:38px;border-radius:12px" onclick="friendMore(\''+f.id+'\')">⋯</button></div><div class="chat-body" id="chatBody"></div>'+
+    /* A COMPOSER THAT CANNOT SEND IS WORSE THAN NO COMPOSER.
+       Leaving the box there means typing a message, pressing send, and getting
+       a refusal — every time. If this person is blocked, the box is replaced by
+       the reason and the way to undo it. */
+    (pzIsBlocked(f.id)
+      ? '<div class="chat-blocked">🚫 <b>این بازیکن را بلاک کرده‌ای.</b><span>تا بلاک برنداری پیامی رد و بدل نمی‌شود.</span>'+
+        '<button class="btn btn-ghost" onclick="pzUnblock(\''+String(f.id).replace(/'/g,"\\'")+'\',\''+frEsc(f.n||'').replace(/'/g,"\\'")+'\')">برداشتن بلاک</button></div>'
+      : '<div class="chat-send"><input class="input" id="chatInput" placeholder="پیام بنویس..." onkeydown="if(event.key===\'Enter\')sendChatMsg()"><button class="btn btn-primary" onclick="sendChatMsg()">➤</button></div>')+
+    '</div>';
   /* Filled by the one renderer rather than a second copy of the same markup —
      a duplicate is how the first paint came out without the «seen» ticks and
      then quietly gained them a second later. */
@@ -15394,10 +15415,21 @@ async function frSendBody(id,txt,replyTo){
   f.m.push(['me',frMsgHTML(txt),'الان','','',q?{mine:q.mine,body:q.body}:null,txt]);
   f.last=txt;
   renderChatMessages(id);
-  let ok=false;
-  try{ const r=await pzApi('POST','/friends/'+id+'/messages',{body:txt,replyTo:(q&&q.id)||''}); ok=!!(r&&r.ok!==false); }
+  let ok=false, blocked=false;
+  try{
+    const r=await pzApi('POST','/friends/'+id+'/messages',{body:txt,replyTo:(q&&q.id)||''});
+    ok=!!(r&&r.ok!==false);
+    blocked=!!(r&&r.error&&r.error.code==='BLOCKED');
+  }
   catch(e){ ok=false; }
-  if(!ok){
+  if(blocked){
+    /* A BLOCK IS NOT A FAILED SEND, and queuing it for retry is cruel: the
+       retry button would be there for ever and would never once work. Said
+       plainly and dropped. The wording is the server's — «ارتباط ممکن نیست»,
+       not «او تو را بلاک کرده», because which of the two blocked whom is not
+       something either side gets told. */
+    toast('ارتباط با این بازیکن ممکن نیست',3600);
+  }else if(!ok){
     /* Kept, not lost. The reload below is about to replace f.m with what the
        server has, which will not include this one. */
     f.failed=(f.failed||[]);
@@ -15509,7 +15541,104 @@ function sortFriendsOnline(){FRIENDS_DATA.sort((a,b)=>(b.on-a.on));renderFriends
 function showFavoritesOnly(){const i=document.getElementById('frSearch');if(i)i.value='⭐';const c=document.getElementById('friendsContent');const list=FRIENDS_DATA.filter(f=>f.fav);c.innerHTML=list.length?list.map(f=>friendCard(f,'friend')).join(''):'<div class="fr-empty"><span class="big">⭐</span>هنوز دوست محبوب نداری.</div>';}
 /* icon:f.a printed the avatar's URL into the modal — iconHTML is the slot that
    takes real markup, and pzProfileIcon is what draws a face. */
-function friendMore(id){const f=FRIENDS_DATA.find(x=>x.id===id);if(!f)return;showAaaModal({iconHTML:pzProfileIcon(f.a||'',f.ch||null),icon:'👤',title:f.n,sub:'چه کاری انجام بدیم؟',primaryText:f.fav?'حذف از محبوب‌ها':'افزودن به محبوب‌ها',secondaryText:'حذف دوست',primaryClass:'btn-primary',secondaryClass:'btn-red',onPrimary:()=>{f.fav=!f.fav;closeAaaModal(false);renderChatView(id);toast('ذخیره شد ⭐');},onSecondary:()=>{closeAaaModal(false);removeFriend(id);}});}
+/* THREE THINGS, and «بلاک» is the third rather than hidden behind «حذف دوست»:
+   removing a friend and blocking them are different decisions, and somebody who
+   wants the second usually does not want to go looking for it. */
+function friendMore(id){const f=FRIENDS_DATA.find(x=>x.id===id);if(!f)return;showAaaModal({iconHTML:pzProfileIcon(f.a||'',f.ch||null),icon:'👤',title:f.n,sub:'چه کاری انجام بدیم؟',primaryText:f.fav?'حذف از محبوب‌ها':'افزودن به محبوب‌ها',secondaryText:'حذف دوست',tertiaryText:'🚫 بلاک کردن',primaryClass:'btn-primary',secondaryClass:'btn-red',tertiaryClass:'btn-ghost',onPrimary:()=>{f.fav=!f.fav;closeAaaModal(false);renderChatView(id);toast('ذخیره شد ⭐');},onSecondary:()=>{closeAaaModal(false);removeFriend(id);},onTertiary:()=>{closeAaaModal(false);pzAskBlock(id,f.n);}});}
+/* ============ BLOCKING SOMEBODY ============
+ *
+ * «یه بلاک هم بزاریم تا کاربرا بتونن بلاک کنن تا بلاک‌شده نتونه بهشون پیام و
+ *  دعوت به بازی بفرسته.»
+ *
+ * The refusing happens on the SERVER — a block that only hides things in one
+ * browser is not a block, it is a preference. This is the part a person
+ * touches: the button, the list, and the sentence that comes back when
+ * somebody tries to reach through one.
+ */
+let PZ_BLOCKED=[];              /* who I have blocked — filled from the server */
+let _pzBlockedAt=0;
+async function pzLoadBlocked(force){
+  if(!force && Date.now()-_pzBlockedAt<30000) return PZ_BLOCKED;
+  try{
+    const r=await pzApi('GET','/blocks');
+    if(r&&r.ok&&r.data&&Array.isArray(r.data.rows)){ PZ_BLOCKED=r.data.rows; _pzBlockedAt=Date.now(); }
+  }catch(e){}
+  return PZ_BLOCKED;
+}
+function pzIsBlocked(id){ return PZ_BLOCKED.some(b=>String(b.id)===String(id)); }
+/* WHO I AM, from something that survives a thin answer.
+   `_usr` is replaced wholesale by whatever /users/me returns, and a response
+   without an `id` leaves the app not knowing who it is — which is how «بلاک
+   کردن» ended up being offered on the player's OWN profile. The copy written
+   at login is the fallback, because that one always had the whole record. */
+function pzMyId(){
+  const live=(_usr&&_usr.id)||'';
+  if(live) return String(live);
+  try{ return String((JSON.parse(localStorage.getItem('pz_usr')||'{}')||{}).id||''); }catch(e){ return ''; }
+}
+
+/* ASKED FIRST, because it cannot be taken back by the person on the other end.
+   The sentence says what it actually does — «پیام و دعوت» — rather than the
+   word «بلاک» on its own, which everybody reads slightly differently. */
+function pzAskBlock(id,name){
+  showAaaModal({
+    icon:'🚫', title:'بلاک کردن '+(name||'این بازیکن')+'؟',
+    sub:'دیگر نمی‌تواند به تو پیام بدهد یا به بازی دعوتت کند — و تو هم نمی‌توانی به او. هر وقت خواستی از «تنظیمات ← کاربران بلاک‌شده» برش می‌داری.',
+    primaryText:'بلاک کن', secondaryText:'انصراف', primaryClass:'btn-red',
+    onPrimary:async()=>{ closeAaaModal(false); await pzDoBlock(id,name); },
+    onSecondary:()=>closeAaaModal(false)
+  });
+}
+async function pzDoBlock(id,name){
+  const r=await pzApi('POST','/blocks/'+encodeURIComponent(id),{});
+  if(!r||!r.ok){ toast((r&&r.error&&r.error.message)||'بلاک انجام نشد'); return; }
+  await pzLoadBlocked(true);
+  toast((name||'این بازیکن')+' بلاک شد');
+  /* The chat they were just in is no longer a place to type, so leave it. */
+  try{ if(frActiveChat===id){ clearInterval(_frChatPoll); frActiveChat=null; } }catch(e){}
+  try{ friendsLoad(); }catch(e){}
+  try{ renderFriendsHub(); }catch(e){}
+}
+async function pzUnblock(id,name){
+  const r=await pzApi('DELETE','/blocks/'+encodeURIComponent(id),{});
+  if(!r||!r.ok){ toast((r&&r.error&&r.error.message)||'برداشتن بلاک انجام نشد'); return; }
+  await pzLoadBlocked(true);
+  toast('بلاک '+(name||'')+' برداشته شد');
+  try{ pzRenderBlockedList(); }catch(e){}
+  /* friendsLoad ends in renderFriendsHub, and that already redraws the open
+     chat when there is one — so the composer comes back on its own. An explicit
+     renderChatView stood here and was removed: a mutation deleting it changed
+     nothing any test could see, which is the whole case against it. */
+  try{ friendsLoad(); }catch(e){}
+}
+
+/* THE LIST, in تنظیمات — because a block nobody can find again is a block
+   nobody can undo. */
+async function pzOpenBlocked(){
+  await pzLoadBlocked(true);
+  showAaaModal({
+    icon:'🚫', title:'کاربران بلاک‌شده',
+    sub:'<div id="pzBlockedList">'+pzBlockedListHtml()+'</div>',
+    closable:true, primaryText:'بستن', secondaryText:'',
+    onPrimary:()=>closeAaaModal(false), onDismiss:()=>{}
+  });
+}
+function pzBlockedListHtml(){
+  if(!PZ_BLOCKED.length) return '<div style="color:var(--muted);font-size:13px;line-height:1.9;text-align:center;padding:10px 0">کسی را بلاک نکرده‌ای.</div>';
+  return '<div style="display:flex;flex-direction:column;gap:8px;text-align:right">'+
+    PZ_BLOCKED.map(b=>'<div style="display:flex;align-items:center;gap:10px;padding:10px 11px;border:2px solid #000;border-radius:14px;background:var(--ink-3)">'+
+      '<div style="flex:1;min-width:0">'+
+        '<b style="font-size:13.5px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+frEsc(b.displayName||b.username||'بازیکن')+'</b>'+
+        (b.username?'<span style="font-size:11px;color:var(--muted);font-weight:700">@'+frEsc(b.username)+'</span>':'')+
+      '</div>'+
+      '<button class="btn btn-ghost" style="width:auto;padding:8px 11px;font-size:12px;border-radius:12px;box-shadow:var(--hard-sm)" onclick="pzUnblock(\''+String(b.id).replace(/'/g,"\\'")+'\',\''+frEsc(b.displayName||b.username||'').replace(/'/g,"\\'")+'\')">برداشتن</button>'+
+    '</div>').join('')+'</div>';
+}
+function pzRenderBlockedList(){
+  const el=document.getElementById('pzBlockedList');
+  if(el) el.innerHTML=pzBlockedListHtml();
+}
+
 function removeFriend(id){const f=FRIENDS_DATA.find(x=>x.id===id);if(!f)return;showAaaModal({icon:'🗑️',title:'حذف دوست؟',sub:'آیا '+f.n+' از لیست دوستان حذف شود؟ گفتگوی شما هم پاک می‌شود.',primaryText:'حذف',secondaryText:'انصراف',primaryClass:'btn-red',onPrimary:async()=>{clearInterval(_frChatPoll);frActiveChat=null;closeAaaModal(false);const r=await pzApi('DELETE','/friends/'+id,{});toast(r&&r.ok?'دوست حذف شد':'خطا در حذف');friendsLoad();},onSecondary:()=>closeAaaModal(false)});}
 renderFriendStats();renderFriendsHub();
 
@@ -18790,7 +18919,18 @@ async function pzHydrateAll(){
   try{
     const r=await pzApi('GET','/users/me');
     if(r&&r.ok&&r.data){
-      const u=r.data; _usr=u; try{ localStorage.setItem('pz_usr',JSON.stringify(u)); }catch(e){}
+      /* MERGED, NOT REPLACED — and the stored copy with it.
+         This took whatever /users/me returned and made it the whole of `_usr`.
+         A thinner answer — an older server, a partial response, a shape that
+         changes — therefore DELETED the fields it did not mention, including
+         `id`, and then wrote that over the copy in localStorage so it did not
+         come back on the next load either. The app ended up not knowing who it
+         was: «بلاک کردن» was offered on the player's own profile, because the
+         id it compared against was gone.
+         A field the server did not send is a field the server did not mention,
+         not a field it cleared. */
+      const u=Object.assign({},_usr||{},r.data); _usr=u;
+      try{ localStorage.setItem('pz_usr',JSON.stringify(u)); }catch(e){}
       /* THE BALANCES. /users/me has always returned them and the client has
          always thrown them away, so anything the server credited — a wheel
          prize, a daily reward, a shop purchase — never reached the header.
