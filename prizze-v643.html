@@ -11875,18 +11875,31 @@ function pzOtpListen(){
       });
   }catch(e){}
 }
-/* ARMED AGAIN ON THE WAY BACK.
-   Reading the message means leaving the app, and a request the browser dropped
-   while we were away would never be renewed — the player returns to a screen
-   that looks like it is waiting and is not. Only while the code screen is the
-   one on show, and only when nothing is already listening. */
-document.addEventListener('visibilitychange',()=>{
+/* ARMED AGAIN ON THE WAY BACK — AND WITHOUT ASKING WHETHER IT NEEDS TO BE.
+ *
+ * «کد هم یکبار کپی شد یکبار نشد.»
+ *
+ * Reading the message means leaving the app, and Android may drop a pending
+ * WebOTP request while the page is hidden WITHOUT rejecting its promise. The
+ * first version of this skipped re-arming whenever a request looked outstanding
+ * — and a request that was silently dropped looks outstanding for ever. So the
+ * page came back to a screen that appeared to be waiting and was not, once, at
+ * random, with nothing to see.
+ *
+ * There is nothing to gain by being careful here: pzOtpListen aborts whatever
+ * is there and asks again, which costs nothing and cannot be wrong. Guessing
+ * whether the old request is still alive is the only thing that can be.
+ *
+ * Both events, because returning from the SMS app does not reliably fire the
+ * same one on every Android browser; the second is then a no-op. */
+function _pzOtpRearm(){
   if(document.visibilityState!=='visible') return;
-  if(_pzOtpAbort) return;
   const scr=document.getElementById('otp');
   if(!scr||!scr.classList.contains('active')) return;
   try{ pzOtpListen(); }catch(e){}
-});
+}
+document.addEventListener('visibilitychange',_pzOtpRearm);
+window.addEventListener('focus',_pzOtpRearm);
 function pzOtpStopListening(){ try{ if(_pzOtpAbort) _pzOtpAbort.abort(); }catch(e){} _pzOtpAbort=null; }
 
 /* THE THIRD ROUTE, AND THE ONLY ONE THAT CANNOT QUIETLY FAIL.
