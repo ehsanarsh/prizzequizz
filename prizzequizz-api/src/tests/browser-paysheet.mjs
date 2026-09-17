@@ -138,10 +138,41 @@ console.log('the payment sheet:');
   /* «آنی» / «حدود ۵ دقیقه» / «بعد از تأیید شبکه» — how long each door takes is
      the thing that decides between them once the price is known. */
   ok('the صندوق says it is instant', /آنی/.test(r[0].when), r[0].when);
-  ok('card-to-card says how long it really takes', /۵ دقیقه/.test(r[1].when), r[1].when);
+  ok('card-to-card says how long it really takes', /۲ دقیقه/.test(r[1].when), r[1].when);
   ok('شاپرک says instant too', /آنی/.test(r[2].when), r[2].when);
   ok('and تتر says it waits for the network', /شبکه/.test(r[3].when), r[3].when);
 
+  await ctx.close();
+}
+
+/* ── 1b. ON THE PHONE IT IS ACTUALLY PAID WITH ─────────────────────────── */
+/*
+ * «متن‌های آنی و دو دقیقه و در انتظار شبکه نشون داده نمی‌شه، فقط در مرورگر
+ *  لپ‌تاپ نشون میده.»
+ *
+ * They were hidden below 360px — which is most phones. The timing is the
+ * difference between the doors: «آنی» against «۲ دقیقه» is the reason somebody
+ * picks the صندوق when they are mid-match. Hidden on the screen it is read on
+ * and shown on the one it is not, it may as well not exist. Measured at three
+ * real widths rather than asserted once at a comfortable one.
+ */
+for (const w of [390, 360, 320]) {
+  const { ctx, page } = await open();
+  await page.setViewportSize({ width: w, height: 780 });
+  await buy(page);
+  const seen = await page.evaluate(() => [...document.querySelectorAll('#pmList .pm')].map((el) => {
+    const when = el.querySelector('.pm-when'), soon = el.querySelector('.pm-soon');
+    const vis = (e) => !!e && !!e.offsetParent && e.getBoundingClientRect().width > 1;
+    return { when: vis(when) ? when.textContent.trim() : '', soon: vis(soon) ? soon.textContent.trim() : '' };
+  }));
+  ok('at ' + w + 'px every door still says how long it takes',
+     seen.every((r) => r.when.length > 0), JSON.stringify(seen.map((r) => r.when)));
+  ok('at ' + w + 'px «بزودی» is still on the two that are not open',
+     seen.filter((r) => r.soon).length === 2, JSON.stringify(seen.map((r) => r.soon)));
+  ok('at ' + w + 'px nothing scrolls sideways', await page.evaluate(() => {
+    const el = document.getElementById('aaaSub');
+    return !el || el.scrollWidth <= el.clientWidth + 1;
+  }));
   await ctx.close();
 }
 

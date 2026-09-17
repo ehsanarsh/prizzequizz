@@ -58,17 +58,25 @@ console.log('the code screen:');
   const { ctx, page, errs } = await open();
   const n = await page.evaluate(() => document.querySelectorAll('#otpBoxes input').length);
   ok('there are four boxes', n === 4, String(n));
+  /* The cause, stated as the markup: a box that keeps one character throws the
+     rest of the code away before anything can spread it. */
+  ok('and none of them truncates the code before a script can see it',
+     await page.evaluate(() => [...document.querySelectorAll('#otpBoxes input')].every((b) => !b.hasAttribute('maxlength'))),
+     await page.evaluate(() => [...document.querySelectorAll('#otpBoxes input')].map((b) => b.getAttribute('maxlength')).join(',')));
   ok('the first one asks the phone for the code',
      await page.evaluate(() => document.querySelector('#otpBoxes input').getAttribute('autocomplete')) === 'one-time-code');
 
   /* ── THE TRAP: four digits into one box ────────────────────────────────── */
+  /*
+   * THIS IS FILLED THE WAY A PHONE FILLS IT, and the difference is the whole
+   * bug. Setting `.value` from a script ignores `maxlength`; a real autofill
+   * does not — the browser cuts the code to one character BEFORE any script
+   * sees it, so «the code arrived» and a single digit appears. An earlier
+   * version of this test set `.value` directly, passed, and proved nothing
+   * about the thing it was named after.
+   */
   const before = verified.length;
-  await page.evaluate(() => {
-    /* Exactly what an autofill does: the whole code, in the first box. */
-    const b = document.querySelector('#otpBoxes input');
-    b.value = '4271';
-    b.dispatchEvent(new Event('input', { bubbles: true }));
-  });
+  await page.fill('#otpBoxes input:first-child', '4271');
   /* Read BEFORE the auto-submit lands: a refused code clears the boxes, which
      is right for the player and would hide what was in them a moment earlier. */
   await page.waitForTimeout(70);
@@ -104,11 +112,7 @@ console.log('the code screen:');
   /* ── PERSIAN DIGITS ────────────────────────────────────────────────────── */
   const { ctx, page } = await open();
   const before = verified.length;
-  await page.evaluate(() => {
-    const b = document.querySelector('#otpBoxes input');
-    b.value = '۹۴۰۶';                             /* what a Persian keyboard makes */
-    b.dispatchEvent(new Event('input', { bubbles: true }));
-  });
+  await page.fill('#otpBoxes input:first-child', '۹۴۰۶');   /* a Persian keyboard */
   await page.waitForTimeout(600);
   ok('a code in Persian digits is understood',
      verified.length === before + 1 && verified[before].code === '9406', JSON.stringify(verified.slice(before)));

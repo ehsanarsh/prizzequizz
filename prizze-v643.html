@@ -574,9 +574,16 @@ body{font-family:'Vazirmatn',system-ui,sans-serif;background:#151310;color:var(-
 .pm-was{display:block;font-size:13px;font-weight:800;color:var(--muted);text-decoration:line-through;
   margin-bottom:-2px}
 .pm-off{font-size:11.5px;font-weight:900;color:#5CFFA8;margin-top:2px}
-/* On a cramped screen the timing badge gives way — but «بزودی» never does:
-   it is the whole reason that row is on the sheet. */
-@media(max-width:360px){.pm-when{display:none}}
+/* HOW LONG EACH DOOR TAKES IS NOT DECORATION.
+   This used to hide the timing badge below 360px — which is most phones — so
+   «آنی», «۲ دقیقه» and «تأیید شبکه» were visible on a laptop and gone on the
+   thing people actually pay with. It is the difference between the doors, so it
+   stays; on a narrow screen it drops onto its own line instead of vanishing. */
+@media(max-width:360px){
+  .pm{flex-wrap:wrap}
+  .pm-body{flex:1 1 100%;order:2}
+  .pm-when,.pm-soon{order:3;margin-inline-start:29px}
+}
 /* THE GATEWAY'S MARK IN THE ICON SLOT. On the card-to-card sheet the player is
    about to be handed to somebody else with real money, so the thing at the top
    of the card is WHO — not a generic 💳. The tile's yellow ground and bob are
@@ -5513,10 +5520,15 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
             <!-- `one-time-code` is what makes the phone's own keyboard offer the
                  code the moment the message lands. It belongs on the FIRST box:
                  the suggestion arrives whole, and pasting it is handled below. -->
-            <input class="input mono" maxlength="1" inputmode="numeric" autocomplete="one-time-code" style="width:60px;height:66px;text-align:center;font-size:26px;font-weight:800">
-            <input class="input mono" maxlength="1" inputmode="numeric" style="width:60px;height:66px;text-align:center;font-size:26px;font-weight:800">
-            <input class="input mono" maxlength="1" inputmode="numeric" style="width:60px;height:66px;text-align:center;font-size:26px;font-weight:800">
-            <input class="input mono" maxlength="1" inputmode="numeric" style="width:60px;height:66px;text-align:center;font-size:26px;font-weight:800">
+            <!-- NO `maxlength`. The phone's own autofill writes the WHOLE code
+                 into the box it is focused on, and a box with maxlength="1"
+                 makes the browser cut it to a single digit before any script
+                 sees it — the code «arrives» and one digit appears. The spread
+                 below is what keeps one character per box. -->
+            <input class="input mono" inputmode="numeric" autocomplete="one-time-code" style="width:60px;height:66px;text-align:center;font-size:26px;font-weight:800">
+            <input class="input mono" inputmode="numeric" style="width:60px;height:66px;text-align:center;font-size:26px;font-weight:800">
+            <input class="input mono" inputmode="numeric" style="width:60px;height:66px;text-align:center;font-size:26px;font-weight:800">
+            <input class="input mono" inputmode="numeric" style="width:60px;height:66px;text-align:center;font-size:26px;font-weight:800">
           </div>
           <p style="color:var(--muted);font-size:13px;margin-top:22px" id="otpTimerLine">اعتبار کد تا <b style="color:var(--gold)" id="otpTimer">—</b></p>
           <button class="btn btn-ghost" id="otpResend" style="margin-top:10px;display:none" onclick="realResendOtp()">ارسال دوبارهٔ کد</button>
@@ -11681,10 +11693,13 @@ function pzOtpSpread(text){
 otpInputs.forEach((inp,i)=>{
   inp.addEventListener('input',()=>{
     if(inp.value.length>1){
-      /* Autofill or paste: the whole code arrived in one box. */
+      /* The whole code arrived in one box — an autofill, a paste, or the phone
+         handing it over. Spread it, and if it filled every box, go. */
       if(pzOtpSpread(inp.value)>=otpInputs.length) pzOtpAutoSubmit();
       return;
     }
+    /* Nothing limits a box to one character any more (see the markup), so a
+       second digit typed into a box that already has one is kept here. */
     if(inp.value&&i<otpInputs.length-1)otpInputs[i+1].focus();
     /* Typed the last digit — there is nothing else to wait for. */
     if(inp.value&&i===otpInputs.length-1) pzOtpAutoSubmit();
@@ -11722,8 +11737,17 @@ function pzOtpListen(){
     pzOtpStopListening();
     _pzOtpAbort=new AbortController();
     navigator.credentials.get({otp:{transport:['sms']},signal:_pzOtpAbort.signal})
-      .then((c)=>{ if(c&&c.code&&pzOtpSpread(c.code)>=otpInputs.length) pzOtpAutoSubmit(); })
-      .catch(()=>{});   /* refused, cancelled, or unsupported — the boxes still work */
+      .then((c)=>{
+        if(!c||!c.code) return;
+        /* Fill first, decide second: even a code that does not fill every box
+           belongs on screen, where the player can see it and finish it. */
+        const n=pzOtpSpread(c.code);
+        if(n>=otpInputs.length) pzOtpAutoSubmit();
+      })
+      /* An abort or a refusal is ordinary and silent. Anything else is a bug in
+         the lines above, and swallowing it is how «I pressed Allow and nothing
+         happened» becomes impossible to explain. */
+      .catch((e)=>{ if(e&&e.name!=='AbortError'&&e.name!=='NotAllowedError') console.warn('otp-autofill',e&&e.message); });
   }catch(e){}
 }
 function pzOtpStopListening(){ try{ if(_pzOtpAbort) _pzOtpAbort.abort(); }catch(e){} _pzOtpAbort=null; }
