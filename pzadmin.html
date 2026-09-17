@@ -5935,7 +5935,8 @@ function smsMissingNote(c){
 function smsWebOtpNote(c){
   const w=(c&&c.webOtp)||null;
   if(!w) return '';   /* an older API that does not report it — say nothing rather than guess */
-  if(w.on) return '<div class="note" style="border-color:#2FBF6D">✅ پر شدن خودکار کد روی گوشی فعال است — '+esc(w.reason)+'</div>';
+  if(w.on) return '<div class="note" style="border-color:#2FBF6D;line-height:2">✅ پر شدن خودکار کد روی گوشی فعال است — '+esc(w.reason)+
+    '<br><b>اگر خط ارسال شما «خدماتی» است</b> و فقط الگوی تأییدشده می‌فرستد، این خطِ اضافه متن را عوض می‌کند و الگو دیگر نمی‌خواند — سرویس‌دهنده خطای NotValidTemplateFound می‌دهد و در صورت تکرار آی‌پی سرور را مسدود می‌کند. در آن صورت از کادر بالا خاموشش کن.</div>';
   return '<div class="note" style="border-color:#E5484D;line-height:2">⚠️ <b>کد ورود روی گوشی خودکار پر نمی‌شود.</b><br>'+esc(w.reason)+
     '<br>این تنظیم در پنل نیست؛ روی سرور به‌عنوان متغیر محیطی <b class="mono" dir="ltr">PUBLIC_APP_URL</b> ست می‌شود و باید دقیقاً همان دامنه‌ای باشد که بازی از آن باز می‌شود.</div>';
 }
@@ -5966,6 +5967,17 @@ async function smsRenderConfig(b){
       '<div class="field"><label>انقضای کد (ثانیه)</label><input id="sm_otpExp" type="number" value="'+(c.otp.expirySeconds)+'"></div>'+
       '<div class="field"><label>حداقل فاصلهٔ دو درخواست (ثانیه)</label><input id="sm_otpMin" type="number" value="'+(c.otp.minIntervalSeconds)+'"></div>'+
       '<div class="field"><label>کد ثابتِ حالت آزمایشی</label><input id="sm_otpTest" dir="ltr" value="'+esc(c.otp.testCode||'1234')+'"></div>'+
+      /* A SWITCH, BECAUSE ON A SERVICE LINE THIS LINE CAN BREAK THE MESSAGE.
+         «خط خدماتی» may only send an approved الگو; the autofill line changes
+         the text, so an approved template stops matching, the provider answers
+         NotValidTemplateFound, and نیازپرداز blocks the IP of whoever keeps
+         sending requests it refuses. Whoever hits that needs to switch it off
+         in ten seconds, not wait for a deploy. */
+      '<div class="field"><label>خط پر شدن خودکار کد روی گوشی</label>'+
+        '<select id="sm_otpWebOtp">'+
+          '<option value="1"'+(c.otp.webOtpLine!==false?' selected':'')+'>روشن (یک خط به پیامک اضافه می‌شود)</option>'+
+          '<option value="0"'+(c.otp.webOtpLine===false?' selected':'')+'>خاموش (متن پیامک دست‌نخورده)</option>'+
+        '</select></div>'+
     '</div>'+
     (smsLive(c)
       ? '<div class="note">سرویس زنده است: کد ورود تصادفی ساخته و با پیامک فرستاده می‌شود و هرگز از سمت سرور برگردانده نمی‌شود.</div>'
@@ -5995,7 +6007,11 @@ function smsLive(c){ return !!c.enabled && !c.sandbox && c.provider!=='sandbox';
 async function smsSaveConfig(){
   const patch={enabled:$('#sm_enabled').value==='1',sandbox:$('#sm_sandbox').value==='1',provider:$('#sm_prov').value,sender:$('#sm_sender').value.trim(),genericUrl:$('#sm_url').value.trim(),
     apiKey:$('#sm_apikey').value.trim(),secret:$('#sm_secret').value.trim(),
-    otp:{maxPerHour:Number($('#sm_otpMax').value||5),expirySeconds:Number($('#sm_otpExp').value||120),minIntervalSeconds:Number($('#sm_otpMin').value||60),testCode:($('#sm_otpTest')?.value||'1234').trim()}};
+    otp:{maxPerHour:Number($('#sm_otpMax').value||5),expirySeconds:Number($('#sm_otpExp').value||120),minIntervalSeconds:Number($('#sm_otpMin').value||60),testCode:($('#sm_otpTest')?.value||'1234').trim(),
+      /* A control that moves on screen and not in the database is worse than no
+         control: the operator believes they switched it off and the pattern
+         keeps breaking. */
+      webOtpLine:($('#sm_otpWebOtp')?.value||'1')==='1'}};
   try{await api('PUT','/admin/sms/config',patch);toast('ذخیره شد ✅','ok');renderSms();}catch(e){toast(e.message,'bad');}
 }
 

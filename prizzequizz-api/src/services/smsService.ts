@@ -23,11 +23,23 @@ export interface SmsConfig {
    * code has to be something a tester can actually type. Kept in config rather
    * than in the code so it can be changed without a deploy — and so it is
    * obvious at a glance whether the site is live or in test mode. */
-  otp: { maxPerHour: number; expirySeconds: number; minIntervalSeconds: number; testCode: string };
+  otp: { maxPerHour: number; expirySeconds: number; minIntervalSeconds: number; testCode: string;
+    /* THE AUTOFILL LINE IS AN EXTRA LINE ON A REAL SMS, AND THAT CAN COST.
+       A service line («خط خدماتی») may only send messages matching an approved
+       الگو. Appending «@host #code» changes the text, so a template that was
+       approved no longer matches — the provider answers NotValidTemplateFound,
+       and نیازپرداز blocks the IP of anyone who keeps sending requests it
+       refuses. That turns a convenience into an outage.
+       So it is a switch, not a constant, and it lives in the panel: whoever
+       finds their codes failing can turn it off in ten seconds instead of
+       waiting for a deploy. */
+    /* Optional and read as «on unless explicitly false», so every config stored
+       before this switch existed keeps the behaviour it already had. */
+    webOtpLine?: boolean };
 }
 export const SMS_DEFAULT_CONFIG: SmsConfig = {
   enabled: false, sandbox: true, provider: 'sandbox', apiKey: '', secret: '', sender: '',
-  otp: { maxPerHour: 5, expirySeconds: 120, minIntervalSeconds: 60, testCode: '1234' }
+  otp: { maxPerHour: 5, expirySeconds: 120, minIntervalSeconds: 60, testCode: '1234', webOtpLine: true }
 };
 
 export interface SmsTemplate { key: string; title: string; text: string; }
@@ -104,7 +116,7 @@ export function maskConfig(c: SmsConfig): SmsConfig & { apiKeySet: boolean; secr
   /* `webOtp` is not a setting — it is a server-side FACT the panel has no other
      way of learning, and the difference between the login code typing itself in
      and the player typing it by hand. */
-  return { ...c, apiKey: c.apiKey ? '••••' + c.apiKey.slice(-4) : '', secret: c.secret ? '••••' : '', apiKeySet: !!c.apiKey, secretSet: !!c.secret, webOtp: webOtpStatus(), missing: missingFor(c), endpoint: effectiveBase(c) };
+  return { ...c, apiKey: c.apiKey ? '••••' + c.apiKey.slice(-4) : '', secret: c.secret ? '••••' : '', apiKeySet: !!c.apiKey, secretSet: !!c.secret, webOtp: webOtpStatusFor(c), missing: missingFor(c), endpoint: effectiveBase(c) };
 }
 
 // ---- templates ----
@@ -529,6 +541,13 @@ const WEBOTP_TEMPLATES = new Set(['login_code', 'signup_code']);
  * condition it all hangs on — PUBLIC_APP_URL — now says what it is and what it
  * means, in the place an operator actually looks. */
 export interface WebOtpStatus { on: boolean; host: string; reason: string; }
+/** The status including the operator's switch — what the panel should show. */
+export function webOtpStatusFor(cfg: SmsConfig): WebOtpStatus {
+  if (cfg.otp.webOtpLine === false) {
+    return { on: false, host: '', reason: 'خط شناسایی خودکار از همین پنل خاموش شده است. اگر خط ارسال شما «خدماتی» است و فقط الگوی تأییدشده می‌فرستد، خاموش‌بودنش درست است.' };
+  }
+  return webOtpStatus();
+}
 export function webOtpStatus(): WebOtpStatus {
   const raw = String(process.env.PUBLIC_APP_URL || '').trim();
   if (!raw) return { on: false, host: '', reason: 'PUBLIC_APP_URL روی سرور تنظیم نشده است؛ خط شناسایی خودکار به پیامک اضافه نمی‌شود و کد ورود روی گوشی خودکار پر نخواهد شد.' };
@@ -566,9 +585,11 @@ export function _resetWebOtpWarning(): void { _warnedNoWebOtp = false; }
 export async function sendOtp(recipient: string, code: string, purpose = 'login', templateKey = 'login_code'): Promise<{ sent: boolean; reason?: string; log?: SmsLogEntry }> {
   const gate = await otpAllowed(recipient);
   if (!gate.allowed) return { sent: false, reason: gate.reason };
-  if (WEBOTP_TEMPLATES.has(templateKey)) warnIfNoWebOtp();
-  const log = await sendTemplate(recipient, templateKey, { code },
-    WEBOTP_TEMPLATES.has(templateKey) ? webOtpLine(code) : '');
+  const cfg = await getSmsConfig();
+  /* Off by the operator's choice beats on by ours — see SmsConfig.otp.webOtpLine. */
+  const wantsLine = WEBOTP_TEMPLATES.has(templateKey) && cfg.otp.webOtpLine !== false;
+  if (wantsLine) warnIfNoWebOtp();
+  const log = await sendTemplate(recipient, templateKey, { code }, wantsLine ? webOtpLine(code) : '');
   const sent = log.status === 'sent' || log.status === 'disabled';
   /* Counted only once a message really went out. Recording first meant a run of
    * provider failures — a wrong sender line, an empty account — locked the

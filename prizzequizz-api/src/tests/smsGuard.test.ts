@@ -141,5 +141,56 @@ await check('an incomplete provider never opens a socket', async () => {
   } finally { (globalThis as any).fetch = realFetch; }
 });
 
+/* ── THE LINE IS IN THE MESSAGE, OR IT IS NOT ────────────────────────────
+   Every check above reads a STATUS. What actually reaches the phone is the
+   message body, and that is what the switch has to govern: a status that says
+   «on» over an SMS with no line in it would be a lie in the one place nobody
+   can see. Sandbox, so these are real sends with no gateway. */
+async function otpBody(webOtpLine: boolean | undefined, to: string): Promise<string> {
+  const { sendOtp, updateSmsConfig } = await import('../services/smsService.js');
+  /* THE KEY MUST BE ABSENT, NOT MERELY UNMENTIONED.
+     updateSmsConfig deep-MERGES, so leaving the field out of the patch keeps
+     whatever the previous test stored — the «legacy config» case inherited the
+     `false` from the case before it and failed for a reason that had nothing to
+     do with the product. Written explicitly as undefined, which is the shape a
+     config stored before this field existed really has. */
+  const otp: any = { maxPerHour: 99, expirySeconds: 120, minIntervalSeconds: 0, testCode: '1234', webOtpLine };
+  await updateSmsConfig({ enabled: true, sandbox: true, provider: 'sandbox', sender: '3000', otp } as any);
+  const r = await sendOtp(to, '4321', 'login', 'login_code');
+  return String(r.log?.body ?? '');
+}
+
+await check('the autofill line really is in the message when it is on', async () => {
+  const before = process.env.PUBLIC_APP_URL;
+  process.env.PUBLIC_APP_URL = 'https://www.prizequiz.ir';
+  try {
+    const body = await otpBody(true, '09121110001');
+    assert.match(body, /@www\.prizequiz\.ir #4321$/, JSON.stringify(body));
+  } finally { if (before === undefined) delete process.env.PUBLIC_APP_URL; else process.env.PUBLIC_APP_URL = before; }
+});
+
+await check('and really is not, when it is switched off', async () => {
+  const before = process.env.PUBLIC_APP_URL;
+  process.env.PUBLIC_APP_URL = 'https://www.prizequiz.ir';
+  try {
+    const body = await otpBody(false, '09121110002');
+    assert.ok(!/@www\.prizequiz\.ir/.test(body), 'the line went out anyway: ' + JSON.stringify(body));
+    assert.match(body, /4321/, 'and the code itself must still be there');
+  } finally { if (before === undefined) delete process.env.PUBLIC_APP_URL; else process.env.PUBLIC_APP_URL = before; }
+});
+
+await check('a config saved before the switch existed keeps the line', async () => {
+  /* EVERY stored config predates this field. Reading a missing value as «off»
+     would silently turn the autofill off for everyone on the next deploy —
+     which is the sort of change nobody notices until they are asked why the
+     code stopped filling itself in. */
+  const before = process.env.PUBLIC_APP_URL;
+  process.env.PUBLIC_APP_URL = 'https://www.prizequiz.ir';
+  try {
+    const body = await otpBody(undefined, '09121110003');
+    assert.match(body, /@www\.prizequiz\.ir #4321$/, 'an older config lost the autofill: ' + JSON.stringify(body));
+  } finally { if (before === undefined) delete process.env.PUBLIC_APP_URL; else process.env.PUBLIC_APP_URL = before; }
+});
+
 console.log(`[smsGuard] ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

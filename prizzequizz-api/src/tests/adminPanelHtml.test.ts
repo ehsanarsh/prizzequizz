@@ -104,6 +104,22 @@ function run(): void {
     assert.ok(body.includes('smsWebOtpNote('), 'smsRenderConfig must render the note');
   });
 
+  check('the autofill switch is actually saved, not just drawn', () => {
+    /* A control that moves on screen and not in the database is worse than no
+       control: the operator believes they turned the autofill off, the line
+       keeps going out, the approved template keeps not matching, and the IP
+       keeps getting blocked. Looked for inside smsSaveConfig's own body — the
+       field's id appears in the render function too, so searching the whole
+       script would pass with the save unwired. */
+    const i = script.indexOf('function smsSaveConfig(');
+    assert.ok(i > 0, 'smsSaveConfig should exist');
+    const rest = script.slice(i + 10);
+    const j = rest.search(/\n(async )?function /);
+    const body = j > 0 ? rest.slice(0, j) : rest;
+    assert.ok(body.includes('sm_otpWebOtp'), 'the switch is never read when saving');
+    assert.ok(/webOtpLine\s*:/.test(body), 'and never sent to the server');
+  });
+
   check('the Last Survivor topic list is the admin one, not the picker', () => {
     /* The picker hides what has been taken off the list. If the panel read that
      * endpoint, a hidden topic would vanish from the panel too and could never

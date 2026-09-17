@@ -10,7 +10,7 @@
  * Run: npx tsx src/tests/otpAutofill.test.ts
  */
 import assert from 'node:assert/strict';
-import { webOtpLine, webOtpStatus, maskConfig, SMS_DEFAULT_CONFIG, warnIfNoWebOtp, _resetWebOtpWarning } from '../services/smsService.js';
+import { webOtpLine, webOtpStatus, webOtpStatusFor, maskConfig, SMS_DEFAULT_CONFIG, warnIfNoWebOtp, _resetWebOtpWarning } from '../services/smsService.js';
 
 let pass = 0, fail = 0;
 function check(name: string, fn: () => void): void {
@@ -153,6 +153,56 @@ check('and not at all when the line is going out', () => {
   withUrl('https://www.prizequiz.ir', () => {
     _resetWebOtpWarning();
     assert.equal(warnIfNoWebOtp(), false);
+  });
+});
+
+/* ── AND A SWITCH, BECAUSE THE LINE CAN COST MORE THAN IT GIVES ──────────
+   A service line («خط خدماتی») may only send an approved الگو. This line
+   changes the message, so the template stops matching, the provider answers
+   NotValidTemplateFound, and نیازپرداز blocks the IP of anyone who keeps
+   sending requests it refuses. Whoever hits that has to be able to turn it off
+   from the panel in ten seconds. */
+
+check('switching it off in the panel really switches it off', () => {
+  withUrl('https://www.prizequiz.ir', () => {
+    const off = webOtpStatusFor({ ...SMS_DEFAULT_CONFIG, otp: { ...SMS_DEFAULT_CONFIG.otp, webOtpLine: false } });
+    assert.equal(off.on, false, 'the switch did nothing');
+    /* And says WHY it is off, so it does not read as the server being broken. */
+    assert.match(off.reason, /خاموش/, off.reason);
+  });
+});
+
+check('and leaving it on keeps it on', () => {
+  withUrl('https://www.prizequiz.ir', () => {
+    assert.equal(webOtpStatusFor({ ...SMS_DEFAULT_CONFIG, otp: { ...SMS_DEFAULT_CONFIG.otp, webOtpLine: true } }).on, true);
+  });
+});
+
+check('a config saved before the switch existed behaves as it did', () => {
+  /* Every stored config predates this field. Reading a missing value as «off»
+     would silently turn the autofill off for everybody on the next deploy. */
+  withUrl('https://www.prizequiz.ir', () => {
+    const legacy: any = { ...SMS_DEFAULT_CONFIG, otp: { maxPerHour: 5, expirySeconds: 120, minIntervalSeconds: 60, testCode: '1234' } };
+    assert.equal(webOtpStatusFor(legacy).on, true, 'an older config lost the autofill');
+  });
+});
+
+check('the switch cannot conjure a line out of an unset origin', () => {
+  /* Two different reasons for «off», and the one that is actually true has to
+     be the one reported — otherwise an operator turns the switch on and waits
+     for something that was never going to happen. */
+  withUrl('', () => {
+    const on = webOtpStatusFor({ ...SMS_DEFAULT_CONFIG, otp: { ...SMS_DEFAULT_CONFIG.otp, webOtpLine: true } });
+    assert.equal(on.on, false);
+    assert.match(on.reason, /PUBLIC_APP_URL/, on.reason);
+  });
+});
+
+check('and the panel is told which of the two it is', () => {
+  withUrl('https://www.prizequiz.ir', () => {
+    const m = maskConfig({ ...SMS_DEFAULT_CONFIG, otp: { ...SMS_DEFAULT_CONFIG.otp, webOtpLine: false } });
+    assert.equal(m.webOtp.on, false);
+    assert.match(m.webOtp.reason, /خاموش/, m.webOtp.reason);
   });
 });
 
