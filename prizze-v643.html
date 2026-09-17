@@ -5551,18 +5551,27 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
           <h1 style="font-size:24px;font-weight:900">کد تأیید</h1>
           <p style="color:var(--muted);margin:8px 0 26px;font-size:14px">کد ۴ رقمی ارسال‌شده به<br><b style="color:var(--text)" dir="ltr" id="otpPhone">—</b> رو وارد کن</p>
           <div style="display:flex;gap:12px;justify-content:center;direction:ltr" id="otpBoxes">
-            <!-- `one-time-code` is what makes the phone's own keyboard offer the
-                 code the moment the message lands. It belongs on the FIRST box:
-                 the suggestion arrives whole, and pasting it is handled below. -->
+            <!-- `one-time-code` ON ALL FOUR, not just the first.
+                 «روی آیفون پیشنهاد هم نمیاد.» Android is handed the code by
+                 WebOTP and never looks at this attribute. iOS has no such
+                 thing: Safari offers the code as a SUGGESTION above the
+                 keyboard, and it offers it for the field that is focused. With
+                 the attribute on box one only, anybody whose finger landed on
+                 box two — or who came back to the screen with the focus moved —
+                 got nothing at all, which looks exactly like «it does not work
+                 on iPhone». It costs nothing to say it four times.
+                 `type="text"` is written out because Safari will not offer a
+                 code for `type="number"`, and leaving it implicit is how that
+                 gets changed by somebody tidying up later. -->
             <!-- NO `maxlength`. The phone's own autofill writes the WHOLE code
                  into the box it is focused on, and a box with maxlength="1"
                  makes the browser cut it to a single digit before any script
                  sees it — the code «arrives» and one digit appears. The spread
                  below is what keeps one character per box. -->
-            <input class="input mono" inputmode="numeric" autocomplete="one-time-code" style="width:60px;height:66px;text-align:center;font-size:26px;font-weight:800">
-            <input class="input mono" inputmode="numeric" style="width:60px;height:66px;text-align:center;font-size:26px;font-weight:800">
-            <input class="input mono" inputmode="numeric" style="width:60px;height:66px;text-align:center;font-size:26px;font-weight:800">
-            <input class="input mono" inputmode="numeric" style="width:60px;height:66px;text-align:center;font-size:26px;font-weight:800">
+            <input class="input mono" type="text" inputmode="numeric" autocomplete="one-time-code" aria-label="رقم اول کد" style="width:60px;height:66px;text-align:center;font-size:26px;font-weight:800">
+            <input class="input mono" type="text" inputmode="numeric" autocomplete="one-time-code" aria-label="رقم دوم کد" style="width:60px;height:66px;text-align:center;font-size:26px;font-weight:800">
+            <input class="input mono" type="text" inputmode="numeric" autocomplete="one-time-code" aria-label="رقم سوم کد" style="width:60px;height:66px;text-align:center;font-size:26px;font-weight:800">
+            <input class="input mono" type="text" inputmode="numeric" autocomplete="one-time-code" aria-label="رقم چهارم کد" style="width:60px;height:66px;text-align:center;font-size:26px;font-weight:800">
           </div>
           <p style="color:var(--muted);font-size:13px;margin-top:22px" id="otpTimerLine">اعتبار کد تا <b style="color:var(--gold)" id="otpTimer">—</b></p>
           <button class="btn btn-ghost" id="otpResend" style="margin-top:10px;display:none" onclick="realResendOtp()">ارسال دوبارهٔ کد</button>

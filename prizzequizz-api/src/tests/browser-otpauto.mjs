@@ -63,8 +63,24 @@ console.log('the code screen:');
   ok('and none of them truncates the code before a script can see it',
      await page.evaluate(() => [...document.querySelectorAll('#otpBoxes input')].every((b) => !b.hasAttribute('maxlength'))),
      await page.evaluate(() => [...document.querySelectorAll('#otpBoxes input')].map((b) => b.getAttribute('maxlength')).join(',')));
-  ok('the first one asks the phone for the code',
-     await page.evaluate(() => document.querySelector('#otpBoxes input').getAttribute('autocomplete')) === 'one-time-code');
+  /* EVERY box asks the phone for the code, not just the first.
+     «روی آیفون پیشنهاد هم نمیاد.» Android is handed the code by WebOTP and
+     never reads this attribute; iOS has no such thing — Safari offers the code
+     as a suggestion above the keyboard, for the field that is FOCUSED. With the
+     attribute on box one alone, anybody whose finger landed on box two, or who
+     came back with the focus moved, got nothing — which reads as «it does not
+     work on iPhone» rather than «you tapped the wrong box». */
+  const otpAttrs = await page.evaluate(() => [...document.querySelectorAll('#otpBoxes input')].map((b) => ({
+    ac: b.getAttribute('autocomplete'), type: (b.getAttribute('type') || '').toLowerCase(), im: b.getAttribute('inputmode')
+  })));
+  ok('every box asks the phone for the code', otpAttrs.every((a) => a.ac === 'one-time-code'),
+     otpAttrs.map((a) => a.ac).join(','));
+  /* Safari will not offer a code for a number input, and an implicit type is
+     one tidy-up away from becoming one. */
+  ok('and none of them is a number input', otpAttrs.every((a) => a.type === 'text'),
+     otpAttrs.map((a) => a.type || '(unset)').join(','));
+  ok('while still bringing up the digits keyboard', otpAttrs.every((a) => a.im === 'numeric'),
+     otpAttrs.map((a) => a.im).join(','));
 
   /* ── THE TRAP: four digits into one box ────────────────────────────────── */
   /*
