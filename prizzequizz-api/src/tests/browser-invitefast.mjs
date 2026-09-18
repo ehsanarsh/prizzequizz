@@ -171,6 +171,53 @@ console.log('coming back to the tab:');
   await ctx.close();
 }
 
+/* ── 6. AFTER A REFUSAL, THE BUTTON IS NOT THERE ────────────────────────── */
+console.log('somebody who already said no:');
+{
+  /* The server refuses a repeat invite either way. This is so the person is not
+     left pressing a button that can only ever refuse them — and so they are
+     told WHY, because a button that is simply gone reads as a broken app and
+     the obvious next move is to try again. */
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+  await ctx.addInitScript(() => {
+    localStorage.setItem('pz_tok', 't'); localStorage.setItem('pz_rtok', 'r');
+    localStorage.setItem('pz_usr', JSON.stringify({ id: 'u-me', username: 'ehsan', displayName: 'احسان', level: 3 }));
+    for (const k of ['leaderboard', 'missions', 'shop', 'wheel']) localStorage.setItem('pq_tut_' + k, '1');
+    try { sessionStorage.setItem('pz_push_asked_visit', '1'); } catch (e) {}
+  });
+  await ctx.route('**/v1/**', (route) => {
+    const u = route.request().url();
+    let d = {};
+    if (u.includes('/users/online')) d = { onlineTotal: 2, coins: 100, nextCost: 0, charged: 0, players: [
+      { userId: 'u-free', username: 'sara', displayName: 'سارا', level: 2, avatar: null, character: null,
+        inMatch: false, invitePending: false, recentlyRefused: false, canInvite: true, lastSeen: new Date().toISOString() },
+      { userId: 'u-said-no', username: 'reza', displayName: 'رضا', level: 4, avatar: null, character: null,
+        inMatch: false, invitePending: false, recentlyRefused: true, canInvite: false, lastSeen: new Date().toISOString() }
+    ] };
+    else if (u.includes('/auth/refresh')) d = { accessToken: 't2', refreshToken: 'r2' };
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, data: d }) });
+  });
+  const page = await ctx.newPage();
+  const errs = []; page.on('pageerror', (e) => errs.push(String(e).slice(0, 160)));
+  await page.goto(`http://${HOST}:${PORT}/`, { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(5600);
+  await page.evaluate(() => { (0, eval)("go('online')"); return (0, eval)('onlineLoad()'); });
+  await page.waitForTimeout(700);
+  const cards = await page.evaluate(() => [...document.querySelectorAll('#onList .online-card')].map((c) => ({
+    text: c.innerText.replace(/\s+/g, ' ').trim(),
+    invite: !!c.querySelector('.pz-invite-go')
+  })));
+  /* The card prints the USERNAME, which is how the game names people
+     everywhere; matching on the display name finds nothing. */
+  const said = cards.find((c) => /reza/.test(c.text));
+  const free = cards.find((c) => /sara/.test(c.text));
+  ok('the one who is free can still be invited', !!free && free.invite, JSON.stringify(free));
+  ok('the one who said no cannot', !!said && !said.invite, JSON.stringify(said));
+  ok('and is told why, rather than left with a gap', !!said && /رد کرده/.test(said.text), JSON.stringify(said));
+  ok('no script errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
 console.log(`\n[invitefast] ${pass} passed, ${fail} failed`);
 await browser.close(); wss.close(); server.close();
 process.exit(fail ? 1 : 0);

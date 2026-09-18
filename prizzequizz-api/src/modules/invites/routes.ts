@@ -9,12 +9,26 @@
 import type { Router } from '../../http/router.js';
 import { blockedBetween } from '../../services/blockService.js';
 import { nudgeUser } from '../../realtime/nudge.js';
+
+/* «۹ دقیقه» rather than «۵۳۷ ثانیه». A refusal message that reads like a
+   stopwatch is a message that sounds like an error; this one sounds like an
+   answer. Rounded UP, so «یک دقیقه» is never followed by another refusal. */
+function waitPhrase(ms: number): string {
+  const mins = Math.max(1, Math.ceil(ms / 60_000));
+  if (mins < 60) return 'تا ' + fa(mins) + ' دقیقهٔ دیگر';
+  const hours = Math.ceil(mins / 60);
+  return 'تا ' + fa(hours) + ' ساعت دیگر';
+}
+/* The panel and the client both speak Persian digits; a server message that
+   arrives in Latin ones is the only thing on that screen that does. */
+function fa(n: number): string {
+  return String(n).replace(/[0-9]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[Number(d)]!);
+}
 import { error, json } from '../../http/response.js';
 import { repositories } from '../../repositories/index.js';
 import { currentMatchOf } from '../../services/matchEngine.js';
 import {
-  createInvite, incomingFor, respond, cancelInvite, getInvite, InviteError, type InviteMode
-} from '../../services/gameInviteService.js';
+  createInvite, incomingFor, respond, cancelInvite, getInvite, InviteError, type InviteMode, rejectionHold} from '../../services/gameInviteService.js';
 import { notifications } from '../../services/notificationService.js';
 import { getRoom } from '../../services/lastSurvivorService.js';
 import { callAfterWin, pendingFor, markSeen, isTier } from '../../services/duelCallService.js';
@@ -43,6 +57,19 @@ export function registerInviteRoutes(router: Router, base: string): void {
          person blocking somebody is usually trying to avoid. The blocker gets
          the same sentence, so neither answer gives the other away. */
     if (await blockedBetween(ctx.userId, toUserId)) return error(ctx.res, 403, 'BLOCKED', 'ارتباط با این بازیکن ممکن نیست.');
+
+    /* «نه» HAS TO MEAN SOMETHING FOR A WHILE.
+       The pending claim already stops a second invite while one is WAITING;
+       the gap was the moment after — refused at second five, invited again at
+       second six, for as long as the sender felt like it. It escalates because
+       the same word means different things depending on how often it has been
+       said: one «no» is usually «not this minute», a third in one day is
+       somebody who has answered and is still being asked. */
+    const hold = await rejectionHold(ctx.userId, toUserId);
+    if (hold.held) {
+      return error(ctx.res, 429, 'RECENTLY_REFUSED',
+        'این بازیکن همین اواخر دعوتت را رد کرده — ' + waitPhrase(hold.untilMs - Date.now()) + ' دیگر می‌توانی دوباره دعوتش کنی.');
+    }
 
     const me = await repositories.users.findById(ctx.userId);
     const them = await repositories.users.findById(toUserId);

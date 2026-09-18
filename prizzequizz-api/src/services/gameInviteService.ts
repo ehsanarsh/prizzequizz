@@ -55,6 +55,8 @@ export interface GameInvite {
   status: InviteStatus;
   createdAt: number;
   expiresAt: number;
+  /** When it was answered, 0 while it has not been. */
+  answeredAt: number;
 }
 
 /** How long one invite holds its claim on the person it was sent to. */
@@ -106,7 +108,12 @@ async function ensureSchema(pool: ReturnType<typeof getPgPool>): Promise<void> {
     `room_id TEXT NOT NULL DEFAULT ''`,
     `room_topic TEXT NOT NULL DEFAULT ''`,
     `from_room_id TEXT NOT NULL DEFAULT ''`,
-    `status TEXT NOT NULL DEFAULT 'pending'`
+    `status TEXT NOT NULL DEFAULT 'pending'`,
+    /* WHEN they answered, not when they were asked. The cooldown after a «no»
+       has to start from the no — an invite that sat unopened for its whole
+       minute and was then refused would otherwise be a minute into its own
+       cooldown before the refusal was even made. */
+    `answered_at BIGINT NOT NULL DEFAULT 0`
   ]) {
     await pool.query(`ALTER TABLE game_invites ADD COLUMN IF NOT EXISTS ${col}`);
   }
@@ -122,7 +129,8 @@ const rowToInvite = (r: any): GameInvite => ({
   roomId: String(r.room_id || ''),
   roomTopic: String(r.room_topic || ''),
   fromRoomId: String(r.from_room_id || ''), status: String(r.status) as InviteStatus,
-  createdAt: Number(r.created_at), expiresAt: Number(r.expires_at)
+  createdAt: Number(r.created_at), expiresAt: Number(r.expires_at),
+  answeredAt: Number(r.answered_at) || 0
 });
 
 async function save(inv: GameInvite): Promise<GameInvite> {
@@ -130,10 +138,10 @@ async function save(inv: GameInvite): Promise<GameInvite> {
   if (!pool) { mem.set(inv.id, { ...inv }); return inv; }
   await ensureSchema(pool);
   await pool.query(
-    `INSERT INTO game_invites (id, from_user_id, from_name, to_user_id, mode, ticket_tier, coin_stake, room_id, room_topic, from_room_id, status, created_at, expires_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
-     ON CONFLICT (id) DO UPDATE SET status=$11, expires_at=$13`,
-    [inv.id, inv.fromUserId, inv.fromName, inv.toUserId, inv.mode, inv.ticketTier, inv.coinStake, inv.roomId, inv.roomTopic, inv.fromRoomId, inv.status, inv.createdAt, inv.expiresAt]
+    `INSERT INTO game_invites (id, from_user_id, from_name, to_user_id, mode, ticket_tier, coin_stake, room_id, room_topic, from_room_id, status, created_at, expires_at, answered_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+     ON CONFLICT (id) DO UPDATE SET status=$11, expires_at=$13, answered_at=$14`,
+    [inv.id, inv.fromUserId, inv.fromName, inv.toUserId, inv.mode, inv.ticketTier, inv.coinStake, inv.roomId, inv.roomTopic, inv.fromRoomId, inv.status, inv.createdAt, inv.expiresAt, inv.answeredAt || 0]
   );
   return inv;
 }
@@ -257,7 +265,7 @@ export async function createInvite(input: CreateInviteInput, now = Date.now()): 
 
   const inv: GameInvite = {
     id: id(), fromUserId: input.fromUserId, fromName: String(input.fromName || 'بازیکن'),
-    toUserId: input.toUserId, mode: input.mode,
+    toUserId: input.toUserId, mode: input.mode, answeredAt: 0,
     ticketTier: String(input.ticketTier || ''), coinStake,
     roomId: String(input.roomId || ''),
     roomTopic: String(input.roomTopic || ''),
@@ -296,7 +304,70 @@ export async function respond(inviteId: string, userId: string, accept: boolean,
      the deadline is left as it was rather than kept in step with it. Two fields
      that must agree are two fields that can disagree. */
   inv.status = accept ? 'accepted' : 'rejected';
+  inv.answeredAt = now;
   return save(inv);
+}
+
+/* ── «نه» یعنی الان نه، و «نه»ِ سوم یعنی بس است ───────────────────────────
+ *
+ * «وقتی کسی دعوت تو را رد کرد دیگه نتونی بهش دعوت بفرستی — کاربر نتونه تند تند
+ *  دعوت بفرسته و کلافه کنه.»
+ *
+ * The claim above already stops a second invite while one is WAITING. The gap
+ * is the moment after: refused at second five, invited again at second six,
+ * for as long as the sender feels like it.
+ *
+ * It escalates rather than being one flat wall, because the same word means
+ * different things depending on how often it has been said. One «no» is
+ * usually «not this minute» — coming back in ten is not harassment. A third
+ * «no» in a day is somebody who has already answered and is still being asked,
+ * and a day is how long they get left alone.
+ *
+ * Nothing new is stored for it: the invitations themselves are the record.
+ */
+export const REJECT_STEPS_MS = [10 * 60_000, 60 * 60_000, 24 * 60 * 60_000];
+/** How long the wait is after the Nth refusal (N counted from 1). */
+export function rejectStep(count: number): number {
+  if (count <= 0) return 0;
+  return REJECT_STEPS_MS[Math.min(count, REJECT_STEPS_MS.length) - 1]!;
+}
+/** The window refusals are counted over. Older ones are forgiven entirely. */
+export const REJECT_MEMORY_MS = 24 * 60 * 60_000;
+
+export interface RejectHold { held: boolean; untilMs: number; count: number }
+
+/** Is this sender currently being asked to leave this person alone? */
+export async function rejectionHold(fromUserId: string, toUserId: string, now = Date.now()): Promise<RejectHold> {
+  const none: RejectHold = { held: false, untilMs: 0, count: 0 };
+  if (!fromUserId || !toUserId) return none;
+  const since = now - REJECT_MEMORY_MS;
+  let times: number[] = [];
+  const pool = pg();
+  if (pool) {
+    await ensureSchema(pool);
+    const { rows } = await pool.query(
+      `SELECT answered_at FROM game_invites
+        WHERE from_user_id=$1 AND to_user_id=$2 AND status='rejected' AND answered_at > $3
+        ORDER BY answered_at DESC LIMIT 20`, [fromUserId, toUserId, since]);
+    times = rows.map((r: any) => Number(r.answered_at) || 0).filter(Boolean);
+  } else {
+    times = [...mem.values()]
+      .filter((i) => i.fromUserId === fromUserId && i.toUserId === toUserId && i.status === 'rejected' && i.answeredAt > since)
+      .map((i) => i.answeredAt).sort((a, b) => b - a);
+  }
+  if (!times.length) return none;
+  const untilMs = times[0]! + rejectStep(times.length);
+  return { held: untilMs > now, untilMs, count: times.length };
+}
+
+/** The same question for a list of people at once, so the online list can stop
+ *  offering a button that is going to be refused. */
+export async function cooledAmong(fromUserId: string, userIds: string[], now = Date.now()): Promise<Set<string>> {
+  const out = new Set<string>();
+  if (!fromUserId || !userIds.length) return out;
+  const holds = await Promise.all(userIds.map(async (id) => [id, await rejectionHold(fromUserId, id, now)] as const));
+  for (const [id, h] of holds) if (h.held) out.add(id);
+  return out;
 }
 
 /** The sender giving up (left the room, closed the sheet). */

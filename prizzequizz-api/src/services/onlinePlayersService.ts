@@ -23,7 +23,7 @@ import { onlineUserIds, lastSeenFor } from './presenceService.js';
 import { avatarUrlFor } from './avatarService.js';
 import { equippedCharacterFor } from './characterSelectionService.js';
 import { currentMatchOf } from './matchEngine.js';
-import { claimedAmong } from './gameInviteService.js';
+import { claimedAmong, cooledAmong} from './gameInviteService.js';
 import type { Gender, User } from '../types/domain.js';
 import { randomInt } from 'node:crypto';
 
@@ -118,6 +118,10 @@ export interface OnlinePlayer {
   inMatch: boolean;
   /** Somebody else's invite is already waiting for them. */
   invitePending: boolean;
+  /** THEY have refused THIS viewer recently, and the wait is not over. Sent so
+   *  the button can be gone rather than there and then refused — being told
+   *  «no» twice for the same «no» is the thing this exists to prevent. */
+  recentlyRefused: boolean;
   /** Neither of the above — free, in the lobby, invitable right now. */
   canInvite: boolean;
   lastSeen: string;
@@ -174,6 +178,7 @@ export async function listOnlinePlayers(userId: string, refresh = false): Promis
      it. Both are the difference between a list you can act on and a list that
      sends invitations into the void. */
   const claimed = await claimedAmong(chosen.map((u) => u.id)).catch(() => new Set<string>());
+  const refused = await cooledAmong(userId, chosen.map((u) => u.id)).catch(() => new Set<string>());
   const players: OnlinePlayer[] = await Promise.all(chosen.map(async (u) => {
     const inMatch = !!currentMatchOf(u.id);
     return {
@@ -188,7 +193,8 @@ export async function listOnlinePlayers(userId: string, refresh = false): Promis
       character: await equippedCharacterFor(u.id).catch(() => null),
       inMatch,
       invitePending: claimed.has(u.id),
-      canInvite: !inMatch && !claimed.has(u.id),
+      recentlyRefused: refused.has(u.id),
+      canInvite: !inMatch && !claimed.has(u.id) && !refused.has(u.id),
       lastSeen: (seen.get(u.id) ?? new Date()).toISOString()
     };
   }));
