@@ -125,6 +125,24 @@ function run(): void {
     assert.ok(ok < 400, 'the header bought ' + ok + ' requests');
   });
 
+  check('a crash report gets a far tighter allowance than an ordinary call', () => {
+    /* A bug inside a render loop posts as fast as the device can. At the
+       general 120 a minute, one phone writes seven thousand rows an hour —
+       burying every other crash and filling the table by morning. The
+       twenty-first copy of a crash says nothing the first did not. */
+    _resetRateLimits();
+    let reports = 0;
+    for (let i = 0; i < 200; i++) if (rateLimit(req({ path: '/v1/monitoring/reports', token: 'phone-a' }), res())) reports++;
+    assert.ok(reports <= 20, 'one device wrote ' + reports + ' crash reports in a minute');
+
+    /* And the tighter limit must not leak onto everything else — the game polls
+       its own match far faster than that and must not be throttled to 20. */
+    _resetRateLimits();
+    let normal = 0;
+    for (let i = 0; i < 200; i++) if (rateLimit(req({ path: '/v1/questions/next', token: 'phone-a' }), res())) normal++;
+    assert.ok(normal > 20, 'ordinary calls were cut to ' + normal + ' a minute too');
+  });
+
   console.log(`[rateLimitPerCaller] ${passed} passed, ${failed} failed`);
   if (failed) process.exit(1);
 }

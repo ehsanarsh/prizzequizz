@@ -1,7 +1,7 @@
 import type { Router } from '../../http/router.js';
 import { error, json } from '../../http/response.js';
 import { requireAdmin } from '../../services/adminGuard.js';
-import { createErrorReport, errorReportDiagnostics, listErrorReports, updateErrorReportStatus } from '../../services/errorReportService.js';
+import { createErrorReport, errorReportDiagnostics, listErrorReports, updateErrorReportStatus, errorGroups, updateErrorGroupStatus } from '../../services/errorReportService.js';
 import type { ErrorReportSeverity, ErrorReportSource, ErrorReportStatus } from '../../types/domain.js';
 import { getPublicConfig } from '../../services/configService.js';
 import { getCategoryImage } from '../../services/categoryImageService.js';
@@ -60,6 +60,35 @@ export function registerMonitoringRoutes(router: Router, base: string): void {
       userId: ctx.query.get('userId') || undefined,
       limit: Number(ctx.query.get('limit') ?? 100)
     }));
+  });
+
+  /* THE QUEUE THE PROGRAMMERS ACTUALLY WORK.
+   * One crash is one job however many times it happened, so the list is
+   * grouped — otherwise the first bug that loops fills the screen and every
+   * other bug is on page forty. */
+  router.add('GET', `${base}/admin/monitoring/groups`, async (ctx) => {
+    if (!requireAdmin(ctx, { tab: 'errors' })) return;
+    json(ctx.res, 200, {
+      groups: await errorGroups({
+        status: (ctx.query.get('status') || 'open') as ErrorReportStatus,
+        source: (ctx.query.get('source') || undefined) as ErrorReportSource | undefined,
+        limit: Number(ctx.query.get('limit') ?? 50)
+      }),
+      diagnostics: await errorReportDiagnostics()
+    });
+  });
+
+  /* Triage by group, for the same reason: nobody is going to mark four
+     thousand rows one at a time, so a per-row-only queue never empties. */
+  router.add('PATCH', `${base}/admin/monitoring/groups/status`, async (ctx) => {
+    if (!requireAdmin(ctx, { tab: 'errors' })) return;
+    const b = (ctx.body ?? {}) as any;
+    const status = String(b.status ?? 'triaged') as ErrorReportStatus;
+    if (!['open','triaged','resolved','ignored'].includes(status)) return error(ctx.res, 422, 'ERROR_REPORT_STATUS_INVALID', 'Invalid error report status.');
+    const fp = String(b.fingerprint ?? '');
+    if (!fp) return error(ctx.res, 422, 'FINGERPRINT_REQUIRED', 'Which group?');
+    const n = await updateErrorGroupStatus(fp, status, ctx.userId ?? 'system');
+    json(ctx.res, 200, { updated: n, status });
   });
 
   router.add('PATCH', `${base}/admin/monitoring/reports/:id/status`, async (ctx) => {

@@ -57,7 +57,12 @@ export function rateLimit(req: IncomingMessage, res: ServerResponse): boolean {
   const now = Date.now();
   sweep(now);
   const windowMs = 60_000;
-  const max = path.includes('/auth/') ? 12 : 120;
+  /* Crash reports get their own, much tighter allowance. A bug inside a render
+     loop posts as fast as the device can, and the general 120 a minute would
+     let one phone write seven thousand rows an hour — burying every other
+     crash and filling the table. Twenty is already far more than anybody needs
+     to see: the twenty-first copy of a crash says nothing the first did not. */
+  const max = path.includes('/monitoring/reports') ? 20 : path.includes('/auth/') ? 12 : 120;
   const bucket = buckets.get(key);
   if (!bucket || bucket.resetAt < now) {
     buckets.set(key, { count: 1, resetAt: now + windowMs });

@@ -314,7 +314,7 @@ const NAV=[
   ['اقتصاد',[['wallet','🏆','صندوق جایزه'],['g_payout','💸','دریافت جایزه'],['tickets','🎫','بلیط‌ها'],['shop','🛒','فروشگاه'],['chatpacks','💬','پک‌های چت'],['giftcodes','🎁','کدهای هدیه'],['discounts','🏷️','کد تخفیف'],['payments','🏦','درگاه پرداخت']]],
   ['بالانس بازی (Data-Driven)',[['g_balance','⚖️','بالانس بازی'],['leagues','🛡️','لیگ‌ها'],['missions2','🎯','مأموریت‌ها']]],
   ['رشد و تعامل',[['leaderboard','📈','لیدربرد'],['campaign','🎁','کمپین کاربر جدید'],['events','📅','رویدادها'],['banners','🖼️','بنرها'],['notifications','🔔','اعلان‌ها'],['g_sms','📱','پنل پیامکی']]],
-  ['سیستم',[['monitoring','🖥️','مانیتورینگ سرور'],['g_security','🛡️','امنیت و ضدتقلب'],['g_audit','📑','گزارش و لاگ'],['reset','♻️','ابزار ریست'],['accounts','🔐','حساب‌ها و دسترسی'],['backup','💾','پشتیبان‌گیری'],['general','⚙️','تنظیمات عمومی'],['rawcfg','🧩','ویرایش خام Config']]]
+  ['سیستم',[['monitoring','🖥️','مانیتورینگ سرور'],['errors','🐞','خطاهای بازی'],['g_security','🛡️','امنیت و ضدتقلب'],['g_audit','📑','گزارش و لاگ'],['reset','♻️','ابزار ریست'],['accounts','🔐','حساب‌ها و دسترسی'],['backup','💾','پشتیبان‌گیری'],['general','⚙️','تنظیمات عمومی'],['rawcfg','🧩','ویرایش خام Config']]]
 ];
 /* NAV with every group opened out into its screens — for anything that has to
    speak in screens rather than nav rows (the access checklist, tab labels). */
@@ -540,7 +540,7 @@ async function render(){
   try{
     if(CUR==='accounts')return renderAccounts();
     if(CONFIG_PAGES[CUR]){ await renderConfigSection(CONFIG_PAGES[CUR][0],CONFIG_PAGES[CUR][1]); groupBar(); if(tracked)void badgeLoad(); return; }
-    const fn={dashboard:renderDashboard,finance:renderFinance,accounting:renderAccounting,expenses:renderExpenses,backup:renderBackup,users:renderUsers,matches:renderMatches,support:renderSupport,questions:renderQuestions,leagues:renderLeagues,qreports:renderQReports,aistudio:renderAiStudio,pipeline:renderPipeline,categories:renderCategories,wallet:renderWallet,withdrawals:renderWithdrawals,payoutpartners:renderPayoutPartners,withdrawotp:renderWithdrawOtp,smsgroups:renderSmsGroups,rewardholds:renderRewardHolds,tickets:renderTickets,giftcodes:renderGiftCodes,discounts:renderDiscounts,shop:renderShopAdmin,chatpacks:renderChatPacks,characters:renderCharacters,charboxes:renderCharBoxes,lifelines:renderLifelines,rewards:renderRewards,missions2:renderMissions2,recordmode:renderRecordMode,onboarding:renderOnboarding,lastsurvivor:renderLastSurvivor,duel:renderDuel,sms:renderSms,payments:renderPayments,leaderboard:renderLeaderboard,banners:renderBanners,notifications:renderNotifications,anticheat:renderAntiCheat,suspicious:renderSuspicious,reports:renderReports,logs:renderLogs,reset:renderReset,roles:renderRoles,rawcfg:renderRawCfg,monitoring:renderMonitoring}[CUR];
+    const fn={dashboard:renderDashboard,finance:renderFinance,accounting:renderAccounting,expenses:renderExpenses,backup:renderBackup,users:renderUsers,matches:renderMatches,support:renderSupport,questions:renderQuestions,leagues:renderLeagues,qreports:renderQReports,aistudio:renderAiStudio,pipeline:renderPipeline,categories:renderCategories,wallet:renderWallet,withdrawals:renderWithdrawals,payoutpartners:renderPayoutPartners,withdrawotp:renderWithdrawOtp,smsgroups:renderSmsGroups,rewardholds:renderRewardHolds,tickets:renderTickets,giftcodes:renderGiftCodes,discounts:renderDiscounts,shop:renderShopAdmin,chatpacks:renderChatPacks,characters:renderCharacters,charboxes:renderCharBoxes,lifelines:renderLifelines,rewards:renderRewards,missions2:renderMissions2,recordmode:renderRecordMode,onboarding:renderOnboarding,lastsurvivor:renderLastSurvivor,duel:renderDuel,sms:renderSms,payments:renderPayments,leaderboard:renderLeaderboard,banners:renderBanners,notifications:renderNotifications,anticheat:renderAntiCheat,suspicious:renderSuspicious,reports:renderReports,logs:renderLogs,reset:renderReset,roles:renderRoles,rawcfg:renderRawCfg,monitoring:renderMonitoring,errors:renderErrors}[CUR];
     if(fn){ await fn(); groupBar(); if(tracked)void badgeLoad(); return; }
     /* No renderer for this tab. Six nav entries were in this state, and
        clicking one silently left the PREVIOUS screen's content on display —
@@ -6557,50 +6557,93 @@ function monShowKey(key,name){
    silently widen what a limited account can open. Both of these walk the
    opened-out list so a group's four screens stay four separate permissions. */
 function tabLabelMap(){const m={};navLeaves().forEach(p=>{if(p[0]!=='accounts')m[p[0]]=p[1]+' '+p[2];});return m;}
-function permChecklist(selected){
+/* THE JOBS, AS THE SERVER DEFINES THEM.
+   Fetched, never written here: a role whose tab list lives in two files is a
+   role that is right in one of them. Empty until the accounts screen loads. */
+let ACC_ROLES=[];
+function roleTabsOf(key){ const r=ACC_ROLES.find(x=>x.key===key); return new Set(r?r.tabs:[]); }
+function roleLabelOf(key){ const r=ACC_ROLES.find(x=>x.key===key); return r?r.label:''; }
+
+/* Tabs the ROLE grants are ticked and locked — they are not this person's own
+   choices and unticking one would be a lie, because the role puts it back on
+   the next request. Everything else is an extra: one screen, for one person,
+   as a visible decision. */
+function permChecklist(selected,role){
   const sel=new Set(selected||[]); const all=sel.has('*');
+  const rt=roleTabsOf(role); const everything=rt.has('*');
   let html='<label style="display:flex;gap:8px;align-items:center;font-weight:900;margin-bottom:8px"><input type="checkbox" id="perm_all" '+(all?'checked':'')+' onchange="document.querySelectorAll(\'.permchk\').forEach(c=>{c.checked=this.checked;c.disabled=this.checked})"> دسترسی کامل (همهٔ تب‌ها)</label>';
+  if(everything) html+='<div class="note" style="margin:0 0 8px">این نقش همهٔ تب‌ها را دارد؛ چیزی برای اضافه‌کردن نمانده.</div>';
   const leaves=navLeaves().filter(p=>p[0]!=='accounts');
   html+=NAV.map(g=>{
     const items=leaves.filter(p=>p[3]===g[0]);
     if(!items.length)return '';
     return '<div style="margin:8px 0 3px;color:var(--muted);font-size:11px;font-weight:800">'+g[0]+'</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">'+
-      items.map(p=>'<label style="display:flex;gap:6px;align-items:center;font-size:12.5px"><input type="checkbox" class="permchk" value="'+p[0]+'" '+(all||sel.has(p[0])?'checked':'')+' '+(all?'disabled':'')+'>'+p[1]+' '+esc(p[2])+'</label>').join('')+'</div>';
+      items.map(p=>{
+        const byRole=everything||rt.has(p[0]);
+        const on=all||byRole||sel.has(p[0]);
+        const lock=all||byRole;
+        return '<label style="display:flex;gap:6px;align-items:center;font-size:12.5px'+(byRole?';opacity:.75':'')+'"><input type="checkbox" class="permchk" value="'+p[0]+'" '+(on?'checked':'')+' '+(lock?'disabled':'')+'>'+p[1]+' '+esc(p[2])+(byRole?' <span class="pill info" style="font-size:9px">از نقش</span>':'')+'</label>';
+      }).join('')+'</div>';
   }).join('');
   return html;
 }
-function collectPerms(){ if($('#perm_all')&&$('#perm_all').checked)return ['*']; return [...document.querySelectorAll('.permchk:checked')].map(c=>c.value); }
+/* Only the boxes this person ticked THEMSELVES. A disabled box still matches
+   `:checked`, so without `:not(:disabled)` every tab the role grants would be
+   copied into the account's own extras — and the role would stop meaning
+   anything the moment somebody pressed save. */
+function collectPerms(){ if($('#perm_all')&&$('#perm_all').checked)return ['*']; return [...document.querySelectorAll('.permchk:checked:not(:disabled)')].map(c=>c.value); }
+function accRolePick(v){
+  const box=$('#ac_perms'); if(!box) return;
+  const keep=[...document.querySelectorAll('.permchk:checked:not(:disabled)')].map(c=>c.value);
+  box.innerHTML=permChecklist(keep,v);
+}
 async function renderAccounts(){
   let data={rows:[]};try{data=await api('GET','/admin/accounts');}catch(e){$('#main').innerHTML=head('حساب‌ها')+'<div class="card empty">'+(e.message||'خطا')+'</div>';return;}
   window._ACCS={};(data.rows||[]).forEach(a=>window._ACCS[a.id]=a);
+  ACC_ROLES=Array.isArray(data.roles)?data.roles:[];
   const lbl=tabLabelMap();
-  const permTxt=a=>a.perms&&a.perms.indexOf('*')>=0?'<span class="pill ok">دسترسی کامل</span>':(a.perms||[]).map(k=>lbl[k]?lbl[k].split(' ').slice(1).join(' '):k).slice(0,8).join('، ')+((a.perms||[]).length>8?' …':'')||'—';
-  $('#main').innerHTML=head('حساب‌ها و دسترسی','برای هرکس حساب بساز و تک‌به‌تک تب‌های مجاز را انتخاب کن','<button class="btn pri" onclick="accEdit()">➕ حساب جدید</button>')+
+  /* EFFECTIVE, not `perms`. `perms` holds only the extras now, so showing it
+     would report somebody with a whole job as having almost no access. */
+  const permTxt=a=>{
+    const eff=a.effective||a.perms||[];
+    if(eff.indexOf('*')>=0) return '<span class="pill ok">دسترسی کامل</span>';
+    const names=eff.map(k=>lbl[k]?lbl[k].split(' ').slice(1).join(' '):k);
+    return names.slice(0,8).join('، ')+(names.length>8?' … (+'+fa(names.length-8)+')':'')||'—';
+  };
+  const roleTxt=a=>a.isOwner?'<span class="pill ok">مدیر کل</span>':(a.role?'<span class="pill info">'+esc(roleLabelOf(a.role)||a.role)+'</span>':'<span class="pill pend">بدون نقش</span>');
+  $('#main').innerHTML=head('حساب‌ها و دسترسی','برای هرکس حساب بساز و نقشش را انتخاب کن — تیک‌ها فقط برای استثناها','<button class="btn pri" onclick="accEdit()">➕ حساب جدید</button>')+
     '<div class="card" style="max-width:520px"><h3>🔑 تغییر رمز عبور من ('+esc(ME_USER||'owner')+')</h3>'+
       '<div class="field"><label>رمز فعلی</label><input id="cp_cur" type="password" dir="ltr"></div>'+
       '<div class="field"><label>رمز جدید</label><input id="cp_new" type="password" dir="ltr"></div>'+
       '<button class="btn pri" onclick="changeMyPassword()">ذخیرهٔ رمز جدید</button>'+
       '<div class="note" style="margin-top:6px">بعد از تغییر رمز، دوباره به‌صورت خودکار با رمز جدید وارد می‌شوی.</div></div>'+
     '<div class="card"><h3>حساب‌های مدیریت</h3>'+
-      tbl(['نام کاربری','دسترسی‌ها','وضعیت','عملیات'],(data.rows||[]).map(a=>{
+      '<div class="note">نقش را انتخاب کن، نه پنجاه تیک را. نقش <b>ذخیره</b> می‌شود و سرِ هر درخواست حل می‌شود — پس صفحه‌ای که ماه بعد اضافه شود، خودش به کسی می‌رسد که کارش همان است. تیک‌ها فقط برای <b>اضافه‌ها</b>ی یک نفرند.</div>'+
+      tbl(['نام کاربری','نقش','دسترسی‌ها','وضعیت','عملیات'],(data.rows||[]).map(a=>{
         const act=a.isOwner?'<span class="pill">مدیر کل</span>':
           '<button class="btn sm" onclick="accEdit(\''+a.id+'\')">ویرایش دسترسی</button> <button class="btn sm" onclick="accResetPass(\''+a.id+'\')">تغییر رمز</button> <button class="btn sm '+(a.active?'':'ok')+'" onclick="accToggle(\''+a.id+'\','+(!a.active)+')">'+(a.active?'غیرفعال':'فعال')+'</button> <button class="btn sm bad" onclick="accDelete(\''+a.id+'\')">حذف</button>';
-        return ['<b>'+esc(a.username)+'</b>'+(a.isOwner?' 👑':''),'<div style="max-width:340px;font-size:12px">'+permTxt(a)+'</div>','<span class="pill '+(a.active?'ok':'bad')+'">'+(a.active?'فعال':'غیرفعال')+'</span>',act];
+        return ['<b>'+esc(a.username)+'</b>'+(a.isOwner?' 👑':''),roleTxt(a),'<div style="max-width:340px;font-size:12px">'+permTxt(a)+'</div>','<span class="pill '+(a.active?'ok':'bad')+'">'+(a.active?'فعال':'غیرفعال')+'</span>',act];
       }))+'</div>';
 }
 function accEdit(id){
   const a=(window._ACCS||{})[id]||{};
+  const role=a.role||'';
+  const opts='<option value="">— بدون نقش (فقط تیک‌های زیر) —</option>'+
+    ACC_ROLES.filter(r=>r.key!=='owner').map(r=>'<option value="'+esc(r.key)+'"'+(role===r.key?' selected':'')+'>'+esc(r.label)+' — '+esc(r.about)+'</option>').join('');
   modal(id?'ویرایش دسترسی: '+esc(a.username):'ساخت حساب مدیریت',
     (id?'':'<div class="field"><label>نام کاربری</label><input id="ac_user" dir="ltr" placeholder="operator1"></div>'+
         '<div class="field"><label>رمز عبور</label><input id="ac_pass" type="password" dir="ltr" placeholder="حداقل ۴ کاراکتر"></div>')+
-    '<div class="field"><label>تب‌های مجاز</label><div style="max-height:340px;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:10px">'+permChecklist(a.perms)+'</div></div>'+
+    '<div class="field"><label>نقش</label><select id="ac_role" onchange="accRolePick(this.value)">'+opts+'</select>'+
+      '<div class="note" style="margin-top:4px">نقش تعیین می‌کند این حساب چه کاری دارد. تب‌هایی که نقش می‌دهد پایین با نشانِ «از نقش» قفل‌اند — آن‌ها انتخابِ این حساب نیستند.</div></div>'+
+    '<div class="field"><label>تب‌های اضافه</label><div id="ac_perms" style="max-height:340px;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:10px">'+permChecklist(a.perms,role)+'</div></div>'+
     '<button class="btn pri" onclick="accSave(\''+(id||'')+'\')">💾 ذخیره</button>');
 }
 async function accSave(id){
   const perms=collectPerms();
+  const role=$('#ac_role')?$('#ac_role').value:'';
   try{
-    if(id){ await api('PATCH','/admin/accounts/'+id,{perms}); }
-    else{ const u=($('#ac_user').value||'').trim(), p=$('#ac_pass').value||''; if(!u||!p)return toast('نام کاربری و رمز لازم است','bad'); await api('POST','/admin/accounts',{username:u,password:p,perms}); }
+    if(id){ await api('PATCH','/admin/accounts/'+id,{perms,role}); }
+    else{ const u=($('#ac_user').value||'').trim(), p=$('#ac_pass').value||''; if(!u||!p)return toast('نام کاربری و رمز لازم است','bad'); await api('POST','/admin/accounts',{username:u,password:p,perms,role}); }
     toast('ذخیره شد ✅','ok');document.querySelector('.modal-bg').remove();render();
   }catch(e){toast(e.message,'bad');}
 }
@@ -6822,6 +6865,81 @@ async function renderReports(){
     '<div class="card" style="margin-bottom:13px"><h3>مالی</h3>'+tbl(['دوره','پرداخت درگاه','جوایز','ورودی','دریافت جایزه','سود'],(rep.rows||[]).map(r=>[r.period,fa(r.deposits),fa(r.rewards),fa(r.stakes),fa(r.withdrawals),'<b style="color:var(--gold)">'+fa(r.systemProfit)+'</b>']))+'</div>'+
     '<div class="grid g2"><div class="card"><h3>کاربران پرگردش</h3>'+tbl(['کاربر','گردش'],(top||[]).map(u=>[esc(u.username||String(u.userId).slice(0,8)),fa(u.volume)]))+'</div>'+
       '<div class="card"><h3>تراکنش‌های ناموفق</h3>'+tbl(['نوع','مبلغ','زمان'],((failed.failedTransactions)||[]).slice(0,15).map(t=>[esc(t.type),fa(t.amount),fmtDate(t.createdAt)]))+'</div></div>';
+}
+
+
+/* ════ WHAT BROKE ON A PLAYER'S PHONE ════════════════════════════════════
+   The server has had a table for crash reports all along, with a status, a
+   severity and a «who resolved it». Nothing wrote to it and nothing read it, so
+   every crash on every player's phone happened in silence and the only way to
+   learn about one was for that player to open a ticket.
+
+   Grouped, always. One bug inside a render loop produces thousands of rows, and
+   a flat list would show that bug and nothing else — the rare crash, the one
+   that loses a payment, would be on page forty. One crash is one job, however
+   many times it happened, so the whole screen and the triage buttons work on
+   the group.
+   ════════════════════════════════════════════════════════════════════════ */
+let ERR_STATUS='open', ERR_SOURCE='';
+async function renderErrors(){
+  let d;
+  try{ d=await api('GET','/admin/monitoring/groups?status='+encodeURIComponent(ERR_STATUS)+(ERR_SOURCE?'&source='+ERR_SOURCE:'')); }
+  catch(e){ $('#main').innerHTML=head('خطاهای بازی')+'<div class="card empty">'+esc(e.message||'خطا')+'</div>'; return; }
+  const g=Array.isArray(d.groups)?d.groups:[], dg=d.diagnostics||{};
+  window._ERRG=g;
+  const tab=(k,t)=>'<button class="btn sm '+(ERR_STATUS===k?'pri':'')+'" onclick="ERR_STATUS=\''+k+'\';render()">'+t+'</button>';
+  const src=(k,t)=>'<button class="btn sm '+(ERR_SOURCE===k?'pri':'')+'" onclick="ERR_SOURCE=\''+k+'\';render()">'+t+'</button>';
+  $('#main').innerHTML=head('خطاهای بازی','هر ردیف یک باگ است، نه یک بار اتفاق‌افتادنش',
+      tab('open','باز')+' '+tab('triaged','در دست بررسی')+' '+tab('resolved','حل‌شده')+' '+tab('ignored','نادیده'))+
+    '<div class="grid g4" style="margin-bottom:13px">'+
+      stat('باز','bad',fa(dg.open||0))+stat('در دست بررسی','pend',fa(dg.triaged||0))+
+      stat('در ۲۴ ساعت','info',fa(dg.last24h||0))+stat('از سمت سرور','',fa(dg.backend||0))+
+    '</div>'+
+    '<div class="toolbar">'+src('','همه')+' '+src('frontend','بازی')+' '+src('backend','سرور')+
+      '<span class="note" style="margin:0 8px;align-self:center">'+fa(g.length)+' باگ</span></div>'+
+    (g.length?g.map((x,i)=>errCard(x,i)).join(''):'<div class="card empty">چیزی اینجا نیست. اگر همیشه خالی است، یعنی بازی هنوز خطاهایش را نمی‌فرستد — نه اینکه خطایی نیست.</div>');
+}
+/* A version is a STRING, not a number — fa() would turn «1.2.3» into ۰. Only
+   the digits are swapped, and everything else is left exactly as written. */
+function faDigits(s){ return String(s==null?'':s).replace(/[0-9]/g,d=>'۰۱۲۳۴۵۶۷۸۹'[+d]); }
+function errWhen(iso){
+  const t=Date.parse(String(iso||'')); if(!t) return '—';
+  const m=Math.max(0,Math.round((Date.now()-t)/60000));
+  if(m<60) return fa(m)+' دقیقه پیش';
+  if(m<1440) return fa(Math.round(m/60))+' ساعت پیش';
+  return fa(Math.round(m/1440))+' روز پیش';
+}
+function errCard(x,i){
+  /* The group is addressed by its INDEX, not by pasting its fingerprint into
+     an onclick. A fingerprint is a crash message with the digits taken out —
+     it can contain quotes, backslashes, anything at all — and building an HTML
+     attribute out of it is how a button stops working for exactly the crashes
+     that matter most. */
+  const act=(st,t,cls)=>'<button class="btn sm '+(cls||'')+'" onclick="errSet('+i+',\''+st+'\')">'+t+'</button>';
+  return '<div class="card" style="margin-bottom:10px">'+
+    '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'+
+      '<span class="pill '+(x.severity==='fatal'?'bad':'pend')+'">'+fa(x.count)+' بار</span>'+
+      '<span class="pill info">'+(x.source==='backend'?'سرور':'بازی')+'</span>'+
+      (x.users?'<span class="pill">'+fa(x.users)+' بازیکن</span>':'')+
+      ((x.appVersions||[]).length?'<span class="pill">نسخهٔ '+esc(faDigits((x.appVersions||[]).join('، ')))+'</span>':'')+
+      '<span class="note" style="margin:0">آخرین بار '+esc(errWhen(x.lastAt))+'</span>'+
+    '</div>'+
+    '<div class="mono" style="direction:ltr;text-align:left;margin:8px 0;font-size:12.5px;word-break:break-word">'+esc(x.message||'')+'</div>'+
+    (x.route?'<div class="note" style="margin:0 0 6px">کجا: <span class="mono" style="direction:ltr">'+esc(x.route)+'</span></div>':'')+
+    (x.stack?'<details><summary class="note" style="cursor:pointer">stack</summary><pre class="mono" style="direction:ltr;text-align:left;white-space:pre-wrap;font-size:11px;max-height:220px;overflow:auto">'+esc(x.stack)+'</pre></details>':'')+
+    '<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">'+
+      act('triaged','بررسی می‌کنم')+act('resolved','حل شد','ok')+act('ignored','نادیده')+
+      (ERR_STATUS!=='open'?act('open','برگردان به باز'):'')+
+    '</div></div>';
+}
+async function errSet(i,status){
+  const x=(window._ERRG||[])[i];
+  if(!x) return toast('این گروه دیگر روی صفحه نیست','bad');
+  try{
+    const r=await api('PATCH','/admin/monitoring/groups/status',{fingerprint:x.fingerprint,status});
+    toast(fa((r&&r.updated)||0)+' مورد بروزرسانی شد','ok');
+    render();
+  }catch(e){ toast(e.message,'bad'); }
 }
 
 /* ================= LOGS & DURABLE AUDIT ================= */

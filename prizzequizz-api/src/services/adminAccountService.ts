@@ -7,11 +7,16 @@
 import { getPgPool } from '../database/postgres.js';
 import { id } from '../utils/id.js';
 import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
+import { effectivePerms, isRoleKey } from './adminRoleService.js';
 
 export interface AdminAccount {
   id: string;
   username: string;
-  perms: string[];          // list of allowed tab keys, or ['*'] for all
+  /* THE JOB. Stored, and resolved on every request — not copied into `perms`.
+     That is what makes a screen added next month reach the person whose job it
+     is, instead of reaching nobody until somebody re-ticks fifty boxes. */
+  role: string | null;
+  perms: string[];          // EXTRA tab keys on top of the role, or ['*'] for all
   isOwner: boolean;
   active: boolean;
   token: string;            // session credential (x-admin-key)
@@ -54,15 +59,20 @@ async function ensureSchema(pool: ReturnType<typeof getPgPool>): Promise<void> {
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now())`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_admin_accounts_token ON admin_accounts(token)`);
+  /* Added after the table existed, so ALTER rather than a new column in the
+     CREATE — a database that predates roles must keep working, and an account
+     with no role simply has whatever extras it was given, exactly as before. */
+  await pool.query(`ALTER TABLE admin_accounts ADD COLUMN IF NOT EXISTS role TEXT`);
   _schemaReady = true;
 }
 
-interface Row { id: string; username: string; pass_salt: string; pass_hash: string; token: string; perms: any; is_owner: boolean; active: boolean; created_by?: string; created_at: any; updated_at: any; }
+interface Row { id: string; username: string; pass_salt: string; pass_hash: string; token: string; perms: any; role?: string | null; is_owner: boolean; active: boolean; created_by?: string; created_at: any; updated_at: any; }
 const mem: Row[] = [];
 
 function rowToAccount(r: Row): AdminAccount {
   return {
-    id: r.id, username: r.username, perms: Array.isArray(r.perms) ? r.perms : (r.perms ? JSON.parse(r.perms) : []),
+    id: r.id, username: r.username, role: normalizeRole(r.role),
+    perms: Array.isArray(r.perms) ? r.perms : (r.perms ? JSON.parse(r.perms) : []),
     isOwner: !!r.is_owner, active: r.active !== false, token: r.token, createdBy: r.created_by ?? undefined,
     createdAt: (r.created_at as any)?.toISOString?.() ?? String(r.created_at),
     updatedAt: (r.updated_at as any)?.toISOString?.() ?? String(r.updated_at)
@@ -79,8 +89,8 @@ async function insertRow(r: Row): Promise<void> {
   const pool = pg();
   if (pool) {
     await ensureSchema(pool);
-    await pool.query(`INSERT INTO admin_accounts(id,username,pass_salt,pass_hash,token,perms,is_owner,active,created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-      [r.id, r.username, r.pass_salt, r.pass_hash, r.token, JSON.stringify(r.perms), r.is_owner, r.active, r.created_by ?? null]);
+    await pool.query(`INSERT INTO admin_accounts(id,username,pass_salt,pass_hash,token,perms,role,is_owner,active,created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+      [r.id, r.username, r.pass_salt, r.pass_hash, r.token, JSON.stringify(r.perms), r.role ?? null, r.is_owner, r.active, r.created_by ?? null]);
   } else mem.push(r);
 }
 
@@ -92,7 +102,7 @@ export async function ensureOwnerSeed(): Promise<void> {
   const rows = await allRows();
   if (rows.some((r) => r.is_owner)) return;
   const { salt, hash } = hashPassword(masterKey);
-  await insertRow({ id: id(), username: process.env.ADMIN_ROOT_USER || 'owner', pass_salt: salt, pass_hash: hash, token: masterKey, perms: ['*'], is_owner: true, active: true, created_by: 'system', created_at: new Date().toISOString() as any, updated_at: new Date().toISOString() as any });
+  await insertRow({ id: id(), username: process.env.ADMIN_ROOT_USER || 'owner', pass_salt: salt, pass_hash: hash, token: masterKey, perms: ['*'], role: 'owner', is_owner: true, active: true, created_by: 'system', created_at: new Date().toISOString() as any, updated_at: new Date().toISOString() as any });
 }
 
 export async function findByToken(token: string): Promise<AdminAccount | null> {
@@ -110,13 +120,16 @@ export async function login(username: string, password: string): Promise<AdminAc
   return rowToAccount(r);
 }
 
-export async function listAccounts(): Promise<Array<Omit<AdminAccount, 'token'> & { hasToken: boolean }>> {
+export async function listAccounts(): Promise<Array<Omit<AdminAccount, 'token'> & { hasToken: boolean; effective: string[] }>> {
   await ensureOwnerSeed();
   const rows = await allRows();
-  return rows.map((r) => { const a = rowToAccount(r); return { id: a.id, username: a.username, perms: a.perms, isOwner: a.isOwner, active: a.active, hasToken: !!a.token, createdBy: a.createdBy, createdAt: a.createdAt, updatedAt: a.updatedAt }; });
+  /* `effective` is what the person can really open — the panel shows that, and
+     `perms` alone would show only the extras, which reads as «this account has
+     almost no access» for somebody with a full job. */
+  return rows.map((r) => { const a = rowToAccount(r); return { id: a.id, username: a.username, role: a.role, perms: a.perms, effective: effectivePerms(a.isOwner ? 'owner' : a.role, a.perms), isOwner: a.isOwner, active: a.active, hasToken: !!a.token, createdBy: a.createdBy, createdAt: a.createdAt, updatedAt: a.updatedAt }; });
 }
 
-export async function createAccount(input: { username: string; password: string; perms: string[]; createdBy?: string }): Promise<AdminAccount> {
+export async function createAccount(input: { username: string; password: string; perms: string[]; role?: unknown; createdBy?: string }): Promise<AdminAccount> {
   const username = String(input.username || '').trim();
   if (!username) throw new Error('USERNAME_REQUIRED');
   if (!/^[a-zA-Z0-9_.-]{3,60}$/.test(username)) throw new Error('USERNAME_INVALID');
@@ -124,10 +137,18 @@ export async function createAccount(input: { username: string; password: string;
   const rows = await allRows();
   if (rows.some((r) => r.username.toLowerCase() === username.toLowerCase())) throw new Error('USERNAME_TAKEN');
   const { salt, hash } = hashPassword(input.password);
-  const row: Row = { id: id(), username, pass_salt: salt, pass_hash: hash, token: newToken(), perms: normalizePerms(input.perms), is_owner: false, active: true, created_by: input.createdBy, created_at: new Date().toISOString() as any, updated_at: new Date().toISOString() as any };
+  const row: Row = { id: id(), username, pass_salt: salt, pass_hash: hash, token: newToken(), perms: normalizePerms(input.perms), role: normalizeRole(input.role), is_owner: false, active: true, created_by: input.createdBy, created_at: new Date().toISOString() as any, updated_at: new Date().toISOString() as any };
   await insertRow(row);
   await refreshTokenCache();
   return rowToAccount(row);
+}
+
+/* A role this build does not know is stored as none. Keeping the unknown
+   string would mean `effectivePerms` silently granting nothing while the panel
+   showed a role name — «I have the support role and I can't see tickets». */
+function normalizeRole(role: unknown): string | null {
+  const r = String(role ?? '').trim();
+  return r && isRoleKey(r) ? r : null;
 }
 
 function normalizePerms(perms: unknown): string[] {
@@ -136,10 +157,14 @@ function normalizePerms(perms: unknown): string[] {
   return p.includes('*') ? ['*'] : [...new Set(p)];
 }
 
-export async function updateAccount(accountId: string, patch: { perms?: string[]; password?: string; active?: boolean }): Promise<boolean> {
+export async function updateAccount(accountId: string, patch: { perms?: string[]; role?: unknown; password?: string; active?: boolean }): Promise<boolean> {
   const pool = pg();
   const sets: string[] = []; const args: unknown[] = [];
   if (patch.perms) { args.push(JSON.stringify(normalizePerms(patch.perms))); sets.push(`perms=$${args.length}`); }
+  /* `role` is set whenever the key is PRESENT, including as empty — «no role,
+     only the extras» has to be expressible, and `if (patch.role)` would make
+     clearing a role impossible. */
+  if (patch.role !== undefined) { args.push(normalizeRole(patch.role)); sets.push(`role=$${args.length}`); }
   if (typeof patch.active === 'boolean') { args.push(patch.active); sets.push(`active=$${args.length}`); }
   if (patch.password) { const { salt, hash } = hashPassword(patch.password); args.push(salt); sets.push(`pass_salt=$${args.length}`); args.push(hash); sets.push(`pass_hash=$${args.length}`); args.push(newToken()); sets.push(`token=$${args.length}`); }
   if (!sets.length) return false;
@@ -153,6 +178,7 @@ export async function updateAccount(accountId: string, patch: { perms?: string[]
   const r = mem.find((x) => x.id === accountId && !x.is_owner);
   if (!r) return false;
   if (patch.perms) r.perms = normalizePerms(patch.perms);
+  if (patch.role !== undefined) r.role = normalizeRole(patch.role);
   if (typeof patch.active === 'boolean') r.active = patch.active;
   if (patch.password) { const { salt, hash } = hashPassword(patch.password); r.pass_salt = salt; r.pass_hash = hash; r.token = newToken(); }
   await refreshTokenCache();
@@ -182,15 +208,7 @@ export async function deleteAccount(accountId: string): Promise<boolean> {
   if (i < 0) return false; mem.splice(i, 1); await refreshTokenCache(); return true;
 }
 
-// The tab keys that exist in the panel (kept in sync with the admin nav).
-export const ADMIN_TABS = [
-  'dashboard', 'finance', 'accounting', 'expenses', 'backup', 'security', 'users', 'matches', 'support',
-  'questions', 'qreports', 'aistudio', 'pipeline', 'categories', 'shop', 'characters', 'charboxes', 'lifelines', 'onboarding', 'lastsurvivor', 'sms', 'smsgroups', 'payments',
-  'wallet', 'withdrawals', 'payoutpartners', 'withdrawotp', 'rewardholds', 'tickets', 'giftcodes',
-  'cfg_xp', 'cfg_level', 'cfg_cup', 'cfg_gameplay', 'leagues', 'missions', 'rewards',
-  'leaderboard', 'campaign', 'events', 'banners', 'notifications',
-  'anticheat', 'suspicious', 'reports', 'logs', 'reset', 'roles', 'accounts', 'general', 'rawcfg', 'monitoring'
-] as const;
+export { ADMIN_TABS } from './adminTabs.js';
 
 // Map a request path to the tab it belongs to (for backend enforcement). Only
 // tabs with distinct endpoints can be enforced server-side; the rest are gated
@@ -242,7 +260,7 @@ export function hasTab(perms: string[] | undefined, tab: string | null): boolean
 }
 
 /* ---- Synchronous token cache so requireAdmin() stays sync at ~80 call sites ---- */
-export interface CachedAccount { id: string; username: string; perms: string[]; isOwner: boolean; }
+export interface CachedAccount { id: string; username: string; role: string | null; perms: string[]; isOwner: boolean; }
 let _cache = new Map<string, CachedAccount>();
 let _cacheAt = 0;
 let _refreshing = false;
@@ -256,7 +274,12 @@ export async function refreshTokenCache(): Promise<void> {
     const m = new Map<string, CachedAccount>();
     for (const r of rows) {
       if (r.active === false) continue;
-      m.set(r.token, { id: r.id, username: r.username, perms: normalizePerms(r.perms), isOwner: !!r.is_owner });
+      /* The cache holds what requireAdmin actually asks: the EFFECTIVE tabs.
+         Resolving the role here is what keeps ~80 call sites unchanged and
+         synchronous, and it is why a role edited in the panel takes effect
+         within the cache's few seconds rather than on the next deploy. */
+      const role = !!r.is_owner ? 'owner' : normalizeRole(r.role);
+      m.set(r.token, { id: r.id, username: r.username, role, perms: effectivePerms(role, normalizePerms(r.perms)), isOwner: !!r.is_owner });
     }
     _cache = m; _cacheAt = Date.now();
   } catch { /* keep old cache */ } finally { _refreshing = false; }
