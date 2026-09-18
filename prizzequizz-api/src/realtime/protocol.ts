@@ -19,6 +19,12 @@ export type ServerRealtimeType =
   | 'server:chat'
   | 'server:presence'
   | 'server:leaderboard_update'
+  /* «کسی الان چیزی برایت فرستاد» — and nothing more. The payload says what
+     KIND of thing arrived, never the thing itself: the client then reads it
+     through the same endpoint it always used, so there is exactly one place
+     that decides what an invite looks like. A push that carried the invite
+     would be a second one. */
+  | 'server:nudge'
   | 'server:error';
 
 export interface ClientRealtimeMessage<T = Record<string, unknown>> {

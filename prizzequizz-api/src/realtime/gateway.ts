@@ -7,6 +7,7 @@ import { getMatch, submitAnswer } from '../services/matchEngine.js';
 import { logger } from '../services/logger.js';
 import { id } from '../utils/id.js';
 import { realtimeRooms } from './roomRegistry.js';
+import { userTopic } from './nudge.js';
 import { leaderboards, type LeaderboardKind } from '../services/leaderboardService.js';
 import type { ClientRealtimeMessage } from './protocol.js';
 
@@ -21,8 +22,21 @@ export function attachRealtimeGateway(server: Server): WebSocketServer {
   wss.on('close', () => clearInterval(cleanupTimer));
 
   wss.on('connection', (socket, req) => {
-    const userId = readUserId(req) ?? 'u1';
+    const real = readUserId(req);
+    const userId = real ?? 'u1';
     const meta = realtimeRooms.add(socket, userId);
+    /* EVERY SOCKET LISTENS ON ITS OWN NAME, from the moment it connects.
+       An invite lives sixty seconds and was only ever found by a poll that ran
+       every twelve — so it arrived late, and if the player happened to be
+       somewhere the poll skips, it expired without ever being seen. Now the
+       server can say «something is waiting» the instant it is.
+       Only for a socket whose token really resolved: `?? 'u1'` above is the
+       unauthenticated fallback, and joining a shared topic under it would send
+       one player's nudge to every stranger. */
+    if (real) {
+      realtimeRooms.joinTopic(meta.id, userTopic(real));
+      void realtimeRooms.subscribeTopic(userTopic(real));
+    }
     realtimeRooms.send(meta.id, { type: 'server:connected', payload: { clientId: meta.id, userId, heartbeatMs: 25000 }, requestId: undefined });
     logger.info('realtime_connected', { clientId: meta.id, userId });
 

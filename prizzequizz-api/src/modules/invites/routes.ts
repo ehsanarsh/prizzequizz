@@ -8,6 +8,7 @@
  */
 import type { Router } from '../../http/router.js';
 import { blockedBetween } from '../../services/blockService.js';
+import { nudgeUser } from '../../realtime/nudge.js';
 import { error, json } from '../../http/response.js';
 import { repositories } from '../../repositories/index.js';
 import { currentMatchOf } from '../../services/matchEngine.js';
@@ -76,6 +77,12 @@ export function registerInviteRoutes(router: Router, base: string): void {
         data: { inviteId: inv.id, mode: inv.mode, ticketTier: inv.ticketTier, coinStake: inv.coinStake, roomId: inv.roomId, roomTopic: inv.roomTopic, url: '/' },
         push: true
       }).catch(() => undefined);
+      /* AND TOLD AT ONCE, over the socket that is already open. The web push
+         above reaches a phone with the game CLOSED; this is for the far more
+         common case — the game is open, the person is looking at it, and until
+         now they waited up to twelve seconds of an invite's sixty-second life
+         to find out. Best effort by design: the poll is still the floor. */
+      nudgeUser(toUserId, 'invite', { inviteId: inv.id, mode: inv.mode });
       json(ctx.res, 201, publicInvite(inv));
     } catch (e) {
       if (e instanceof InviteError) {
@@ -165,6 +172,10 @@ export function registerInviteRoutes(router: Router, base: string): void {
       tier,
       matchId, stage: Number(body.stage ?? 2)
     });
+    /* «حریفت ادامه داد» is only worth reading while it is still true — the
+       server throws the call away after three minutes. Waiting for a poll
+       spends a good part of that on nothing. */
+    nudgeUser(loser, 'duel_call', { callId: call.id });
     json(ctx.res, 201, { called: true, call: publicCall(call) });
   });
 

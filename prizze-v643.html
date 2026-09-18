@@ -20884,6 +20884,13 @@ async function realVerifyOtp(){
     otpStopTimer();
     wallet=_usr.balances?.wallet||0; updateWalletUI();
     applyMyName(); try{ pzHydrateAll(); }catch(e){}
+    /* THE INVITE LISTENER STARTS HERE TOO, not only at boot. It used to be
+       armed by a single timer four seconds after the page loaded, gated on
+       having a token — so anybody who signed in AFTER that moment, which is
+       everybody signing in for the first time, never listened for an invite
+       for the rest of the session. They were not «ignoring» invitations; they
+       were never told about them. */
+    try{ pzInviteArm(); }catch(e){}
     /* New account (no chosen name yet) → registration; otherwise straight in. */
     if(_pzNeedsRegister()){ toast('خوش اومدی! اطلاعاتت رو کامل کن'); go('register'); }
     else { toast('خوش اومدی '+pzDisplayName()+'!'); go('plans'); }
@@ -24537,7 +24544,7 @@ try{ setTimeout(()=>{ pzRegisterSW().then(()=>{
 }); }, 3000); }catch(e){}
 /* An invite is live for sixty seconds, so it has to be looked for while it
    still means something. */
-try{ setTimeout(()=>{ try{ if(_tok) pzInvitePollStart(); }catch(e){} }, 4000); }catch(e){}
+try{ setTimeout(()=>{ try{ pzInviteArm(); }catch(e){} }, 4000); }catch(e){}
 /* Keep the header bell badge fresh (new server messages arrive between opens). */
 try{ setInterval(()=>{ try{ if(_tok) pzInboxBadge(); }catch(e){} }, 45000); }catch(e){}
 
@@ -24867,6 +24874,68 @@ function pzInvitePollStart(){
   PZ_INV_POLL=setInterval(pzInvitePoll,12000);
   setTimeout(pzInvitePoll,1500);
 }
+
+/* ═══ «هیچ دعوتی نمیره و اگه بره هم با خیلی تاخیر» ════════════════════════
+   Two separate faults, and the first one is the one that made invitations look
+   ignored rather than late.
+
+   ONE: the listener was started by a single timer, four seconds after the page
+   loaded, and only if a token already existed. Everybody who signs in for the
+   first time has no token at that moment — so for the whole of that session
+   nothing ever asked the server whether anybody had invited them. Not late:
+   never. Armed here instead, from every place a session can begin or resume.
+
+   TWO: when it did run it asked every twelve seconds, about an invite that
+   lives sixty. So a person watching their screen still waited most of a minute,
+   and if they happened to be on one of the screens the poll skips, it expired
+   before they were ever asked. The socket below is the fast path: the server
+   says «something is waiting» the instant it is, and the poll stays exactly as
+   it is underneath, as the floor for anybody whose socket is not up. */
+let PZ_NOTICE_WS=null, PZ_NOTICE_TRIES=0, PZ_NOTICE_TIMER=null;
+function pzNoticeConnect(){
+  if(!_tok) return;
+  if(PZ_NOTICE_WS&&(PZ_NOTICE_WS.readyState===0||PZ_NOTICE_WS.readyState===1)) return;
+  try{
+    const url=_A.replace(/^http/,'ws')+'/realtime?token='+encodeURIComponent(_tok);
+    const ws=new WebSocket(url); PZ_NOTICE_WS=ws;
+    ws.onopen=()=>{ PZ_NOTICE_TRIES=0; };
+    ws.onmessage=(e)=>{
+      try{
+        const m=JSON.parse(e.data);
+        /* The nudge carries only the KIND of thing that arrived. What it is and
+           how it looks is read through the same endpoint the poll uses, so
+           there stays one place that decides what an invite is. */
+        if(m&&m.type==='server:nudge') setTimeout(pzInvitePoll,0);
+      }catch(_){}
+    };
+    ws.onclose=()=>{
+      PZ_NOTICE_WS=null;
+      if(!_tok) return;
+      /* Backing off rather than hammering: a network that will not carry a
+         socket at all must not turn into a retry loop that drains the battery
+         and never succeeds. The poll is still running the whole time. */
+      const wait=Math.min(30000,2000*Math.pow(2,Math.min(4,PZ_NOTICE_TRIES++)));
+      try{ clearTimeout(PZ_NOTICE_TIMER); }catch(_){}
+      PZ_NOTICE_TIMER=setTimeout(pzNoticeConnect,wait);
+    };
+    ws.onerror=()=>{};
+  }catch(_){}
+}
+/* Everything that has to be true for an invitation to be heard. Safe to call
+   as often as anything likes — both halves are idempotent. */
+function pzInviteArm(){
+  try{ if(!_tok) return; }catch(e){ return; }
+  try{ pzInvitePollStart(); }catch(e){}
+  try{ pzNoticeConnect(); }catch(e){}
+}
+/* COMING BACK IS THE MOMENT SOMETHING IS MOST LIKELY TO BE WAITING — the phone
+   was in a pocket, the socket was dropped by the browser, and the poll's next
+   tick is up to twelve seconds away. Ask straight away. */
+try{
+  const back=()=>{ try{ if(document.visibilityState==='visible'){ pzInviteArm(); setTimeout(pzInvitePoll,0); } }catch(e){} };
+  window.addEventListener('focus',back);
+  document.addEventListener('visibilitychange',back);
+}catch(e){}
 function pzInviteBusy(){
   /* Never in front of somebody mid-match: they cannot accept anyway, and a
      sheet over a live question is how a round is lost. */
