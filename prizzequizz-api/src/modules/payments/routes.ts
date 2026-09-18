@@ -1,5 +1,6 @@
 import type { Router } from '../../http/router.js';
 import { error, json } from '../../http/response.js';
+import { repositories } from '../../repositories/index.js';
 import { requireAdmin } from '../../services/adminGuard.js';
 import { WalletError } from '../../services/walletLedgerService.js';
 import { createPaymentIntent, getPaymentIntent, listPaymentIntents, paymentDiagnostics, settlePaymentIntent, settleBlupalIntent, findIntentByBlupalInvoice, blupalActive } from '../../services/paymentService.js';
@@ -154,7 +155,24 @@ export function registerPaymentRoutes(router: Router, base: string): void {
 
   router.add('GET', `${base}/admin/payments/intents`, async (ctx) => {
     if (!requireAdmin(ctx, { tab: 'payments' })) return;
-    json(ctx.res, 200, await listPaymentIntents({ userId: ctx.query.get('userId') || undefined, status: (ctx.query.get('status') || undefined) as PaymentIntentStatus | undefined, provider: (ctx.query.get('provider') || undefined) as PaymentProvider | undefined, limit: Number(ctx.query.get('limit') ?? 100) }));
+    const rows = await listPaymentIntents({ userId: ctx.query.get('userId') || undefined, status: (ctx.query.get('status') || undefined) as PaymentIntentStatus | undefined, provider: (ctx.query.get('provider') || undefined) as PaymentProvider | undefined, limit: Number(ctx.query.get('limit') ?? 100) });
+    /* WHO PAID, not which uuid paid. The list showed the first eight characters
+       of a user id, which cannot be matched against a support ticket, a bank
+       statement or a person. Looked up once per DISTINCT player rather than
+       once per row — a busy day is mostly the same few people. */
+    const ids = [...new Set(rows.map((r) => r.userId).filter(Boolean))];
+    const who = new Map<string, { username?: string; displayName?: string; phone?: string }>();
+    for (const id of ids) {
+      const u = await repositories.users.findById(id).catch(() => null);
+      if (u) who.set(id, { username: u.username, displayName: u.displayName, phone: u.phone });
+    }
+    const q = String(ctx.query.get('q') ?? '').trim().toLowerCase();
+    const enriched = rows.map((r) => ({ ...r, ...(who.get(r.userId) ?? {}) }));
+    /* One box over everything, because whoever is looking knows a name or a
+       reference or an amount — not which column it lives in. */
+    const out = q ? enriched.filter((r) => [r.displayName, r.username, r.phone, r.providerReference, r.id, String(r.amount)]
+      .some((v) => String(v ?? '').toLowerCase().includes(q))) : enriched;
+    json(ctx.res, 200, out);
   });
 
   // ---- Multi-gateway management (tab 'payments') ----

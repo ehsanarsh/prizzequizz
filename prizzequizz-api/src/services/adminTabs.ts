@@ -7,6 +7,9 @@ export const ADMIN_TABS = [
   'dashboard', 'finance', 'accounting', 'expenses', 'backup', 'security', 'users', 'matches', 'support',
   'questions', 'qreports', 'aistudio', 'pipeline', 'categories', 'shop', 'characters', 'charboxes', 'lifelines', 'onboarding', 'lastsurvivor', 'sms', 'smsgroups', 'payments',
   'wallet', 'withdrawals', 'payoutpartners', 'withdrawotp', 'rewardholds', 'tickets', 'giftcodes',
+  /* Every movement of money, itemised — its own permission because a list of
+     who paid what is not the same thing as a dashboard of totals. */
+  'ledger',
   'cfg_xp', 'cfg_level', 'cfg_cup', 'cfg_gameplay', 'leagues', 'missions', 'rewards',
   'leaderboard', 'campaign', 'events', 'banners', 'notifications',
   'anticheat', 'suspicious', 'reports', 'logs', 'reset', 'roles', 'accounts', 'general', 'rawcfg', 'monitoring',

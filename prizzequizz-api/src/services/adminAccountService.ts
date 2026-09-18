@@ -233,6 +233,7 @@ export function tabForPath(path: string): string | null {
   if (p.includes('/admin/questions/ai') || p.includes('/admin/questions/draft')) return 'aistudio';
   if (p.includes('/admin/questions/pipeline')) return 'pipeline';
   if (p.includes('/admin/questions')) return 'questions';
+  if (p.includes('/admin/wallet/ledger')) return 'ledger';
   if (p.includes('/admin/wallet/withdrawals')) return 'withdrawals';
   if (p.includes('/admin/reward') && p.includes('hold')) return 'rewardholds';
   if (p.includes('/admin/wallet')) return 'wallet';

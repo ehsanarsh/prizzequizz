@@ -6,7 +6,7 @@ import { notifications } from '../../services/notificationService.js';
 import { createPaymentIntent, listPaymentIntents } from '../../services/paymentService.js';
 import {
   WALLET_LIMITS, WalletError, adminAdjust, auditLog, getAccount, getDashboard, internalTransfer,
-  listAudit, listEntries, listWithdraws, postEntry, reportSummary, reportSuspicious, reportTopUsers,
+  listAudit, listEntries, listAllEntries, ledgerAsCsv, listWithdraws, postEntry, reportSummary, reportSuspicious, reportTopUsers,
   requestWithdraw, transitionWithdraw, verifyConsistency, withdrawOtpCode
 } from '../../services/walletLedgerService.js';
 import { TicketError, consumeTicket, purchaseTicket, refundTicket } from '../../services/ticketService.js';
@@ -310,6 +310,45 @@ export function registerWalletRoutes(router: Router, base: string): void {
   router.add('GET', `${base}/admin/wallet/users/:id/ledger`, async (ctx) => {
     if (!requireAdmin(ctx)) return;
     json(ctx.res, 200, await listEntries(ctx.params.id!, { type: ctx.query.get('type') || undefined, page: Number(ctx.query.get('page') ?? 1), pageSize: Number(ctx.query.get('pageSize') ?? 50) }));
+  });
+
+  /* EVERY MOVEMENT, NOT ONE PLAYER'S.
+   * «باید ریز تراکنش‌ها رو بتونم ببینم.» The ledger could only be read one
+   * player at a time, and only if you already knew their id — so «what money
+   * moved today» had no answer anywhere in the panel. The finance screen shows
+   * totals, and totals are what you look at once you already trust the rows
+   * under them. Here are the rows. */
+  router.add('GET', `${base}/admin/wallet/ledger`, async (ctx) => {
+    if (!requireAdmin(ctx, { tab: 'ledger' })) return;
+    const num = (k: string): number | undefined => {
+      const v = ctx.query.get(k); if (v == null || v === '') return undefined;
+      const n = Number(v); return Number.isFinite(n) ? n : undefined;
+    };
+    const csv = String(ctx.query.get('format') ?? '') === 'csv';
+    const f = {
+      userId: ctx.query.get('userId') || undefined,
+      type: ctx.query.get('type') || undefined,
+      kind: ctx.query.get('kind') || undefined,
+      q: ctx.query.get('q') || undefined,
+      from: ctx.query.get('from') || undefined,
+      to: ctx.query.get('to') || undefined,
+      minAmount: num('minAmount'), maxAmount: num('maxAmount'),
+      page: Number(ctx.query.get('page') ?? 1),
+      /* The export takes the WHOLE filtered set, not the page on screen — an
+         export that silently hands back fifty rows is how a month ends up
+         half-reconciled. Capped so one click cannot pull the entire table. */
+      pageSize: csv ? 20000 : Number(ctx.query.get('pageSize') ?? 50),
+      sort: (ctx.query.get('sort') === 'asc' ? 'asc' : 'desc') as 'asc' | 'desc'
+    };
+    const out = await listAllEntries(f);
+    if (csv) {
+      ctx.res.statusCode = 200;
+      ctx.res.setHeader('content-type', 'text/csv; charset=utf-8');
+      ctx.res.setHeader('content-disposition', `attachment; filename="ledger-${new Date().toISOString().slice(0, 10)}.csv"`);
+      ctx.res.end(ledgerAsCsv(out.rows));
+      return;
+    }
+    json(ctx.res, 200, out);
   });
 
   router.add('GET', `${base}/admin/wallet/withdrawals`, async (ctx) => {

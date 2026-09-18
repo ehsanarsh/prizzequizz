@@ -47,7 +47,7 @@ export const ADMIN_ROLES: AdminRole[] = [
   },
   {
     key: 'finance', label: 'مالی', about: 'درخواست جایزه، درگاه، حسابداری',
-    tabs: ['dashboard', 'finance', 'accounting', 'expenses', 'wallet', 'withdrawals',
+    tabs: ['dashboard', 'finance', 'ledger', 'accounting', 'expenses', 'wallet', 'withdrawals',
            'withdrawotp', 'payoutpartners', 'rewardholds', 'payments', 'giftcodes', 'reports', 'users']
   },
   {

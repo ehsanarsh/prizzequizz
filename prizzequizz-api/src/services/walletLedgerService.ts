@@ -429,6 +429,136 @@ export async function listEntries(userId: string, f: LedgerFilter = {}): Promise
   return { rows: rows.rows.map(entryFromRow), total: Number(total.rows[0]?.n ?? 0), page, pageSize };
 }
 
+/* ── EVERY MOVEMENT, NOT ONE PLAYER'S ──────────────────────────────────────
+ *
+ * «در قسمت درگاه و یا مالی باید ریز تراکنش‌ها رو بتونم ببینم.»
+ *
+ * The ledger could only ever be read one player at a time, and only if you
+ * already knew their id. So «what money moved today» had no answer anywhere in
+ * the panel — the finance screen showed totals, and totals are what you look at
+ * AFTER you already trust the rows underneath them.
+ *
+ * Three things this has that the per-user list does not, and each one is the
+ * difference between a screen that gets used and one that does not:
+ *
+ *   — THE PLAYER'S NAME. A ledger row carries a user id. A UUID is not a
+ *     person; nobody can answer a support ticket or check a suspicious payment
+ *     against one. The name is joined on here rather than looked up row by row
+ *     from the panel.
+ *   — SEARCH THAT SPANS BOTH. «رضا» is a player and «match_reward» is a type
+ *     and `0912…` is a phone — whoever is looking does not know which field
+ *     their word lives in, and should not have to.
+ *   — TOTALS OF WHAT IS ON SCREEN. A filtered list whose sum you have to work
+ *     out by hand is a list you cannot reconcile anything against.
+ */
+export interface AdminLedgerFilter {
+  userId?: string; type?: string; kind?: string; q?: string;
+  from?: string; to?: string; minAmount?: number; maxAmount?: number;
+  page?: number; pageSize?: number; sort?: 'asc' | 'desc';
+}
+export interface AdminLedgerRow extends LedgerEntry {
+  username?: string; displayName?: string; phone?: string;
+}
+export interface AdminLedgerPage {
+  rows: AdminLedgerRow[]; total: number; page: number; pageSize: number;
+  /* Sums over EVERYTHING the filter matches, not over the page being shown —
+     a total that changes when you turn the page is worse than no total. */
+  totals: { credit: number; debit: number; net: number; count: number };
+}
+
+export async function listAllEntries(f: AdminLedgerFilter = {}): Promise<AdminLedgerPage> {
+  const page = Math.max(1, Number(f.page) || 1);
+  const pageSize = Math.min(500, Math.max(1, Number(f.pageSize) || 50));
+  const pool = pgAvailable();
+  /* `credit` adds to what the player can spend; `lock`, `debit` and `settle`
+     take away from it. Anything else is not counted in either direction rather
+     than guessed at. */
+  const CREDIT = new Set(['credit', 'release']);
+  const DEBIT = new Set(['debit', 'lock', 'settle']);
+
+  if (!pool) {
+    let rows: AdminLedgerRow[] = memLedger.slice();
+    if (f.userId) rows = rows.filter((e) => e.userId === f.userId);
+    if (f.type) rows = rows.filter((e) => e.entryType === f.type);
+    if (f.kind) rows = rows.filter((e) => e.kind === f.kind);
+    if (f.from) rows = rows.filter((e) => e.createdAt >= f.from!);
+    if (f.to) rows = rows.filter((e) => e.createdAt <= f.to!);
+    if (f.minAmount != null) rows = rows.filter((e) => e.amount >= f.minAmount!);
+    if (f.maxAmount != null) rows = rows.filter((e) => e.amount <= f.maxAmount!);
+    if (f.q) {
+      const q = f.q.toLowerCase();
+      rows = rows.filter((e) => [e.description, e.refId, e.id, e.entryType, e.userId]
+        .some((v) => String(v ?? '').toLowerCase().includes(q)));
+    }
+    rows.sort((x, y) => f.sort === 'asc' ? x.createdAt.localeCompare(y.createdAt) : y.createdAt.localeCompare(x.createdAt));
+    const totals = rows.reduce((t, e) => {
+      if (CREDIT.has(e.kind)) t.credit += e.amount; else if (DEBIT.has(e.kind)) t.debit += e.amount;
+      return t;
+    }, { credit: 0, debit: 0, net: 0, count: rows.length });
+    totals.net = totals.credit - totals.debit;
+    return { rows: rows.slice((page - 1) * pageSize, page * pageSize), total: rows.length, page, pageSize, totals };
+  }
+
+  await ensureSchema(pool);
+  const conds: string[] = ['1=1']; const args: unknown[] = [];
+  const add = (sql: string, v: unknown): void => { args.push(v); conds.push(sql.replace('?', '$' + args.length)); };
+  if (f.userId) add('l.user_id = ?::uuid', f.userId);
+  if (f.type) add('l.entry_type = ?', f.type);
+  if (f.kind) add('l.kind = ?', f.kind);
+  if (f.from) add('l.created_at >= ?', f.from);
+  if (f.to) add('l.created_at <= ?', f.to);
+  if (f.minAmount != null) add('l.amount >= ?', f.minAmount);
+  if (f.maxAmount != null) add('l.amount <= ?', f.maxAmount);
+  if (f.q) {
+    /* One word, every field it could belong to — including the player's name
+       and phone, which is the whole reason the join is here. */
+    args.push(`%${f.q}%`);
+    const i = '$' + args.length;
+    conds.push(`(l.description ILIKE ${i} OR l.ref_id ILIKE ${i} OR l.id::text ILIKE ${i}
+                 OR l.entry_type ILIKE ${i} OR u.username ILIKE ${i} OR u.display_name ILIKE ${i}
+                 OR u.phone ILIKE ${i})`);
+  }
+  const where = conds.join(' AND ');
+  const order = f.sort === 'asc' ? 'ASC' : 'DESC';
+  const agg = await pool.query(
+    `SELECT count(*)::int AS n,
+            coalesce(sum(CASE WHEN l.kind IN ('credit','release') THEN l.amount ELSE 0 END),0)::bigint AS credit,
+            coalesce(sum(CASE WHEN l.kind IN ('debit','lock','settle') THEN l.amount ELSE 0 END),0)::bigint AS debit
+       FROM wallet_ledger l LEFT JOIN users u ON u.id = l.user_id
+      WHERE ${where}`, args);
+  const rows = await pool.query(
+    `SELECT l.*, u.username, u.display_name, u.phone
+       FROM wallet_ledger l LEFT JOIN users u ON u.id = l.user_id
+      WHERE ${where}
+      ORDER BY l.created_at ${order}
+      LIMIT ${pageSize} OFFSET ${(page - 1) * pageSize}`, args);
+  const credit = Number(agg.rows[0]?.credit ?? 0), debit = Number(agg.rows[0]?.debit ?? 0);
+  return {
+    rows: rows.rows.map((r: any) => ({ ...entryFromRow(r), username: r.username ?? undefined, displayName: r.display_name ?? undefined, phone: r.phone ?? undefined })),
+    total: Number(agg.rows[0]?.n ?? 0), page, pageSize,
+    totals: { credit, debit, net: credit - debit, count: Number(agg.rows[0]?.n ?? 0) }
+  };
+}
+
+/* THE SAME ROWS, FOR A SPREADSHEET. Accounting does not happen in a browser,
+   and «export» that silently gives you only the page you were looking at is
+   how a month ends up half-reconciled. This takes the WHOLE filtered set. */
+export function ledgerAsCsv(rows: AdminLedgerRow[]): string {
+  const esc = (v: unknown): string => {
+    const s = String(v ?? '');
+    return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  };
+  const head = ['تاریخ', 'شناسه تراکنش', 'بازیکن', 'نام کاربری', 'شماره', 'نوع', 'جهت', 'مبلغ', 'موجودی قبل', 'موجودی بعد', 'مرجع', 'شرح', 'اپراتور'];
+  const lines = rows.map((r) => [
+    r.createdAt, r.id, r.displayName ?? '', r.username ?? '', r.phone ?? '', r.entryType, r.kind,
+    r.amount, r.availableBefore, r.availableAfter, r.refId ?? '', r.description ?? '', r.operatorId ?? ''
+  ].map(esc).join(','));
+  /* The BOM is what makes Excel open a UTF-8 file as Persian instead of as
+     mojibake — without it the whole export looks corrupted to the one person
+     who actually needs it. */
+  return '\ufeff' + [head.join(','), ...lines].join('\n');
+}
+
 export async function getDashboard(userId: string): Promise<Record<string, unknown>> {
   const account = await getAccount(userId);
   const user = await repositories.users.findById(userId);

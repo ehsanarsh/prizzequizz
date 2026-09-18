@@ -294,7 +294,7 @@ async function loadCfg(){ try{ CFG=await api('GET','/admin/config'); $('#cfgVer'
    — and it keeps the permission unit per-screen, so an account granted
    'withdrawals' and nothing else still sees exactly that one subtab. */
 const TAB_GROUPS={
-  g_money:   {icon:'💰',label:'مالی و حسابداری',tabs:[['finance','داشبورد مالی'],['accounting','حسابداری و گزارش'],['expenses','هزینه‌های شرکت']]},
+  g_money:   {icon:'💰',label:'مالی و حسابداری',tabs:[['finance','داشبورد مالی'],['ledger','ریز تراکنش‌ها'],['accounting','حسابداری و گزارش'],['expenses','هزینه‌های شرکت']]},
   g_qhub:    {icon:'❓',label:'سوالات',tabs:[['questions','بانک سوال'],['qreports','گزارش سؤالات'],['aistudio','استودیوی AI'],['pipeline','خط‌لولهٔ کیفیت']]},
   g_chars:   {icon:'🎭',label:'کاراکترها',tabs:[['characters','کاراکترها'],['charboxes','قرعه‌کشی کاراکتر']]},
   g_payout:  {icon:'💸',label:'دریافت جایزه',tabs:[['withdrawals','درخواست‌ها'],['rewardholds','جوایز در انتظار'],['payoutpartners','شرکای جایزه'],['withdrawotp','کد تأیید']]},
@@ -540,7 +540,7 @@ async function render(){
   try{
     if(CUR==='accounts')return renderAccounts();
     if(CONFIG_PAGES[CUR]){ await renderConfigSection(CONFIG_PAGES[CUR][0],CONFIG_PAGES[CUR][1]); groupBar(); if(tracked)void badgeLoad(); return; }
-    const fn={dashboard:renderDashboard,finance:renderFinance,accounting:renderAccounting,expenses:renderExpenses,backup:renderBackup,users:renderUsers,matches:renderMatches,support:renderSupport,questions:renderQuestions,leagues:renderLeagues,qreports:renderQReports,aistudio:renderAiStudio,pipeline:renderPipeline,categories:renderCategories,wallet:renderWallet,withdrawals:renderWithdrawals,payoutpartners:renderPayoutPartners,withdrawotp:renderWithdrawOtp,smsgroups:renderSmsGroups,rewardholds:renderRewardHolds,tickets:renderTickets,giftcodes:renderGiftCodes,discounts:renderDiscounts,shop:renderShopAdmin,chatpacks:renderChatPacks,characters:renderCharacters,charboxes:renderCharBoxes,lifelines:renderLifelines,rewards:renderRewards,missions2:renderMissions2,recordmode:renderRecordMode,onboarding:renderOnboarding,lastsurvivor:renderLastSurvivor,duel:renderDuel,sms:renderSms,payments:renderPayments,leaderboard:renderLeaderboard,banners:renderBanners,notifications:renderNotifications,anticheat:renderAntiCheat,suspicious:renderSuspicious,reports:renderReports,logs:renderLogs,reset:renderReset,roles:renderRoles,rawcfg:renderRawCfg,monitoring:renderMonitoring,errors:renderErrors}[CUR];
+    const fn={dashboard:renderDashboard,finance:renderFinance,accounting:renderAccounting,expenses:renderExpenses,backup:renderBackup,users:renderUsers,matches:renderMatches,support:renderSupport,questions:renderQuestions,leagues:renderLeagues,qreports:renderQReports,aistudio:renderAiStudio,pipeline:renderPipeline,categories:renderCategories,wallet:renderWallet,withdrawals:renderWithdrawals,payoutpartners:renderPayoutPartners,withdrawotp:renderWithdrawOtp,smsgroups:renderSmsGroups,rewardholds:renderRewardHolds,tickets:renderTickets,giftcodes:renderGiftCodes,discounts:renderDiscounts,shop:renderShopAdmin,chatpacks:renderChatPacks,characters:renderCharacters,charboxes:renderCharBoxes,lifelines:renderLifelines,rewards:renderRewards,missions2:renderMissions2,recordmode:renderRecordMode,onboarding:renderOnboarding,lastsurvivor:renderLastSurvivor,duel:renderDuel,sms:renderSms,payments:renderPayments,leaderboard:renderLeaderboard,banners:renderBanners,notifications:renderNotifications,anticheat:renderAntiCheat,suspicious:renderSuspicious,reports:renderReports,logs:renderLogs,reset:renderReset,roles:renderRoles,rawcfg:renderRawCfg,monitoring:renderMonitoring,errors:renderErrors,ledger:renderLedger}[CUR];
     if(fn){ await fn(); groupBar(); if(tracked)void badgeLoad(); return; }
     /* No renderer for this tab. Six nav entries were in this state, and
        clicking one silently left the PREVIOUS screen's content on display —
@@ -6424,16 +6424,141 @@ async function payReports(b){
   ]));
 }
 let PAY_TXST='';
+let PAY_TXQ='';
 async function payTx(b){
-  const rows=await api('GET','/admin/payments/intents?limit=200'+(PAY_TXST?'&status='+PAY_TXST:'')).catch(()=>[]);
+  const rows=await api('GET','/admin/payments/intents?limit=200'+(PAY_TXST?'&status='+PAY_TXST:'')+(PAY_TXQ?'&q='+encodeURIComponent(PAY_TXQ):'')).catch(()=>[]);
   const list=Array.isArray(rows)?rows:(rows.rows||[]);
   const filter='<div class="subtabs">'+[['','همه'],['paid','موفق'],['pending','در انتظار'],['failed','ناموفق']].map(s=>'<button class="'+(PAY_TXST===s[0]?'active':'')+'" onclick="PAY_TXST=\''+s[0]+'\';renderPayments()">'+s[1]+'</button>').join('')+'</div>';
-  b.innerHTML=filter+tbl(['زمان','کاربر','مبلغ','درگاه','وضعیت','کد مرجع'],list.map(i=>[
-    fmtDate(i.createdAt),'<span class="mono">'+String(i.userId||'').slice(0,8)+'</span>','<b>'+fa(i.amount)+'</b>',
-    esc((i.metadata&&i.metadata.gatewayName)||i.provider||'—'),
-    '<span class="pill '+(i.status==='paid'?'ok':(i.status==='failed'||i.status==='expired'?'bad':''))+'">'+(PIST[i.status]||i.status)+'</span>',
-    '<span class="mono" style="font-size:11px">'+esc(i.providerReference||'—')+'</span>'
-  ]));
+  const paid=list.filter(i=>i.status==='paid').reduce((n,i)=>n+(Number(i.amount)||0),0);
+  b.innerHTML=filter+
+    '<div class="toolbar"><input id="ptxq" placeholder="نام، شماره، کد مرجع یا مبلغ…" value="'+esc(PAY_TXQ)+'" style="min-width:260px">'+
+      '<span class="note" style="margin:0 8px;align-self:center">'+fa(list.length)+' تراکنش · موفق: '+fa(paid)+' ت</span></div>'+
+    /* WHO PAID, not which uuid paid. Eight characters of a user id cannot be
+       matched against a ticket, a bank statement, or a person. */
+    tbl(['زمان','بازیکن','مبلغ','درگاه','وضعیت','کد مرجع'],list.map(i=>[
+      fmtDate(i.createdAt),
+      '<b>'+esc(i.displayName||i.username||'—')+'</b>'+(i.username?'<div class="note" style="margin:0;font-size:11px">@'+esc(i.username)+'</div>':''),
+      '<b>'+fa(i.amount)+'</b>',
+      esc((i.metadata&&i.metadata.gatewayName)||i.provider||'—'),
+      '<span class="pill '+(i.status==='paid'?'ok':(i.status==='failed'||i.status==='expired'?'bad':''))+'">'+(PIST[i.status]||i.status)+'</span>',
+      '<span class="mono" style="font-size:11px">'+esc(i.providerReference||'—')+'</span>'
+    ]));
+  liveSearch({ input:'#ptxq', set:(v)=>{PAY_TXQ=v;}, paint:()=>{}, got:()=>{}, fetch:async()=>{ await renderPayments(); } });
+}
+
+
+/* ════ RIZ-E TRAKONESH-HA — EVERY MOVEMENT, ITEMISED ══════════════════════
+   «در قسمت درگاه و یا مالی باید ریز تراکنش‌ها رو بتونم ببینم.»
+
+   The ledger could only be read one player at a time, and only if you already
+   knew their id, so «چه پولی امروز جابه‌جا شد» had no answer. The finance
+   screen shows totals — and totals are what you look at once you already trust
+   the rows underneath them.
+
+   Three decisions worth stating, because each is what makes it usable:
+     — the player's NAME, not their id. A UUID is not a person, and nobody can
+       check a payment or answer a ticket against one.
+     — ONE search box over everything: a name, a phone, a type, a reference. The
+       person looking does not know which column their word lives in.
+     — totals of the WHOLE filter, not of the page. A sum that changes when you
+       turn the page cannot be reconciled against anything.
+   ═══════════════════════════════════════════════════════════════════════ */
+const LG_TYPES={
+  deposit:'واریز',ticket_purchase:'خرید بلیط',lifeline_purchase:'خرید کمک',shop_purchase:'خرید فروشگاه',
+  match_stake:'ورودی مسابقه',stake_refund:'بازگشت ورودی',refund:'بازگشت وجه',
+  match_reward:'جایزهٔ مسابقه',league_reward:'جایزهٔ لیگ',referral_reward:'جایزهٔ معرفی',bonus:'هدیه',
+  withdraw_lock:'رزرو برای دریافت',withdraw_release:'آزادسازی رزرو',withdraw_paid:'جایزهٔ پرداخت‌شده',
+  fee:'کارمزد',penalty:'جریمه',adjustment:'اصلاح دستی',transfer_in:'انتقال ورودی',transfer_out:'انتقال خروجی'
+};
+const LG_KINDS={credit:'واریز',debit:'برداشت',lock:'رزرو',release:'آزادسازی',settle:'تسویه'};
+/* Which way the money went for the player. `lock` leaves the spendable balance
+   even though nothing has been paid out yet, so it counts as an outflow here —
+   otherwise the totals disagree with the balance the player sees. */
+const LG_IN=['credit','release'];
+let LG={q:'',type:'',kind:'',from:'',to:'',minAmount:'',maxAmount:'',userId:'',page:1,pageSize:50};
+function lgQS(extra){
+  const p=[];
+  Object.keys(LG).forEach(k=>{ if(k!=='pageSize'&&String(LG[k]||'')!=='') p.push(k+'='+encodeURIComponent(LG[k])); });
+  p.push('pageSize='+LG.pageSize);
+  if(extra) p.push(extra);
+  return p.join('&');
+}
+async function renderLedger(){
+  let d;
+  try{ d=await api('GET','/admin/wallet/ledger?'+lgQS()); }
+  catch(e){ $('#main').innerHTML=head('ریز تراکنش‌ها')+'<div class="card empty">'+esc(e.message||'خطا')+'</div>'; return; }
+  const rows=d.rows||[], t=d.totals||{credit:0,debit:0,net:0,count:0};
+  window._LGR=rows;
+  const money=v=>fa(v)+' ت';
+  const opt=(cur,map,any)=>'<option value="">'+any+'</option>'+Object.keys(map).map(k=>'<option value="'+k+'"'+(cur===k?' selected':'')+'>'+esc(map[k])+'</option>').join('');
+  $('#main').innerHTML=head('ریز تراکنش‌ها','هر حرکتِ پول در دفترکل — با نام بازیکن، نه شناسه',
+      '<button class="btn" onclick="lgCsv()">📥 دانلود CSV</button> <button class="btn sm" onclick="render()">↻</button>')+
+    '<div class="toolbar">'+
+      '<input id="lg_q" placeholder="نام، نام کاربری، شماره، نوع، شرح یا کد مرجع…" value="'+esc(LG.q)+'" style="min-width:260px">'+
+      '<label style="margin:0">نوع<select id="lg_type" onchange="lgSet(\'type\',this.value)" style="min-width:150px">'+opt(LG.type,LG_TYPES,'— همه —')+'</select></label>'+
+      '<label style="margin:0">جهت<select id="lg_kind" onchange="lgSet(\'kind\',this.value)" style="min-width:120px">'+opt(LG.kind,LG_KINDS,'— همه —')+'</select></label>'+
+      '<label style="margin:0">از<input id="lg_from" type="date" onchange="lgSet(\'from\',this.value)" value="'+esc(String(LG.from).slice(0,10))+'"></label>'+
+      '<label style="margin:0">تا<input id="lg_to" type="date" onchange="lgSet(\'to\',this.value)" value="'+esc(String(LG.to).slice(0,10))+'"></label>'+
+      '<label style="margin:0">از مبلغ<input id="lg_min" type="number" min="0" style="width:110px" onchange="lgSet(\'minAmount\',this.value)" value="'+esc(LG.minAmount)+'"></label>'+
+      '<label style="margin:0">تا مبلغ<input id="lg_max" type="number" min="0" style="width:110px" onchange="lgSet(\'maxAmount\',this.value)" value="'+esc(LG.maxAmount)+'"></label>'+
+      (LG.userId?'<button class="btn sm bad" onclick="lgSet(\'userId\',\'\')">✕ فقط این بازیکن</button>':'')+
+    '</div>'+
+    '<div class="grid g4" style="margin-bottom:13px">'+
+      stat('تعداد','info',fa(t.count))+stat('ورودی','ok',money(t.credit))+
+      stat('خروجی','bad',money(t.debit))+stat('خالص',t.net>=0?'gold':'bad',money(t.net))+
+    '</div>'+
+    '<div class="note">جمع‌ها برای <b>کلِ</b> چیزی است که فیلتر پیدا کرده، نه فقط این صفحه.</div>'+
+    '<div class="tbl-wrap">'+tbl(['زمان','بازیکن','نوع','جهت','مبلغ','موجودی بعد','مرجع','شرح'],rows.map((r,i)=>lgRow(r,i)))+'</div>'+
+    lgPager(d);
+  liveSearch({ input:'#lg_q', set:(v)=>{LG.q=v;LG.page=1;}, paint:()=>{}, got:()=>{}, fetch:async()=>{ await renderLedger(); } });
+}
+function lgRow(r,i){
+  const into=LG_IN.indexOf(r.kind)>=0;
+  const who=esc(r.displayName||r.username||'—');
+  const uname=r.username?'<div class="note" style="margin:0;font-size:11px">@'+esc(r.username)+'</div>':'';
+  return [
+    fmtDate(r.createdAt),
+    /* The ROW INDEX, not the id pasted into the attribute. JSON.stringify
+       wraps its value in double quotes and the attribute is delimited by double
+       quotes too, so the handler was cut short and the link threw instead of
+       filtering — the same trap the error screen has a comment about. */
+    '<a href="#" onclick="lgOnly('+i+');return false"><b>'+who+'</b></a>'+uname,
+    esc(LG_TYPES[r.entryType]||r.entryType),
+    '<span class="pill '+(into?'ok':'bad')+'">'+esc(LG_KINDS[r.kind]||r.kind)+'</span>',
+    '<b style="color:'+(into?'var(--ok)':'var(--bad)')+'">'+(into?'+':'−')+fa(r.amount)+'</b>',
+    fa(r.availableAfter),
+    '<span class="mono" style="font-size:11px">'+esc(r.refId||'—')+'</span>',
+    esc(r.description||'—')
+  ];
+}
+function lgPager(d){
+  const pages=Math.max(1,Math.ceil((d.total||0)/(d.pageSize||50)));
+  if(pages<2) return '';
+  const b=(p,t,on)=>'<button class="btn sm '+(on?'pri':'')+'" onclick="lgSet(\'page\','+p+')">'+t+'</button>';
+  let out='<div style="margin-top:10px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">';
+  out+=b(Math.max(1,d.page-1),'قبلی',false);
+  out+='<span class="note" style="margin:0">صفحهٔ '+fa(d.page)+' از '+fa(pages)+'</span>';
+  out+=b(Math.min(pages,d.page+1),'بعدی',false);
+  return out+'</div>';
+}
+function lgSet(k,v){ LG[k]=v; if(k!=='page') LG.page=1; renderLedger(); }
+function lgOnly(i){
+  const r=(window._LGR||[])[i];
+  if(!r||!r.userId) return;
+  LG.userId=String(r.userId); LG.page=1; renderLedger();
+}
+/* The export carries the SAME filters the screen is showing. An export button
+   that quietly ignores them hands back a different month than the one on
+   screen, and nobody notices until the numbers do not add up. */
+function lgCsv(){
+  const url=API+'/admin/wallet/ledger?'+lgQS('format=csv');
+  fetch(url,{headers:{'x-admin-key':KEY}}).then(r=>r.ok?r.blob():Promise.reject(new Error('خطای '+r.status))).then(bl=>{
+    const a=document.createElement('a'); a.href=URL.createObjectURL(bl);
+    a.download='ledger-'+new Date().toISOString().slice(0,10)+'.csv';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+    toast('فایل دانلود شد','ok');
+  }).catch(e=>toast(e.message,'bad'));
 }
 
 /* ================= SERVER MONITORING ================= */
