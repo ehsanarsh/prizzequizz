@@ -2212,6 +2212,136 @@ input,textarea,select,[contenteditable="true"],.pz-selectable,.pz-selectable *{
 .lvl-ring{width:130px;height:130px;border-radius:50%;border:var(--stroke);background:radial-gradient(#FFE24A,#c98f00);display:grid;place-items:center;font-size:52px;font-weight:900;color:#141414;box-shadow:var(--hard),0 0 60px var(--bolt-glow);animation:lvlIn .7s cubic-bezier(.2,1.4,.4,1) both}
 @keyframes lvlIn{0%{transform:scale(.2) rotate(-30deg);opacity:0}60%{transform:scale(1.15) rotate(6deg)}100%{transform:scale(1) rotate(0)}}
 .lvl-txt{font-size:30px;font-weight:900;font-style:italic;color:var(--paper);text-shadow:3px 3px 0 #000;animation:pop .5s .25s both}
+
+/* ═══════════ LEVEL UP ═══════════════════════════════════════════════════
+   «موشن‌های level up و victory خیلی مسخره و مصنوعی هستند.»
+
+   They were one scale-in and a pop. What makes a celebration read as made
+   rather than generated is not more effects — it is TIMING and SECONDARY
+   MOTION. Four things were missing, and all four are cheap:
+
+     — ANTICIPATION. Nothing lands well without first pulling back. The badge
+       squashes and dims for a tenth of a second before it arrives.
+     — AN IMPACT that the rest of the frame answers: a flash, two shockwaves
+       leaving at different speeds, sparks thrown outward.
+     — SETTLE, not stop. A single spring to 1.0 looks like a slide; a small
+       counter-bounce afterwards looks like weight.
+     — AN EXIT. It used to vanish — display:none, one frame, gone. Half of
+       «مصنوعی» was that: things in the real world leave.
+
+   Layered so the depth reads: rays turning slowly behind, the badge in front
+   of them, sparks in front of that. Every layer is on its own clock. */
+#lvlOverlay{animation:lvxBg .22s ease-out both}
+#lvlOverlay.out{animation:lvxBgOut .34s ease-in both;pointer-events:none}
+@keyframes lvxBg{from{opacity:0;backdrop-filter:blur(0)}to{opacity:1}}
+@keyframes lvxBgOut{from{opacity:1}to{opacity:0;transform:translateY(-10px)}}
+
+.lvx-stage{position:relative;width:196px;height:196px;display:grid;place-items:center}
+/* The white kiss of the impact — short, and never fully opaque. A full-white
+   frame on a phone at night is a flinch, not a celebration. */
+.lvx-flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;z-index:2;
+  animation:lvxFlash .42s .06s ease-out both}
+@keyframes lvxFlash{0%{opacity:0}12%{opacity:.5}100%{opacity:0}}
+
+/* Light behind the badge. It keeps turning after everything else has settled,
+   which is what stops the frame looking frozen while the player reads it. */
+.lvx-rays{position:absolute;width:300px;height:300px;border-radius:50%;pointer-events:none;
+  background:conic-gradient(from 0deg,rgba(255,226,74,.44) 0deg 9deg,transparent 9deg 30deg,
+    rgba(255,226,74,.3) 30deg 37deg,transparent 37deg 60deg);
+  mask:radial-gradient(circle,transparent 26%,#000 40%,#000 72%,transparent 88%);
+  -webkit-mask:radial-gradient(circle,transparent 26%,#000 40%,#000 72%,transparent 88%);
+  opacity:0;animation:lvxRaysIn .7s .14s ease-out both,lvxSpin 14s .14s linear infinite}
+@keyframes lvxRaysIn{from{opacity:0;transform:scale(.6)}to{opacity:.85;transform:scale(1)}}
+@keyframes lvxSpin{to{rotate:360deg}}
+
+/* Two rings, leaving at different speeds. One is a ripple; two is a hit. */
+.lvx-shock{position:absolute;width:130px;height:130px;border-radius:50%;pointer-events:none;
+  border:3px solid rgba(255,226,74,.9);opacity:0;animation:lvxShock .72s .1s cubic-bezier(.12,.76,.26,1) both}
+.lvx-shock.s2{border-color:rgba(255,255,255,.55);border-width:2px;animation-delay:.22s;animation-duration:.86s}
+@keyframes lvxShock{0%{opacity:.95;transform:scale(.62)}100%{opacity:0;transform:scale(2.5)}}
+
+/* THE BADGE. Six stops rather than three: squash, overshoot, counter-bounce,
+   rest. The rotation is tiny on purpose — a badge that spins is a sticker. */
+.lvx-ring{position:relative;z-index:3;animation:lvxRing .82s .06s cubic-bezier(.22,.9,.24,1) both}
+@keyframes lvxRing{
+  0%{opacity:0;transform:scale(.36) rotate(-12deg);filter:brightness(.55)}
+  18%{opacity:1;transform:scale(1.24) rotate(5deg);filter:brightness(1.7)}
+  38%{transform:scale(.93) rotate(-2.5deg);filter:brightness(1)}
+  58%{transform:scale(1.06) rotate(1deg)}
+  78%{transform:scale(.985) rotate(0)}
+  100%{transform:scale(1) rotate(0)}
+}
+/* A slow breath afterwards, so the badge is alive while it is being read. */
+#lvlOverlay.show .lvx-ring{animation:lvxRing .82s .06s cubic-bezier(.22,.9,.24,1) both,lvxBreathe 2.4s .9s ease-in-out infinite}
+@keyframes lvxBreathe{50%{transform:scale(1.035)}}
+
+.lvx-sparks{position:absolute;inset:0;pointer-events:none;z-index:4}
+.lvx-spark{position:absolute;left:50%;top:50%;width:8px;height:8px;border-radius:50%;
+  background:var(--bolt);box-shadow:0 0 12px var(--bolt);
+  animation:lvxSpark var(--d,.9s) var(--t,.12s) cubic-bezier(.1,.72,.24,1) both}
+@keyframes lvxSpark{
+  0%{opacity:0;transform:translate(-50%,-50%) scale(.3)}
+  14%{opacity:1}
+  100%{opacity:0;transform:translate(calc(-50% + var(--x)),calc(-50% + var(--y))) scale(.25) rotate(var(--r,180deg))}
+}
+
+/* The words arrive AFTER the badge has landed — reading over a moving object
+   is what made the old one feel like two unrelated animations at once. */
+.lvx-title{margin-top:6px;font-size:clamp(26px,8vw,36px);font-weight:900;font-style:italic;letter-spacing:1px;
+  color:var(--paper);text-shadow:3px 3px 0 #000;animation:lvxTitle .5s .3s cubic-bezier(.2,1.3,.35,1) both;position:relative}
+@keyframes lvxTitle{from{opacity:0;transform:translateY(16px) scale(.86)}to{opacity:1;transform:none}}
+/* One light sweep across the letters. It is the single cheapest thing that
+   reads as «finished» rather than «assembled». */
+.lvx-title span{background:linear-gradient(100deg,currentColor 40%,#fff 50%,currentColor 60%);
+  background-size:280% 100%;-webkit-background-clip:text;background-clip:text;
+  animation:lvxSheen 1.15s .62s ease-out 1 both}
+@keyframes lvxSheen{from{background-position:180% 0}to{background-position:-80% 0}}
+
+.lvx-sub{font-size:15px;font-weight:900;color:var(--bolt);margin-top:2px;
+  animation:lvxTitle .45s .42s cubic-bezier(.2,1.3,.35,1) both}
+.lvx-hint{animation:lvxTitle .4s .9s ease-out both}
+
+/* ═══════════ VICTORY ═══════════════════════════════════════════════════
+   The headline used to change colour and nothing else — the whole «برنده شدی»
+   moment was a green word. It lands now: a short drop with a real stop, and
+   the same light sweep, so the win and the level-up read as one family. */
+/* Hung on `win-in` rather than on `win`: the `win` class stays put from one
+   win to the next, and a CSS animation on a class that never changes plays
+   exactly once per page load. `win-in` is taken off and put back for every
+   result, so the headline lands every time instead of only the first. */
+.res.win-in .res-title{animation:lvxSlam .56s cubic-bezier(.16,.9,.22,1) both}
+@keyframes lvxSlam{
+  0%{opacity:0;transform:translateY(-22px) scale(1.22);filter:blur(3px)}
+  42%{opacity:1;transform:translateY(0) scale(.94);filter:none}
+  64%{transform:scale(1.035)}
+  82%{transform:scale(.99)}
+  100%{transform:scale(1)}
+}
+.res.win-in .res-title::after{content:"";position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(100deg,transparent 42%,rgba(255,255,255,.55) 50%,transparent 58%);
+  background-size:260% 100%;animation:lvxSheen 1.1s .42s ease-out 1 both}
+.res-title{position:relative}
+/* The mascot arrives with the headline instead of before it, and lands with
+   weight rather than appearing at full size. */
+.res.win-in .res-char{animation:lvxLand .66s .08s cubic-bezier(.18,.88,.24,1) both}
+@keyframes lvxLand{
+  0%{opacity:0;transform:translateY(-34px) scale(.82)}
+  46%{opacity:1;transform:translateY(0) scaleX(1.12) scaleY(.88)}
+  68%{transform:scaleX(.96) scaleY(1.05)}
+  86%{transform:scaleX(1.02) scaleY(.99)}
+  100%{transform:none}
+}
+
+/* NOTHING ABOVE IS WORTH A HEADACHE. Everything becomes a plain fade for
+   anybody who has asked their phone for less movement — and the sparks are
+   not created at all, rather than created and hidden. */
+@media(prefers-reduced-motion:reduce){
+  #lvlOverlay,#lvlOverlay.out,.lvx-ring,#lvlOverlay.show .lvx-ring,.lvx-title,.lvx-title span,
+  .lvx-sub,.lvx-hint,.res.win-in .res-title,.res.win-in .res-title::after,
+  .res.win-in .res-char{animation:none!important}
+  .lvx-flash,.lvx-shock,.lvx-rays{display:none!important}
+  #lvlOverlay{transition:opacity .2s ease}
+}
 /* ===== STATES: loading / empty / error ===== */
 .state{display:flex;flex-direction:column;align-items:center;gap:12px;padding:34px 20px;text-align:center}
 .state .st-ico{font-size:44px;filter:drop-shadow(0 4px 0 rgba(0,0,0,.35))}
@@ -7401,9 +7531,17 @@ body{padding:0!important;align-items:stretch!important;justify-content:center!im
   </div>
   <!-- Level up -->
   <div id="lvlOverlay" onclick="hideLevelUp()">
-    <div class="lvl-ring" id="lvlNum">۴</div>
-    <div class="lvl-txt">!LEVEL UP</div>
-    <div class="chest-lbl">برای ادامه لمس کن</div>
+    <i class="lvx-flash"></i>
+    <div class="lvx-stage">
+      <i class="lvx-rays"></i>
+      <i class="lvx-shock"></i>
+      <i class="lvx-shock s2"></i>
+      <div class="lvl-ring lvx-ring" id="lvlNum">۴</div>
+      <div class="lvx-sparks" id="lvlSparks"></div>
+    </div>
+    <div class="lvx-title"><span>LEVEL UP</span></div>
+    <div class="lvx-sub" id="lvlSub"></div>
+    <div class="chest-lbl lvx-hint">برای ادامه لمس کن</div>
   </div>
 
   <!-- League promotion -->
@@ -13245,18 +13383,80 @@ function skipChest(){
   if(chestCb){const cb=chestCb;chestCb=null;cb();}
 }
 let curLvl=3;
-function showLevelUp(target){
-  /* target = the REAL new level (from real XP). Falls back to +1 for the legacy
-     demo trigger if called with no argument. */
-  curLvl = (typeof target==='number' && target>0) ? target : (curLvl+1);
-  const ln=document.getElementById('lvlNum'); if(ln)ln.textContent=fa(curLvl);
-  const hl=document.getElementById('hdrLvl'); if(hl)hl.textContent=fa(curLvl);
-  const ov=document.getElementById('lvlOverlay'); if(ov)ov.classList.add('show');
-  sfx('found');vib([40,60,40,60,160]);
-  setTimeout(hideLevelUp,3200);
+let _lvxTimers=[];
+function _lvxClear(){ _lvxTimers.forEach(t=>{try{clearTimeout(t)}catch(e){}}); _lvxTimers=[]; }
+function _lvxCalm(){ try{ return window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches; }catch(e){ return false; } }
+/* Thrown outward on impact. Built rather than written out so they can be
+   uneven — sixteen identical rays at identical speeds read as a loading
+   spinner, which is the opposite of what this moment is for. */
+function _lvxSparks(){
+  const host=document.getElementById('lvlSparks'); if(!host) return;
+  host.innerHTML='';
+  if(_lvxCalm()) return;
+  for(let i=0;i<18;i++){
+    const a=(i/18)*Math.PI*2 + (Math.random()-.5)*.35;
+    const dist=76+Math.random()*68;
+    const el=document.createElement('i'); el.className='lvx-spark';
+    el.style.setProperty('--x',(Math.cos(a)*dist).toFixed(1)+'px');
+    el.style.setProperty('--y',(Math.sin(a)*dist).toFixed(1)+'px');
+    el.style.setProperty('--d',(.72+Math.random()*.5).toFixed(2)+'s');
+    el.style.setProperty('--t',(.1+Math.random()*.12).toFixed(2)+'s');
+    el.style.setProperty('--r',Math.round(Math.random()*540-270)+'deg');
+    if(i%4===0){ el.style.width='6px'; el.style.height='6px'; el.style.background='#fff'; el.style.boxShadow='0 0 10px #fff'; }
+    host.appendChild(el);
+  }
 }
-function hideLevelUp(){document.getElementById('lvlOverlay').classList.remove('show');}
-let winsThisSession=0;
+/* THE NUMBER HAS TO MEAN SOMETHING. It used to appear already showing the new
+   level, so the one piece of information the whole overlay exists to deliver —
+   that this is HIGHER than before — was never actually shown happening. */
+function _lvxCount(el,from,to){
+  if(!el) return;
+  if(_lvxCalm()||from>=to){ el.textContent=fa(to); return; }
+  el.textContent=fa(from);
+  _lvxTimers.push(setTimeout(()=>{ el.textContent=fa(to); },520));
+}
+function showLevelUp(target){
+  const ov=document.getElementById('lvlOverlay'); if(!ov) return;
+  /* The level BEFORE. `curLvl` is the last one anybody knew about: pzUpdateXpBar
+     writes it on every paint where nothing changed, and this function writes it
+     on every paint where something did. A second «previous level» argument was
+     tried and removed — it could never disagree with this one, and a parameter
+     that can only ever repeat what is already known is one more thing to pass
+     wrongly. */
+  const from=curLvl;
+  curLvl=(typeof target==='number'&&target>0)?target:(curLvl+1);
+  _lvxClear();
+  ov.classList.remove('out');
+  const ln=document.getElementById('lvlNum');
+  const sub=document.getElementById('lvlSub'); if(sub) sub.textContent='سطح '+fa(curLvl);
+  const hl=document.getElementById('hdrLvl'); if(hl) hl.textContent=fa(curLvl);
+  /* The animations are declared in CSS and start when the element appears, so
+     the whole sequence is re-armed by taking the class off and putting it back
+     on the next frame. Without the gap a second level-up in one session shows
+     nothing at all — the browser sees no change and replays nothing. */
+  ov.classList.remove('show');
+  void ov.offsetWidth;
+  ov.classList.add('show');
+  _lvxSparks();
+  _lvxCount(ln,from,curLvl);
+  try{ sfx('found'); }catch(e){}
+  /* The haptic follows the IMPACT, not the tap that led to it — one short hit
+     where the flash is, then the pattern. Sixty milliseconds late is the
+     difference between feeling the thing land and feeling a buzz. */
+  try{ if(!_lvxCalm()) _lvxTimers.push(setTimeout(()=>vib([26,44,18,40,150]),60)); }catch(e){}
+  /* Long enough to read, and it LEAVES rather than vanishing. */
+  _lvxTimers.push(setTimeout(hideLevelUp,3400));
+}
+function hideLevelUp(){
+  const ov=document.getElementById('lvlOverlay'); if(!ov) return;
+  _lvxClear();
+  if(!ov.classList.contains('show')) return;
+  ov.classList.add('out');
+  _lvxTimers.push(setTimeout(()=>{
+    ov.classList.remove('show','out');
+    const h=document.getElementById('lvlSparks'); if(h) h.innerHTML='';
+  },_lvxCalm()?200:360));
+}
 
 let lastPracticeCoinsEarned=0,lastPracticeCoinBefore=0,lastPracticeCoinAfter=0;
 function renderDuelResultPanel(won){
@@ -13468,6 +13668,13 @@ function endGame(won,amount,isWithdraw,customSub){
      gone: green for a win, red for a loss, and heavier than anything else. */
   try{ const _t=document.getElementById('resultTitle');
        if(_t){ _t.classList.toggle('win',!!won); _t.classList.toggle('lose',!won); } }catch(e){}
+  /* THE WIN HAS TO LAND EVERY TIME. These are CSS animations, and a class that
+     is already on the element replays nothing — the second win of a session
+     would show a headline that was simply there. Off, reflow, on. */
+  try{
+    const _r=document.getElementById('result');
+    if(_r){ _r.classList.remove('win-in'); if(won){ void _r.offsetWidth; _r.classList.add('win-in'); } }
+  }catch(e){}
   pzResultCharacter(won);
   const badge=document.getElementById('resultBadge'),emoji=document.getElementById('resultEmoji');
   const title=document.getElementById('resultTitle'),sub=document.getElementById('resultSub'),amt=document.getElementById('resultAmt');
@@ -13534,7 +13741,12 @@ function endGame(won,amount,isWithdraw,customSub){
       go('result');
       setTimeout(()=>animatePracticeCoinReward(coins,beforeCoins,afterCoins),450);
       showUpsell(final);
-      winsThisSession++;if(winsThisSession%2===1)setTimeout(showLevelUp,1000);
+      /* NO LEVEL-UP HERE. Every odd win of the session used to fire the
+         level-up overlay — `winsThisSession % 2` — which is why it appeared
+         after games where nothing had happened, and showed a number it had
+         invented (`curLvl + 1` from a hardcoded 3). A level-up is a fact about
+         XP, and the ONE place that knows it is pzUpdateXpBar, which fires it
+         when the level the server reports is higher than the one before. */
       return;
     }
     showChest(final,()=>{
@@ -13546,8 +13758,6 @@ function endGame(won,amount,isWithdraw,customSub){
          used to print. The real award is animated by pzShowGain from the
          server's own numbers, so there is nothing to replace it with. */
       countUp(amt,final,900);
-      winsThisSession++;
-      if(winsThisSession%2===1)setTimeout(showLevelUp,1200);
     });
     return;
   }
