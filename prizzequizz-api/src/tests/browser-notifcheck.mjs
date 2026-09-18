@@ -116,7 +116,14 @@ console.log('being asked to turn phone notifications on:');
      ordinary browser was never asked, never subscribed, and could not receive
      a push at all — which is exactly «badge yes, phone no». */
   const canAsk = await page.evaluate(() => {
-    (0, eval)("try{localStorage.removeItem('pz_push_asked');}catch(e){}");
+    /* BOTH counters, not one. `pz_push_asked` is the lifetime count and
+       `pz_push_asked_visit` is «already asked since this tab opened» — and the
+       app asks once on load now that a real session lands on a real screen
+       instead of being bounced to the login page. This block is deliberately
+       re-arming the ask to test it, so it has to clear both; clearing only the
+       first left the visit flag set and pzShouldAskPush() answered «no» for a
+       reason that has nothing to do with what is being checked here. */
+    (0, eval)("try{localStorage.removeItem('pz_push_asked');}catch(e){} try{sessionStorage.removeItem('pz_push_asked_visit');}catch(e){}");
     return {
       installed: (0, eval)('pzIsInstalled()'),
       supported: 'PushManager' in window,
@@ -129,7 +136,7 @@ console.log('being asked to turn phone notifications on:');
 
   /* And it does ask, from the chat — the one place the answer matters most. */
   const asked = await page.evaluate(async () => {
-    (0, eval)("try{localStorage.removeItem('pz_push_asked');}catch(e){} try{closeAaaModal(true);}catch(e){}");
+    (0, eval)("try{localStorage.removeItem('pz_push_asked');}catch(e){} try{sessionStorage.removeItem('pz_push_asked_visit');}catch(e){} try{closeAaaModal(true);}catch(e){}");
     (0, eval)('pzAskPushForChat()');
     await new Promise((r) => setTimeout(r, 1400));
     const m = document.getElementById('aaaModal');
