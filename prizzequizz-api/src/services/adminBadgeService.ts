@@ -70,7 +70,14 @@ function pg(): ReturnType<typeof getPgPool> | null {
 
 /* ── the seen mark ─────────────────────────────────────────────────────── */
 
-const memSeen = new Map<string, string>();          // `${adminId}${screen}` → ISO
+/* A SEPARATOR THAT SURVIVES BEING EDITED. This was a RAW NUL BYTE in the
+   source — which made the file «binary» to grep, and any tool that copied it
+   through a text round-trip silently turned `'\u0000'` into `''`. Then
+   `k.split('')` split into single characters and every mark was lost: the
+   badges kept counting from the beginning of time. Written as an escape, it
+   behaves identically and cannot be destroyed by looking at it. */
+const SEEN_SEP = '\u0000';
+const memSeen = new Map<string, string>();          // `${adminId}${SEEN_SEP}${screen}` → ISO
 const memCount = new Map<string, (since: Date | null) => number | Promise<number>>();
 
 /** Test seam: stand in for a table this process has no database for. */
@@ -99,7 +106,7 @@ async function ensureSchema(pool: ReturnType<typeof getPgPool>): Promise<boolean
   }
 }
 
-const seenKey = (adminId: string, screen: string): string => adminId + '' + screen;
+const seenKey = (adminId: string, screen: string): string => adminId + SEEN_SEP + screen;
 
 async function loadSeen(adminId: string): Promise<Map<string, string>> {
   const pool = pg();
@@ -112,7 +119,7 @@ async function loadSeen(adminId: string): Promise<Map<string, string>> {
     } catch (e) { logger.warn('badge_seen_read_failed', { message: (e as Error).message }); }
   }
   for (const [k, v] of memSeen) {
-    const [a, s] = k.split('');
+    const [a, s] = k.split(SEEN_SEP);
     if (a === adminId && s) out.set(s, v);
   }
   return out;

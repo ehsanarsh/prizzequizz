@@ -431,7 +431,11 @@ function run(): void {
   check('access is still granted one screen at a time', () => {
     /* A merged row must not become a single permission covering four screens —
        that would hand an account whatever it was not granted. */
-    assert.match(script, /function permChecklist[\s\S]{0,400}navLeaves\(\)/,
+    /* The window was 400 and the function grew past it when roles arrived —
+       the property was still true and the proximity check was what broke.
+       Widened to stay inside permChecklist and no further; it is the SAME
+       function that must read navLeaves(), not merely the same file. */
+    assert.match(script, /function permChecklist[\s\S]{0,900}navLeaves\(\)/,
       'the access checklist must be built from the opened-out screen list');
     assert.match(script, /function canTab[\s\S]{0,400}TAB_GROUPS\[k\]/,
       'a merged row opens only when one of its own screens is permitted');
