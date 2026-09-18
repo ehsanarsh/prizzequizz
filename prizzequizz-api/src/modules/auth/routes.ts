@@ -51,7 +51,14 @@ export function registerAuthRoutes(router: Router, base: string): void {
     }
     let user = await repositories.users.findByPhone(verified.phone);
     if (!user) {
-      user = { id: id(), phone: verified.phone, username: `user_${Date.now()}`, displayName: 'بازیکن جدید', plan: 'free', level: 1, xp: 0, weeklyScore: 0, wallet: 0, coins: 350, hearts: 5, tickets: { bronze: 0, silver: 0, gold: 0 } };
+      /* A MILLISECOND IS NOT UNIQUE. Two people finishing the SMS step in the
+         same millisecond both got `user_<that ms>` and the second save failed
+         on the username — a registration lost to a coincidence. Three random
+         digits on the end make the collision one in a thousand of that, and
+         the shape is unchanged: still `user_` followed by digits, so both the
+         server's `isPlaceholderUsername` and the client's own «this account
+         has no real name yet» test still recognise it. */
+      user = { id: id(), phone: verified.phone, username: `user_${Date.now()}${String(Math.floor(Math.random() * 1000)).padStart(3, '0')}`, displayName: 'بازیکن جدید', plan: 'free', level: 1, xp: 0, weeklyScore: 0, wallet: 0, coins: 350, hearts: 5, tickets: { bronze: 0, silver: 0, gold: 0 } };
       await repositories.users.save(user);
       // Auto new-user reward campaign (no-op unless enabled + in date window).
       await grantNewUserCampaign(user.id);

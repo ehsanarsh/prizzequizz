@@ -10,6 +10,7 @@ import { getAdminAnalytics } from '../../services/analyticsService.js';
 import { getAdminUserOverview, resetUserStats, searchAdminUsers, setUserTickets, updateUserFields, updateUserRole, updateUserStatus, UsernameTakenError } from '../../services/adminUserService.js';
 import { adminUserTable } from '../../services/adminUserTable.js';
 import { exportUserPhones, phonesAsText, phonesAsCsv, type PhoneWho } from '../../services/phoneExportService.js';
+import { duplicateUsernames, ensureUsernameIndex, usernameIndexReady } from '../../services/usernameService.js';
 import { listDiscountCodes, saveDiscountCode, deleteDiscountCode, DiscountError } from '../../services/discountService.js';
 import { getMatch, claimTimeout, forfeitMatch } from '../../services/matchEngine.js';
 import { activeMatchState } from '../../services/matchStateStore.js';
@@ -627,6 +628,42 @@ export function registerAdminRoutes(router: Router, base: string): void {
       return;
     }
     json(ctx.res, 200, x);
+  });
+
+  /* «کلا نباید سرور اجازه بده تا نام کاربری که وجود داره دوباره ساخته بشه.»
+   *
+   * It does not: both places a username can be set — a player saving their
+   * profile and an admin editing one — refuse a name somebody else already
+   * holds, folded so that «Nazi», «NAZI», «na zi» and «na‌zi» are one name.
+   * What was missing is the layer under that: the unique index, which is the
+   * only thing that can stop TWO saves of the same free name in the same
+   * instant, because the database applies it at write time. It could not be
+   * created, because the table already held the very duplicates it exists to
+   * prevent — and the only place that said so was a line in the boot log.
+   *
+   * So it is said here instead: whether the guarantee is actually in place,
+   * and if not, exactly which accounts are standing in the way — with enough
+   * about each of them to decide which one keeps the name. */
+  router.add('GET', `${base}/admin/users/duplicates`, async (ctx) => {
+    if (!requireAdmin(ctx, { tab: 'users' })) return;
+    const groups = await duplicateUsernames();
+    let ready = await usernameIndexReady();
+    /* Nothing left in the way → take the index now rather than waiting for
+       somebody to restart the API. Renaming the last pair and still being told
+       «not guaranteed» is how this ends up believed to be broken. */
+    if (!ready && groups.length === 0) { await ensureUsernameIndex(true); ready = await usernameIndexReady(); }
+    json(ctx.res, 200, { indexReady: ready, groups, total: groups.reduce((n, g) => n + g.count, 0) });
+  });
+
+  /* The same retry on demand — for the case where the index is missing for a
+     reason other than duplicates (it was dropped, or the database was restored
+     from a dump that predates it). */
+  router.add('POST', `${base}/admin/users/username-index`, async (ctx) => {
+    if (!requireAdmin(ctx, { tab: 'users' })) return;
+    const r = await ensureUsernameIndex(true);
+    const ready = await usernameIndexReady();
+    audit(ctx.userId, 'USERNAME_INDEX_RETRIED', 'user', undefined, { ready, blocked: r.blockedBy.length });
+    json(ctx.res, 200, { indexReady: ready, blockedBy: r.blockedBy });
   });
 
   router.add('GET', `${base}/admin/users/:id/overview`, async (ctx) => {

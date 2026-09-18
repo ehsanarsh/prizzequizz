@@ -1304,9 +1304,11 @@ function uPaintPager(){
 async function renderUsers(){
   await uFetch(U_Q).catch(()=>{ U_PAGE={rows:[],total:0,tiers:['green','blue','red']}; window._UALL=[]; });
   const oc=await api('GET','/admin/online-config').catch(()=>null);
+  const dup=await api('GET','/admin/users/duplicates').catch(()=>null);
   const cats=(CFG&&Array.isArray(CFG.categories)?CFG.categories:[]).slice()
     .sort((a,b)=>(Number(a.order)||99)-(Number(b.order)||99)).filter(c=>c&&c.name);
   $('#main').innerHTML=head('مدیریت کاربران','هر ستون قابل مرتب‌سازی است — مرتب‌سازی روی همهٔ کاربران انجام می‌شود، نه فقط این صفحه')+
+    uDupCard(dup)+
     (oc?'<div class="card" style="margin-bottom:12px"><b>افراد آنلاین (صفحهٔ اصلی)</b>'+
       '<div class="note">اولین بازکردنِ صفحه همیشه رایگان است؛ هزینه فقط برای دکمهٔ «نمایش افراد دیگر» گرفته می‌شود.</div>'+
       '<div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-top:8px">'+
@@ -1342,6 +1344,74 @@ async function renderUsers(){
     fetch:async(q)=>uFetch(q)
   });
   const i=$('#uq'); if(i&&U_Q){i.focus();i.setSelectionRange(i.value.length,i.value.length);}
+}
+/* ONE NAME, ONE PLAYER — SAID WHERE SOMEBODY CAN ACT ON IT.
+   «کلا نباید سرور اجازه بده تا نام کاربری که وجود داره دوباره ساخته بشه.»
+   It does not: both places a name can be set refuse one that is taken, folding
+   case, spaces and the invisible half-space first, so «Nazi» and «NAZI» are one
+   name. Underneath that sits the unique index, which is the only thing that can
+   stop two saves of the same free name in the same instant. That index cannot
+   be created while the table still holds the duplicates it exists to prevent —
+   and until now the only place that said so was one line in the boot log, which
+   nobody reads. So it is said here: whether the guarantee is really on, and if
+   not, exactly which accounts are in the way and which of them had the name
+   first. Renaming is one tap from the same card, because sending somebody to
+   search for the account by hand is how this stays unfixed. */
+function uDupCard(d){
+  if(!d) return '';
+  const gs=Array.isArray(d.groups)?d.groups:[];
+  if(d.indexReady&&!gs.length){
+    return '<div class="card" style="margin-bottom:12px;border-color:#2e7d52">'+
+      '<b>✅ نام کاربری تکراری ممکن نیست</b>'+
+      '<div class="note">تضمین در خودِ پایگاه داده فعال است — نه فقط یک بررسی در کد. حتی اگر دو نفر در یک لحظه یک نام آزاد را بگیرند، فقط یکی ذخیره می‌شود.</div></div>';
+  }
+  if(!gs.length){
+    return '<div class="card" style="margin-bottom:12px;border-color:#c9a227">'+
+      '<b>⚠️ تضمینِ پایگاه داده فعال نیست</b>'+
+      '<div class="note">نام تکراری در جدول نیست، ولی ایندکس یکتا ساخته نشده. تا وقتی نباشد، دو ذخیرهٔ هم‌زمانِ یک نامِ آزاد هر دو موفق می‌شوند.</div>'+
+      '<button class="btn pri" style="margin-top:8px" onclick="uDupFixIndex()">ساختن ایندکس یکتا</button></div>';
+  }
+  return '<div class="card" style="margin-bottom:12px;border-color:#b3453f">'+
+    '<b>🚫 '+fa(gs.length)+' نام کاربری تکراری</b>'+
+    '<div class="note">تا وقتی این‌ها هستند، ایندکس یکتا ساخته نمی‌شود و تضمینِ پایگاه داده خاموش می‌ماند. یکی از هر جفت را تغییر بده؛ نشانِ «قدیمی‌تر» یعنی آن حساب زودتر این نام را داشته.</div>'+
+    gs.map(g=>'<div style="margin-top:10px;padding:8px;border:1px solid #333;border-radius:8px">'+
+      '<div class="mono" style="opacity:.7;font-size:12px;direction:ltr">'+esc(g.folded||'')+'</div>'+
+      (g.users||[]).map(u=>'<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px">'+
+        '<b class="mono" style="direction:ltr">'+esc(u.username||'')+'</b>'+
+        (u.oldest?'<span class="pill ok">قدیمی‌تر</span>':'')+
+        '<span class="note" style="margin:0">'+esc(u.displayName||'—')+' · سطح '+fa(u.level||0)+' · '+fa(u.xp||0)+' XP · '+fa(u.wallet||0)+' تومان</span>'+
+        '<span class="note" style="margin:0">'+esc(uDupWhen(u.createdAt))+'</span>'+
+        '<button class="btn sm" onclick="uDupRename('+JSON.stringify(String(u.id))+','+JSON.stringify(String(u.username||''))+')">تغییر نام</button>'+
+        '</div>').join('')+
+      '</div>').join('')+
+    '</div>';
+}
+function uDupWhen(iso){
+  if(!iso) return 'تاریخ نامعلوم';
+  const t=Date.parse(String(iso)); if(!t) return 'تاریخ نامعلوم';
+  return 'ساخته‌شده '+dcDate(t);
+}
+async function uDupRename(id,cur){
+  const next=prompt('نام کاربری تازه برای «'+cur+'»:',cur);
+  if(next==null) return;
+  const v=String(next).trim();
+  if(!v||v===cur) return;
+  try{
+    await api('PATCH','/admin/users/'+encodeURIComponent(id),{username:v});
+    toast('نام کاربری تغییر کرد','ok');
+    /* Repaint rather than patch the card in place: renaming the last duplicate
+       is what lets the index take hold, and the card decides that by asking the
+       server again. A card that edited itself would keep saying «تکراری». */
+    render();
+  }catch(e){ toast(e.message,'bad'); }
+}
+async function uDupFixIndex(){
+  try{
+    const r=await api('POST','/admin/users/username-index');
+    if(r&&r.indexReady) toast('ایندکس یکتا ساخته شد','ok');
+    else toast((r&&r.blockedBy&&r.blockedBy.length)?('هنوز مانع دارد: '+r.blockedBy.join(' ؛ ')):'ساخته نشد','bad');
+    render();
+  }catch(e){ toast(e.message,'bad'); }
 }
 /* WHO IS SHOWN — «همه», «ثبت‌نام کامل», «ثبت‌نام ناتمام».
    An account exists from the moment the SMS code is verified, BEFORE a name is
